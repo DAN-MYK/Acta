@@ -7,6 +7,7 @@ slint::include_modules!();
 
 mod db;
 mod models;
+mod pdf;
 
 use anyhow::Result;
 use chrono::NaiveDate;
