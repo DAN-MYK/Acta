@@ -1,6 +1,7 @@
 // Генерація PDF-актів через Typst CLI
 //
 // Алгоритм: структури даних → serde_json → JSON рядок → typst compile --input data=...
+#![allow(dead_code)]
 // Typst читає sys.inputs["data"] і будує PDF з шаблону templates/act.typ.
 
 use std::path::{Path, PathBuf};

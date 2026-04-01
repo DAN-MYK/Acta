@@ -4,88 +4,100 @@
 //   MainWindow — кореневий компонент, який Rust інстанціює через MainWindow::new()
 //   NavItem    — приватний компонент навігаційного елементу (не экспортується)
 //
-// Навігація: ліва панель з 4 розділами, права — контент поточного розділу.
+// Навігація: ліва панель з 5 розділами, права — контент поточного розділу.
 // Перемикання через in-out property <int> current-page.
+// Нумерація сторінок: 0=Контрагенти, 1=Акти, 2=Накладні, 3=Платежі, 4=Звіти
 
+import { Theme } from "theme.slint";
 import { CounterpartyList } from "counterparties/counterparty_list.slint";
+import { CounterpartyForm } from "counterparties/counterparty_form.slint";
 import { ActList }          from "acts/act_list.slint";
 import { ActForm }          from "acts/act_form.slint";
-// StandardListViewItem не потребує явного імпорту —
-// він доступний через StandardTableView (імпортований у CounterpartyList).
 
 // ── NavItem — елемент бічної навігації ──────────────────────────────────────
 //
-// Не містить `export` — використовується лише в цьому файлі.
-// active: bool — підсвічує активний розділ синім фоном.
-// Анімація: плавна зміна кольору при переходах.
+// active: bool — підсвічує активний розділ синім фоном + білою лівою смужкою.
+// label: string — включає emoji, наприклад "📄  Акти"
 component NavItem {
     in property <string> label;
     in property <bool>   active: false;
     callback clicked;
 
-    height: 42px;
+    height: 36px;
     min-width: 0;
 
-    // Rectangle з TouchArea — стандартний патерн кастомної кнопки в Slint.
-    // TouchArea "ловить" кліки, Rectangle — візуальне оформлення.
     rect := Rectangle {
-        border-radius: 6px;
-        background: root.active ? #3b82f6 : transparent;
-        // animate — плавна анімація зміни фону за 150мс
-        animate background { duration: 150ms; easing: ease; }
+        border-radius: 8px;
+        background: root.active ? Theme.primary
+            : (nav-touch.has-hover ? #E8EDFE : transparent);
+        animate background { duration: 120ms; easing: ease; }
+
+        // Ліва акцентна смужка — біла, 3px × 24px, видно лише для активного
+        // Позиціонована x=-3 щоб виходити за лівий край rect (sidebar не кліпає)
+        if root.active : Rectangle {
+            x: -3px;
+            y: (parent.height - 24px) / 2;
+            width: 3px;
+            height: 24px;
+            border-radius: 2px;
+            background: #ffffff;
+        }
 
         HorizontalLayout {
-            padding-left: 14px;
-            padding-right: 14px;
+            padding-left: 12px;
+            padding-right: 12px;
 
             Text {
                 text: root.label;
-                font-size: 14px;
-                font-weight: root.active ? 600 : 400;
-                color: root.active ? #ffffff : #94a3b8;
+                font-size: 13px;
+                font-weight: root.active ? 500 : 400;
+                color: root.active ? #ffffff : Theme.text-sub;
                 vertical-alignment: center;
                 animate color { duration: 150ms; easing: ease; }
             }
         }
 
-        TouchArea {
+        nav-touch := TouchArea {
             mouse-cursor: pointer;
             clicked => { root.clicked(); }
-
-            // Hover ефект — трохи освітлюємо коли не активний
-            pointer-event(e) => {
-                if (e.kind == PointerEventKind.move) {
-                    rect.background = root.active ? #3b82f6 : #ffffff18;
-                }
-            }
         }
     }
 }
 
 // ── MainWindow — головне вікно ───────────────────────────────────────────────
-//
-// `inherits Window` — наслідуємо від системного вікна.
-// Всі властивості та колбеки, що починаються з `counterparty-`,
-// делегуються в CounterpartyList.
 export component MainWindow inherits Window {
     title: "Acta — Управлінський облік";
     min-width:  1100px;
     min-height: 680px;
-    preferred-width:  1280px;
-    preferred-height: 800px;
+    preferred-width:  1440px;
+    preferred-height: 900px;
 
     // ── Стан навігації ───────────────────────────────────────────────────────
-    // in-out — двостороннє: Rust може читати і встановлювати,
-    //          Slint також може змінювати (через NavItem.clicked)
+    // 0=Контрагенти | 1=Акти | 2=Накладні | 3=Платежі | 4=Звіти
     in-out property <int> current-page: 0;
-    // 0 = Контрагенти | 1 = Акти | 2 = Накладні | 3 = Платежі
 
     // ── Дані контрагентів ────────────────────────────────────────────────────
-    // [[StandardListViewItem]] — таблиця (масив масивів) для StandardTableView
-    // [string]                 — паралельний масив UUID
     in property <[[StandardListViewItem]]> counterparty-rows;
     in property <[string]>                 counterparty-ids;
+    in property <[bool]>                   counterparty-archived;
     in property <bool>                     counterparties-loading: false;
+    in property <int>                      counterparty-total-count: 0;
+    in property <int>                      counterparty-active-count: 0;
+    in property <int>                      counterparty-archived-count: 0;
+    in property <string>                   counterparty-pagination-text: "";
+    in property <bool>                     counterparty-show-archived: false;
+
+    // ── Стан форми контрагента ───────────────────────────────────────────────
+    in property <bool>   show-cp-form: false;
+    in property <bool>   cp-form-is-edit: false;
+    in property <string> cp-form-edit-id: "";
+    in property <string> cp-form-name: "";
+    in property <string> cp-form-edrpou: "";
+    in property <string> cp-form-iban: "";
+    in property <string> cp-form-phone: "";
+    in property <string> cp-form-email: "";
+    in property <string> cp-form-address: "";
+    in property <string> cp-form-notes: "";
 
     // ── Дані актів ───────────────────────────────────────────────────────────
     in property <[[StandardListViewItem]]> act-rows;
@@ -94,150 +106,218 @@ export component MainWindow inherits Window {
     in property <bool>                     acts-loading: false;
 
     // ── Стан форми акту ──────────────────────────────────────────────────────
-    // show-act-form: false = список актів, true = форма створення/редагування.
-    // Rust встановлює через set_show_act_form() після завантаження даних.
     in property <bool>     show-act-form: false;
     in property <bool>     act-form-is-edit: false;
     in property <string>   act-form-number: "";
-    // Поля для режиму редагування (порожні при створенні нового акту)
     in property <string>   act-form-date: "";
     in property <string>   act-form-notes: "";
     in property <int>      act-form-cp-index: 0;
     in property <string>   act-form-edit-id: "";
     in property <string>   act-form-total: "0.00";
-    // Контрагенти для ComboBox форми (заповнюються при відкритті)
     in property <[string]> act-form-cp-names;
     in property <[string]> act-form-cp-ids;
-    // Позиції форми: паралельні масиви, Rust оновлює після кожного add/remove
     in property <[string]> act-form-item-descriptions;
     in property <[string]> act-form-item-quantities;
     in property <[string]> act-form-item-units;
     in property <[string]> act-form-item-prices;
     in property <[string]> act-form-item-amounts;
 
-    // ── Колбеки контрагентів (делегуються вниз до CounterpartyList) ──────────
+    // ── Колбеки контрагентів ─────────────────────────────────────────────────
     callback counterparty-search-changed(string);
     callback counterparty-selected(string);
     callback counterparty-create-clicked();
     callback counterparty-archive-clicked(string);
+    callback counterparty-filter-clicked();
+
+    // ── Колбеки форми контрагента ────────────────────────────────────────────
+    // Параметри: назва, ЄДРПОУ, IBAN, телефон, email, адреса, примітки
+    callback cp-form-save(   string, string, string, string, string, string, string);
+    callback cp-form-update( string, string, string, string, string, string, string);
+    callback cp-form-cancel();
 
     // ── Колбеки актів ────────────────────────────────────────────────────────
-    // status-filter: 0=Усі, 1=Чернетка, 2=Виставлено, 3=Підписано, 4=Оплачено
     callback act-status-filter-changed(int);
+    callback act-search-changed(string);
     callback act-selected(string);
     callback act-create-clicked();
     callback act-advance-status-clicked(string);
-    callback act-edit-clicked(string);          // UUID → відкрити форму редагування
+    callback act-edit-clicked(string);
 
     // ── Колбеки форми акту ───────────────────────────────────────────────────
-    // Rust обробляє: парсить рядки, викликає db::acts::create(), оновлює список
-    callback act-form-save(      /* number */ string, /* date */ string,
-                                 /* counterparty_id */ string, /* notes */ string);
-    callback act-form-save-draft(/* number */ string, /* date */ string,
-                                 /* counterparty_id */ string, /* notes */ string);
-    callback act-form-update(    /* number */ string, /* date */ string,
-                                 /* counterparty_id */ string, /* notes */ string);
+    callback act-form-save(string, string, string, string);
+    callback act-form-save-draft(string, string, string, string);
+    callback act-form-update(string, string, string, string);
     callback act-form-cancel();
     callback act-form-add-item();
-    callback act-form-remove-item(/* index */ int);
+    callback act-form-remove-item(int);
+    callback act-form-item-changed(int, string, string);
+
+    // ── Toast-сповіщення ─────────────────────────────────────────────────────
+    // Rust встановлює message → toast з'являється, через 3с Rust очищає.
+    // in-out: Slint може прибрати кнопкою ×, Rust може теж.
+    in-out property <string> toast-message: "";
+    in property <bool>       toast-is-error: false;
 
     // ── Розмітка ─────────────────────────────────────────────────────────────
+    // Rectangle-обгортка потрібна щоб накладати toast overlay поверх layout.
+    Rectangle {
+
     HorizontalLayout {
 
-        // ══ Бічна панель навігації ══════════════════════════════════════════
+
+        // ══ Бічна панель навігації (220px) ══════════════════════════════════
         Rectangle {
-            width: 200px;
-            background: #1e293b;   // темно-синій — фірмовий колір сайдбару
+            width: 220px;
+            background: Theme.sidebar-bg;
+            border-width: 1px;
+            border-color: Theme.border;
 
             VerticalLayout {
-                padding: 12px;
-                spacing: 4px;
+                spacing: 0;
+                padding: 0;
 
-                // Логотип / назва програми
+                // ── Логотип (88px: "Acta" + підпис + розділювач) ────────────
+                // Абсолютне позиціонування відповідає Figma: y=24, y=48, y=72
                 Rectangle {
-                    height: 60px;
+                    height: 88px;
 
                     Text {
-                        text: "ACTA";
-                        font-size: 22px;
-                        font-weight: 700;
-                        color: #ffffff;
-                        letter-spacing: 3px;
-                        horizontal-alignment: center;
+                        x: 20px;
+                        y: 24px;
+                        text: "Acta";
+                        font-size: 20px;
+                        font-weight: 600;
+                        color: Theme.text-main;
+                    }
+
+                    Text {
+                        x: 20px;
+                        y: 48px;
+                        text: "Управлінський облік";
+                        font-size: 11px;
+                        color: Theme.text-muted;
+                    }
+
+                    Rectangle {
+                        x: 20px;
+                        y: 72px;
+                        width: 180px;
+                        height: 1px;
+                        background: Theme.border;
+                    }
+                }
+
+                // ── Навігаційні пункти (з відступами 12px з боків, 8px між) ──
+                // Порядок відповідає Figma: Акти, Накладні, Контрагенти, Платежі, Звіти
+                VerticalLayout {
+                    padding-left: 12px;
+                    padding-right: 12px;
+                    padding-top: 4px;
+                    spacing: 8px;
+                    vertical-stretch: 0;
+
+                    NavItem {
+                        label: "📄  Акти";
+                        active: root.current-page == 1;
+                        clicked => { root.current-page = 1; }
+                    }
+                    NavItem {
+                        label: "📦  Накладні";
+                        active: root.current-page == 2;
+                        clicked => { root.current-page = 2; }
+                    }
+                    NavItem {
+                        label: "👥  Контрагенти";
+                        active: root.current-page == 0;
+                        clicked => { root.current-page = 0; }
+                    }
+                    NavItem {
+                        label: "💳  Платежі";
+                        active: root.current-page == 3;
+                        clicked => { root.current-page = 3; }
+                    }
+                    NavItem {
+                        label: "📊  Звіти";
+                        active: root.current-page == 4;
+                        clicked => { root.current-page = 4; }
+                    }
+                }
+
+                // Розпірка — штовхає нижній блок до дна
+                Rectangle { vertical-stretch: 1; }
+
+                // ── Нижня секція: розділювач + Налаштування ──────────────────
+                // HorizontalLayout для вирівняного розділювача (x=20, ширина 180px)
+                HorizontalLayout {
+                    height: 1px;
+                    padding-left: 20px;
+                    padding-right: 20px;
+                    vertical-stretch: 0;
+
+                    Rectangle {
+                        background: Theme.border;
+                    }
+                }
+
+                Rectangle {
+                    height: 34px;
+                    vertical-stretch: 0;
+
+                    Text {
+                        x: 20px;
+                        height: parent.height;
+                        text: "⚙️  Налаштування";
+                        font-size: 13px;
+                        color: Theme.text-sub;
                         vertical-alignment: center;
                     }
                 }
 
-                // Розділювач
-                Rectangle {
-                    height: 1px;
-                    background: #334155;
-                    vertical-stretch: 0;
-                }
-
-                // Відступ після розділювача
-                Rectangle { height: 8px; vertical-stretch: 0; }
-
-                // Навігаційні елементи
-                NavItem {
-                    label: "Контрагенти";
-                    active: root.current-page == 0;
-                    clicked => { root.current-page = 0; }
-                }
-                NavItem {
-                    label: "Акти";
-                    active: root.current-page == 1;
-                    clicked => { root.current-page = 1; }
-                }
-                NavItem {
-                    label: "Накладні";
-                    active: root.current-page == 2;
-                    clicked => { root.current-page = 2; }
-                }
-                NavItem {
-                    label: "Платежі";
-                    active: root.current-page == 3;
-                    clicked => { root.current-page = 3; }
-                }
-
-                // Розпірка — штовхає версію вниз
-                Rectangle { vertical-stretch: 1; }
-
-                // Версія програми
-                Text {
-                    text: "v0.1.0";
-                    font-size: 11px;
-                    color: #475569;
-                    horizontal-alignment: center;
-                }
-
-                Rectangle { height: 4px; vertical-stretch: 0; }
+                Rectangle { height: 12px; vertical-stretch: 0; }
             }
         }
 
         // ══ Область контенту ════════════════════════════════════════════════
         Rectangle {
-            background: #f8fafc;   // світло-сірий фон сторінки
+            background: Theme.bg;
 
-            // ── Сторінка 0: Контрагенти ───────────────────────────────────
-            // Умовне відображення: `if condition : Component { ... }`
-            // Компонент існує в пам'яті лише поки умова true.
-            if root.current-page == 0 : CounterpartyList {
-                // Передаємо дані зверху вниз
-                rows:    root.counterparty-rows;
-                row-ids: root.counterparty-ids;
-                loading: root.counterparties-loading;
+            // ── Сторінка 0: Контрагенти — список ────────────────────────────
+            if root.current-page == 0 && !root.show-cp-form : CounterpartyList {
+                rows:             root.counterparty-rows;
+                row-ids:          root.counterparty-ids;
+                row-archived:     root.counterparty-archived;
+                loading:          root.counterparties-loading;
+                total-count:      root.counterparty-total-count;
+                active-count:     root.counterparty-active-count;
+                archived-count:   root.counterparty-archived-count;
+                pagination-text:  root.counterparty-pagination-text;
+                show-archived:    root.counterparty-show-archived;
 
-                // Делегуємо колбеки вгору до MainWindow
-                // Синтаксис: event(args) => { root.callback(args); }
-                search-changed(q)  => { root.counterparty-search-changed(q); }
-                row-selected(id)   => { root.counterparty-selected(id); }
-                create-clicked     => { root.counterparty-create-clicked(); }
-                archive-clicked(id)=> { root.counterparty-archive-clicked(id); }
+                search-changed(q)   => { root.counterparty-search-changed(q); }
+                row-selected(id)    => { root.counterparty-selected(id); }
+                create-clicked      => { root.counterparty-create-clicked(); }
+                archive-clicked(id) => { root.counterparty-archive-clicked(id); }
+                filter-clicked      => { root.counterparty-filter-clicked(); }
+            }
+
+            // ── Сторінка 0: Контрагенти — форма ─────────────────────────────
+            if root.current-page == 0 && root.show-cp-form : CounterpartyForm {
+                is-edit-mode: root.cp-form-is-edit;
+                cp-edit-id:   root.cp-form-edit-id;
+                cp-name:      root.cp-form-name;
+                cp-edrpou:    root.cp-form-edrpou;
+                cp-iban:      root.cp-form-iban;
+                cp-phone:     root.cp-form-phone;
+                cp-email:     root.cp-form-email;
+                cp-address:   root.cp-form-address;
+                cp-notes:     root.cp-form-notes;
+
+                save(nm, ed, ib, ph, em, ad, nt)    => { root.cp-form-save(nm, ed, ib, ph, em, ad, nt); }
+                update(nm, ed, ib, ph, em, ad, nt)  => { root.cp-form-update(nm, ed, ib, ph, em, ad, nt); }
+                cancel                              => { root.cp-form-cancel(); }
             }
 
             // ── Сторінка 1: Акти — список ────────────────────────────────────
-            // Показується коли show-act-form = false (за замовчуванням)
             if root.current-page == 1 && !root.show-act-form : ActList {
                 rows:             root.act-rows;
                 row-ids:          root.act-row-ids;
@@ -245,15 +325,14 @@ export component MainWindow inherits Window {
                 loading:          root.acts-loading;
 
                 status-filter-changed(i)    => { root.act-status-filter-changed(i); }
+                search-changed(q)           => { root.act-search-changed(q); }
                 row-selected(id)            => { root.act-selected(id); }
                 create-clicked              => { root.act-create-clicked(); }
                 advance-status-clicked(id)  => { root.act-advance-status-clicked(id); }
                 edit-clicked(id)            => { root.act-edit-clicked(id); }
             }
 
-            // ── Сторінка 1: Акти — форма створення ───────────────────────────
-            // Показується коли Rust встановлює show-act-form = true
-            // Дані форми передаються через act-form-* properties.
+            // ── Сторінка 1: Акти — форма ─────────────────────────────────────
             if root.current-page == 1 && root.show-act-form : ActForm {
                 act-number:           root.act-form-number;
                 act-date:             root.act-form-date;
@@ -270,18 +349,18 @@ export component MainWindow inherits Window {
                 item-prices:          root.act-form-item-prices;
                 item-amounts:         root.act-form-item-amounts;
 
-                // Делегуємо колбеки форми вгору до MainWindow → Rust
                 save(n, d, c, notes)       => { root.act-form-save(n, d, c, notes); }
                 save-draft(n, d, c, notes) => { root.act-form-save-draft(n, d, c, notes); }
                 update(n, d, c, notes)     => { root.act-form-update(n, d, c, notes); }
                 cancel                     => { root.act-form-cancel(); }
                 add-item                   => { root.act-form-add-item(); }
                 remove-item(i)             => { root.act-form-remove-item(i); }
+                item-changed(idx, fld, val) => { root.act-form-item-changed(idx, fld, val); }
             }
 
             // ── Заглушки для майбутніх сторінок ──────────────────────────
 
-            if root.current-page == 2 : placeholder-invoices := Rectangle {
+            if root.current-page == 2 : Rectangle {
                 Text {
                     text: "📦  Видаткові накладні\nБуде реалізовано у наступній версії";
                     color: #94a3b8;
@@ -292,7 +371,7 @@ export component MainWindow inherits Window {
                 }
             }
 
-            if root.current-page == 3 : placeholder-payments := Rectangle {
+            if root.current-page == 3 : Rectangle {
                 Text {
                     text: "💰  Платежі\nБуде реалізовано у наступній версії";
                     color: #94a3b8;
@@ -302,6 +381,83 @@ export component MainWindow inherits Window {
                     wrap: word-wrap;
                 }
             }
+
+            if root.current-page == 4 : Rectangle {
+                Text {
+                    text: "📊  Звіти\nБуде реалізовано у наступній версії";
+                    color: #94a3b8;
+                    font-size: 16px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    wrap: word-wrap;
+                }
+            }
         }
+    }
+
+    // ── Toast overlay (fixed bottom-right) ───────────────────────────────────
+    // Слухає toast-message: якщо не порожній — показує повідомлення.
+    // Rust встановлює через set_toast_message(), очищає через таймер (~3с).
+    if root.toast-message != "" : Rectangle {
+        x: parent.width - self.width - 24px;
+        y: parent.height - self.height - 24px;
+        width: 340px;
+        height: 56px;
+        border-radius: 10px;
+        background: root.toast-is-error ? #FEF2F2 : #ECFDF5;
+        border-width: 1px;
+        border-color: root.toast-is-error ? #FECACA : #A7F3D0;
+
+        // Іконка та текст
+        HorizontalLayout {
+            padding-left: 16px;
+            padding-right: 8px;
+            spacing: 10px;
+
+            Text {
+                text: root.toast-is-error ? "✕" : "✓";
+                color: root.toast-is-error ? #DC2626 : #16A34A;
+                font-size: 14px;
+                font-weight: 700;
+                vertical-alignment: center;
+                width: 18px;
+            }
+
+            Text {
+                text: root.toast-message;
+                color: root.toast-is-error ? #991B1B : #166534;
+                font-size: 13px;
+                font-weight: 500;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+                overflow: elide;
+            }
+
+            // Кнопка ×
+            Rectangle {
+                width: 28px;
+                height: 28px;
+                border-radius: 6px;
+                background: close-touch.has-hover
+                    ? (root.toast-is-error ? #FECACA : #A7F3D0)
+                    : transparent;
+                y: (parent.height - self.height) / 2;
+                animate background { duration: 100ms; easing: ease; }
+
+                Text {
+                    text: "×";
+                    color: root.toast-is-error ? #DC2626 : #16A34A;
+                    font-size: 16px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+                close-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.toast-message = ""; }
+                }
+            }
+        }
+    }
     }
 }

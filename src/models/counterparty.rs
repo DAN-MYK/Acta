@@ -1,5 +1,6 @@
 // Модель контрагента
 // Контрагент — це постачальник або покупець, з яким укладаються договори
+#![allow(dead_code)]
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

@@ -1,156 +1,421 @@
-// Компонент: список актів виконаних робіт з фільтром по статусу
+// Компонент: список актів виконаних робіт
 //
-// Патерн аналогічний CounterpartyList:
-//   - Дані приходять через `in property`
-//   - Події виходять через `callback`
-//   - UI-логіка тут, бізнес-логіка — в Rust
+// Структура аналогічна CounterpartyList:
+//   - Topbar 64px (заголовок + кнопка створення)
+//   - Рядок фільтру за статусом
+//   - Таблиця 40px header + 52px рядки + hover
+//   - Status badge з кольором за статусом
+//   - Панель дій з'являється при виборі рядка
 
-import { Button, LineEdit, StandardTableView, ProgressIndicator, ComboBox } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { ProgressIndicator, ComboBox, ListView } from "std-widgets.slint";
 
 export component ActList {
 
     // ── Вхідні дані (Rust → Slint) ─────────────────────────────────────────
     in property <[[StandardListViewItem]]> rows;
     in property <[string]>                 row-ids;
-    // Статуси паралельно до рядків: "draft" | "issued" | "signed" | "paid"
-    // Потрібні для визначення чи доступна кнопка "Наступний статус"
+    // "draft" | "issued" | "signed" | "paid" — для badge-кольорів
     in property <[string]>                 row-statuses;
     in property <bool>                     loading: false;
 
     // ── Колбеки (Slint → Rust) ──────────────────────────────────────────────
     // 0=Усі, 1=Чернетка, 2=Виставлено, 3=Підписано, 4=Оплачено
     callback status-filter-changed(int);
-    callback row-selected(string);          // UUID вибраного акту
+    callback search-changed(string);
+    callback row-selected(string);
     callback create-clicked();
-    callback advance-status-clicked(string); // UUID акту → Rust обчислює наступний статус
-    callback edit-clicked(string);           // UUID акту → відкрити форму редагування
+    callback advance-status-clicked(string);
+    callback edit-clicked(string);
 
     // ── Внутрішній стан ─────────────────────────────────────────────────────
     private property <int>    selected-row: -1;
     private property <string> selected-id: "";
-    private property <string> selected-status: "";  // "draft" | "issued" | "signed" | "paid"
+    private property <string> selected-status: "";
+    private property <string> selected-number: "";
 
     min-width: 600px;
     min-height: 400px;
 
     VerticalLayout {
-        padding: 20px;
-        spacing: 12px;
+        spacing: 0;
+        padding: 0;
 
-        // ── Заголовок + кнопка "Новий акт" ─────────────────────────────────
-        HorizontalLayout {
-            alignment: space-between;
-            vertical-stretch: 0;
+        // ── Topbar (64px, білий, з нижньою межею) ───────────────────────────
+        Rectangle {
+            height: 64px;
+            background: Theme.surface;
 
-            Text {
-                text: "Акти виконаних робіт";
-                font-size: 22px;
-                font-weight: 700;
-                color: #1e293b;
-                vertical-alignment: center;
-            }
+            HorizontalLayout {
+                padding-left: 32px;
+                padding-right: 32px;
 
-            Button {
-                text: "+ Новий акт";
-                clicked => { root.create-clicked(); }
-            }
-        }
-
-        // ── Фільтр по статусу ───────────────────────────────────────────────
-        //
-        // ComboBox зі std-widgets: model = список варіантів,
-        // selected(val) — callback при зміні вибору.
-        // current-index читаємо через ім'я елементу status-combo.
-        HorizontalLayout {
-            spacing: 12px;
-            vertical-stretch: 0;
-
-            Text {
-                text: "Статус:";
-                font-size: 13px;
-                color: #64748b;
-                vertical-alignment: center;
-                width: 60px;
-            }
-
-            status-combo := ComboBox {
-                model: ["Усі", "Чернетка", "Виставлено", "Підписано", "Оплачено"];
-                horizontal-stretch: 0;
-                // При зміні вибору надсилаємо індекс до Rust.
-                // 0=Усі відповідає None у Rust, 1-4 = конкретний статус.
-                selected(val) => {
-                    root.status-filter-changed(status-combo.current-index);
+                Text {
+                    text: "Акти виконаних робіт";
+                    font-size: 18px;
+                    font-weight: 600;
+                    color: Theme.text-main;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
                 }
-            }
 
-            // Розпірка — залишок рядка порожній
-            Rectangle { horizontal-stretch: 1; }
-        }
+                new-btn := Rectangle {
+                    background: Theme.primary;
+                    border-radius: 8px;
+                    height: 36px;
+                    width: 140px;
+                    y: (parent.height - self.height) / 2;
 
-        // ── Індикатор завантаження ──────────────────────────────────────────
-        if root.loading : ProgressIndicator {
-            indeterminate: true;
-            vertical-stretch: 0;
-        }
+                    Text {
+                        text: "+ Новий акт";
+                        color: #ffffff;
+                        font-size: 13px;
+                        font-weight: 500;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
 
-        // ── Таблиця актів ───────────────────────────────────────────────────
-        //
-        // Колонки: Номер (фіксована), Дата (фіксована), Контрагент (розтяжна),
-        //          Сума (фіксована), Статус (фіксована)
-        StandardTableView {
-            columns: [
-                { title: "Номер",       width: 140px },
-                { title: "Дата",        width: 100px },
-                { title: "Контрагент",  horizontal-stretch: 1 },
-                { title: "Сума, грн",   width: 130px },
-                { title: "Статус",      width: 110px },
-            ];
-            rows: root.rows;
-
-            current-row-changed(i) => {
-                root.selected-row = i;
-                if i >= 0 && i < root.row-ids.length {
-                    root.selected-id      = root.row-ids[i];
-                    root.selected-status  = root.row-statuses[i];
-                    root.row-selected(root.row-ids[i]);
-                }
-            }
-        }
-
-        // ── Панель дій (з'являється при виборі рядка) ───────────────────────
-        if root.selected-row >= 0 : HorizontalLayout {
-            alignment: end;
-            spacing: 8px;
-            vertical-stretch: 0;
-
-            Text {
-                text: "ID: " + root.selected-id;
-                color: #94a3b8;
-                font-size: 11px;
-                vertical-alignment: center;
-                overflow: elide;
-                horizontal-stretch: 1;
-            }
-
-            Button {
-                text: "✎ Редагувати";
-                clicked => {
-                    if (root.selected-id != "") {
-                        root.edit-clicked(root.selected-id);
+                    TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.create-clicked(); }
                     }
                 }
             }
 
-            // Кнопка доступна для всіх статусів крім "paid" (фінального)
-            Button {
-                text: "Наступний статус ▶";
-                enabled: root.selected-id != "" && root.selected-status != "paid";
-                clicked => {
-                    if (root.selected-id != "") {
-                        root.advance-status-clicked(root.selected-id);
-                        root.selected-row    = -1;
-                        root.selected-id     = "";
-                        root.selected-status = "";
+            Rectangle {
+                y: parent.height - 1px;
+                height: 1px;
+                background: Theme.border;
+            }
+        }
+
+        // ── Основний контент ─────────────────────────────────────────────────
+        Rectangle {
+            background: Theme.bg;
+            vertical-stretch: 1;
+
+            VerticalLayout {
+                padding-top: 24px;
+                padding-left: 32px;
+                padding-right: 32px;
+                padding-bottom: 24px;
+                spacing: 16px;
+
+                // ── Фільтр за статусом ────────────────────────────────────────
+                HorizontalLayout {
+                    height: 40px;
+                    spacing: 12px;
+                    vertical-stretch: 0;
+
+                    search-rect := Rectangle {
+                        background: Theme.surface;
+                        border-radius: 8px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        horizontal-stretch: 1;
+                        clip: true;
+
+                        HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 12px;
+
+                            search-input := TextInput {
+                                vertical-alignment: center;
+                                font-size: 13px;
+                                color: Theme.text-main;
+                                edited => { root.search-changed(search-input.text); }
+                            }
+                        }
+
+                        if search-input.text == "" : Text {
+                            x: 12px;
+                            height: parent.height;
+                            width: parent.width - 24px;
+                            text: "🔎  Пошук за номером або контрагентом...";
+                            color: Theme.text-muted;
+                            font-size: 13px;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    Text {
+                        text: "Статус:";
+                        font-size: 13px;
+                        color: Theme.text-sub;
+                        vertical-alignment: center;
+                        width: 52px;
+                    }
+
+                    // ComboBox обгорнутий у стилізований Rectangle
+                    Rectangle {
+                        background: Theme.surface;
+                        border-radius: 8px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        width: 180px;
+
+                        status-combo := ComboBox {
+                            model: ["Усі", "Чернетка", "Виставлено", "Підписано", "Оплачено"];
+                            selected => {
+                                root.status-filter-changed(status-combo.current-index);
+                            }
+                        }
+                    }
+
+                }
+
+                if root.loading : ProgressIndicator {
+                    indeterminate: true;
+                    vertical-stretch: 0;
+                }
+
+                // ── Таблиця ──────────────────────────────────────────────────
+                Rectangle {
+                    vertical-stretch: 1;
+                    border-radius: 8px;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    clip: true;
+
+                    VerticalLayout {
+                        spacing: 0;
+
+                        // Заголовок таблиці
+                        Rectangle {
+                            height: 40px;
+                            background: #F1F1F4;
+
+                            HorizontalLayout {
+                                padding-left: 16px;
+                                padding-right: 16px;
+
+                                Text { text: "Номер";      color: Theme.text-sub; font-size: 12px; font-weight: 500; horizontal-stretch: 2; vertical-alignment: center; }
+                                Text { text: "Дата";       color: Theme.text-sub; font-size: 12px; font-weight: 500; horizontal-stretch: 1; vertical-alignment: center; }
+                                Text { text: "Контрагент"; color: Theme.text-sub; font-size: 12px; font-weight: 500; horizontal-stretch: 3; vertical-alignment: center; }
+                                Text { text: "Сума, ₴";    color: Theme.text-sub; font-size: 12px; font-weight: 500; horizontal-stretch: 1; vertical-alignment: center; }
+                                Text { text: "Статус";     color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 100px; vertical-alignment: center; }
+                            }
+                        }
+
+                        // Порожній стан — коли немає актів і не завантажується
+                        if !root.loading && root.rows.length == 0 : Rectangle {
+                            vertical-stretch: 1;
+                            background: Theme.surface;
+
+                            VerticalLayout {
+                                alignment: center;
+                                spacing: 8px;
+
+                                Text {
+                                    text: "📄";
+                                    font-size: 32px;
+                                    horizontal-alignment: center;
+                                }
+                                Text {
+                                    text: "Актів ще немає";
+                                    font-size: 15px;
+                                    font-weight: 500;
+                                    color: Theme.text-sub;
+                                    horizontal-alignment: center;
+                                }
+                                Text {
+                                    text: "Натисніть «+ Новий акт» щоб створити перший";
+                                    font-size: 13px;
+                                    color: Theme.text-muted;
+                                    horizontal-alignment: center;
+                                }
+                            }
+                        }
+
+                        // Рядки даних
+                        ListView {
+                            vertical-stretch: 1;
+
+                            for row[i] in root.rows : Rectangle {
+                                // Визначаємо raw-статус для badge-кольору
+                                property <string> raw-status: i < root.row-statuses.length
+                                    ? root.row-statuses[i] : "draft";
+                                // Колір тексту badge
+                                property <color> badge-color:
+                                    raw-status == "paid"   ? Theme.success  :
+                                    raw-status == "signed" ? Theme.primary  :
+                                    raw-status == "issued" ? Theme.warning  :
+                                    Theme.text-muted;
+                                // Фон badge (12% прозорість відповідного кольору)
+                                property <color> badge-bg:
+                                    raw-status == "paid"   ? #1EB16E1F :
+                                    raw-status == "signed" ? #3D75F41A :
+                                    raw-status == "issued" ? #F4A31E1F :
+                                    #ABABB71F;
+
+                                height: 52px;
+                                background: root.selected-row == i
+                                    ? #EFF1FE
+                                    : (row-touch.has-hover
+                                        ? #EEEEF5
+                                        : (Math.mod(i, 2) == 0 ? Theme.surface : #FCFCFD));
+                                border-width: 1px;
+                                border-color: Theme.border;
+                                animate background { duration: 80ms; easing: ease; }
+
+                                HorizontalLayout {
+                                    padding-left: 15px;
+                                    padding-right: 15px;
+
+                                    // Номер акту
+                                    Text {
+                                        text: row[0].text;
+                                        color: Theme.text-main;
+                                        font-size: 13px;
+                                        font-weight: 500;
+                                        horizontal-stretch: 2;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                    }
+                                    // Дата
+                                    Text {
+                                        text: row[1].text;
+                                        color: Theme.text-sub;
+                                        font-size: 13px;
+                                        horizontal-stretch: 1;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                    }
+                                    // Контрагент
+                                    Text {
+                                        text: row[2].text;
+                                        color: Theme.text-sub;
+                                        font-size: 13px;
+                                        horizontal-stretch: 3;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                    }
+                                    // Сума — виділена жирним
+                                    Text {
+                                        text: row[3].text;
+                                        color: Theme.text-main;
+                                        font-size: 13px;
+                                        font-weight: 600;
+                                        horizontal-stretch: 1;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                    }
+                                    // Status badge — кольорова таблетка
+                                    Rectangle {
+                                        width: 100px;
+
+                                        Rectangle {
+                                            width: 84px;
+                                            height: 24px;
+                                            y: (parent.height - self.height) / 2;
+                                            border-radius: 12px;
+                                            background: badge-bg;
+
+                                            Text {
+                                                text: row[4].text;
+                                                color: badge-color;
+                                                font-size: 11px;
+                                                font-weight: 500;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                row-touch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => {
+                                        root.selected-row = i;
+                                        if i < root.row-ids.length {
+                                            root.selected-id     = root.row-ids[i];
+                                            root.selected-status = root.row-statuses[i];
+                                            root.selected-number = row[0].text;
+                                            root.row-selected(root.row-ids[i]);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Панель дій (з'являється при виборі рядка) ───────────────
+                if root.selected-row >= 0 : HorizontalLayout {
+                    height: 48px;
+                    spacing: 8px;
+                    vertical-stretch: 0;
+
+                    // Назва вибраного акту
+                    Text {
+                        text: root.selected-number;
+                        color: Theme.text-sub;
+                        font-size: 13px;
+                        font-weight: 500;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                        overflow: elide;
+                    }
+
+                    // Кнопка "Редагувати" — вторинний стиль
+                    Rectangle {
+                        background: Theme.surface;
+                        border-radius: 8px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        height: 36px;
+                        width: 130px;
+                        y: (parent.height - self.height) / 2;
+
+                        Text {
+                            text: "✎  Редагувати";
+                            color: Theme.text-main;
+                            font-size: 13px;
+                            font-weight: 500;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                if root.selected-id != "" {
+                                    root.edit-clicked(root.selected-id);
+                                }
+                            }
+                        }
+                    }
+
+                    // Кнопка "Наступний статус" — синя або сіра (paid = фінал)
+                    Rectangle {
+                        background: root.selected-status != "paid"
+                            ? Theme.primary : Theme.border;
+                        border-radius: 8px;
+                        height: 36px;
+                        width: 180px;
+                        y: (parent.height - self.height) / 2;
+
+                        Text {
+                            text: "Наступний статус ▶";
+                            color: root.selected-status != "paid" ? #ffffff : Theme.text-muted;
+                            font-size: 13px;
+                            font-weight: 500;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+
+                        TouchArea {
+                            mouse-cursor: root.selected-status != "paid" ? pointer : default;
+                            clicked => {
+                                if root.selected-id != "" && root.selected-status != "paid" {
+                                    root.advance-status-clicked(root.selected-id);
+                                    root.selected-row    = -1;
+                                    root.selected-id     = "";
+                                    root.selected-status = "";
+                                    root.selected-number = "";
+                                }
+                            }
+                        }
                     }
                 }
             }

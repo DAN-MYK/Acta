@@ -1,6 +1,7 @@
 // CRUD операції для актів виконаних робіт
 //
 // Транзакційна вставка: create() відкриває транзакцію, вставляє акт + всі позиції,
+#![allow(dead_code)]
 // перераховує total_amount, і лише тоді робить commit.
 // Якщо будь-який крок провалився — транзакція автоматично відкатується при drop().
 
@@ -32,9 +33,9 @@ pub async fn generate_next_number(pool: &PgPool) -> Result<String> {
         r#"
         SELECT number
         FROM acts
-        WHERE EXTRACT(YEAR FROM date) = $1
+        WHERE EXTRACT(YEAR FROM date)::int = $1
         "#,
-        year as f64  // EXTRACT повертає float8 у PostgreSQL, тому порівнюємо з f64
+        year as i32
     )
     .fetch_all(pool)
     .await?;
@@ -96,9 +97,20 @@ pub async fn counterparties_for_select(pool: &PgPool) -> Result<Vec<(Uuid, Strin
 /// Два окремих `query_as!` замість динамічного SQL —
 /// так зберігається перевірка типів під час компіляції.
 pub async fn list(pool: &PgPool, status_filter: Option<ActStatus>) -> Result<Vec<ActListRow>> {
-    match status_filter {
-        None => {
-            let rows = sqlx::query_as!(
+    list_filtered(pool, status_filter, None).await
+}
+
+/// Отримати список актів з фільтром за статусом і текстовим пошуком.
+pub async fn list_filtered(
+    pool: &PgPool,
+    status_filter: Option<ActStatus>,
+    search_query: Option<&str>,
+) -> Result<Vec<ActListRow>> {
+    let search_query = search_query.map(str::trim).filter(|q| !q.is_empty());
+
+    let rows = match (status_filter, search_query) {
+        (None, None) => {
+            sqlx::query_as!(
                 ActListRow,
                 r#"
                 SELECT a.id, a.number, a.date,
@@ -111,11 +123,10 @@ pub async fn list(pool: &PgPool, status_filter: Option<ActStatus>) -> Result<Vec
                 "#
             )
             .fetch_all(pool)
-            .await?;
-            Ok(rows)
+            .await?
         }
-        Some(status) => {
-            let rows = sqlx::query_as!(
+        (Some(status), None) => {
+            sqlx::query_as!(
                 ActListRow,
                 r#"
                 SELECT a.id, a.number, a.date,
@@ -130,10 +141,51 @@ pub async fn list(pool: &PgPool, status_filter: Option<ActStatus>) -> Result<Vec
                 status as ActStatus
             )
             .fetch_all(pool)
-            .await?;
-            Ok(rows)
+            .await?
         }
-    }
+        (None, Some(q)) => {
+            let pattern = format!("%{q}%");
+            sqlx::query_as::<_, ActListRow>(
+                r#"
+                SELECT a.id, a.number, a.date,
+                       c.name AS counterparty_name,
+                       a.total_amount,
+                       a.status
+                FROM acts a
+                JOIN counterparties c ON c.id = a.counterparty_id
+                WHERE a.number ILIKE $1 OR c.name ILIKE $1
+                ORDER BY a.date DESC, a.number
+                LIMIT 100
+                "#,
+            )
+            .bind(pattern)
+            .fetch_all(pool)
+            .await?
+        }
+        (Some(status), Some(q)) => {
+            let pattern = format!("%{q}%");
+            sqlx::query_as::<_, ActListRow>(
+                r#"
+                SELECT a.id, a.number, a.date,
+                       c.name AS counterparty_name,
+                       a.total_amount,
+                       a.status
+                FROM acts a
+                JOIN counterparties c ON c.id = a.counterparty_id
+                WHERE a.status = $1
+                  AND (a.number ILIKE $2 OR c.name ILIKE $2)
+                ORDER BY a.date DESC, a.number
+                LIMIT 100
+                "#,
+            )
+            .bind(status)
+            .bind(pattern)
+            .fetch_all(pool)
+            .await?
+        }
+    };
+
+    Ok(rows)
 }
 
 /// Отримати один акт разом з усіма його позиціями.

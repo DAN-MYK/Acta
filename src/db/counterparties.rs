@@ -1,6 +1,7 @@
 // CRUD операції для контрагентів
 //
 // `sqlx::query_as!` — макрос, що перевіряє SQL під час компіляції.
+#![allow(dead_code)]
 // Потребує DATABASE_URL у змінних середовища та запущеної БД при `cargo build`.
 // Для офлайн-розробки запустити: cargo sqlx prepare
 
@@ -12,21 +13,7 @@ use crate::models::{Counterparty, NewCounterparty, UpdateCounterparty};
 
 /// Отримати список усіх активних контрагентів (не архівованих), відсортованих за назвою.
 pub async fn list(pool: &PgPool) -> Result<Vec<Counterparty>> {
-    // query_as! перевіряє SQL та типи під час компіляції
-    let rows = sqlx::query_as!(
-        Counterparty,
-        r#"
-        SELECT id, name, edrpou, iban, address, phone, email, notes,
-               is_archived, bas_id, created_at, updated_at
-        FROM counterparties
-        WHERE is_archived = FALSE
-        ORDER BY name
-        "#
-    )
-    .fetch_all(pool)
-    .await?;
-
-    Ok(rows)
+    list_filtered(pool, None, false).await
 }
 
 /// Отримати одного контрагента за UUID.
@@ -50,25 +37,77 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<Counterparty>> 
 
 /// Пошук контрагентів за назвою або ЄДРПОУ (часткове співпадіння, без урахування регістру).
 pub async fn search(pool: &PgPool, query: &str) -> Result<Vec<Counterparty>> {
-    // ILIKE — PostgreSQL оператор пошуку без урахування регістру
-    // format! потрібен, щоб обгорнути пошуковий запит у %...%
-    let pattern = format!("%{}%", query);
+    list_filtered(pool, Some(query), false).await
+}
 
-    let rows = sqlx::query_as!(
-        Counterparty,
-        r#"
-        SELECT id, name, edrpou, iban, address, phone, email, notes,
-               is_archived, bas_id, created_at, updated_at
-        FROM counterparties
-        WHERE is_archived = FALSE
-          AND (name ILIKE $1 OR edrpou ILIKE $1)
-        ORDER BY name
-        LIMIT 100
-        "#,
-        pattern
-    )
-    .fetch_all(pool)
-    .await?;
+/// Список контрагентів з опціональним текстовим пошуком та показом архіву.
+pub async fn list_filtered(
+    pool: &PgPool,
+    query: Option<&str>,
+    include_archived: bool,
+) -> Result<Vec<Counterparty>> {
+    let query = query.map(str::trim).filter(|q| !q.is_empty());
+
+    let rows = match (query, include_archived) {
+        (None, false) => {
+            sqlx::query_as::<_, Counterparty>(
+                r#"
+                SELECT id, name, edrpou, iban, address, phone, email, notes,
+                       is_archived, bas_id, created_at, updated_at
+                FROM counterparties
+                WHERE is_archived = FALSE
+                ORDER BY name
+                "#,
+            )
+            .fetch_all(pool)
+            .await?
+        }
+        (None, true) => {
+            sqlx::query_as::<_, Counterparty>(
+                r#"
+                SELECT id, name, edrpou, iban, address, phone, email, notes,
+                       is_archived, bas_id, created_at, updated_at
+                FROM counterparties
+                ORDER BY name
+                "#,
+            )
+            .fetch_all(pool)
+            .await?
+        }
+        (Some(q), false) => {
+            let pattern = format!("%{q}%");
+            sqlx::query_as::<_, Counterparty>(
+                r#"
+                SELECT id, name, edrpou, iban, address, phone, email, notes,
+                       is_archived, bas_id, created_at, updated_at
+                FROM counterparties
+                WHERE is_archived = FALSE
+                  AND (name ILIKE $1 OR COALESCE(edrpou, '') ILIKE $1)
+                ORDER BY name
+                LIMIT 100
+                "#,
+            )
+            .bind(pattern)
+            .fetch_all(pool)
+            .await?
+        }
+        (Some(q), true) => {
+            let pattern = format!("%{q}%");
+            sqlx::query_as::<_, Counterparty>(
+                r#"
+                SELECT id, name, edrpou, iban, address, phone, email, notes,
+                       is_archived, bas_id, created_at, updated_at
+                FROM counterparties
+                WHERE name ILIKE $1 OR COALESCE(edrpou, '') ILIKE $1
+                ORDER BY name
+                LIMIT 100
+                "#,
+            )
+            .bind(pattern)
+            .fetch_all(pool)
+            .await?
+        }
+    };
 
     Ok(rows)
 }
@@ -154,6 +193,19 @@ pub async fn archive(pool: &PgPool, id: Uuid) -> Result<bool> {
 
     // 0 означає "запис не знайдено"
     Ok(affected > 0)
+}
+
+/// Кількість архівованих контрагентів.
+///
+/// Використовує звичайний `sqlx::query_scalar` (без макросу) —
+/// не потребує `cargo sqlx prepare`, перевіряється тільки в runtime.
+pub async fn count_archived(pool: &PgPool) -> Result<i64> {
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::bigint FROM counterparties WHERE is_archived = TRUE"
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(count)
 }
 
 /// Знайти контрагента за bas_id (для імпорту з BAS без дублів).

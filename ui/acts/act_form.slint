@@ -11,6 +11,7 @@
 //   remove-item(i)     → Rust видаляє позицію і та оновлює item-* масиви
 //   Редагування полів позицій — через окремий колбек (TODO: edit-item)
 
+import { Theme } from "../theme.slint";
 import { Button, LineEdit, TextEdit, ComboBox, ScrollView } from "std-widgets.slint";
 
 export component ActForm {
@@ -71,12 +72,29 @@ export component ActForm {
     // Rust видаляє позицію з вказаним індексом, потім оновлює item-* масиви
     callback remove-item(/* index */ int);
 
+    // Користувач відредагував поле позиції:
+    //   index — порядковий номер позиції
+    //   field — "desc" | "qty" | "unit" | "price"
+    //   value — нове значення (рядок)
+    // Rust оновлює модель та перераховує суму/total для qty і price.
+    callback item-changed(/* index */ int, /* field */ string, /* value */ string);
+
     min-width: 700px;
     min-height: 500px;
 
-    VerticalLayout {
-        padding: 24px;
-        spacing: 16px;
+    focus-scope := FocusScope {
+        forward-focus: number-field;
+        key-pressed(event) => {
+            if (event.text == Key.Escape) {
+                root.cancel();
+                return accept;
+            }
+            return reject;
+        }
+
+        VerticalLayout {
+            padding: 24px;
+            spacing: 16px;
 
         // ── Заголовок ────────────────────────────────────────────────────────
         //
@@ -88,7 +106,7 @@ export component ActForm {
                 text: root.is-edit-mode ? "Редагування акту" : "Новий акт";
                 font-size: 22px;
                 font-weight: 700;
-                color: #1e293b;
+                color: Theme.text-main;
                 vertical-alignment: center;
             }
         }
@@ -106,15 +124,22 @@ export component ActForm {
                 Text {
                     text: "Номер акту";
                     font-size: 13px;
-                    color: #64748b;
+                    color: Theme.text-sub;
                     vertical-alignment: center;
                     horizontal-stretch: 0;
                     min-width: 120px;
                 }
                 // number-field.text буде прочитано у колбеках save/save-draft
-                number-field := LineEdit {
-                    text: root.act-number;
-                    placeholder-text: "АКТ-001";
+                Rectangle {
+                    background: Theme.surface;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    border-radius: 8px;
+                    height: 40px;
+                    number-field := LineEdit {
+                        text: root.act-number;
+                        placeholder-text: "АКТ-001";
+                    }
                 }
             }
 
@@ -122,16 +147,23 @@ export component ActForm {
                 Text {
                     text: "Дата";
                     font-size: 13px;
-                    color: #64748b;
+                    color: Theme.text-sub;
                     vertical-alignment: center;
                     horizontal-stretch: 0;
                     min-width: 120px;
                 }
                 // Rust парсить рядок у NaiveDate (формат ДД.ММ.РРРР)
                 // act-date: "" для нового акту, "ДД.ММ.РРРР" для редагування
-                date-field := LineEdit {
-                    text: root.act-date;
-                    placeholder-text: "ДД.ММ.РРРР";
+                Rectangle {
+                    background: Theme.surface;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    border-radius: 8px;
+                    height: 40px;
+                    date-field := LineEdit {
+                        text: root.act-date;
+                        placeholder-text: "ДД.ММ.РРРР";
+                    }
                 }
             }
 
@@ -139,16 +171,25 @@ export component ActForm {
                 Text {
                     text: "Контрагент";
                     font-size: 13px;
-                    color: #64748b;
+                    color: Theme.text-sub;
                     vertical-alignment: center;
                     horizontal-stretch: 0;
                     min-width: 120px;
                 }
                 // cp-combo.current-index → counterparty-ids[i] → Rust отримує UUID
                 // act-cp-index: 0 для нового акту, знайдений індекс для редагування
-                cp-combo := ComboBox {
-                    model: root.counterparty-names;
-                    current-index: root.act-cp-index;
+                // ComboBox обгорнутий у Rectangle щоб задати фон у темній темі
+                Rectangle {
+                    height: 40px;
+                    background: Theme.surface;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    border-radius: 8px;
+
+                    cp-combo := ComboBox {
+                        model: root.counterparty-names;
+                        current-index: root.act-cp-index;
+                    }
                 }
             }
 
@@ -156,7 +197,7 @@ export component ActForm {
                 Text {
                     text: "Примітки";
                     font-size: 13px;
-                    color: #64748b;
+                    color: Theme.text-sub;
                     vertical-alignment: center;
                     vertical-stretch: 0;
                     horizontal-stretch: 0;
@@ -165,10 +206,16 @@ export component ActForm {
                 // TextEdit — багаторядкове поле (на відміну від LineEdit)
                 // wrap: word-wrap — перенос за словами
                 // act-notes: "" для нового акту, наявні нотатки для редагування
-                notes-field := TextEdit {
-                    text: root.act-notes;
-                    height: 80px;
-                    wrap: word-wrap;
+                Rectangle {
+                    background: Theme.surface;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    border-radius: 8px;
+                    height: 88px;
+                    notes-field := TextEdit {
+                        text: root.act-notes;
+                        wrap: word-wrap;
+                    }
                 }
             }
         }
@@ -182,7 +229,7 @@ export component ActForm {
                 text: "Позиції";
                 font-size: 16px;
                 font-weight: 600;
-                color: #1e293b;
+                color: Theme.text-main;
                 vertical-alignment: center;
             }
 
@@ -203,7 +250,7 @@ export component ActForm {
         //   Кнопка ×     — 36px (порожній Rectangle для вирівнювання)
         Rectangle {
             height: 36px;
-            background: #f1f5f9;
+            background: #F1F1F4;
             border-radius: 4px;
             vertical-stretch: 0;
 
@@ -216,7 +263,7 @@ export component ActForm {
                     text: "Найменування";
                     font-size: 12px;
                     font-weight: 600;
-                    color: #64748b;
+                    color: Theme.text-sub;
                     vertical-alignment: center;
                     horizontal-stretch: 3;
                 }
@@ -224,7 +271,7 @@ export component ActForm {
                     text: "К-сть";
                     font-size: 12px;
                     font-weight: 600;
-                    color: #64748b;
+                    color: Theme.text-sub;
                     vertical-alignment: center;
                     horizontal-alignment: right;
                     width: 80px;
@@ -233,7 +280,7 @@ export component ActForm {
                     text: "Од.вим.";
                     font-size: 12px;
                     font-weight: 600;
-                    color: #64748b;
+                    color: Theme.text-sub;
                     vertical-alignment: center;
                     horizontal-alignment: center;
                     width: 70px;
@@ -242,7 +289,7 @@ export component ActForm {
                     text: "Ціна";
                     font-size: 12px;
                     font-weight: 600;
-                    color: #64748b;
+                    color: Theme.text-sub;
                     vertical-alignment: center;
                     horizontal-alignment: right;
                     width: 100px;
@@ -251,7 +298,7 @@ export component ActForm {
                     text: "Сума";
                     font-size: 12px;
                     font-weight: 600;
-                    color: #64748b;
+                    color: Theme.text-sub;
                     vertical-alignment: center;
                     horizontal-alignment: right;
                     width: 100px;
@@ -280,53 +327,50 @@ export component ActForm {
                 for desc[i] in root.item-descriptions: VerticalLayout {
                     spacing: 0;
 
-                    // Рядок позиції
+                    // Рядок позиції — поля редагуються через LineEdit.
+                    // item-changed(i, field, value) → Rust оновлює модель
+                    // та перераховує суму/total при зміні qty або price.
+                    // amount — read-only Text (обчислюється Rust).
                     Rectangle {
                         height: 44px;
-                        background: #ffffff;
+                        background: Theme.surface;
 
                         HorizontalLayout {
                             padding-left: 12px;
                             padding-right: 4px;
+                            padding-top: 4px;
+                            padding-bottom: 4px;
                             spacing: 8px;
 
-                            Text {
+                            LineEdit {
                                 text: desc;
                                 font-size: 13px;
-                                color: #1e293b;
-                                vertical-alignment: center;
-                                overflow: elide;
                                 horizontal-stretch: 3;
+                                edited(v) => { root.item-changed(i, "desc", v); }
                             }
-                            Text {
+                            LineEdit {
                                 text: root.item-quantities[i];
                                 font-size: 13px;
-                                color: #1e293b;
-                                vertical-alignment: center;
-                                horizontal-alignment: right;
                                 width: 80px;
+                                edited(v) => { root.item-changed(i, "qty", v); }
                             }
-                            Text {
+                            LineEdit {
                                 text: root.item-units[i];
                                 font-size: 13px;
-                                color: #475569;
-                                vertical-alignment: center;
-                                horizontal-alignment: center;
                                 width: 70px;
+                                edited(v) => { root.item-changed(i, "unit", v); }
                             }
-                            Text {
+                            LineEdit {
                                 text: root.item-prices[i];
                                 font-size: 13px;
-                                color: #1e293b;
-                                vertical-alignment: center;
-                                horizontal-alignment: right;
                                 width: 100px;
+                                edited(v) => { root.item-changed(i, "price", v); }
                             }
                             Text {
                                 text: root.item-amounts[i];
                                 font-size: 13px;
                                 font-weight: 600;
-                                color: #1e293b;
+                                color: Theme.text-main;
                                 vertical-alignment: center;
                                 horizontal-alignment: right;
                                 width: 100px;
@@ -347,7 +391,7 @@ export component ActForm {
                                 Text {
                                     text: "×";
                                     font-size: 18px;
-                                    color: del-touch.has-hover ? #dc2626 : #94a3b8;
+                                    color: del-touch.has-hover ? #dc2626 : Theme.text-muted;
                                     horizontal-alignment: center;
                                     vertical-alignment: center;
                                     animate color { duration: 100ms; easing: ease; }
@@ -365,7 +409,7 @@ export component ActForm {
                     // Горизонтальний розділювач між рядками
                     Rectangle {
                         height: 1px;
-                        background: #e2e8f0;
+                        background: Theme.border;
                     }
                 }
 
@@ -376,7 +420,7 @@ export component ActForm {
 
                     Text {
                         text: "Позиції відсутні. Натисніть \"+ Додати позицію\".";
-                        color: #94a3b8;
+                        color: Theme.text-muted;
                         font-size: 13px;
                         horizontal-alignment: center;
                         vertical-alignment: center;
@@ -391,7 +435,7 @@ export component ActForm {
         // total-amount — рядок зі значенням від Rust (вже відформатований).
         Rectangle {
             height: 1px;
-            background: #e2e8f0;
+            background: Theme.border;
             vertical-stretch: 0;
         }
 
@@ -403,7 +447,7 @@ export component ActForm {
                 text: "Разом: " + root.total-amount + " ₴";
                 font-size: 18px;
                 font-weight: 700;
-                color: #1e293b;
+                color: Theme.text-main;
             }
         }
 
@@ -469,5 +513,6 @@ export component ActForm {
                 }
             }
         }
+    }
     }
 }

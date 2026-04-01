@@ -1,127 +1,510 @@
-// Компонент: список контрагентів з пошуком
+// Компонент: список контрагентів — дизайн за Figma
 //
 // Патерн: UI-логіка тут, бізнес-логіка — в Rust.
 // Дані приходять через `in property`, події виходять через `callback`.
 
-import { Button, LineEdit, StandardTableView, ProgressIndicator } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { ProgressIndicator, ListView } from "std-widgets.slint";
 
 export component CounterpartyList {
 
     // ── Вхідні дані (Rust → Slint) ─────────────────────────────────────────
-    //
-    // [[StandardListViewItem]] — таблиця: масив рядків, кожен рядок — масив комірок.
-    // row-ids — паралельний масив UUID, щоб при виборі рядка передати id до Rust.
     in property <[[StandardListViewItem]]> rows;
     in property <[string]>                 row-ids;
+    // Паралельний масив: чи архівований кожен контрагент
+    in property <[bool]>                   row-archived;
     in property <bool>                     loading: false;
 
-    // ── Колбеки (Slint → Rust) ──────────────────────────────────────────────
-    callback search-changed(string);      // викликається при кожній зміні пошуку
-    callback row-selected(string);        // передає UUID вибраного контрагента
-    callback create-clicked();
-    callback archive-clicked(string);     // передає UUID контрагента
+    // Stat-картки
+    in property <int>    total-count: 0;
+    in property <int>    active-count: 0;
+    in property <int>    archived-count: 0;
+    in property <bool>   show-archived: false;
 
-    // ── Внутрішній стан компоненту ──────────────────────────────────────────
-    // private — недоступний ззовні, лише всередині цього компоненту
+    // Текст пагінації: "Показано N з M контрагентів" — формується в Rust
+    in property <string> pagination-text: "";
+
+    // ── Колбеки (Slint → Rust) ──────────────────────────────────────────────
+    callback search-changed(string);
+    callback row-selected(string);
+    callback create-clicked();
+    callback archive-clicked(string);
+    callback filter-clicked();
+
+    // ── Внутрішній стан ─────────────────────────────────────────────────────
     private property <int>    selected-row: -1;
     private property <string> selected-id: "";
+    private property <int>    archive-confirm-row: -1;
 
-    // ── Розмір за замовчуванням ─────────────────────────────────────────────
     min-width: 600px;
     min-height: 400px;
 
     VerticalLayout {
-        padding: 20px;
-        spacing: 12px;
+        spacing: 0;
+        padding: 0;
 
-        // ── Заголовок + кнопка "Новий" ──────────────────────────────────────
-        HorizontalLayout {
-            alignment: space-between;
-            vertical-stretch: 0;         // не розтягувати — фіксована висота
+        // ── Topbar (64px, білий, з нижньою межею) ───────────────────────────
+        Rectangle {
+            height: 64px;
+            background: Theme.surface;
 
-            Text {
-                text: "Контрагенти";
-                font-size: 22px;
-                font-weight: 700;
-                color: #1e293b;
-                vertical-alignment: center;
-            }
+            HorizontalLayout {
+                padding-left: 32px;
+                padding-right: 32px;
 
-            Button {
-                text: "+ Новий контрагент";
-                clicked => { root.create-clicked(); }
-            }
-        }
+                Text {
+                    text: "Контрагенти";
+                    font-size: 18px;
+                    font-weight: 600;
+                    color: Theme.text-main;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
 
-        // ── Поле пошуку ─────────────────────────────────────────────────────
-        // edited(text) — callback LineEdit, спрацьовує при кожній зміні тексту
-        LineEdit {
-            placeholder-text: "Пошук за назвою або ЄДРПОУ...";
-            vertical-stretch: 0;
-            edited(text) => { root.search-changed(text); }
-        }
+                new-btn := Rectangle {
+                    background: Theme.primary;
+                    border-radius: 8px;
+                    height: 36px;
+                    width: 188px;
+                    // вертикальне центрування в HorizontalLayout (батьківська висота = 64px)
+                    y: (parent.height - self.height) / 2;
 
-        // ── Індикатор завантаження (видимий лише коли loading = true) ───────
-        // `if condition : Component { ... }` — умовне відображення в Slint
-        if root.loading : ProgressIndicator {
-            indeterminate: true;   // крутилка без відсотка — невідомий прогрес
-            vertical-stretch: 0;
-        }
+                    Text {
+                        text: "+ Новий контрагент";
+                        color: #ffffff;
+                        font-size: 13px;
+                        font-weight: 500;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
 
-        // ── Таблиця ─────────────────────────────────────────────────────────
-        //
-        // horizontal-stretch: 1  → колонка розтягується, займає вільний простір
-        // width: Npx             → фіксована ширина
-        //
-        // StandardTableView автоматично отримує вертикальний stretch = 1
-        // (займає весь залишок VerticalLayout).
-        StandardTableView {
-            columns: [
-                { title: "Назва",    horizontal-stretch: 2 },
-                { title: "ЄДРПОУ",   width: 110px },
-                { title: "IBAN",     width: 240px },
-                { title: "Телефон",  width: 130px },
-                { title: "Email",    horizontal-stretch: 1 },
-            ];
-            rows: root.rows;
-
-            // current-row-changed — спрацьовує коли користувач клікає рядок.
-            // `i` — індекс рядка, -1 якщо виділення знято.
-            current-row-changed(i) => {
-                root.selected-row = i;
-                // Перевірка меж масиву — захист від помилки out-of-bounds
-                if i >= 0 && i < root.row-ids.length {
-                    root.selected-id = root.row-ids[i];
-                    root.row-selected(root.row-ids[i]);
+                    TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.create-clicked(); }
+                    }
                 }
             }
+
+            // Нижня межа topbar — абсолютно позиціонований thin Rectangle
+            Rectangle {
+                y: parent.height - 1px;
+                height: 1px;
+                background: Theme.border;
+            }
         }
 
-        // ── Панель дій — з'являється коли рядок вибрано ─────────────────────
-        if root.selected-row >= 0 : HorizontalLayout {
-            alignment: end;
-            spacing: 8px;
-            vertical-stretch: 0;
+        // ── Основний контент ─────────────────────────────────────────────────
+        Rectangle {
+            background: Theme.bg;
+            vertical-stretch: 1;
 
-            // Показуємо UUID вибраного контрагента (корисно для налагодження)
-            Text {
-                text: "ID: " + root.selected-id;
-                color: #94a3b8;
-                font-size: 11px;
-                vertical-alignment: center;
-                overflow: elide;
-                horizontal-stretch: 1;
-            }
+            VerticalLayout {
+                padding-top: 24px;
+                padding-left: 32px;
+                padding-right: 32px;
+                padding-bottom: 24px;
+                spacing: 16px;
 
-            Button {
-                text: "Архівувати";
-                enabled: root.selected-id != "";
-                clicked => {
-                    if (root.selected-id != "") {
-                        root.archive-clicked(root.selected-id);
-                        // Скидаємо виділення після дії
-                        root.selected-row = -1;
-                        root.selected-id = "";
+                // ── Рядок пошуку + фільтр ─────────────────────────────────────
+                HorizontalLayout {
+                    height: 40px;
+                    spacing: 12px;
+                    vertical-stretch: 0;
+
+                    search-rect := Rectangle {
+                        background: Theme.surface;
+                        border-radius: 8px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        horizontal-stretch: 1;
+                        clip: true;
+
+                        HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 12px;
+
+                            search-input := TextInput {
+                                vertical-alignment: center;
+                                font-size: 13px;
+                                color: Theme.text-main;
+                                edited => { root.search-changed(search-input.text); }
+                            }
+                        }
+
+                        // Placeholder — зникає одразу як є перший символ
+                        if search-input.text == "" : Text {
+                            x: 12px;
+                            height: parent.height;
+                            width: parent.width - 24px;
+                            text: "🔍  Пошук за назвою або ЄДРПОУ...";
+                            color: Theme.text-muted;
+                            font-size: 13px;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    Rectangle {
+                        background: Theme.surface;
+                        border-radius: 8px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        width: 96px;
+                        clip: true;
+
+                        Text {
+                            text: root.show-archived ? "⚙  Усі" : "⚙  Архів";
+                            color: Theme.text-sub;
+                            font-size: 13px;
+                            font-weight: 500;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.filter-clicked(); }
+                        }
+                    }
+                }
+
+                // ── Stat-картки ───────────────────────────────────────────────
+                //
+                // Три картки: Всього (синя смужка), Активних (зелена), В архіві (сіра).
+                // Кожна картка містить кольорову смужку зверху, велике число і підпис.
+                HorizontalLayout {
+                    height: 74px;
+                    spacing: 16px;
+                    alignment: start;
+                    vertical-stretch: 0;
+
+                    // Всього
+                    Rectangle {
+                        background: Theme.surface;
+                        border-radius: 10px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        width: 140px;
+                        clip: true;
+
+                        Rectangle { x: 0; y: 0; height: 3px; width: parent.width; background: Theme.primary; }
+                        Text { x: 15px; y: 7px;  text: root.total-count;  font-size: 22px; font-weight: 700; color: Theme.text-main; }
+                        Text { x: 15px; y: 33px; text: "Всього";           font-size: 11px; color: Theme.text-sub; }
+                    }
+
+                    // Активних
+                    Rectangle {
+                        background: Theme.surface;
+                        border-radius: 10px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        width: 140px;
+                        clip: true;
+
+                        Rectangle { x: 0; y: 0; height: 3px; width: parent.width; background: Theme.success; }
+                        Text { x: 15px; y: 7px;  text: root.active-count;  font-size: 22px; font-weight: 700; color: Theme.text-main; }
+                        Text { x: 15px; y: 33px; text: "Активних";          font-size: 11px; color: Theme.text-sub; }
+                    }
+
+                    // В архіві
+                    Rectangle {
+                        background: Theme.surface;
+                        border-radius: 10px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        width: 140px;
+                        clip: true;
+
+                        Rectangle { x: 0; y: 0; height: 3px; width: parent.width; background: Theme.text-muted; }
+                        Text { x: 15px; y: 7px;  text: root.archived-count; font-size: 22px; font-weight: 700; color: Theme.text-main; }
+                        Text { x: 15px; y: 33px; text: "В архіві";           font-size: 11px; color: Theme.text-sub; }
+                    }
+                }
+
+                // ── Таблиця ──────────────────────────────────────────────────
+                //
+                // Структура: header (40px, #F1F1F4) + ListView (решта висоти).
+                // Колонки фіксованими stretch: Назва(3), ЄДРПОУ(1), IBAN(2), Телефон(1),
+                //   Статус(88px), Дії(88px) — однакові в header і рядках.
+                Rectangle {
+                    vertical-stretch: 1;
+                    border-radius: 8px;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    clip: true;
+
+                    VerticalLayout {
+                        spacing: 0;
+
+                        // Заголовок таблиці
+                        Rectangle {
+                            height: 40px;
+                            background: #F1F1F4;
+
+                            HorizontalLayout {
+                                padding-left: 16px;
+                                padding-right: 16px;
+
+                                Text { text: "Назва";   color: Theme.text-sub; font-size: 12px; font-weight: 500; horizontal-stretch: 3; vertical-alignment: center; }
+                                Text { text: "ЄДРПОУ";  color: Theme.text-sub; font-size: 12px; font-weight: 500; horizontal-stretch: 1; vertical-alignment: center; }
+                                Text { text: "IBAN";    color: Theme.text-sub; font-size: 12px; font-weight: 500; horizontal-stretch: 2; vertical-alignment: center; }
+                                Text { text: "Телефон"; color: Theme.text-sub; font-size: 12px; font-weight: 500; horizontal-stretch: 1; vertical-alignment: center; }
+                                Text { text: "Статус";  color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 88px; vertical-alignment: center; }
+                                Text { text: "Дії";     color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 88px; vertical-alignment: center; }
+                            }
+                        }
+
+                        if root.loading : ProgressIndicator {
+                            indeterminate: true;
+                            vertical-stretch: 0;
+                        }
+
+                        // Порожній стан — коли немає контрагентів і не завантажується
+                        if !root.loading && root.rows.length == 0 : Rectangle {
+                            vertical-stretch: 1;
+                            background: Theme.surface;
+
+                            VerticalLayout {
+                                alignment: center;
+                                spacing: 8px;
+
+                                Text {
+                                    text: "👥";
+                                    font-size: 32px;
+                                    horizontal-alignment: center;
+                                }
+                                Text {
+                                    text: "Контрагентів ще немає";
+                                    font-size: 15px;
+                                    font-weight: 500;
+                                    color: Theme.text-sub;
+                                    horizontal-alignment: center;
+                                }
+                                Text {
+                                    text: "Натисніть «+ Новий контрагент» щоб додати першого";
+                                    font-size: 13px;
+                                    color: Theme.text-muted;
+                                    horizontal-alignment: center;
+                                }
+                            }
+                        }
+
+                        // Рядки даних
+                        ListView {
+                            vertical-stretch: 1;
+
+                            for row[i] in root.rows : Rectangle {
+                                // Локальна властивість для статусу архіву цього рядка
+                                property <bool> is-archived: i < root.row-archived.length && root.row-archived[i];
+
+                                height: 52px;
+                                // Пріоритет: вибраний > hover > чергування
+                                background: root.selected-row == i
+                                    ? #EFF1FE
+                                    : (row-touch.has-hover
+                                        ? #EEEEF5
+                                        : (Math.mod(i, 2) == 0 ? Theme.surface : #FCFCFD));
+                                border-width: 1px;
+                                border-color: Theme.border;
+                                animate background { duration: 80ms; easing: ease; }
+
+                                HorizontalLayout {
+                                    padding-left: 15px;
+                                    padding-right: 15px;
+
+                                    // col 0: Назва
+                                    Text {
+                                        text: row[0].text;
+                                        color: Theme.text-main;
+                                        font-size: 13px;
+                                        font-weight: 500;
+                                        horizontal-stretch: 3;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                    }
+                                    // col 1: ЄДРПОУ
+                                    Text {
+                                        text: row[1].text;
+                                        color: Theme.text-sub;
+                                        font-size: 13px;
+                                        horizontal-stretch: 1;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                    }
+                                    // col 2: IBAN
+                                    Text {
+                                        text: row[2].text;
+                                        color: Theme.text-sub;
+                                        font-size: 13px;
+                                        horizontal-stretch: 2;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                    }
+                                    // col 3: Телефон
+                                    Text {
+                                        text: row[3].text;
+                                        color: Theme.text-sub;
+                                        font-size: 13px;
+                                        horizontal-stretch: 1;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                    }
+                                    // Статус badge — зелений "Активний" або сірий "Архів"
+                                    // Контейнер 88px, badge 72px × 24px — вертикально по центру
+                                    Rectangle {
+                                        width: 88px;
+
+                                        Rectangle {
+                                            width: 72px;
+                                            height: 24px;
+                                            y: (parent.height - self.height) / 2;
+                                            border-radius: 12px;
+                                            // rgba(30,177,110, 0.12) або rgba(171,171,183, 0.12)
+                                            background: is-archived ? #ABABB71F : #1EB16E1F;
+
+                                            Text {
+                                                text: is-archived ? "Архів" : "Активний";
+                                                color: is-archived ? Theme.text-muted : Theme.success;
+                                                font-size: 11px;
+                                                font-weight: 500;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+                                    }
+                                    // Дії: двокрокове архівування без окремого діалогу
+                                    Rectangle {
+                                        width: 88px;
+
+                                        if !is-archived : Rectangle {
+                                            width: 72px;
+                                            height: 24px;
+                                            y: (parent.height - self.height) / 2;
+                                            border-radius: 6px;
+                                            background: root.archive-confirm-row == i ? #FEF2F2 : #F3F4F6;
+
+                                            Text {
+                                                text: root.archive-confirm-row == i ? "Підтв." : "Архів?";
+                                                color: root.archive-confirm-row == i ? #DC2626 : Theme.text-sub;
+                                                font-size: 11px;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                            }
+
+                                            TouchArea {
+                                                mouse-cursor: pointer;
+                                                clicked => {
+                                                    root.selected-row = i;
+                                                    if root.archive-confirm-row == i {
+                                                        root.archive-confirm-row = -1;
+                                                        if i < root.row-ids.length {
+                                                            root.archive-clicked(root.row-ids[i]);
+                                                        }
+                                                    } else {
+                                                        root.archive-confirm-row = i;
+                                                        if i < root.row-ids.length {
+                                                            root.selected-id = root.row-ids[i];
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // TouchArea на весь рядок — hover + вибір + відкрити
+                                row-touch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => {
+                                        root.archive-confirm-row = -1;
+                                        root.selected-row = i;
+                                        if i < root.row-ids.length {
+                                            root.selected-id = root.row-ids[i];
+                                            root.row-selected(root.row-ids[i]);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Пагінація ─────────────────────────────────────────────────
+                //
+                // Ліворуч: "Показано N з M контрагентів" (текст з Rust).
+                // Праворуч: ← 1 → (статична заглушка, реальна пагінація — майбутнє).
+                HorizontalLayout {
+                    height: 48px;
+                    vertical-stretch: 0;
+
+                    Text {
+                        text: root.pagination-text;
+                        color: Theme.text-muted;
+                        font-size: 13px;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+
+                    HorizontalLayout {
+                        spacing: 4px;
+                        alignment: end;
+
+                        // ← попередня сторінка
+                        Rectangle {
+                            background: Theme.surface;
+                            border-radius: 8px;
+                            border-width: 1px;
+                            border-color: Theme.border;
+                            width: 36px;
+                            height: 36px;
+                            y: (parent.height - self.height) / 2;
+
+                            Text {
+                                text: "←";
+                                color: Theme.text-sub;
+                                font-size: 13px;
+                                font-weight: 500;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        // Сторінка 1 (активна — синя)
+                        Rectangle {
+                            background: Theme.primary;
+                            border-radius: 8px;
+                            width: 36px;
+                            height: 36px;
+                            y: (parent.height - self.height) / 2;
+
+                            Text {
+                                text: "1";
+                                color: #ffffff;
+                                font-size: 13px;
+                                font-weight: 500;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        // → наступна сторінка
+                        Rectangle {
+                            background: Theme.surface;
+                            border-radius: 8px;
+                            border-width: 1px;
+                            border-color: Theme.border;
+                            width: 36px;
+                            height: 36px;
+                            y: (parent.height - self.height) / 2;
+
+                            Text {
+                                text: "→";
+                                color: Theme.text-sub;
+                                font-size: 13px;
+                                font-weight: 500;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
                     }
                 }
             }

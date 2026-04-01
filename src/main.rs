@@ -14,8 +14,21 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use slint::{Model, ModelRc, SharedString, StandardListViewItem, VecModel, Weak};
 use sqlx::postgres::PgPoolOptions;
+use std::sync::{Arc, Mutex};
 
-use models::{ActStatus, NewAct, NewActItem, UpdateAct};
+use models::{ActStatus, NewAct, NewActItem, NewCounterparty, UpdateAct, UpdateCounterparty};
+
+#[derive(Clone, Default)]
+struct CounterpartyListState {
+    query: String,
+    include_archived: bool,
+}
+
+#[derive(Clone, Default)]
+struct ActListState {
+    query: String,
+    status_filter: Option<ActStatus>,
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -36,26 +49,17 @@ async fn main() -> Result<()> {
     // ── Створення вікна ──────────────────────────────────────────────────────
     // MainWindow — тип згенерований з ui/main.slint
     let ui = MainWindow::new()?;
+    ui.set_counterparty_show_archived(false);
+
+    let counterparty_state = Arc::new(Mutex::new(CounterpartyListState::default()));
+    let act_state = Arc::new(Mutex::new(ActListState::default()));
 
     // ── Початкове завантаження ───────────────────────────────────────────────
     // Тут ми ще в main thread (до ui.run()), тому ModelRc будувати безпечно.
-    {
-        let counterparties = db::counterparties::list(&pool).await?;
-        let (rows, ids) = build_models(to_table_data(&counterparties));
-        ui.set_counterparty_rows(rows);
-        ui.set_counterparty_ids(ids);
-        tracing::info!("Завантажено {} контрагентів.", counterparties.len());
-    }
+    reload_counterparties(&pool, ui.as_weak(), String::new(), false, false).await?;
 
     // ── Початкове завантаження актів ─────────────────────────────────────────
-    {
-        let acts = db::acts::list(&pool, None).await?;
-        let (rows, ids, statuses) = build_acts_models(to_acts_table_data(&acts));
-        ui.set_act_rows(rows);
-        ui.set_act_row_ids(ids);
-        ui.set_act_row_statuses(statuses);
-        tracing::info!("Завантажено {} актів.", acts.len());
-    }
+    reload_acts(&pool, ui.as_weak(), None, String::new(), false).await?;
 
     // ── Колбек: пошук ────────────────────────────────────────────────────────
     //
@@ -68,51 +72,101 @@ async fn main() -> Result<()> {
     //   а ModelRc будуємо всередині upgrade_in_event_loop (main thread).
     let pool_search = pool.clone();
     let ui_weak = ui.as_weak();
+    let counterparty_state_search = counterparty_state.clone();
 
     ui.on_counterparty_search_changed(move |query| {
         let pool = pool_search.clone();
         let ui_handle = ui_weak.clone();
-        let query_str = query.to_string();
+        let (query_str, include_archived) = {
+            let mut state = counterparty_state_search.lock().unwrap();
+            state.query = query.to_string();
+            (state.query.clone(), state.include_archived)
+        };
 
         tokio::spawn(async move {
-            let result = if query_str.trim().is_empty() {
-                db::counterparties::list(&pool).await
-            } else {
-                db::counterparties::search(&pool, &query_str).await
-            };
-
-            match result {
-                Ok(cps) => {
-                    // to_table_data повертає Vec<Vec<SharedString>> — є Send
-                    let data = to_table_data(&cps);
-
-                    // upgrade_in_event_loop: ставимо задачу в чергу Slint event loop.
-                    // Closure виконається в main thread — тут безпечно будувати ModelRc.
-                    ui_handle
-                        .upgrade_in_event_loop(move |ui| {
-                            let (rows, ids) = build_models(data);
-                            ui.set_counterparty_rows(rows);
-                            ui.set_counterparty_ids(ids);
-                        })
-                        // unwrap безпечний: повертає Err лише якщо вікно вже закрите,
-                        // але tokio::spawn завершується раніше ніж ui дропається.
-                        .unwrap();
-                }
-                Err(e) => tracing::error!("Помилка пошуку: {e}"),
+            if let Err(e) =
+                reload_counterparties(&pool, ui_handle, query_str, include_archived, false).await
+            {
+                tracing::error!("Помилка пошуку: {e}");
             }
         });
     });
 
-    // ── Колбек: вибір рядка ──────────────────────────────────────────────────
-    ui.on_counterparty_selected(|id| {
-        tracing::debug!("Вибрано контрагента: {id}");
-        // TODO: відкрити картку контрагента
+    // ── Колбек: вибір контрагента — відкрити форму редагування ─────────────
+    let pool_cp_select = pool.clone();
+    let ui_weak_cp_select = ui.as_weak();
+
+    ui.on_counterparty_selected(move |id| {
+        let pool     = pool_cp_select.clone();
+        let ui_handle = ui_weak_cp_select.clone();
+        let id_str   = id.to_string();
+
+        tokio::spawn(async move {
+            let Ok(uuid) = id_str.parse::<uuid::Uuid>() else {
+                tracing::error!("Некоректний UUID контрагента: {id_str}");
+                return;
+            };
+
+            match db::counterparties::get_by_id(&pool, uuid).await {
+                Ok(Some(cp)) => {
+                    ui_handle
+                        .upgrade_in_event_loop(move |ui| {
+                            ui.set_cp_form_name(SharedString::from(cp.name.as_str()));
+                            ui.set_cp_form_edrpou(SharedString::from(cp.edrpou.as_deref().unwrap_or("")));
+                            ui.set_cp_form_iban(SharedString::from(cp.iban.as_deref().unwrap_or("")));
+                            ui.set_cp_form_phone(SharedString::from(cp.phone.as_deref().unwrap_or("")));
+                            ui.set_cp_form_email(SharedString::from(cp.email.as_deref().unwrap_or("")));
+                            ui.set_cp_form_address(SharedString::from(cp.address.as_deref().unwrap_or("")));
+                            ui.set_cp_form_notes(SharedString::from(cp.notes.as_deref().unwrap_or("")));
+                            ui.set_cp_form_edit_id(SharedString::from(cp.id.to_string().as_str()));
+                            ui.set_cp_form_is_edit(true);
+                            ui.set_show_cp_form(true);
+                        })
+                        .ok();
+                }
+                Ok(None) => tracing::warn!("Контрагента {uuid} не знайдено."),
+                Err(e)   => tracing::error!("Помилка завантаження контрагента: {e}"),
+            }
+        });
     });
 
-    // ── Колбек: новий контрагент ─────────────────────────────────────────────
-    ui.on_counterparty_create_clicked(|| {
-        tracing::info!("Натиснуто: Новий контрагент");
-        // TODO: відкрити форму створення
+    // ── Колбек: новий контрагент — відкрити порожню форму ───────────────────
+    let ui_weak_cp_create = ui.as_weak();
+
+    ui.on_counterparty_create_clicked(move || {
+        if let Some(ui) = ui_weak_cp_create.upgrade() {
+            ui.set_cp_form_name(SharedString::from(""));
+            ui.set_cp_form_edrpou(SharedString::from(""));
+            ui.set_cp_form_iban(SharedString::from(""));
+            ui.set_cp_form_phone(SharedString::from(""));
+            ui.set_cp_form_email(SharedString::from(""));
+            ui.set_cp_form_address(SharedString::from(""));
+            ui.set_cp_form_notes(SharedString::from(""));
+            ui.set_cp_form_edit_id(SharedString::from(""));
+            ui.set_cp_form_is_edit(false);
+            ui.set_show_cp_form(true);
+        }
+    });
+
+    // ── Колбек: фільтр контрагентів ──────────────────────────────────────────
+    let pool_cp_filter = pool.clone();
+    let ui_weak_cp_filter = ui.as_weak();
+    let counterparty_state_filter = counterparty_state.clone();
+
+    ui.on_counterparty_filter_clicked(move || {
+        let pool = pool_cp_filter.clone();
+        let ui_handle = ui_weak_cp_filter.clone();
+        let (query, include_archived) = {
+            let mut state = counterparty_state_filter.lock().unwrap();
+            state.include_archived = !state.include_archived;
+            (state.query.clone(), state.include_archived)
+        };
+
+        tokio::spawn(async move {
+            if let Err(e) = reload_counterparties(&pool, ui_handle, query, include_archived, false).await {
+                tracing::error!("Помилка фільтра контрагентів: {e}");
+            }
+        });
     });
 
     // ── Колбек: фільтр статусу актів ─────────────────────────────────────────
@@ -120,6 +174,7 @@ async fn main() -> Result<()> {
     // Індекс ComboBox: 0=Усі, 1=Чернетка, 2=Виставлено, 3=Підписано, 4=Оплачено
     let pool_acts_filter = pool.clone();
     let ui_weak_acts_filter = ui.as_weak();
+    let act_state_filter = act_state.clone();
 
     ui.on_act_status_filter_changed(move |filter_idx| {
         let pool = pool_acts_filter.clone();
@@ -133,22 +188,35 @@ async fn main() -> Result<()> {
             4 => Some(ActStatus::Paid),
             _ => None,  // 0 = "Усі"
         };
+        let query = {
+            let mut state = act_state_filter.lock().unwrap();
+            state.status_filter = status_filter.clone();
+            state.query.clone()
+        };
 
         tokio::spawn(async move {
-            match db::acts::list(&pool, status_filter).await {
-                Ok(acts) => {
-                    let data = to_acts_table_data(&acts);
-                    ui_handle
-                        .upgrade_in_event_loop(move |ui| {
-                            let (rows, ids, statuses) = build_acts_models(data);
-                            ui.set_act_rows(rows);
-                            ui.set_act_row_ids(ids);
-                            ui.set_act_row_statuses(statuses);
-                        })
-                        // unwrap безпечний: вікно живе поки tokio runtime активний.
-                        .unwrap();
-                }
-                Err(e) => tracing::error!("Помилка фільтру актів: {e}"),
+            if let Err(e) = reload_acts(&pool, ui_handle, status_filter, query, false).await {
+                tracing::error!("Помилка фільтру актів: {e}");
+            }
+        });
+    });
+
+    let pool_acts_search = pool.clone();
+    let ui_weak_acts_search = ui.as_weak();
+    let act_state_search = act_state.clone();
+
+    ui.on_act_search_changed(move |query| {
+        let pool = pool_acts_search.clone();
+        let ui_handle = ui_weak_acts_search.clone();
+        let (query, status_filter) = {
+            let mut state = act_state_search.lock().unwrap();
+            state.query = query.to_string();
+            (state.query.clone(), state.status_filter.clone())
+        };
+
+        tokio::spawn(async move {
+            if let Err(e) = reload_acts(&pool, ui_handle, status_filter, query, false).await {
+                tracing::error!("Помилка пошуку актів: {e}");
             }
         });
     });
@@ -198,10 +266,19 @@ async fn main() -> Result<()> {
                 .map(|(id, _)| SharedString::from(id.to_string().as_str()))
                 .collect();
 
+            // Сьогоднішня дата у форматі ДД.ММ.РРРР — обчислюємо до closure (sync)
+            let today = chrono::Local::now()
+                .date_naive()
+                .format("%d.%m.%Y")
+                .to_string();
+
             ui_handle
                 .upgrade_in_event_loop(move |ui| {
                     ui.set_act_form_number(SharedString::from(next_number.as_str()));
+                    ui.set_act_form_date(SharedString::from(today.as_str()));
+                    ui.set_act_form_notes(SharedString::from(""));
                     ui.set_act_form_total(SharedString::from("0.00"));
+                    ui.set_act_form_cp_index(0);
                     ui.set_act_form_is_edit(false);
                     ui.set_act_form_cp_names(ModelRc::new(VecModel::from(cp_names)));
                     ui.set_act_form_cp_ids(ModelRc::new(VecModel::from(cp_ids)));
@@ -222,11 +299,13 @@ async fn main() -> Result<()> {
     // ── Колбек: наступний статус акту ────────────────────────────────────────
     let pool_acts_status = pool.clone();
     let ui_weak_acts_status = ui.as_weak();
+    let act_state_advance = act_state.clone();
 
     ui.on_act_advance_status_clicked(move |id| {
         let pool = pool_acts_status.clone();
         let ui_handle = ui_weak_acts_status.clone();
         let id_str = id.to_string();
+        let act_state = act_state_advance.clone();
 
         tokio::spawn(async move {
             let Ok(uuid) = id_str.parse::<uuid::Uuid>() else {
@@ -241,18 +320,17 @@ async fn main() -> Result<()> {
                         act.number,
                         act.status.label()
                     );
-                    // Оновлюємо список після зміни статусу
-                    if let Ok(acts) = db::acts::list(&pool, None).await {
-                        let data = to_acts_table_data(&acts);
-                        ui_handle
-                            .upgrade_in_event_loop(move |ui| {
-                                let (rows, ids, statuses) = build_acts_models(data);
-                                ui.set_act_rows(rows);
-                                ui.set_act_row_ids(ids);
-                                ui.set_act_row_statuses(statuses);
-                            })
-                            // unwrap безпечний: вікно живе поки tokio runtime активний.
-                            .unwrap();
+                    show_toast(
+                        ui_handle.clone(),
+                        format!("Акт '{}' → {}", act.number, act.status.label()),
+                        false,
+                    );
+                    let (query, status_filter) = {
+                        let state = act_state.lock().unwrap();
+                        (state.query.clone(), state.status_filter.clone())
+                    };
+                    if let Err(e) = reload_acts(&pool, ui_handle.clone(), status_filter, query, false).await {
+                        tracing::error!("Помилка оновлення списку актів після зміни статусу: {e}");
                     }
                 }
                 Ok(None) => tracing::warn!("Акт {uuid} не знайдено."),
@@ -355,6 +433,7 @@ async fn main() -> Result<()> {
     // потім spawn для async DB операції.
     let pool_update = pool.clone();
     let ui_weak_update = ui.as_weak();
+    let act_state_update = act_state.clone();
 
     ui.on_act_form_update(move |number, date_str, cp_id_str, notes| {
         let Some(ui_ref) = ui_weak_update.upgrade() else { return; };
@@ -368,12 +447,27 @@ async fn main() -> Result<()> {
         let date_str  = date_str.to_string();
         let cp_id_str = cp_id_str.to_string();
         let notes_opt = if notes.trim().is_empty() { None } else { Some(notes.to_string()) };
+        let act_state = act_state_update.clone();
 
         tokio::spawn(async move {
             let Ok(uuid) = edit_id.parse::<uuid::Uuid>() else {
                 tracing::error!("Некоректний edit_id: {edit_id}");
                 return;
             };
+
+            // Валідація обов'язкових полів форми
+            if number.trim().is_empty() {
+                tracing::error!("Номер акту не може бути порожнім");
+                return;
+            }
+            if date_str.trim().is_empty() {
+                tracing::error!("Дата акту не може бути порожньою");
+                return;
+            }
+            if cp_id_str.trim().is_empty() {
+                tracing::error!("Контрагент не вибраний");
+                return;
+            }
 
             // Парсимо дату (урок 2026-04-01)
             let date = match NaiveDate::parse_from_str(&date_str, "%d.%m.%Y") {
@@ -403,17 +497,13 @@ async fn main() -> Result<()> {
             match db::acts::update_with_items(&pool, uuid, update_data, items).await {
                 Ok(act) => {
                     tracing::info!("Акт '{}' оновлено (id={}).", act.number, act.id);
-                    if let Ok(acts) = db::acts::list(&pool, None).await {
-                        let data = to_acts_table_data(&acts);
-                        ui_weak
-                            .upgrade_in_event_loop(move |ui| {
-                                let (rows, ids, statuses) = build_acts_models(data);
-                                ui.set_act_rows(rows);
-                                ui.set_act_row_ids(ids);
-                                ui.set_act_row_statuses(statuses);
-                                ui.set_show_act_form(false);
-                            })
-                            .ok();
+                    show_toast(ui_weak.clone(), format!("Акт '{}' оновлено", act.number), false);
+                    let (query, status_filter) = {
+                        let state = act_state.lock().unwrap();
+                        (state.query.clone(), state.status_filter.clone())
+                    };
+                    if let Err(e) = reload_acts(&pool, ui_weak.clone(), status_filter, query, true).await {
+                        tracing::error!("Помилка оновлення списку актів після редагування: {e}");
                     }
                 }
                 Err(e) => tracing::error!("Помилка оновлення акту: {e}"),
@@ -421,14 +511,141 @@ async fn main() -> Result<()> {
         });
     });
 
+    // ── Колбек: скасувати форму контрагента ─────────────────────────────────
+    let ui_weak_cp_cancel = ui.as_weak();
+    ui.on_cp_form_cancel(move || {
+        if let Some(ui) = ui_weak_cp_cancel.upgrade() {
+            ui.set_show_cp_form(false);
+        }
+    });
+
+    // ── Колбек: зберегти нового контрагента ──────────────────────────────────
+    let pool_cp_save  = pool.clone();
+    let ui_weak_cp_save = ui.as_weak();
+    let counterparty_state_save = counterparty_state.clone();
+
+    ui.on_cp_form_save(move |name, edrpou, iban, phone, email, address, notes| {
+        let pool     = pool_cp_save.clone();
+        let ui_weak  = ui_weak_cp_save.clone();
+        let name_s   = name.to_string();
+        let edrpou_s = edrpou.to_string();
+        let iban_s   = iban.to_string();
+        let phone_s  = phone.to_string();
+        let email_s  = email.to_string();
+        let address_s = address.to_string();
+        let notes_s  = notes.to_string();
+        let counterparty_state = counterparty_state_save.clone();
+
+        tokio::spawn(async move {
+            if name_s.trim().is_empty() {
+                tracing::error!("Назва контрагента не може бути порожньою");
+                show_toast(ui_weak, "Введіть назву контрагента".to_string(), true);
+                return;
+            }
+
+            let data = NewCounterparty {
+                name:    name_s.clone(),
+                edrpou:  if edrpou_s.trim().is_empty()  { None } else { Some(edrpou_s) },
+                iban:    if iban_s.trim().is_empty()     { None } else { Some(iban_s) },
+                phone:   if phone_s.trim().is_empty()    { None } else { Some(phone_s) },
+                email:   if email_s.trim().is_empty()    { None } else { Some(email_s) },
+                address: if address_s.trim().is_empty()  { None } else { Some(address_s) },
+                notes:   if notes_s.trim().is_empty()    { None } else { Some(notes_s) },
+                bas_id:  None,
+            };
+
+            match db::counterparties::create(&pool, &data).await {
+                Ok(cp) => {
+                    tracing::info!("Контрагента '{}' створено (id={}).", cp.name, cp.id);
+                    show_toast(ui_weak.clone(), format!("Контрагента '{}' створено", cp.name), false);
+                    let (query, include_archived) = {
+                        let state = counterparty_state.lock().unwrap();
+                        (state.query.clone(), state.include_archived)
+                    };
+                    if let Err(e) = reload_counterparties(&pool, ui_weak, query, include_archived, true).await {
+                        tracing::error!("Помилка оновлення списку контрагентів після створення: {e}");
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Помилка створення контрагента: {e}");
+                    show_toast(ui_weak, format!("Помилка: {e}"), true);
+                }
+            }
+        });
+    });
+
+    // ── Колбек: оновити контрагента (режим редагування) ──────────────────────
+    let pool_cp_update  = pool.clone();
+    let ui_weak_cp_update = ui.as_weak();
+    let counterparty_state_update = counterparty_state.clone();
+
+    ui.on_cp_form_update(move |name, edrpou, iban, phone, email, address, notes| {
+        let Some(ui_ref) = ui_weak_cp_update.upgrade() else { return; };
+        let edit_id = ui_ref.get_cp_form_edit_id().to_string();
+
+        let pool      = pool_cp_update.clone();
+        let ui_weak   = ui_weak_cp_update.clone();
+        let name_s    = name.to_string();
+        let edrpou_s  = edrpou.to_string();
+        let iban_s    = iban.to_string();
+        let phone_s   = phone.to_string();
+        let email_s   = email.to_string();
+        let address_s = address.to_string();
+        let notes_s   = notes.to_string();
+        let counterparty_state = counterparty_state_update.clone();
+
+        tokio::spawn(async move {
+            let Ok(uuid) = edit_id.parse::<uuid::Uuid>() else {
+                tracing::error!("Некоректний edit_id: {edit_id}");
+                return;
+            };
+
+            if name_s.trim().is_empty() {
+                show_toast(ui_weak, "Введіть назву контрагента".to_string(), true);
+                return;
+            }
+
+            let data = UpdateCounterparty {
+                name:    name_s,
+                edrpou:  if edrpou_s.trim().is_empty()  { None } else { Some(edrpou_s) },
+                iban:    if iban_s.trim().is_empty()     { None } else { Some(iban_s) },
+                phone:   if phone_s.trim().is_empty()    { None } else { Some(phone_s) },
+                email:   if email_s.trim().is_empty()    { None } else { Some(email_s) },
+                address: if address_s.trim().is_empty()  { None } else { Some(address_s) },
+                notes:   if notes_s.trim().is_empty()    { None } else { Some(notes_s) },
+            };
+
+            match db::counterparties::update(&pool, uuid, &data).await {
+                Ok(Some(cp)) => {
+                    tracing::info!("Контрагента '{}' оновлено (id={}).", cp.name, cp.id);
+                    show_toast(ui_weak.clone(), format!("Контрагента '{}' оновлено", cp.name), false);
+                    let (query, include_archived) = {
+                        let state = counterparty_state.lock().unwrap();
+                        (state.query.clone(), state.include_archived)
+                    };
+                    if let Err(e) = reload_counterparties(&pool, ui_weak, query, include_archived, true).await {
+                        tracing::error!("Помилка оновлення списку контрагентів після редагування: {e}");
+                    }
+                }
+                Ok(None) => tracing::warn!("Контрагента {uuid} не знайдено."),
+                Err(e) => {
+                    tracing::error!("Помилка оновлення контрагента: {e}");
+                    show_toast(ui_weak, format!("Помилка: {e}"), true);
+                }
+            }
+        });
+    });
+
     // ── Колбек: архівувати ───────────────────────────────────────────────────
     let pool_archive = pool.clone();
     let ui_weak_archive = ui.as_weak();
+    let counterparty_state_archive = counterparty_state.clone();
 
     ui.on_counterparty_archive_clicked(move |id| {
         let pool = pool_archive.clone();
         let ui_handle = ui_weak_archive.clone();
         let id_str = id.to_string();
+        let counterparty_state = counterparty_state_archive.clone();
 
         tokio::spawn(async move {
             // Перетворюємо рядок у UUID — let-else для чистого раннього виходу
@@ -440,17 +657,13 @@ async fn main() -> Result<()> {
             match db::counterparties::archive(&pool, uuid).await {
                 Ok(true) => {
                     tracing::info!("Контрагента {uuid} архівовано.");
-                    if let Ok(cps) = db::counterparties::list(&pool).await {
-                        let data = to_table_data(&cps);
-                        ui_handle
-                            .upgrade_in_event_loop(move |ui| {
-                                let (rows, ids) = build_models(data);
-                                ui.set_counterparty_rows(rows);
-                                ui.set_counterparty_ids(ids);
-                            })
-                            // unwrap безпечний: аналогічно до пошуку — вікно живе
-                            // поки tokio runtime активний (обидва зупиняються разом).
-                            .unwrap();
+                    show_toast(ui_handle.clone(), "Контрагента архівовано".to_string(), false);
+                    let (query, include_archived) = {
+                        let state = counterparty_state.lock().unwrap();
+                        (state.query.clone(), state.include_archived)
+                    };
+                    if let Err(e) = reload_counterparties(&pool, ui_handle, query, include_archived, false).await {
+                        tracing::error!("Помилка оновлення списку контрагентів після архівування: {e}");
                     }
                 }
                 Ok(false) => tracing::warn!("Контрагента {uuid} не знайдено."),
@@ -519,12 +732,70 @@ async fn main() -> Result<()> {
         ui.set_act_form_item_amounts(     remove_at(ui.get_act_form_item_amounts(),      i));
     });
 
+    // ── Колбек: редагування поля позиції акту ───────────────────────────────
+    //
+    // Синхронний колбек (немає DB) — лише перебудовуємо ModelRc.
+    // При зміні qty або price — перераховуємо amounts та total.
+    //
+    // Чому не оновлюємо qty/price через set_row_data: ModelRc не дає
+    // доступу до внутрішнього VecModel після побудови. Замість цього
+    // створюємо новий ModelRc — Slint порівнює значення і не скидає
+    // фокус LineEdit якщо значення не змінилось.
+    let ui_weak_item = ui.as_weak();
+
+    ui.on_act_form_item_changed(move |idx, field, value| {
+        let Some(ui) = ui_weak_item.upgrade() else { return; };
+        let i = idx as usize;
+        let val = value.to_string();
+
+        // Перебудувати ModelRc з одним зміненим елементом
+        fn set_at(model: ModelRc<SharedString>, i: usize, val: &str) -> ModelRc<SharedString> {
+            let mut v: Vec<SharedString> = (0..model.row_count())
+                .filter_map(|j| model.row_data(j))
+                .collect();
+            if i < v.len() { v[i] = SharedString::from(val); }
+            ModelRc::new(VecModel::from(v))
+        }
+
+        match field.as_str() {
+            "desc"  => ui.set_act_form_item_descriptions(set_at(ui.get_act_form_item_descriptions(), i, &val)),
+            "qty"   => ui.set_act_form_item_quantities(  set_at(ui.get_act_form_item_quantities(),   i, &val)),
+            "unit"  => ui.set_act_form_item_units(       set_at(ui.get_act_form_item_units(),        i, &val)),
+            "price" => ui.set_act_form_item_prices(      set_at(ui.get_act_form_item_prices(),       i, &val)),
+            _ => return,
+        }
+
+        // Перераховуємо суми рядків та total лише при зміні qty або price
+        if field == "qty" || field == "price" {
+            let qtys   = ui.get_act_form_item_quantities();
+            let prices = ui.get_act_form_item_prices();
+            let n      = qtys.row_count();
+
+            let mut new_amounts: Vec<SharedString> = Vec::with_capacity(n);
+            let mut total = Decimal::ZERO;
+
+            for j in 0..n {
+                let qty   = qtys.row_data(j).unwrap_or_default()
+                    .parse::<Decimal>().unwrap_or_default();
+                let price = prices.row_data(j).unwrap_or_default()
+                    .parse::<Decimal>().unwrap_or_default();
+                let amt   = qty * price;
+                total += amt;
+                new_amounts.push(SharedString::from(format!("{:.2}", amt).as_str()));
+            }
+
+            ui.set_act_form_item_amounts(ModelRc::new(VecModel::from(new_amounts)));
+            ui.set_act_form_total(SharedString::from(format!("{:.2}", total).as_str()));
+        }
+    });
+
     // ── Колбек: зберегти акт ("Зберегти") ───────────────────────────────────
     //
     // Читаємо поля форми + позиції синхронно (ми в main thread),
     // потім передаємо в tokio::spawn для async DB операції.
     let pool_save = pool.clone();
     let ui_weak_save = ui.as_weak();
+    let act_state_save = act_state.clone();
 
     ui.on_act_form_save(move |number, date_str, cp_id_str, notes| {
         let Some(ui_ref) = ui_weak_save.upgrade() else { return; };
@@ -533,6 +804,7 @@ async fn main() -> Result<()> {
         spawn_save_act(
             pool_save.clone(),
             ui_weak_save.clone(),
+            act_state_save.clone(),
             number.to_string(),
             date_str.to_string(),
             cp_id_str.to_string(),
@@ -548,6 +820,7 @@ async fn main() -> Result<()> {
     // TODO: у майбутньому on_act_form_save може одразу переводити до Issued.
     let pool_draft = pool.clone();
     let ui_weak_draft = ui.as_weak();
+    let act_state_draft = act_state.clone();
 
     ui.on_act_form_save_draft(move |number, date_str, cp_id_str, notes| {
         let Some(ui_ref) = ui_weak_draft.upgrade() else { return; };
@@ -556,6 +829,7 @@ async fn main() -> Result<()> {
         spawn_save_act(
             pool_draft.clone(),
             ui_weak_draft.clone(),
+            act_state_draft.clone(),
             number.to_string(),
             date_str.to_string(),
             cp_id_str.to_string(),
@@ -579,9 +853,12 @@ struct TableData {
     rows: Vec<Vec<SharedString>>,
     // Паралельний масив UUID — rows[i] відповідає ids[i]
     ids: Vec<SharedString>,
+    // Паралельний масив архівованості — true якщо контрагент в архіві
+    archived: Vec<bool>,
 }
 
-// Конвертуємо контрагентів у проміжний формат
+// Конвертуємо контрагентів у проміжний формат.
+// Колонки: Назва, ЄДРПОУ, IBAN, Телефон (email не відображається в таблиці).
 fn to_table_data(cps: &[models::Counterparty]) -> TableData {
     let rows = cps
         .iter()
@@ -591,7 +868,6 @@ fn to_table_data(cps: &[models::Counterparty]) -> TableData {
                 SharedString::from(cp.edrpou.as_deref().unwrap_or("—")),
                 SharedString::from(cp.iban.as_deref().unwrap_or("—")),
                 SharedString::from(cp.phone.as_deref().unwrap_or("—")),
-                SharedString::from(cp.email.as_deref().unwrap_or("—")),
             ]
         })
         .collect();
@@ -601,7 +877,9 @@ fn to_table_data(cps: &[models::Counterparty]) -> TableData {
         .map(|cp| SharedString::from(cp.id.to_string().as_str()))
         .collect();
 
-    TableData { rows, ids }
+    let archived = cps.iter().map(|cp| cp.is_archived).collect();
+
+    TableData { rows, ids, archived }
 }
 
 // ── Проміжний формат для актів (Send) ───────────────────────────────────────
@@ -673,7 +951,11 @@ fn build_acts_models(
 // (struct non-exhaustive, тому { text: ... } не компілюється).
 fn build_models(
     data: TableData,
-) -> (ModelRc<ModelRc<StandardListViewItem>>, ModelRc<SharedString>) {
+) -> (
+    ModelRc<ModelRc<StandardListViewItem>>,
+    ModelRc<SharedString>,
+    ModelRc<bool>,
+) {
     // Кожен рядок → ModelRc<StandardListViewItem>
     let rows: Vec<ModelRc<StandardListViewItem>> = data
         .rows
@@ -690,6 +972,7 @@ fn build_models(
     (
         ModelRc::new(VecModel::from(rows)),
         ModelRc::new(VecModel::from(data.ids)),
+        ModelRc::new(VecModel::from(data.archived)),
     )
 }
 
@@ -724,6 +1007,75 @@ fn collect_form_items(ui: &MainWindow) -> Vec<NewActItem> {
         .collect()
 }
 
+async fn reload_counterparties(
+    pool: &sqlx::PgPool,
+    ui_weak: Weak<MainWindow>,
+    query: String,
+    include_archived: bool,
+    close_form: bool,
+) -> Result<()> {
+    let counterparties =
+        db::counterparties::list_filtered(pool, normalized_query(&query), include_archived).await?;
+    let archived_cnt = db::counterparties::count_archived(pool).await.unwrap_or(0) as i32;
+    let data = to_table_data(&counterparties);
+    let total = data.ids.len() as i32;
+    let active = data.archived.iter().filter(|archived| !**archived).count() as i32;
+    let pagination = SharedString::from(format!("Показано {} контрагентів", total).as_str());
+
+    ui_weak
+        .upgrade_in_event_loop(move |ui| {
+            let (rows, ids, archived) = build_models(data);
+            ui.set_counterparty_rows(rows);
+            ui.set_counterparty_ids(ids);
+            ui.set_counterparty_archived(archived);
+            ui.set_counterparty_total_count(total);
+            ui.set_counterparty_active_count(active);
+            ui.set_counterparty_archived_count(archived_cnt);
+            ui.set_counterparty_pagination_text(pagination);
+            ui.set_counterparty_show_archived(include_archived);
+            if close_form {
+                ui.set_show_cp_form(false);
+            }
+        })
+        .map_err(anyhow::Error::from)?;
+
+    Ok(())
+}
+
+async fn reload_acts(
+    pool: &sqlx::PgPool,
+    ui_weak: Weak<MainWindow>,
+    status_filter: Option<ActStatus>,
+    query: String,
+    close_form: bool,
+) -> Result<()> {
+    let acts = db::acts::list_filtered(pool, status_filter, normalized_query(&query)).await?;
+    let data = to_acts_table_data(&acts);
+
+    ui_weak
+        .upgrade_in_event_loop(move |ui| {
+            let (rows, ids, statuses) = build_acts_models(data);
+            ui.set_act_rows(rows);
+            ui.set_act_row_ids(ids);
+            ui.set_act_row_statuses(statuses);
+            if close_form {
+                ui.set_show_act_form(false);
+            }
+        })
+        .map_err(anyhow::Error::from)?;
+
+    Ok(())
+}
+
+fn normalized_query(query: &str) -> Option<&str> {
+    let trimmed = query.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed)
+    }
+}
+
 /// Запускає tokio::spawn для збереження акту в БД.
 ///
 /// Повертається відразу (non-blocking).
@@ -735,6 +1087,7 @@ fn collect_form_items(ui: &MainWindow) -> Vec<NewActItem> {
 fn spawn_save_act(
     pool:      sqlx::PgPool,
     ui_weak:   Weak<MainWindow>,
+    act_state: Arc<Mutex<ActListState>>,
     number:    String,
     date_str:  String,
     cp_id_str: String,
@@ -742,6 +1095,20 @@ fn spawn_save_act(
     items:     Vec<NewActItem>,
 ) {
     tokio::spawn(async move {
+        // Валідація обов'язкових полів форми
+        if number.trim().is_empty() {
+            tracing::error!("Номер акту не може бути порожнім");
+            return;
+        }
+        if date_str.trim().is_empty() {
+            tracing::error!("Дата акту не може бути порожньою");
+            return;
+        }
+        if cp_id_str.trim().is_empty() {
+            tracing::error!("Контрагент не вибраний");
+            return;
+        }
+
         // Парсимо дату зі строки ДД.ММ.РРРР → chrono::NaiveDate
         let date = match NaiveDate::parse_from_str(&date_str, "%d.%m.%Y") {
             Ok(d)  => d,
@@ -773,22 +1140,42 @@ fn spawn_save_act(
         match db::acts::create(&pool, &new_act).await {
             Ok(act) => {
                 tracing::info!("Акт '{}' збережено (id={}).", act.number, act.id);
+                show_toast(ui_weak.clone(), format!("Акт '{}' збережено", act.number), false);
 
                 // Оновлюємо список та повертаємось до нього
-                if let Ok(acts) = db::acts::list(&pool, None).await {
-                    let data = to_acts_table_data(&acts);
-                    ui_weak
-                        .upgrade_in_event_loop(move |ui| {
-                            let (rows, ids, statuses) = build_acts_models(data);
-                            ui.set_act_rows(rows);
-                            ui.set_act_row_ids(ids);
-                            ui.set_act_row_statuses(statuses);
-                            ui.set_show_act_form(false);  // повертаємось до списку
-                        })
-                        .ok();
+                let (query, status_filter) = {
+                    let state = act_state.lock().unwrap();
+                    (state.query.clone(), state.status_filter.clone())
+                };
+                if let Err(e) = reload_acts(&pool, ui_weak.clone(), status_filter, query, true).await {
+                    tracing::error!("Помилка оновлення списку актів після збереження: {e}");
                 }
             }
-            Err(e) => tracing::error!("Помилка збереження акту: {e}"),
+            Err(e) => {
+                tracing::error!("Помилка збереження акту: {e}");
+                show_toast(ui_weak.clone(), format!("Помилка: {e}"), true);
+            }
         }
+    });
+}
+
+/// Показує toast-сповіщення на 3 секунди, потім автоматично прибирає.
+fn show_toast(ui_weak: Weak<MainWindow>, message: String, is_error: bool) {
+    let msg = SharedString::from(message.as_str());
+    ui_weak
+        .upgrade_in_event_loop(move |ui| {
+            ui.set_toast_message(msg);
+            ui.set_toast_is_error(is_error);
+        })
+        .ok();
+
+    let clear_handle = ui_weak.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        clear_handle
+            .upgrade_in_event_loop(|ui| {
+                ui.set_toast_message(SharedString::from(""));
+            })
+            .ok();
     });
 }
