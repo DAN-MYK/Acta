@@ -23,11 +23,19 @@ export component ActForm {
 
     // Поточний номер акту — заповнюється при відкритті форми редагування
     in property <string> act-number: "";
+    // Дата акту у форматі ДД.ММ.РРРР (для режиму редагування)
+    in property <string> act-date: "";
+    // Примітки акту (для режиму редагування)
+    in property <string> act-notes: "";
+    // Індекс контрагента у ComboBox (для режиму редагування)
+    in property <int>    act-cp-index: 0;
 
     // Підсумкова сума — ЗАВЖДИ обчислюється в Rust, Slint лише відображає
     in property <string> total-amount: "0.00";
 
-    in property <bool> is-edit-mode: false;
+    in property <bool>   is-edit-mode: false;
+    // UUID акту, що редагується — Rust читає при збереженні (update)
+    in property <string> act-edit-id: "";
 
     // ── Позиції акту: паралельні масиви ──────────────────────────────────────
     //
@@ -47,6 +55,11 @@ export component ActForm {
                         /* counterparty_id */ string,
                         /* notes  */ string);
     callback save-draft(/* number */ string,
+                        /* date   */ string,
+                        /* counterparty_id */ string,
+                        /* notes  */ string);
+    // update: викликається при збереженні в режимі редагування
+    callback update(    /* number */ string,
                         /* date   */ string,
                         /* counterparty_id */ string,
                         /* notes  */ string);
@@ -115,7 +128,9 @@ export component ActForm {
                     min-width: 120px;
                 }
                 // Rust парсить рядок у NaiveDate (формат ДД.ММ.РРРР)
+                // act-date: "" для нового акту, "ДД.ММ.РРРР" для редагування
                 date-field := LineEdit {
+                    text: root.act-date;
                     placeholder-text: "ДД.ММ.РРРР";
                 }
             }
@@ -130,8 +145,10 @@ export component ActForm {
                     min-width: 120px;
                 }
                 // cp-combo.current-index → counterparty-ids[i] → Rust отримує UUID
+                // act-cp-index: 0 для нового акту, знайдений індекс для редагування
                 cp-combo := ComboBox {
                     model: root.counterparty-names;
+                    current-index: root.act-cp-index;
                 }
             }
 
@@ -147,7 +164,9 @@ export component ActForm {
                 }
                 // TextEdit — багаторядкове поле (на відміну від LineEdit)
                 // wrap: word-wrap — перенос за словами
+                // act-notes: "" для нового акту, наявні нотатки для редагування
                 notes-field := TextEdit {
+                    text: root.act-notes;
                     height: 80px;
                     wrap: word-wrap;
                 }
@@ -425,16 +444,27 @@ export component ActForm {
 
                 // primary: true — стандартна властивість Button у std-widgets:
                 // відображається з заповненим фоном (акцентний колір теми)
+                //
+                // Умовна логіка: is-edit-mode → update, інакше → save
                 Button {
                     text: "Зберегти";
                     primary: true;
                     clicked => {
-                        root.save(
-                            number-field.text,
-                            date-field.text,
-                            root.counterparty-ids[cp-combo.current-index],
-                            notes-field.text
-                        );
+                        if (root.is-edit-mode) {
+                            root.update(
+                                number-field.text,
+                                date-field.text,
+                                root.counterparty-ids[cp-combo.current-index],
+                                notes-field.text
+                            );
+                        } else {
+                            root.save(
+                                number-field.text,
+                                date-field.text,
+                                root.counterparty-ids[cp-combo.current-index],
+                                notes-field.text
+                            );
+                        }
                     }
                 }
             }

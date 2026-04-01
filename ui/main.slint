@@ -99,6 +99,11 @@ export component MainWindow inherits Window {
     in property <bool>     show-act-form: false;
     in property <bool>     act-form-is-edit: false;
     in property <string>   act-form-number: "";
+    // Поля для режиму редагування (порожні при створенні нового акту)
+    in property <string>   act-form-date: "";
+    in property <string>   act-form-notes: "";
+    in property <int>      act-form-cp-index: 0;
+    in property <string>   act-form-edit-id: "";
     in property <string>   act-form-total: "0.00";
     // Контрагенти для ComboBox форми (заповнюються при відкритті)
     in property <[string]> act-form-cp-names;
@@ -122,12 +127,15 @@ export component MainWindow inherits Window {
     callback act-selected(string);
     callback act-create-clicked();
     callback act-advance-status-clicked(string);
+    callback act-edit-clicked(string);          // UUID → відкрити форму редагування
 
     // ── Колбеки форми акту ───────────────────────────────────────────────────
     // Rust обробляє: парсить рядки, викликає db::acts::create(), оновлює список
     callback act-form-save(      /* number */ string, /* date */ string,
                                  /* counterparty_id */ string, /* notes */ string);
     callback act-form-save-draft(/* number */ string, /* date */ string,
+                                 /* counterparty_id */ string, /* notes */ string);
+    callback act-form-update(    /* number */ string, /* date */ string,
                                  /* counterparty_id */ string, /* notes */ string);
     callback act-form-cancel();
     callback act-form-add-item();
@@ -240,6 +248,7 @@ export component MainWindow inherits Window {
                 row-selected(id)            => { root.act-selected(id); }
                 create-clicked              => { root.act-create-clicked(); }
                 advance-status-clicked(id)  => { root.act-advance-status-clicked(id); }
+                edit-clicked(id)            => { root.act-edit-clicked(id); }
             }
 
             // ── Сторінка 1: Акти — форма створення ───────────────────────────
@@ -247,6 +256,10 @@ export component MainWindow inherits Window {
             // Дані форми передаються через act-form-* properties.
             if root.current-page == 1 && root.show-act-form : ActForm {
                 act-number:           root.act-form-number;
+                act-date:             root.act-form-date;
+                act-notes:            root.act-form-notes;
+                act-cp-index:         root.act-form-cp-index;
+                act-edit-id:          root.act-form-edit-id;
                 total-amount:         root.act-form-total;
                 is-edit-mode:         root.act-form-is-edit;
                 counterparty-names:   root.act-form-cp-names;
@@ -260,6 +273,7 @@ export component MainWindow inherits Window {
                 // Делегуємо колбеки форми вгору до MainWindow → Rust
                 save(n, d, c, notes)       => { root.act-form-save(n, d, c, notes); }
                 save-draft(n, d, c, notes) => { root.act-form-save-draft(n, d, c, notes); }
+                update(n, d, c, notes)     => { root.act-form-update(n, d, c, notes); }
                 cancel                     => { root.act-form-cancel(); }
                 add-item                   => { root.act-form-add-item(); }
                 remove-item(i)             => { root.act-form-remove-item(i); }

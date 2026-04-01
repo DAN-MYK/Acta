@@ -14,7 +14,7 @@ use rust_decimal::Decimal;
 use slint::{Model, ModelRc, SharedString, StandardListViewItem, VecModel, Weak};
 use sqlx::postgres::PgPoolOptions;
 
-use models::{ActStatus, NewAct, NewActItem};
+use models::{ActStatus, NewAct, NewActItem, UpdateAct};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -256,6 +256,166 @@ async fn main() -> Result<()> {
                 }
                 Ok(None) => tracing::warn!("Акт {uuid} не знайдено."),
                 Err(e)   => tracing::error!("Помилка зміни статусу: {e}"),
+            }
+        });
+    });
+
+    // ── Колбек: відкрити акт для редагування ────────────────────────────────
+    //
+    // Паралельно завантажуємо акт з позиціями та список контрагентів,
+    // потім заповнюємо всі поля форми та перемикаємось у edit-mode.
+    let pool_edit = pool.clone();
+    let ui_weak_edit = ui.as_weak();
+
+    ui.on_act_edit_clicked(move |act_id| {
+        let pool = pool_edit.clone();
+        let ui_handle = ui_weak_edit.clone();
+        let id_str = act_id.to_string();
+
+        tokio::spawn(async move {
+            let Ok(uuid) = id_str.parse::<uuid::Uuid>() else {
+                tracing::error!("Некоректний UUID акту: {id_str}");
+                return;
+            };
+
+            // tokio::join! — два незалежних запити паралельно (урок 2026-04-01)
+            let (act_result, cp_result) = tokio::join!(
+                db::acts::get_for_edit(&pool, uuid),
+                db::acts::counterparties_for_select(&pool),
+            );
+
+            let act_opt = match act_result {
+                Ok(v)  => v,
+                Err(e) => { tracing::error!("Помилка завантаження акту: {e}"); return; }
+            };
+            let counterparties = match cp_result {
+                Ok(v)  => v,
+                Err(e) => { tracing::error!("Помилка завантаження контрагентів: {e}"); return; }
+            };
+
+            let Some((act, items)) = act_opt else {
+                tracing::warn!("Акт {uuid} не знайдено.");
+                return;
+            };
+
+            let cp_names: Vec<SharedString> = counterparties
+                .iter()
+                .map(|(_, n)| SharedString::from(n.as_str()))
+                .collect();
+            let cp_ids: Vec<SharedString> = counterparties
+                .iter()
+                .map(|(id, _)| SharedString::from(id.to_string().as_str()))
+                .collect();
+
+            // Шукаємо індекс контрагента акту у відсортованому списку
+            let cp_index = counterparties
+                .iter()
+                .position(|(id, _)| *id == act.counterparty_id)
+                .unwrap_or(0) as i32;
+
+            let item_descs:   Vec<SharedString> = items.iter().map(|it| SharedString::from(it.description.as_str())).collect();
+            let item_qtys:    Vec<SharedString> = items.iter().map(|it| SharedString::from(format!("{}", it.quantity).as_str())).collect();
+            let item_units:   Vec<SharedString> = items.iter().map(|it| SharedString::from(it.unit.as_str())).collect();
+            let item_prices:  Vec<SharedString> = items.iter().map(|it| SharedString::from(format!("{}", it.unit_price).as_str())).collect();
+            let item_amounts: Vec<SharedString> = items.iter().map(|it| SharedString::from(format!("{:.2}", it.amount).as_str())).collect();
+
+            let act_number  = act.number.clone();
+            // Дата у форматі ДД.ММ.РРРР (урок 2026-04-01)
+            let act_date    = act.date.format("%d.%m.%Y").to_string();
+            let act_notes   = act.notes.clone().unwrap_or_default();
+            let act_id_str  = act.id.to_string();
+            let total_str   = format!("{:.2}", act.total_amount);
+
+            ui_handle
+                .upgrade_in_event_loop(move |ui| {
+                    ui.set_act_form_number(SharedString::from(act_number.as_str()));
+                    ui.set_act_form_date(SharedString::from(act_date.as_str()));
+                    ui.set_act_form_notes(SharedString::from(act_notes.as_str()));
+                    ui.set_act_form_cp_index(cp_index);
+                    ui.set_act_form_edit_id(SharedString::from(act_id_str.as_str()));
+                    ui.set_act_form_total(SharedString::from(total_str.as_str()));
+                    ui.set_act_form_is_edit(true);
+                    ui.set_act_form_cp_names(ModelRc::new(VecModel::from(cp_names)));
+                    ui.set_act_form_cp_ids(ModelRc::new(VecModel::from(cp_ids)));
+                    ui.set_act_form_item_descriptions(ModelRc::new(VecModel::from(item_descs)));
+                    ui.set_act_form_item_quantities(  ModelRc::new(VecModel::from(item_qtys)));
+                    ui.set_act_form_item_units(       ModelRc::new(VecModel::from(item_units)));
+                    ui.set_act_form_item_prices(      ModelRc::new(VecModel::from(item_prices)));
+                    ui.set_act_form_item_amounts(     ModelRc::new(VecModel::from(item_amounts)));
+                    ui.set_show_act_form(true);
+                })
+                .ok();
+        });
+    });
+
+    // ── Колбек: оновити акт з позиціями (режим редагування) ─────────────────
+    //
+    // Читаємо edit_id синхронно з UI (main thread),
+    // потім spawn для async DB операції.
+    let pool_update = pool.clone();
+    let ui_weak_update = ui.as_weak();
+
+    ui.on_act_form_update(move |number, date_str, cp_id_str, notes| {
+        let Some(ui_ref) = ui_weak_update.upgrade() else { return; };
+        // Читаємо edit_id та позиції поки ще в main thread
+        let edit_id = ui_ref.get_act_form_edit_id().to_string();
+        let items   = collect_form_items(&ui_ref);
+
+        let pool      = pool_update.clone();
+        let ui_weak   = ui_weak_update.clone();
+        let number    = number.to_string();
+        let date_str  = date_str.to_string();
+        let cp_id_str = cp_id_str.to_string();
+        let notes_opt = if notes.trim().is_empty() { None } else { Some(notes.to_string()) };
+
+        tokio::spawn(async move {
+            let Ok(uuid) = edit_id.parse::<uuid::Uuid>() else {
+                tracing::error!("Некоректний edit_id: {edit_id}");
+                return;
+            };
+
+            // Парсимо дату (урок 2026-04-01)
+            let date = match NaiveDate::parse_from_str(&date_str, "%d.%m.%Y") {
+                Ok(d)  => d,
+                Err(_) => {
+                    tracing::error!("Невірний формат дати: '{date_str}'");
+                    return;
+                }
+            };
+
+            let cp_uuid = match uuid::Uuid::parse_str(&cp_id_str) {
+                Ok(id) => id,
+                Err(_) => {
+                    tracing::error!("Некоректний UUID контрагента: '{cp_id_str}'");
+                    return;
+                }
+            };
+
+            let update_data = UpdateAct {
+                number:          number.clone(),
+                counterparty_id: cp_uuid,
+                contract_id:     None,
+                date,
+                notes:           notes_opt,
+            };
+
+            match db::acts::update_with_items(&pool, uuid, update_data, items).await {
+                Ok(act) => {
+                    tracing::info!("Акт '{}' оновлено (id={}).", act.number, act.id);
+                    if let Ok(acts) = db::acts::list(&pool, None).await {
+                        let data = to_acts_table_data(&acts);
+                        ui_weak
+                            .upgrade_in_event_loop(move |ui| {
+                                let (rows, ids, statuses) = build_acts_models(data);
+                                ui.set_act_rows(rows);
+                                ui.set_act_row_ids(ids);
+                                ui.set_act_row_statuses(statuses);
+                                ui.set_show_act_form(false);
+                            })
+                            .ok();
+                    }
+                }
+                Err(e) => tracing::error!("Помилка оновлення акту: {e}"),
             }
         });
     });

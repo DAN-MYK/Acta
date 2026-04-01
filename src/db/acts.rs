@@ -10,7 +10,7 @@ use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::models::act::{Act, ActItem, ActListRow, ActStatus, NewAct, UpdateAct};
+use crate::models::act::{Act, ActItem, ActListRow, ActStatus, NewAct, NewActItem, UpdateAct};
 
 /// Згенерувати наступний номер акту у форматі "АКТ-РРРР-NNN".
 ///
@@ -320,6 +320,109 @@ pub async fn change_status(pool: &PgPool, id: Uuid, new_status: ActStatus) -> Re
     .fetch_optional(pool)
     .await?;
 
+    Ok(act)
+}
+
+/// Завантажити акт з позиціями для форми редагування.
+/// Делегує до `get_by_id` — логіка ідентична.
+pub async fn get_for_edit(pool: &PgPool, id: Uuid) -> Result<Option<(Act, Vec<ActItem>)>> {
+    get_by_id(pool, id).await
+}
+
+/// Оновити акт разом з позиціями в одній транзакції.
+///
+/// Стара логіка "редагування без позицій" (функція `update`) залишається
+/// для зворотної сумісності. Ця функція — повна заміна позицій:
+///   1. UPDATE заголовку акту
+///   2. DELETE усіх старих позицій
+///   3. INSERT нових позицій
+///   4. UPDATE total_amount = сума нових позицій
+pub async fn update_with_items(
+    pool: &PgPool,
+    id: Uuid,
+    data: UpdateAct,
+    items: Vec<NewActItem>,
+) -> Result<Act> {
+    let mut tx = pool.begin().await?;
+
+    // 1. Оновлюємо заголовок акту
+    let act = sqlx::query_as!(
+        Act,
+        r#"
+        UPDATE acts
+        SET number          = $2,
+            counterparty_id = $3,
+            contract_id     = $4,
+            date            = $5,
+            notes           = $6,
+            updated_at      = NOW()
+        WHERE id = $1
+        RETURNING id, number, counterparty_id, contract_id, date, total_amount,
+                  status AS "status: ActStatus", notes, bas_id, created_at, updated_at
+        "#,
+        id,
+        data.number,
+        data.counterparty_id,
+        data.contract_id,
+        data.date,
+        data.notes,
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    // Якщо акт не знайдено — повертаємо помилку (None неможливий для update)
+    let act = match act {
+        Some(a) => a,
+        None => anyhow::bail!("Акт з id={} не знайдено", id),
+    };
+
+    // 2. Видаляємо всі старі позиції
+    sqlx::query!(
+        "DELETE FROM act_items WHERE act_id = $1",
+        id
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    // 3. Вставляємо нові позиції, рахуємо суму
+    let mut total = Decimal::ZERO;
+
+    for item in &items {
+        let amount = item.quantity * item.unit_price;
+        total += amount;
+
+        sqlx::query!(
+            r#"
+            INSERT INTO act_items (act_id, description, quantity, unit, unit_price, amount)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            "#,
+            act.id,
+            item.description,
+            item.quantity,
+            item.unit,
+            item.unit_price,
+            amount,
+        )
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    // 4. Оновлюємо total_amount
+    let act = sqlx::query_as!(
+        Act,
+        r#"
+        UPDATE acts SET total_amount = $2, updated_at = NOW()
+        WHERE id = $1
+        RETURNING id, number, counterparty_id, contract_id, date, total_amount,
+                  status AS "status: ActStatus", notes, bas_id, created_at, updated_at
+        "#,
+        act.id,
+        total,
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
     Ok(act)
 }
 

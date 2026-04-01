@@ -23,6 +23,7 @@ export component ActList {
     callback row-selected(string);          // UUID вибраного акту
     callback create-clicked();
     callback advance-status-clicked(string); // UUID акту → Rust обчислює наступний статус
+    callback edit-clicked(string);           // UUID акту → відкрити форму редагування
 
     // ── Внутрішній стан ─────────────────────────────────────────────────────
     private property <int>    selected-row: -1;
@@ -129,6 +130,15 @@ export component ActList {
                 vertical-alignment: center;
                 overflow: elide;
                 horizontal-stretch: 1;
+            }
+
+            Button {
+                text: "✎ Редагувати";
+                clicked => {
+                    if (root.selected-id != "") {
+                        root.edit-clicked(root.selected-id);
+                    }
+                }
             }
 
             // Кнопка доступна для всіх статусів крім "paid" (фінального)
