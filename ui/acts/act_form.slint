@@ -1,0 +1,443 @@
+// Форма створення/редагування акту виконаних робіт
+//
+// Архітектура:
+//   - Уся бізнес-логіка (розрахунок сум, валідація) — тільки в Rust
+//   - UI-стан (введені значення, поточний вибір) — тут, у Slint
+//   - При збереженні колбек передає текстові значення полів до Rust
+//   - Позиції: Rust керує списком, Slint лише відображає та сигналізує про зміни
+//
+// Взаємодія з позиціями:
+//   add-item()         → Rust додає нову порожню позицію та оновлює item-* масиви
+//   remove-item(i)     → Rust видаляє позицію і та оновлює item-* масиви
+//   Редагування полів позицій — через окремий колбек (TODO: edit-item)
+
+import { Button, LineEdit, TextEdit, ComboBox, ScrollView } from "std-widgets.slint";
+
+export component ActForm {
+
+    // ── Вхідні дані (Rust → Slint) ─────────────────────────────────────────
+
+    // Контрагенти для ComboBox — паралельні масиви (names[i] ↔ ids[i])
+    in property <[string]> counterparty-names;
+    in property <[string]> counterparty-ids;
+
+    // Поточний номер акту — заповнюється при відкритті форми редагування
+    in property <string> act-number: "";
+
+    // Підсумкова сума — ЗАВЖДИ обчислюється в Rust, Slint лише відображає
+    in property <string> total-amount: "0.00";
+
+    in property <bool> is-edit-mode: false;
+
+    // ── Позиції акту: паралельні масиви ──────────────────────────────────────
+    //
+    // Кожен i-й елемент описує одну позицію.
+    // Rust оновлює ці масиви після кожного add-item / remove-item.
+    in property <[string]> item-descriptions;
+    in property <[string]> item-quantities;
+    in property <[string]> item-units;
+    in property <[string]> item-prices;
+    in property <[string]> item-amounts;    // quantity × unit_price, рахується Rust
+
+    // ── Колбеки (Slint → Rust) ──────────────────────────────────────────────
+
+    // save / save-draft: передають текстовий стан усіх полів до Rust для парсингу
+    callback save(      /* number */ string,
+                        /* date   */ string,
+                        /* counterparty_id */ string,
+                        /* notes  */ string);
+    callback save-draft(/* number */ string,
+                        /* date   */ string,
+                        /* counterparty_id */ string,
+                        /* notes  */ string);
+    callback cancel();
+
+    // Rust додає нову порожню позицію, потім оновлює item-* масиви
+    callback add-item();
+
+    // Rust видаляє позицію з вказаним індексом, потім оновлює item-* масиви
+    callback remove-item(/* index */ int);
+
+    min-width: 700px;
+    min-height: 500px;
+
+    VerticalLayout {
+        padding: 24px;
+        spacing: 16px;
+
+        // ── Заголовок ────────────────────────────────────────────────────────
+        //
+        // Умовний текст: `condition ? true-val : false-val` — тернарний оператор Slint
+        HorizontalLayout {
+            vertical-stretch: 0;
+
+            Text {
+                text: root.is-edit-mode ? "Редагування акту" : "Новий акт";
+                font-size: 22px;
+                font-weight: 700;
+                color: #1e293b;
+                vertical-alignment: center;
+            }
+        }
+
+        // ── Поля форми ───────────────────────────────────────────────────────
+        //
+        // GridLayout — двоколонна сітка: ліворуч підпис (120px), праворуч поле.
+        // `Row { }` — один рядок сітки.
+        // Named elements (`:=`) — щоб читати їх значення у колбеках кнопок нижче.
+        GridLayout {
+            spacing: 12px;
+            vertical-stretch: 0;
+
+            Row {
+                Text {
+                    text: "Номер акту";
+                    font-size: 13px;
+                    color: #64748b;
+                    vertical-alignment: center;
+                    horizontal-stretch: 0;
+                    min-width: 120px;
+                }
+                // number-field.text буде прочитано у колбеках save/save-draft
+                number-field := LineEdit {
+                    text: root.act-number;
+                    placeholder-text: "АКТ-001";
+                }
+            }
+
+            Row {
+                Text {
+                    text: "Дата";
+                    font-size: 13px;
+                    color: #64748b;
+                    vertical-alignment: center;
+                    horizontal-stretch: 0;
+                    min-width: 120px;
+                }
+                // Rust парсить рядок у NaiveDate (формат ДД.ММ.РРРР)
+                date-field := LineEdit {
+                    placeholder-text: "ДД.ММ.РРРР";
+                }
+            }
+
+            Row {
+                Text {
+                    text: "Контрагент";
+                    font-size: 13px;
+                    color: #64748b;
+                    vertical-alignment: center;
+                    horizontal-stretch: 0;
+                    min-width: 120px;
+                }
+                // cp-combo.current-index → counterparty-ids[i] → Rust отримує UUID
+                cp-combo := ComboBox {
+                    model: root.counterparty-names;
+                }
+            }
+
+            Row {
+                Text {
+                    text: "Примітки";
+                    font-size: 13px;
+                    color: #64748b;
+                    vertical-alignment: center;
+                    vertical-stretch: 0;
+                    horizontal-stretch: 0;
+                    min-width: 120px;
+                }
+                // TextEdit — багаторядкове поле (на відміну від LineEdit)
+                // wrap: word-wrap — перенос за словами
+                notes-field := TextEdit {
+                    height: 80px;
+                    wrap: word-wrap;
+                }
+            }
+        }
+
+        // ── Секція позицій: заголовок + кнопка додавання ────────────────────
+        HorizontalLayout {
+            alignment: space-between;
+            vertical-stretch: 0;
+
+            Text {
+                text: "Позиції";
+                font-size: 16px;
+                font-weight: 600;
+                color: #1e293b;
+                vertical-alignment: center;
+            }
+
+            Button {
+                text: "+ Додати позицію";
+                clicked => { root.add-item(); }
+            }
+        }
+
+        // ── Шапка таблиці позицій ─────────────────────────────────────────────
+        //
+        // Ширини стовпців мають точно збігатися з рядками у ScrollView нижче:
+        //   Найменування — horizontal-stretch: 3 (займає вільний простір)
+        //   К-сть        — 80px, right
+        //   Од.вим.      — 70px, center
+        //   Ціна         — 100px, right
+        //   Сума         — 100px, right
+        //   Кнопка ×     — 36px (порожній Rectangle для вирівнювання)
+        Rectangle {
+            height: 36px;
+            background: #f1f5f9;
+            border-radius: 4px;
+            vertical-stretch: 0;
+
+            HorizontalLayout {
+                padding-left: 12px;
+                padding-right: 4px;
+                spacing: 8px;
+
+                Text {
+                    text: "Найменування";
+                    font-size: 12px;
+                    font-weight: 600;
+                    color: #64748b;
+                    vertical-alignment: center;
+                    horizontal-stretch: 3;
+                }
+                Text {
+                    text: "К-сть";
+                    font-size: 12px;
+                    font-weight: 600;
+                    color: #64748b;
+                    vertical-alignment: center;
+                    horizontal-alignment: right;
+                    width: 80px;
+                }
+                Text {
+                    text: "Од.вим.";
+                    font-size: 12px;
+                    font-weight: 600;
+                    color: #64748b;
+                    vertical-alignment: center;
+                    horizontal-alignment: center;
+                    width: 70px;
+                }
+                Text {
+                    text: "Ціна";
+                    font-size: 12px;
+                    font-weight: 600;
+                    color: #64748b;
+                    vertical-alignment: center;
+                    horizontal-alignment: right;
+                    width: 100px;
+                }
+                Text {
+                    text: "Сума";
+                    font-size: 12px;
+                    font-weight: 600;
+                    color: #64748b;
+                    vertical-alignment: center;
+                    horizontal-alignment: right;
+                    width: 100px;
+                }
+                // Порожнє місце навпроти кнопок видалення (для вирівнювання шапки)
+                Rectangle { width: 36px; }
+            }
+        }
+
+        // ── Список позицій (прокручуваний) ───────────────────────────────────
+        //
+        // ScrollView — прокрутка коли позицій більше ніж вміщується.
+        // vertical-stretch: 1 — займає весь залишок VerticalLayout.
+        //
+        // `for desc[i] in root.item-descriptions` — Slint for-loop з індексом:
+        //   desc = поточний елемент масиву
+        //   i    = числовий індекс (0, 1, 2, ...)
+        //
+        // Доступ до паралельних масивів: root.item-quantities[i] тощо.
+        ScrollView {
+            vertical-stretch: 1;
+            min-height: 80px;
+
+            VerticalLayout {
+
+                for desc[i] in root.item-descriptions: VerticalLayout {
+                    spacing: 0;
+
+                    // Рядок позиції
+                    Rectangle {
+                        height: 44px;
+                        background: #ffffff;
+
+                        HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 4px;
+                            spacing: 8px;
+
+                            Text {
+                                text: desc;
+                                font-size: 13px;
+                                color: #1e293b;
+                                vertical-alignment: center;
+                                overflow: elide;
+                                horizontal-stretch: 3;
+                            }
+                            Text {
+                                text: root.item-quantities[i];
+                                font-size: 13px;
+                                color: #1e293b;
+                                vertical-alignment: center;
+                                horizontal-alignment: right;
+                                width: 80px;
+                            }
+                            Text {
+                                text: root.item-units[i];
+                                font-size: 13px;
+                                color: #475569;
+                                vertical-alignment: center;
+                                horizontal-alignment: center;
+                                width: 70px;
+                            }
+                            Text {
+                                text: root.item-prices[i];
+                                font-size: 13px;
+                                color: #1e293b;
+                                vertical-alignment: center;
+                                horizontal-alignment: right;
+                                width: 100px;
+                            }
+                            Text {
+                                text: root.item-amounts[i];
+                                font-size: 13px;
+                                font-weight: 600;
+                                color: #1e293b;
+                                vertical-alignment: center;
+                                horizontal-alignment: right;
+                                width: 100px;
+                            }
+
+                            // Кнопка видалення рядка
+                            //
+                            // Кастомний Rectangle + TouchArea замість Button —
+                            // компактніший (36px) та підтримує hover-ефект.
+                            // `del-touch.has-hover` — вбудована властивість TouchArea.
+                            del-rect := Rectangle {
+                                width: 36px;
+                                height: 36px;
+                                border-radius: 4px;
+                                background: del-touch.has-hover ? #fee2e2 : transparent;
+                                animate background { duration: 100ms; easing: ease; }
+
+                                Text {
+                                    text: "×";
+                                    font-size: 18px;
+                                    color: del-touch.has-hover ? #dc2626 : #94a3b8;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                    animate color { duration: 100ms; easing: ease; }
+                                }
+
+                                del-touch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    // `i` захоплюється по значенню у кожній ітерації for-loop
+                                    clicked => { root.remove-item(i); }
+                                }
+                            }
+                        }
+                    }
+
+                    // Горизонтальний розділювач між рядками
+                    Rectangle {
+                        height: 1px;
+                        background: #e2e8f0;
+                    }
+                }
+
+                // Заглушка для порожнього списку
+                // Видима лише коли item-descriptions.length == 0
+                if root.item-descriptions.length == 0 : Rectangle {
+                    height: 80px;
+
+                    Text {
+                        text: "Позиції відсутні. Натисніть \"+ Додати позицію\".";
+                        color: #94a3b8;
+                        font-size: 13px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        // ── Підсумок ─────────────────────────────────────────────────────────
+        //
+        // Рядок "Разом" вирівняний вправо через `alignment: end`.
+        // total-amount — рядок зі значенням від Rust (вже відформатований).
+        Rectangle {
+            height: 1px;
+            background: #e2e8f0;
+            vertical-stretch: 0;
+        }
+
+        HorizontalLayout {
+            alignment: end;
+            vertical-stretch: 0;
+
+            Text {
+                text: "Разом: " + root.total-amount + " ₴";
+                font-size: 18px;
+                font-weight: 700;
+                color: #1e293b;
+            }
+        }
+
+        // ── Кнопки дій ───────────────────────────────────────────────────────
+        //
+        // Ліворуч:  "← Назад"
+        // Праворуч: "Чернетка" + "Зберегти" (primary — виділений кольором)
+        //
+        // У колбеках читаємо значення named elements:
+        //   number-field.text, date-field.text, notes-field.text — рядки
+        //   cp-combo.current-index — індекс → counterparty-ids[i] → UUID рядком
+        //
+        // Якщо контрагентів нема (ids порожній), current-index = -1,
+        // тоді counterparty-ids[-1] повертає "" (поведінка Slint для out-of-bounds).
+        HorizontalLayout {
+            alignment: space-between;
+            vertical-stretch: 0;
+
+            Button {
+                text: "← Назад";
+                clicked => { root.cancel(); }
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+
+                Button {
+                    text: "Чернетка";
+                    clicked => {
+                        root.save-draft(
+                            number-field.text,
+                            date-field.text,
+                            root.counterparty-ids[cp-combo.current-index],
+                            notes-field.text
+                        );
+                    }
+                }
+
+                // primary: true — стандартна властивість Button у std-widgets:
+                // відображається з заповненим фоном (акцентний колір теми)
+                Button {
+                    text: "Зберегти";
+                    primary: true;
+                    clicked => {
+                        root.save(
+                            number-field.text,
+                            date-field.text,
+                            root.counterparty-ids[cp-combo.current-index],
+                            notes-field.text
+                        );
+                    }
+                }
+            }
+        }
+    }
+}

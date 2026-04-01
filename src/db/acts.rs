@@ -5,11 +5,87 @@
 // Якщо будь-який крок провалився — транзакція автоматично відкатується при drop().
 
 use anyhow::{bail, Result};
+use chrono::Datelike; // .year() для chrono::DateTime
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::models::act::{Act, ActItem, ActListRow, ActStatus, NewAct, UpdateAct};
+
+/// Згенерувати наступний номер акту у форматі "АКТ-РРРР-NNN".
+///
+/// Логіка:
+///   1. Шукаємо всі акти поточного року (date >= '2026-01-01').
+///   2. Серед номерів що відповідають шаблону "АКТ-РРРР-NNN" — беремо максимальний суфікс.
+///   3. Повертаємо суфікс + 1, відформатований з нулями до трьох цифр.
+///
+/// Чому MAX(number) не достатньо:
+///   Лексикографічний MAX рядків не гарантує числовий максимум ("АКТ-2026-9" > "АКТ-2026-10").
+///   Тому парсимо лише числову частину після останнього дефісу.
+pub async fn generate_next_number(pool: &PgPool) -> Result<String> {
+    let year = chrono::Utc::now().year();
+
+    // Отримуємо всі номери актів поточного року.
+    // EXTRACT(YEAR FROM date) — PostgreSQL функція для виділення року з DATE.
+    // Повертає Option<String> — якщо немає жодного акту, rows буде порожнім Vec.
+    let rows = sqlx::query!(
+        r#"
+        SELECT number
+        FROM acts
+        WHERE EXTRACT(YEAR FROM date) = $1
+        "#,
+        year as f64  // EXTRACT повертає float8 у PostgreSQL, тому порівнюємо з f64
+    )
+    .fetch_all(pool)
+    .await?;
+
+    // Парсимо числову частину кожного номеру і знаходимо максимум.
+    //
+    // Формат номеру: "АКТ-РРРР-NNN"
+    // rsplit_once('-') — розбиває рядок по останньому дефісу:
+    //   "АКТ-2026-042" → ("АКТ-2026", "042")
+    // parse::<u32>()  — перетворює "042" → 42
+    let max_seq = rows
+        .iter()
+        .filter_map(|r| {
+            r.number
+                .rsplit_once('-')
+                .and_then(|(_, seq)| seq.parse::<u32>().ok())
+        })
+        .max()
+        .unwrap_or(0); // якщо немає жодного акту — починаємо з 0
+
+    // Форматуємо: рік + порядковий номер з провідними нулями до 3 цифр
+    // format!("{:03}", n) → "001", "042", "100" тощо
+    Ok(format!("АКТ-{year}-{:03}", max_seq + 1))
+}
+
+/// Отримати список активних контрагентів для ComboBox у формі акту.
+///
+/// Повертає пари (UUID, назва), відсортовані за назвою.
+/// Rust tuple (Uuid, String) відповідає двом стовпцям SELECT.
+///
+/// Чому не використовуємо повну структуру Counterparty:
+///   Для ComboBox потрібні лише id та name — зайві поля марно вантажили б мережу.
+pub async fn counterparties_for_select(pool: &PgPool) -> Result<Vec<(Uuid, String)>> {
+    // query_as! з tuple — sqlx підтримує mapping у кортежі якщо стовпців рівно стільки
+    // скільки елементів у tuple. Порядок полів у SELECT = порядок у tuple.
+    let rows = sqlx::query!(
+        r#"
+        SELECT id, name
+        FROM counterparties
+        WHERE is_archived = FALSE
+        ORDER BY name
+        "#
+    )
+    .fetch_all(pool)
+    .await?;
+
+    // Перетворюємо результат у Vec<(Uuid, String)>
+    // record.id — вже Uuid (sqlx декодує uuid тип автоматично завдяки features = ["uuid"])
+    let result = rows.into_iter().map(|r| (r.id, r.name)).collect();
+    Ok(result)
+}
 
 
 /// Отримати список актів з JOIN на назву контрагента.

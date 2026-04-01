@@ -9,10 +9,12 @@ mod db;
 mod models;
 
 use anyhow::Result;
-use slint::{ModelRc, SharedString, StandardListViewItem, VecModel};
+use chrono::NaiveDate;
+use rust_decimal::Decimal;
+use slint::{Model, ModelRc, SharedString, StandardListViewItem, VecModel, Weak};
 use sqlx::postgres::PgPoolOptions;
 
-use models::ActStatus;
+use models::{ActStatus, NewAct, NewActItem};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -156,10 +158,64 @@ async fn main() -> Result<()> {
         // TODO: відкрити картку акту
     });
 
-    // ── Колбек: новий акт ────────────────────────────────────────────────────
-    ui.on_act_create_clicked(|| {
-        tracing::info!("Натиснуто: Новий акт");
-        // TODO: відкрити форму створення
+    // ── Колбек: новий акт — відкрити форму ──────────────────────────────────
+    //
+    // Перед показом форми потрібно:
+    //   1. Завантажити список контрагентів для ComboBox
+    //   2. Згенерувати наступний номер акту
+    // Обидві операції виконуються паралельно через tokio::join!
+    let pool_create_act = pool.clone();
+    let ui_weak_create_act = ui.as_weak();
+
+    ui.on_act_create_clicked(move || {
+        let pool = pool_create_act.clone();
+        let ui_handle = ui_weak_create_act.clone();
+
+        tokio::spawn(async move {
+            // tokio::join! — запускає обидва futures паралельно (не послідовно)
+            let (cp_result, num_result) = tokio::join!(
+                db::acts::counterparties_for_select(&pool),
+                db::acts::generate_next_number(&pool),
+            );
+
+            let counterparties = match cp_result {
+                Ok(v)  => v,
+                Err(e) => { tracing::error!("Помилка завантаження контрагентів: {e}"); return; }
+            };
+            let next_number = match num_result {
+                Ok(n)  => n,
+                Err(e) => { tracing::error!("Помилка генерації номеру: {e}"); return; }
+            };
+
+            // Розбиваємо Vec<(Uuid, String)> на два паралельних Vec<SharedString>
+            let cp_names: Vec<SharedString> = counterparties
+                .iter()
+                .map(|(_, name)| SharedString::from(name.as_str()))
+                .collect();
+            let cp_ids: Vec<SharedString> = counterparties
+                .iter()
+                .map(|(id, _)| SharedString::from(id.to_string().as_str()))
+                .collect();
+
+            ui_handle
+                .upgrade_in_event_loop(move |ui| {
+                    ui.set_act_form_number(SharedString::from(next_number.as_str()));
+                    ui.set_act_form_total(SharedString::from("0.00"));
+                    ui.set_act_form_is_edit(false);
+                    ui.set_act_form_cp_names(ModelRc::new(VecModel::from(cp_names)));
+                    ui.set_act_form_cp_ids(ModelRc::new(VecModel::from(cp_ids)));
+                    // Очищаємо позиції з попереднього відкриття форми
+                    let empty: Vec<SharedString> = vec![];
+                    ui.set_act_form_item_descriptions(ModelRc::new(VecModel::from(empty.clone())));
+                    ui.set_act_form_item_quantities(ModelRc::new(VecModel::from(empty.clone())));
+                    ui.set_act_form_item_units(ModelRc::new(VecModel::from(empty.clone())));
+                    ui.set_act_form_item_prices(ModelRc::new(VecModel::from(empty.clone())));
+                    ui.set_act_form_item_amounts(ModelRc::new(VecModel::from(empty)));
+                    // Перемикаємо на форму
+                    ui.set_show_act_form(true);
+                })
+                .ok();
+        });
     });
 
     // ── Колбек: наступний статус акту ────────────────────────────────────────
@@ -240,6 +296,111 @@ async fn main() -> Result<()> {
                 Err(e) => tracing::error!("Помилка архівування: {e}"),
             }
         });
+    });
+
+    // ── Колбек: скасувати форму — повернутись до списку ─────────────────────
+    //
+    // Синхронний колбек (немає DB операцій) — просто скидаємо прапор.
+    // Викликається без tokio::spawn: ми вже в main thread.
+    let ui_weak_cancel = ui.as_weak();
+    ui.on_act_form_cancel(move || {
+        if let Some(ui) = ui_weak_cancel.upgrade() {
+            ui.set_show_act_form(false);
+        }
+    });
+
+    // ── Колбек: додати позицію до форми ─────────────────────────────────────
+    //
+    // Додає порожній рядок у кожен паралельний масив позицій.
+    // Синхронно: оновлюємо ModelRc у main thread.
+    // Редагування значень позиції — майбутня функція (TODO: edit-item колбек).
+    let ui_weak_add = ui.as_weak();
+    ui.on_act_form_add_item(move || {
+        let Some(ui) = ui_weak_add.upgrade() else { return; };
+
+        // Локальна функція (не closure) — не захоплює змінних, може бути вбудована
+        fn append(model: ModelRc<SharedString>, val: &str) -> ModelRc<SharedString> {
+            let mut v: Vec<SharedString> = (0..model.row_count())
+                .filter_map(|i| model.row_data(i))
+                .collect();
+            v.push(SharedString::from(val));
+            ModelRc::new(VecModel::from(v))
+        }
+
+        ui.set_act_form_item_descriptions(append(ui.get_act_form_item_descriptions(), "Нова послуга"));
+        ui.set_act_form_item_quantities(  append(ui.get_act_form_item_quantities(),   "1"));
+        ui.set_act_form_item_units(       append(ui.get_act_form_item_units(),        "шт"));
+        ui.set_act_form_item_prices(      append(ui.get_act_form_item_prices(),       "0.00"));
+        ui.set_act_form_item_amounts(     append(ui.get_act_form_item_amounts(),      "0.00"));
+
+        // Перераховуємо total (після append amount = 0.00, тому total не змінюється)
+        // Повноцінний перерахунок — після реалізації edit-item
+    });
+
+    // ── Колбек: видалити позицію з форми ────────────────────────────────────
+    let ui_weak_remove = ui.as_weak();
+    ui.on_act_form_remove_item(move |idx| {
+        let Some(ui) = ui_weak_remove.upgrade() else { return; };
+        let i = idx as usize;
+
+        fn remove_at(model: ModelRc<SharedString>, i: usize) -> ModelRc<SharedString> {
+            let mut v: Vec<SharedString> = (0..model.row_count())
+                .filter_map(|j| model.row_data(j))
+                .collect();
+            if i < v.len() { v.remove(i); }
+            ModelRc::new(VecModel::from(v))
+        }
+
+        ui.set_act_form_item_descriptions(remove_at(ui.get_act_form_item_descriptions(), i));
+        ui.set_act_form_item_quantities(  remove_at(ui.get_act_form_item_quantities(),   i));
+        ui.set_act_form_item_units(       remove_at(ui.get_act_form_item_units(),        i));
+        ui.set_act_form_item_prices(      remove_at(ui.get_act_form_item_prices(),       i));
+        ui.set_act_form_item_amounts(     remove_at(ui.get_act_form_item_amounts(),      i));
+    });
+
+    // ── Колбек: зберегти акт ("Зберегти") ───────────────────────────────────
+    //
+    // Читаємо поля форми + позиції синхронно (ми в main thread),
+    // потім передаємо в tokio::spawn для async DB операції.
+    let pool_save = pool.clone();
+    let ui_weak_save = ui.as_weak();
+
+    ui.on_act_form_save(move |number, date_str, cp_id_str, notes| {
+        let Some(ui_ref) = ui_weak_save.upgrade() else { return; };
+        let items = collect_form_items(&ui_ref);
+
+        spawn_save_act(
+            pool_save.clone(),
+            ui_weak_save.clone(),
+            number.to_string(),
+            date_str.to_string(),
+            cp_id_str.to_string(),
+            if notes.trim().is_empty() { None } else { Some(notes.to_string()) },
+            items,
+        );
+    });
+
+    // ── Колбек: зберегти як чернетку ("Чернетка") ───────────────────────────
+    //
+    // Наразі ідентичний до on_act_form_save — обидва створюють акт зі статусом Draft
+    // (статус 'draft' є DEFAULT у БД, змінити можна лише через advance_status).
+    // TODO: у майбутньому on_act_form_save може одразу переводити до Issued.
+    let pool_draft = pool.clone();
+    let ui_weak_draft = ui.as_weak();
+
+    ui.on_act_form_save_draft(move |number, date_str, cp_id_str, notes| {
+        let Some(ui_ref) = ui_weak_draft.upgrade() else { return; };
+        let items = collect_form_items(&ui_ref);
+
+        spawn_save_act(
+            pool_draft.clone(),
+            ui_weak_draft.clone(),
+            number.to_string(),
+            date_str.to_string(),
+            cp_id_str.to_string(),
+            if notes.trim().is_empty() { None } else { Some(notes.to_string()) },
+            items,
+        );
     });
 
     // run() блокує до закриття вікна
@@ -369,4 +530,104 @@ fn build_models(
         ModelRc::new(VecModel::from(rows)),
         ModelRc::new(VecModel::from(data.ids)),
     )
+}
+
+// ── Допоміжні функції для форми актів ────────────────────────────────────────
+
+/// Зчитує поточний стан позицій з паралельних масивів форми.
+///
+/// Викликати ТІЛЬКИ з main thread (в синхронному колбеку Slint),
+/// бо MainWindow не є Send і не може бути передана між потоками.
+///
+/// Позиції з невалідними числами (quantity або price) — мовчки пропускаються.
+fn collect_form_items(ui: &MainWindow) -> Vec<NewActItem> {
+    let descs  = ui.get_act_form_item_descriptions();
+    let qtys   = ui.get_act_form_item_quantities();
+    let units  = ui.get_act_form_item_units();
+    let prices = ui.get_act_form_item_prices();
+
+    (0..descs.row_count())
+        .filter_map(|i| {
+            let description = descs.row_data(i)?.to_string();
+            let qty_str     = qtys.row_data(i)?;
+            let unit        = units.row_data(i)?.to_string();
+            let price_str   = prices.row_data(i)?;
+
+            // parse::<Decimal>() — стандартний FromStr для rust_decimal
+            // Якщо поле порожнє або не є числом — filter_map видаляє рядок
+            let quantity   = qty_str.parse::<Decimal>().ok()?;
+            let unit_price = price_str.parse::<Decimal>().ok()?;
+
+            Some(NewActItem { description, quantity, unit, unit_price })
+        })
+        .collect()
+}
+
+/// Запускає tokio::spawn для збереження акту в БД.
+///
+/// Повертається відразу (non-blocking).
+/// Після успішного збереження:
+///   - Перезавантажує список актів
+///   - Через upgrade_in_event_loop оновлює UI та ховає форму
+///
+/// `pool` — клонований PgPool (дешево: пул використовує Arc всередині).
+fn spawn_save_act(
+    pool:      sqlx::PgPool,
+    ui_weak:   Weak<MainWindow>,
+    number:    String,
+    date_str:  String,
+    cp_id_str: String,
+    notes:     Option<String>,
+    items:     Vec<NewActItem>,
+) {
+    tokio::spawn(async move {
+        // Парсимо дату зі строки ДД.ММ.РРРР → chrono::NaiveDate
+        let date = match NaiveDate::parse_from_str(&date_str, "%d.%m.%Y") {
+            Ok(d)  => d,
+            Err(_) => {
+                tracing::error!("Невірний формат дати: '{date_str}'. Очікується ДД.ММ.РРРР");
+                return;
+            }
+        };
+
+        // UUID контрагента — якщо порожній або невалідний → помилка
+        let cp_uuid = match uuid::Uuid::parse_str(&cp_id_str) {
+            Ok(id) => id,
+            Err(_) => {
+                tracing::error!("Контрагент не вибраний або UUID некоректний: '{cp_id_str}'");
+                return;
+            }
+        };
+
+        let new_act = NewAct {
+            number:          number.clone(),
+            counterparty_id: cp_uuid,
+            contract_id:     None,  // договір — майбутня функція
+            date,
+            notes,
+            bas_id:          None,
+            items,
+        };
+
+        match db::acts::create(&pool, &new_act).await {
+            Ok(act) => {
+                tracing::info!("Акт '{}' збережено (id={}).", act.number, act.id);
+
+                // Оновлюємо список та повертаємось до нього
+                if let Ok(acts) = db::acts::list(&pool, None).await {
+                    let data = to_acts_table_data(&acts);
+                    ui_weak
+                        .upgrade_in_event_loop(move |ui| {
+                            let (rows, ids, statuses) = build_acts_models(data);
+                            ui.set_act_rows(rows);
+                            ui.set_act_row_ids(ids);
+                            ui.set_act_row_statuses(statuses);
+                            ui.set_show_act_form(false);  // повертаємось до списку
+                        })
+                        .ok();
+                }
+            }
+            Err(e) => tracing::error!("Помилка збереження акту: {e}"),
+        }
+    });
 }
