@@ -118,6 +118,7 @@ dependencies = [
  "dotenvy",
  "lopdf",
  "notify",
+ "notify-rust",
  "quick-xml 0.37.5",
  "rust_decimal",
  "rust_decimal_macros",
@@ -3382,6 +3383,10 @@ dependencies = [
  "walkdir",
  "windows-sys 0.48.0",
 ]
+
+[[package]]
+name = "notify-rust"
+version = "0.1.0"
 
 [[package]]
 name = "nu-ansi-term"

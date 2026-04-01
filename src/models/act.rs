@@ -24,30 +24,30 @@ impl ActStatus {
     /// Наступний статус у циклі. `None` — якщо вже фінальний (Paid).
     pub fn next(&self) -> Option<ActStatus> {
         match self {
-            ActStatus::Draft  => Some(ActStatus::Issued),
+            ActStatus::Draft => Some(ActStatus::Issued),
             ActStatus::Issued => Some(ActStatus::Signed),
             ActStatus::Signed => Some(ActStatus::Paid),
-            ActStatus::Paid   => None,
+            ActStatus::Paid => None,
         }
     }
 
     /// Назва статусу українською для відображення в UI.
     pub fn label(&self) -> &'static str {
         match self {
-            ActStatus::Draft  => "Чернетка",
+            ActStatus::Draft => "Чернетка",
             ActStatus::Issued => "Виставлено",
             ActStatus::Signed => "Підписано",
-            ActStatus::Paid   => "Оплачено",
+            ActStatus::Paid => "Оплачено",
         }
     }
 
     /// Рядкове представлення для передачі в SQL без явного cast.
     pub fn as_str(&self) -> &'static str {
         match self {
-            ActStatus::Draft  => "draft",
+            ActStatus::Draft => "draft",
             ActStatus::Issued => "issued",
             ActStatus::Signed => "signed",
-            ActStatus::Paid   => "paid",
+            ActStatus::Paid => "paid",
         }
     }
 }
@@ -66,17 +66,17 @@ impl fmt::Display for ActStatus {
 /// `contract_id` — опціональний: акт може існувати без прив'язки до договору.
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Act {
-    pub id:              Uuid,
-    pub number:          String,
+    pub id: Uuid,
+    pub number: String,
     pub counterparty_id: Uuid,
-    pub contract_id:     Option<Uuid>,
-    pub date:            NaiveDate,
-    pub total_amount:    Decimal,
-    pub status:          ActStatus,
-    pub notes:           Option<String>,
-    pub bas_id:          Option<String>,
-    pub created_at:      DateTime<Utc>,
-    pub updated_at:      DateTime<Utc>,
+    pub contract_id: Option<Uuid>,
+    pub date: NaiveDate,
+    pub total_amount: Decimal,
+    pub status: ActStatus,
+    pub notes: Option<String>,
+    pub bas_id: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 /// Позиція акту — одна послуга або робота.
@@ -85,15 +85,15 @@ pub struct Act {
 /// щоб уникнути перерахунку при кожному зчитуванні.
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct ActItem {
-    pub id:          Uuid,
-    pub act_id:      Uuid,
+    pub id: Uuid,
+    pub act_id: Uuid,
     pub description: String,
-    pub quantity:    Decimal,
-    pub unit:        String,
-    pub unit_price:  Decimal,
-    pub amount:      Decimal,
-    pub created_at:  DateTime<Utc>,
-    pub updated_at:  DateTime<Utc>,
+    pub quantity: Decimal,
+    pub unit: String,
+    pub unit_price: Decimal,
+    pub amount: Decimal,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 /// Рядок акту для відображення в списку.
@@ -102,38 +102,72 @@ pub struct ActItem {
 /// але не містить усіх полів (оптимізація для списків).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ActListRow {
-    pub id:                Uuid,
-    pub number:            String,
-    pub date:              NaiveDate,
+    pub id: Uuid,
+    pub number: String,
+    pub date: NaiveDate,
     pub counterparty_name: String,
-    pub total_amount:      Decimal,
-    pub status:            ActStatus,
+    pub total_amount: Decimal,
+    pub status: ActStatus,
 }
 
 /// Дані для створення нового акту разом з позиціями (одна транзакція).
 pub struct NewAct {
-    pub number:          String,
+    pub number: String,
     pub counterparty_id: Uuid,
-    pub contract_id:     Option<Uuid>,
-    pub date:            NaiveDate,
-    pub notes:           Option<String>,
-    pub bas_id:          Option<String>,
-    pub items:           Vec<NewActItem>,
+    pub contract_id: Option<Uuid>,
+    pub date: NaiveDate,
+    pub notes: Option<String>,
+    pub bas_id: Option<String>,
+    pub items: Vec<NewActItem>,
 }
 
 /// Дані для нової позиції акту. `amount` обчислюється в коді при вставці.
 pub struct NewActItem {
     pub description: String,
-    pub quantity:    Decimal,
-    pub unit:        String,
-    pub unit_price:  Decimal,
+    pub quantity: Decimal,
+    pub unit: String,
+    pub unit_price: Decimal,
 }
 
 /// Дані для оновлення заголовку акту (без позицій — MVP підхід).
 pub struct UpdateAct {
-    pub number:          String,
+    pub number: String,
     pub counterparty_id: Uuid,
-    pub contract_id:     Option<Uuid>,
-    pub date:            NaiveDate,
-    pub notes:           Option<String>,
+    pub contract_id: Option<Uuid>,
+    pub date: NaiveDate,
+    pub notes: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ActStatus;
+
+    #[test]
+    fn act_status_next_moves_forward_only() {
+        assert_eq!(ActStatus::Draft.next(), Some(ActStatus::Issued));
+        assert_eq!(ActStatus::Issued.next(), Some(ActStatus::Signed));
+        assert_eq!(ActStatus::Signed.next(), Some(ActStatus::Paid));
+        assert_eq!(ActStatus::Paid.next(), None);
+    }
+
+    #[test]
+    fn act_status_label_is_ukrainian_ui_text() {
+        assert_eq!(ActStatus::Draft.label(), "Чернетка");
+        assert_eq!(ActStatus::Issued.label(), "Виставлено");
+        assert_eq!(ActStatus::Signed.label(), "Підписано");
+        assert_eq!(ActStatus::Paid.label(), "Оплачено");
+    }
+
+    #[test]
+    fn act_status_as_str_is_db_value() {
+        assert_eq!(ActStatus::Draft.as_str(), "draft");
+        assert_eq!(ActStatus::Issued.as_str(), "issued");
+        assert_eq!(ActStatus::Signed.as_str(), "signed");
+        assert_eq!(ActStatus::Paid.as_str(), "paid");
+    }
+
+    #[test]
+    fn display_uses_label() {
+        assert_eq!(ActStatus::Draft.to_string(), "Чернетка");
+    }
 }

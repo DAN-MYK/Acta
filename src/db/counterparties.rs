@@ -200,11 +200,10 @@ pub async fn archive(pool: &PgPool, id: Uuid) -> Result<bool> {
 /// Використовує звичайний `sqlx::query_scalar` (без макросу) —
 /// не потребує `cargo sqlx prepare`, перевіряється тільки в runtime.
 pub async fn count_archived(pool: &PgPool) -> Result<i64> {
-    let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*)::bigint FROM counterparties WHERE is_archived = TRUE"
-    )
-    .fetch_one(pool)
-    .await?;
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*)::bigint FROM counterparties WHERE is_archived = TRUE")
+            .fetch_one(pool)
+            .await?;
     Ok(count)
 }
 
@@ -224,4 +223,22 @@ pub async fn find_by_bas_id(pool: &PgPool, bas_id: &str) -> Result<Option<Counte
     .await?;
 
     Ok(row)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn db_counterparties_public_api_is_exposed() {
+        let _ = list;
+        let _ = get_by_id;
+        let _ = search;
+        let _ = list_filtered;
+        let _ = create;
+        let _ = update;
+        let _ = archive;
+        let _ = count_archived;
+        let _ = find_by_bas_id;
+    }
 }

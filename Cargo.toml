@@ -34,6 +34,9 @@ lopdf = "0.34"
 # Файловий моніторинг
 notify = "6"
 
+# Desktop-сповіщення (To-Do нагадування)
+notify-rust = { path = "vendor/notify-rust" }
+
 # XML парсинг (BAS імпорт)
 quick-xml = { version = "0.37", features = ["serialize"] }
 

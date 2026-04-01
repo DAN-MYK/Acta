@@ -5,7 +5,7 @@
 // перераховує total_amount, і лише тоді робить commit.
 // Якщо будь-який крок провалився — транзакція автоматично відкатується при drop().
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use chrono::Datelike; // .year() для chrono::DateTime
 use rust_decimal::Decimal;
 use sqlx::PgPool;
@@ -87,7 +87,6 @@ pub async fn counterparties_for_select(pool: &PgPool) -> Result<Vec<(Uuid, Strin
     let result = rows.into_iter().map(|r| (r.id, r.name)).collect();
     Ok(result)
 }
-
 
 /// Отримати список актів з JOIN на назву контрагента.
 ///
@@ -263,7 +262,7 @@ pub async fn create(pool: &PgPool, data: &NewAct) -> Result<Act> {
 
     for item in &data.items {
         // Обчислюємо суму тут, а не в SQL — щоб мати контроль над заокругленням.
-        let amount = item.quantity * item.unit_price;
+        let amount = (item.quantity * item.unit_price).round_dp(2);
         total += amount;
 
         sqlx::query!(
@@ -354,7 +353,10 @@ pub async fn change_status(pool: &PgPool, id: Uuid, new_status: ActStatus) -> Re
             "Недопустимий перехід статусу: '{}' → '{}'. Очікувалось: '{}'",
             row.status,
             new_status,
-            row.status.next().map(|s: ActStatus| s.to_string()).unwrap_or_else(|| "(фінальний статус)".into())
+            row.status
+                .next()
+                .map(|s: ActStatus| s.to_string())
+                .unwrap_or_else(|| "(фінальний статус)".into())
         );
     }
 
@@ -429,18 +431,15 @@ pub async fn update_with_items(
     };
 
     // 2. Видаляємо всі старі позиції
-    sqlx::query!(
-        "DELETE FROM act_items WHERE act_id = $1",
-        id
-    )
-    .execute(&mut *tx)
-    .await?;
+    sqlx::query!("DELETE FROM act_items WHERE act_id = $1", id)
+        .execute(&mut *tx)
+        .await?;
 
     // 3. Вставляємо нові позиції, рахуємо суму
     let mut total = Decimal::ZERO;
 
     for item in &items {
-        let amount = item.quantity * item.unit_price;
+        let amount = (item.quantity * item.unit_price).round_dp(2);
         total += amount;
 
         sqlx::query!(
@@ -497,4 +496,24 @@ pub async fn advance_status(pool: &PgPool, id: Uuid) -> Result<Option<Act>> {
     };
 
     change_status(pool, id, next).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn db_acts_public_api_is_exposed() {
+        let _ = generate_next_number;
+        let _ = counterparties_for_select;
+        let _ = list;
+        let _ = list_filtered;
+        let _ = get_by_id;
+        let _ = create;
+        let _ = update;
+        let _ = change_status;
+        let _ = get_for_edit;
+        let _ = update_with_items;
+        let _ = advance_status;
+    }
 }

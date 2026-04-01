@@ -13,6 +13,8 @@ import { CounterpartyList } from "counterparties/counterparty_list.slint";
 import { CounterpartyForm } from "counterparties/counterparty_form.slint";
 import { ActList }          from "acts/act_list.slint";
 import { ActForm }          from "acts/act_form.slint";
+import { TaskList }         from "tasks/task_list.slint";
+import { TaskForm }         from "tasks/task_form.slint";
 
 // ── NavItem — елемент бічної навігації ──────────────────────────────────────
 //
@@ -73,7 +75,7 @@ export component MainWindow inherits Window {
     preferred-height: 900px;
 
     // ── Стан навігації ───────────────────────────────────────────────────────
-    // 0=Контрагенти | 1=Акти | 2=Накладні | 3=Платежі | 4=Звіти
+    // 0=Контрагенти | 1=Акти | 2=Накладні | 3=Платежі | 4=Звіти | 5=Завдання
     in-out property <int> current-page: 0;
 
     // ── Дані контрагентів ────────────────────────────────────────────────────
@@ -121,10 +123,35 @@ export component MainWindow inherits Window {
     in property <[string]> act-form-item-units;
     in property <[string]> act-form-item-prices;
     in property <[string]> act-form-item-amounts;
+    in property <[[StandardListViewItem]]> act-task-rows;
+    in property <[string]>                 act-task-row-ids;
+    in property <[string]>                 act-task-row-statuses;
+    in property <[string]>                 act-task-row-priorities;
+    in property <bool>                     act-tasks-loading: false;
+
+    // ── Дані задач ─────────────────────────────────────────────────────────
+    in property <[[StandardListViewItem]]> task-rows;
+    in property <[string]>                 task-row-ids;
+    in property <[string]>                 task-row-statuses;
+    in property <[string]>                 task-row-priorities;
+    in property <bool>                     tasks-loading: false;
+
+    // ── Стан форми задачі ──────────────────────────────────────────────────
+    in property <bool>   show-task-form: false;
+    in property <bool>   task-form-is-edit: false;
+    in property <string> task-form-edit-id: "";
+    in property <string> task-form-title: "";
+    in property <string> task-form-description: "";
+    in property <int>    task-form-priority-index: 1;
+    in property <string> task-form-due-date: "";
+    in property <string> task-form-reminder-at: "";
+    in property <string> task-form-act-id: "";
+    in property <int>    task-form-return-page: 5;
 
     // ── Колбеки контрагентів ─────────────────────────────────────────────────
     callback counterparty-search-changed(string);
     callback counterparty-selected(string);
+    callback counterparty-edit-clicked(string);
     callback counterparty-create-clicked();
     callback counterparty-archive-clicked(string);
     callback counterparty-filter-clicked();
@@ -151,6 +178,23 @@ export component MainWindow inherits Window {
     callback act-form-add-item();
     callback act-form-remove-item(int);
     callback act-form-item-changed(int, string, string);
+    callback act-task-create-clicked();
+    callback act-task-edit-clicked(string);
+    callback act-task-toggle-status-clicked(string);
+    callback act-task-delete-clicked(string);
+
+    // ── Колбеки задач ──────────────────────────────────────────────────────
+    callback task-search-changed(string);
+    callback task-selected(string);
+    callback task-create-clicked();
+    callback task-toggle-status-clicked(string);
+    callback task-delete-clicked(string);
+    callback task-edit-clicked(string);
+
+    // ── Колбеки форми задачі ────────────────────────────────────────────────
+    callback task-form-save(string, string, int, string, string);
+    callback task-form-update(string, string, int, string, string);
+    callback task-form-cancel();
 
     // ── Toast-сповіщення ─────────────────────────────────────────────────────
     // Rust встановлює message → toast з'являється, через 3с Rust очищає.
@@ -237,6 +281,11 @@ export component MainWindow inherits Window {
                         clicked => { root.current-page = 3; }
                     }
                     NavItem {
+                        label: "📝  Завдання";
+                        active: root.current-page == 5;
+                        clicked => { root.current-page = 5; }
+                    }
+                    NavItem {
                         label: "📊  Звіти";
                         active: root.current-page == 4;
                         clicked => { root.current-page = 4; }
@@ -295,6 +344,7 @@ export component MainWindow inherits Window {
 
                 search-changed(q)   => { root.counterparty-search-changed(q); }
                 row-selected(id)    => { root.counterparty-selected(id); }
+                edit-clicked(id)    => { root.counterparty-edit-clicked(id); }
                 create-clicked      => { root.counterparty-create-clicked(); }
                 archive-clicked(id) => { root.counterparty-archive-clicked(id); }
                 filter-clicked      => { root.counterparty-filter-clicked(); }
@@ -348,6 +398,11 @@ export component MainWindow inherits Window {
                 item-units:           root.act-form-item-units;
                 item-prices:          root.act-form-item-prices;
                 item-amounts:         root.act-form-item-amounts;
+                act-task-rows:        root.act-task-rows;
+                act-task-row-ids:     root.act-task-row-ids;
+                act-task-row-statuses: root.act-task-row-statuses;
+                act-task-row-priorities: root.act-task-row-priorities;
+                act-tasks-loading:    root.act-tasks-loading;
 
                 save(n, d, c, notes)       => { root.act-form-save(n, d, c, notes); }
                 save-draft(n, d, c, notes) => { root.act-form-save-draft(n, d, c, notes); }
@@ -356,6 +411,42 @@ export component MainWindow inherits Window {
                 add-item                   => { root.act-form-add-item(); }
                 remove-item(i)             => { root.act-form-remove-item(i); }
                 item-changed(idx, fld, val) => { root.act-form-item-changed(idx, fld, val); }
+                act-task-create-clicked    => { root.act-task-create-clicked(); }
+                act-task-edit-clicked(id)  => { root.act-task-edit-clicked(id); }
+                act-task-toggle-status-clicked(id) => { root.act-task-toggle-status-clicked(id); }
+                act-task-delete-clicked(id) => { root.act-task-delete-clicked(id); }
+            }
+
+            // ── Сторінка 5: Завдання — список ─────────────────────────────
+            if root.current-page == 5 && !root.show-task-form : TaskList {
+                rows:             root.task-rows;
+                row-ids:          root.task-row-ids;
+                row-statuses:     root.task-row-statuses;
+                row-priorities:   root.task-row-priorities;
+                loading:          root.tasks-loading;
+
+                search-changed(q)         => { root.task-search-changed(q); }
+                row-selected(id)          => { root.task-selected(id); }
+                create-clicked            => { root.task-create-clicked(); }
+                toggle-status-clicked(id) => { root.task-toggle-status-clicked(id); }
+                delete-clicked(id)        => { root.task-delete-clicked(id); }
+                edit-clicked(id)          => { root.task-edit-clicked(id); }
+            }
+
+            // ── Сторінка 5: Завдання — форма ──────────────────────────────
+            if root.current-page == 5 && root.show-task-form : TaskForm {
+                is-edit-mode:           root.task-form-is-edit;
+                task-edit-id:           root.task-form-edit-id;
+                task-title:             root.task-form-title;
+                task-description:       root.task-form-description;
+                task-priority-index:    root.task-form-priority-index;
+                task-due-date:          root.task-form-due-date;
+                task-reminder-at:       root.task-form-reminder-at;
+                task-act-id:            root.task-form-act-id;
+
+                save(t, d, p, due, rem)   => { root.task-form-save(t, d, p, due, rem); }
+                update(t, d, p, due, rem) => { root.task-form-update(t, d, p, due, rem); }
+                cancel                    => { root.task-form-cancel(); }
             }
 
             // ── Заглушки для майбутніх сторінок ──────────────────────────

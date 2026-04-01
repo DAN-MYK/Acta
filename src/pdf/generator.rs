@@ -15,9 +15,9 @@ use serde::Serialize;
 /// Реквізити однієї сторони (виконавець або замовник).
 #[derive(Debug, Serialize)]
 pub struct PdfCompany {
-    pub name:    String,
-    pub edrpou:  String,
-    pub iban:    String,
+    pub name: String,
+    pub edrpou: String,
+    pub iban: String,
     pub address: String,
 }
 
@@ -25,14 +25,14 @@ pub struct PdfCompany {
 #[derive(Debug, Serialize)]
 pub struct PdfActItem {
     /// Порядковий номер (1, 2, …).
-    pub num:    u32,
-    pub name:   String,
+    pub num: u32,
+    pub name: String,
     /// Кількість у форматі "1.0000".
-    pub qty:    String,
+    pub qty: String,
     /// Одиниця виміру: "послуга", "шт", "год" тощо.
-    pub unit:   String,
+    pub unit: String,
     /// Ціна за одиницю у форматі "45000.00".
-    pub price:  String,
+    pub price: String,
     /// Сума = qty × price у форматі "45000.00".
     pub amount: String,
 }
@@ -41,20 +41,20 @@ pub struct PdfActItem {
 #[derive(Debug, Serialize)]
 pub struct PdfActData {
     /// Номер акту: "АКТ-2026-001".
-    pub number:      String,
+    pub number: String,
     /// Дата у форматі ДД.ММ.РРРР: "28.03.2026".
-    pub date:        String,
+    pub date: String,
     /// Виконавець (дані з конфігу програми).
-    pub company:     PdfCompany,
+    pub company: PdfCompany,
     /// Замовник (контрагент).
-    pub client:      PdfCompany,
-    pub items:       Vec<PdfActItem>,
+    pub client: PdfCompany,
+    pub items: Vec<PdfActItem>,
     /// Загальна сума: "45000.00".
-    pub total:       String,
+    pub total: String,
     /// Загальна сума прописом.
     pub total_words: String,
     /// Примітки (порожній рядок — не виводяться).
-    pub notes:       String,
+    pub notes: String,
 }
 
 // ── Публічні функції ──────────────────────────────────────────────────────
@@ -66,8 +66,7 @@ pub struct PdfActData {
 /// 2. Викликає `typst compile templates/act.typ <output_path> --input data=<json>`.
 /// 3. Перевіряє успішність команди через `ensure!`.
 pub fn generate_act_pdf(data: &PdfActData, output_path: &Path) -> Result<()> {
-    let json = serde_json::to_string(data)
-        .context("Серіалізація PdfActData у JSON")?;
+    let json = serde_json::to_string(data).context("Серіалізація PdfActData у JSON")?;
 
     let input_arg = format!("data={json}");
 
@@ -75,7 +74,9 @@ pub fn generate_act_pdf(data: &PdfActData, output_path: &Path) -> Result<()> {
         .args([
             "compile",
             "templates/act.typ",
-            output_path.to_str().context("Невалідний шлях до output PDF")?,
+            output_path
+                .to_str()
+                .context("Невалідний шлях до output PDF")?,
             "--input",
             &input_arg,
         ])
@@ -132,7 +133,7 @@ pub fn amount_to_words(amount: &Decimal) -> String {
         .unsigned_abs() as u64;
 
     let hryvnia_words = integer_to_words(hryvnias, Gender::Feminine);
-    let hryvnia_form  = plural_form(hryvnias, "гривня", "гривні", "гривень");
+    let hryvnia_form = plural_form(hryvnias, "гривня", "гривні", "гривень");
 
     format!("{hryvnia_words} {hryvnia_form} {kopecks:02} копійок")
 }
@@ -261,16 +262,16 @@ fn teens_word(n: u64) -> &'static str {
         17 => "сімнадцять",
         18 => "вісімнадцять",
         19 => "дев'ятнадцять",
-        _  => "десять",
+        _ => "десять",
     }
 }
 
 /// 1–9 з урахуванням роду (впливає лише на 1 і 2).
 fn ones_word(n: u64, gender: Gender) -> &'static str {
     match (n, gender) {
-        (1, Gender::Feminine)  => "одна",
+        (1, Gender::Feminine) => "одна",
         (1, Gender::Masculine) => "один",
-        (2, Gender::Feminine)  => "дві",
+        (2, Gender::Feminine) => "дві",
         (2, Gender::Masculine) => "два",
         (3, _) => "три",
         (4, _) => "чотири",
@@ -279,7 +280,7 @@ fn ones_word(n: u64, gender: Gender) -> &'static str {
         (7, _) => "сім",
         (8, _) => "вісім",
         (9, _) => "дев'ять",
-        _      => "",
+        _ => "",
     }
 }
 
@@ -287,15 +288,12 @@ fn ones_word(n: u64, gender: Gender) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use rust_decimal_macros::dec;
     use super::*;
+    use rust_decimal_macros::dec;
 
     #[test]
     fn test_amount_to_words_simple() {
-        assert_eq!(
-            amount_to_words(&dec!(100.00)),
-            "сто гривень 00 копійок"
-        );
+        assert_eq!(amount_to_words(&dec!(100.00)), "сто гривень 00 копійок");
     }
 
     #[test]
@@ -316,18 +314,12 @@ mod tests {
 
     #[test]
     fn test_amount_to_words_one_hryvnia() {
-        assert_eq!(
-            amount_to_words(&dec!(1.00)),
-            "одна гривня 00 копійок"
-        );
+        assert_eq!(amount_to_words(&dec!(1.00)), "одна гривня 00 копійок");
     }
 
     #[test]
     fn test_amount_to_words_two_hryvnias() {
-        assert_eq!(
-            amount_to_words(&dec!(2.00)),
-            "дві гривні 00 копійок"
-        );
+        assert_eq!(amount_to_words(&dec!(2.00)), "дві гривні 00 копійок");
     }
 
     #[test]

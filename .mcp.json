@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "obsidian": {
+      "command": "cmd",
+      "args": [
+        "/c",
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "C:/Users/MykhailoDan/OneDrive - UDPR/Obsidian/Mykhailo_Dan/development"
+      ]
+    }
+  }
+}

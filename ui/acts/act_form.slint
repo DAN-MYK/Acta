@@ -12,7 +12,7 @@
 //   Редагування полів позицій — через окремий колбек (TODO: edit-item)
 
 import { Theme } from "../theme.slint";
-import { Button, LineEdit, TextEdit, ComboBox, ScrollView } from "std-widgets.slint";
+import { Button, LineEdit, TextEdit, ComboBox, ScrollView, ProgressIndicator, ListView } from "std-widgets.slint";
 
 export component ActForm {
 
@@ -48,6 +48,13 @@ export component ActForm {
     in property <[string]> item-prices;
     in property <[string]> item-amounts;    // quantity × unit_price, рахується Rust
 
+    // ── Задачі, прив'язані до акту ─────────────────────────────────────────
+    in property <[[StandardListViewItem]]> act-task-rows;
+    in property <[string]>                 act-task-row-ids;
+    in property <[string]>                 act-task-row-statuses;
+    in property <[string]>                 act-task-row-priorities;
+    in property <bool>                     act-tasks-loading: false;
+
     // ── Колбеки (Slint → Rust) ──────────────────────────────────────────────
 
     // save / save-draft: передають текстовий стан усіх полів до Rust для парсингу
@@ -78,6 +85,12 @@ export component ActForm {
     //   value — нове значення (рядок)
     // Rust оновлює модель та перераховує суму/total для qty і price.
     callback item-changed(/* index */ int, /* field */ string, /* value */ string);
+
+    // ── Колбеки задач в межах акту ──────────────────────────────────────────
+    callback act-task-create-clicked();
+    callback act-task-edit-clicked(string);
+    callback act-task-toggle-status-clicked(string);
+    callback act-task-delete-clicked(string);
 
     min-width: 700px;
     min-height: 500px;
@@ -424,6 +437,274 @@ export component ActForm {
                         font-size: 13px;
                         horizontal-alignment: center;
                         vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        // ── Задачі акту ────────────────────────────────────────────────────
+        Rectangle {
+            height: 1px;
+            background: Theme.border;
+            vertical-stretch: 0;
+        }
+
+        VerticalLayout {
+            vertical-stretch: 0;
+            spacing: 12px;
+
+            HorizontalLayout {
+                alignment: space-between;
+                vertical-stretch: 0;
+
+                Text {
+                    text: "Задачі по акту";
+                    font-size: 16px;
+                    font-weight: 600;
+                    color: Theme.text-main;
+                    vertical-alignment: center;
+                }
+
+                Button {
+                    text: "+ Додати задачу";
+                    clicked => { root.act-task-create-clicked(); }
+                }
+            }
+
+            if root.act-tasks-loading : ProgressIndicator {
+                indeterminate: true;
+                vertical-stretch: 0;
+            }
+
+            Rectangle {
+                min-height: 120px;
+                vertical-stretch: 1;
+                border-radius: 8px;
+                border-width: 1px;
+                border-color: Theme.border;
+                clip: true;
+
+                VerticalLayout {
+                    spacing: 0;
+
+                    Rectangle {
+                        height: 36px;
+                        background: #F1F1F4;
+
+                        HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 12px;
+
+                            Text { text: "Назва";      color: Theme.text-sub; font-size: 12px; font-weight: 500; horizontal-stretch: 3; vertical-alignment: center; }
+                            Text { text: "Пріоритет";  color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 110px; vertical-alignment: center; }
+                            Text { text: "Дедлайн";    color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 120px; vertical-alignment: center; }
+                            Text { text: "Нагад.";     color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 120px; vertical-alignment: center; }
+                            Text { text: "Статус";     color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 100px; vertical-alignment: center; }
+                            Text { text: "Дії";        color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 180px; vertical-alignment: center; }
+                        }
+                    }
+
+                    ListView {
+                        vertical-stretch: 1;
+
+                        for row[i] in root.act-task-rows : Rectangle {
+                            property <string> raw-status: i < root.act-task-row-statuses.length ? root.act-task-row-statuses[i] : "open";
+                            property <string> raw-priority: i < root.act-task-row-priorities.length ? root.act-task-row-priorities[i] : "normal";
+                            property <color> status-color:
+                                raw-status == "done"       ? Theme.success :
+                                raw-status == "in_progress"? Theme.primary :
+                                raw-status == "cancelled"  ? Theme.text-muted :
+                                Theme.warning;
+                            property <color> status-bg:
+                                raw-status == "done"       ? #1EB16E1F :
+                                raw-status == "in_progress"? #3D75F41A :
+                                raw-status == "cancelled"  ? #ABABB71F :
+                                #F4A31E1F;
+                            property <color> priority-color:
+                                raw-priority == "critical" ? #DC2626 :
+                                raw-priority == "high"     ? #F97316 :
+                                raw-priority == "normal"   ? Theme.primary :
+                                Theme.text-muted;
+                            property <color> priority-bg:
+                                raw-priority == "critical" ? #DC26261A :
+                                raw-priority == "high"     ? #F973161A :
+                                raw-priority == "normal"   ? #3D75F41A :
+                                #ABABB71A;
+
+                            height: 48px;
+                            background: row-touch.has-hover ? #F8F8FC : Theme.surface;
+                            border-width: 1px;
+                            border-color: Theme.border;
+
+                            HorizontalLayout {
+                                padding-left: 12px;
+                                padding-right: 12px;
+
+                                Text {
+                                    text: row[0].text;
+                                    color: Theme.text-main;
+                                    font-size: 13px;
+                                    font-weight: 500;
+                                    horizontal-stretch: 3;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
+
+                                Rectangle {
+                                    width: 110px;
+                                    Rectangle {
+                                        width: 90px;
+                                        height: 22px;
+                                        y: (parent.height - self.height) / 2;
+                                        border-radius: 11px;
+                                        background: priority-bg;
+                                        Text {
+                                            text: row[1].text;
+                                            color: priority-color;
+                                            font-size: 11px;
+                                            font-weight: 500;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    text: row[2].text;
+                                    color: Theme.text-sub;
+                                    font-size: 13px;
+                                    width: 120px;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
+
+                                Text {
+                                    text: row[3].text;
+                                    color: Theme.text-sub;
+                                    font-size: 13px;
+                                    width: 120px;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
+
+                                Rectangle {
+                                    width: 100px;
+                                    Rectangle {
+                                        width: 84px;
+                                        height: 22px;
+                                        y: (parent.height - self.height) / 2;
+                                        border-radius: 11px;
+                                        background: status-bg;
+                                        Text {
+                                            text: row[4].text;
+                                            color: status-color;
+                                            font-size: 11px;
+                                            font-weight: 500;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+
+                                HorizontalLayout {
+                                    width: 180px;
+                                    spacing: 8px;
+
+                                    Rectangle {
+                                        background: Theme.surface;
+                                        border-width: 1px;
+                                        border-color: Theme.border;
+                                        border-radius: 6px;
+                                        height: 28px;
+                                        width: 60px;
+
+                                        Text {
+                                            text: "✎";
+                                            color: Theme.text-main;
+                                            font-size: 12px;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+
+                                        TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => {
+                                                if i < root.act-task-row-ids.length {
+                                                    root.act-task-edit-clicked(root.act-task-row-ids[i]);
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        background: Theme.primary;
+                                        border-radius: 6px;
+                                        height: 28px;
+                                        width: 56px;
+
+                                        Text {
+                                            text: "✓";
+                                            color: #ffffff;
+                                            font-size: 12px;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+
+                                        TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => {
+                                                if i < root.act-task-row-ids.length {
+                                                    root.act-task-toggle-status-clicked(root.act-task-row-ids[i]);
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        background: #FEF2F2;
+                                        border-radius: 6px;
+                                        border-width: 1px;
+                                        border-color: #FECACA;
+                                        height: 28px;
+                                        width: 48px;
+
+                                        Text {
+                                            text: "×";
+                                            color: #DC2626;
+                                            font-size: 14px;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+
+                                        TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => {
+                                                if i < root.act-task-row-ids.length {
+                                                    root.act-task-delete-clicked(root.act-task-row-ids[i]);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            row-touch := TouchArea {
+                                mouse-cursor: pointer;
+                            }
+                        }
+                    }
+
+                    if !root.act-tasks-loading && root.act-task-rows.length == 0 : Rectangle {
+                        height: 72px;
+                        background: Theme.surface;
+
+                        Text {
+                            text: "У цьому акті ще немає задач";
+                            color: Theme.text-muted;
+                            font-size: 13px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
                     }
                 }
             }

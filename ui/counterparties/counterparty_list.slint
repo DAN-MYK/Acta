@@ -27,6 +27,7 @@ export component CounterpartyList {
     // ── Колбеки (Slint → Rust) ──────────────────────────────────────────────
     callback search-changed(string);
     callback row-selected(string);
+    callback edit-clicked(string);
     callback create-clicked();
     callback archive-clicked(string);
     callback filter-clicked();
@@ -34,6 +35,7 @@ export component CounterpartyList {
     // ── Внутрішній стан ─────────────────────────────────────────────────────
     private property <int>    selected-row: -1;
     private property <string> selected-id: "";
+    private property <string> selected-name: "";
     private property <int>    archive-confirm-row: -1;
 
     min-width: 600px;
@@ -397,6 +399,8 @@ export component CounterpartyList {
                                                     if root.archive-confirm-row == i {
                                                         root.archive-confirm-row = -1;
                                                         if i < root.row-ids.length {
+                                                            root.selected-id = root.row-ids[i];
+                                                            root.selected-name = row[0].text;
                                                             root.archive-clicked(root.row-ids[i]);
                                                         }
                                                     } else {
@@ -419,6 +423,7 @@ export component CounterpartyList {
                                         root.selected-row = i;
                                         if i < root.row-ids.length {
                                             root.selected-id = root.row-ids[i];
+                                            root.selected-name = row[0].text;
                                             root.row-selected(root.row-ids[i]);
                                         }
                                     }
@@ -428,10 +433,51 @@ export component CounterpartyList {
                     }
                 }
 
-                // ── Пагінація ─────────────────────────────────────────────────
-                //
-                // Ліворуч: "Показано N з M контрагентів" (текст з Rust).
-                // Праворуч: ← 1 → (статична заглушка, реальна пагінація — майбутнє).
+                if root.selected-row >= 0 : HorizontalLayout {
+                    height: 48px;
+                    spacing: 8px;
+                    vertical-stretch: 0;
+
+                    Text {
+                        text: root.selected-name;
+                        color: Theme.text-sub;
+                        font-size: 13px;
+                        font-weight: 500;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                        overflow: elide;
+                    }
+
+                    Rectangle {
+                        background: Theme.surface;
+                        border-radius: 8px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        height: 36px;
+                        width: 150px;
+                        y: (parent.height - self.height) / 2;
+
+                        Text {
+                            text: "✎  Редагувати";
+                            color: Theme.text-main;
+                            font-size: 13px;
+                            font-weight: 500;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                if root.selected-id != "" {
+                                    root.edit-clicked(root.selected-id);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Службова інформація списку ────────────────────────────────
                 HorizontalLayout {
                     height: 48px;
                     vertical-stretch: 0;
@@ -444,67 +490,13 @@ export component CounterpartyList {
                         horizontal-stretch: 1;
                     }
 
-                    HorizontalLayout {
-                        spacing: 4px;
-                        alignment: end;
-
-                        // ← попередня сторінка
-                        Rectangle {
-                            background: Theme.surface;
-                            border-radius: 8px;
-                            border-width: 1px;
-                            border-color: Theme.border;
-                            width: 36px;
-                            height: 36px;
-                            y: (parent.height - self.height) / 2;
-
-                            Text {
-                                text: "←";
-                                color: Theme.text-sub;
-                                font-size: 13px;
-                                font-weight: 500;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                            }
-                        }
-
-                        // Сторінка 1 (активна — синя)
-                        Rectangle {
-                            background: Theme.primary;
-                            border-radius: 8px;
-                            width: 36px;
-                            height: 36px;
-                            y: (parent.height - self.height) / 2;
-
-                            Text {
-                                text: "1";
-                                color: #ffffff;
-                                font-size: 13px;
-                                font-weight: 500;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                            }
-                        }
-
-                        // → наступна сторінка
-                        Rectangle {
-                            background: Theme.surface;
-                            border-radius: 8px;
-                            border-width: 1px;
-                            border-color: Theme.border;
-                            width: 36px;
-                            height: 36px;
-                            y: (parent.height - self.height) / 2;
-
-                            Text {
-                                text: "→";
-                                color: Theme.text-sub;
-                                font-size: 13px;
-                                font-weight: 500;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                            }
-                        }
+                    Text {
+                        text: root.selected-row >= 0
+                            ? "Нижче доступне редагування вибраного контрагента"
+                            : "Оберіть рядок, щоб побачити дії";
+                        color: Theme.text-muted;
+                        font-size: 12px;
+                        vertical-alignment: center;
                     }
                 }
             }

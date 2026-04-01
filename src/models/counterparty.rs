@@ -14,14 +14,14 @@ use uuid::Uuid;
 pub struct Counterparty {
     pub id: Uuid,
     pub name: String,
-    pub edrpou: Option<String>,   // ЄДРПОУ може бути відсутнім (ФОП без реєстрації)
+    pub edrpou: Option<String>, // ЄДРПОУ може бути відсутнім (ФОП без реєстрації)
     pub iban: Option<String>,
     pub address: Option<String>,
     pub phone: Option<String>,
     pub email: Option<String>,
     pub notes: Option<String>,
     pub is_archived: bool,
-    pub bas_id: Option<String>,   // ID з BAS — для уникнення дублів при імпорті
+    pub bas_id: Option<String>, // ID з BAS — для уникнення дублів при імпорті
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -59,4 +59,45 @@ pub struct UpdateCounterparty {
     pub phone: Option<String>,
     pub email: Option<String>,
     pub notes: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{NewCounterparty, UpdateCounterparty};
+
+    #[test]
+    fn new_counterparty_can_hold_optional_fields() {
+        let cp = NewCounterparty {
+            name: "ТОВ Приклад".to_string(),
+            edrpou: Some("12345678".to_string()),
+            iban: None,
+            address: None,
+            phone: Some("+380501112233".to_string()),
+            email: Some("mail@example.com".to_string()),
+            notes: None,
+            bas_id: Some("bas-42".to_string()),
+        };
+
+        assert_eq!(cp.name, "ТОВ Приклад");
+        assert_eq!(cp.edrpou.as_deref(), Some("12345678"));
+        assert_eq!(cp.bas_id.as_deref(), Some("bas-42"));
+    }
+
+    #[test]
+    fn update_counterparty_clone_keeps_values() {
+        let original = UpdateCounterparty {
+            name: "ФОП Іваненко".to_string(),
+            edrpou: None,
+            iban: Some("UA123".to_string()),
+            address: Some("Київ".to_string()),
+            phone: None,
+            email: Some("fop@example.com".to_string()),
+            notes: Some("оновити реквізити".to_string()),
+        };
+
+        let cloned = original.clone();
+        assert_eq!(cloned.name, original.name);
+        assert_eq!(cloned.iban, original.iban);
+        assert_eq!(cloned.notes, original.notes);
+    }
 }

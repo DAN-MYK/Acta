@@ -1,0 +1,331 @@
+// Форма створення / редагування контрагента
+//
+// Архітектура ідентична ActForm:
+//   - UI-логіка тут, бізнес-логіка — в Rust
+//   - Дані приходять через `in property`, події виходять через `callback`
+//   - При збереженні колбек передає текстові значення полів до Rust
+
+import { Theme } from "../theme.slint";
+import { LineEdit, TextEdit } from "std-widgets.slint";
+
+export component CounterpartyForm {
+
+    // ── Вхідні дані (Rust → Slint) ─────────────────────────────────────────
+    in property <bool>   is-edit-mode: false;
+    // UUID контрагента що редагується — Rust читає при збереженні
+    in property <string> cp-edit-id: "";
+
+    // Поточні значення полів (заповнюються при редагуванні)
+    in property <string> cp-name: "";
+    in property <string> cp-edrpou: "";
+    in property <string> cp-iban: "";
+    in property <string> cp-phone: "";
+    in property <string> cp-email: "";
+    in property <string> cp-address: "";
+    in property <string> cp-notes: "";
+
+    // ── Колбеки (Slint → Rust) ──────────────────────────────────────────────
+    // Параметри: назва, ЄДРПОУ, IBAN, телефон, email, адреса, примітки
+    callback save(   string, string, string, string, string, string, string);
+    callback update( string, string, string, string, string, string, string);
+    callback cancel();
+
+    min-width: 600px;
+    min-height: 400px;
+
+    focus-scope := FocusScope {
+        forward-focus: name-field;
+        key-pressed(event) => {
+            if (event.text == Key.Escape) {
+                root.cancel();
+                return accept;
+            }
+            return reject;
+        }
+
+        VerticalLayout {
+            spacing: 0;
+            padding: 0;
+
+        // ── Topbar ───────────────────────────────────────────────────────────
+        Rectangle {
+            height: 64px;
+            background: Theme.surface;
+
+            HorizontalLayout {
+                padding-left: 32px;
+                padding-right: 32px;
+
+                Text {
+                    text: root.is-edit-mode
+                        ? "Редагування контрагента"
+                        : "Новий контрагент";
+                    font-size: 18px;
+                    font-weight: 600;
+                    color: Theme.text-main;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+            }
+
+            Rectangle {
+                y: parent.height - 1px;
+                height: 1px;
+                background: Theme.border;
+            }
+        }
+
+        // ── Контент ──────────────────────────────────────────────────────────
+        Rectangle {
+            background: Theme.bg;
+            vertical-stretch: 1;
+
+            VerticalLayout {
+                padding-top: 32px;
+                padding-left: 32px;
+                padding-right: 32px;
+                padding-bottom: 32px;
+                spacing: 20px;
+
+                // ── Поля форми ────────────────────────────────────────────────
+                GridLayout {
+                    spacing: 12px;
+                    vertical-stretch: 0;
+
+                    Row {
+                        Text {
+                            text: "Назва *";
+                            font-size: 13px;
+                            color: Theme.text-sub;
+                            vertical-alignment: center;
+                            horizontal-stretch: 0;
+                            min-width: 130px;
+                        }
+                        Rectangle {
+                            background: Theme.surface;
+                            border-width: 1px;
+                            border-color: Theme.border;
+                            border-radius: 8px;
+                            height: 40px;
+                            name-field := LineEdit {
+                                text: root.cp-name;
+                                placeholder-text: "ТОВ «Назва компанії»";
+                            }
+                        }
+                    }
+
+                    Row {
+                        Text {
+                            text: "ЄДРПОУ";
+                            font-size: 13px;
+                            color: Theme.text-sub;
+                            vertical-alignment: center;
+                            horizontal-stretch: 0;
+                            min-width: 130px;
+                        }
+                        Rectangle {
+                            background: Theme.surface;
+                            border-width: 1px;
+                            border-color: Theme.border;
+                            border-radius: 8px;
+                            height: 40px;
+                            edrpou-field := LineEdit {
+                                text: root.cp-edrpou;
+                                placeholder-text: "12345678";
+                            }
+                        }
+                    }
+
+                    Row {
+                        Text {
+                            text: "IBAN";
+                            font-size: 13px;
+                            color: Theme.text-sub;
+                            vertical-alignment: center;
+                            horizontal-stretch: 0;
+                            min-width: 130px;
+                        }
+                        Rectangle {
+                            background: Theme.surface;
+                            border-width: 1px;
+                            border-color: Theme.border;
+                            border-radius: 8px;
+                            height: 40px;
+                            iban-field := LineEdit {
+                                text: root.cp-iban;
+                                placeholder-text: "UA123456789012345678901234567";
+                            }
+                        }
+                    }
+
+                    Row {
+                        Text {
+                            text: "Телефон";
+                            font-size: 13px;
+                            color: Theme.text-sub;
+                            vertical-alignment: center;
+                            horizontal-stretch: 0;
+                            min-width: 130px;
+                        }
+                        Rectangle {
+                            background: Theme.surface;
+                            border-width: 1px;
+                            border-color: Theme.border;
+                            border-radius: 8px;
+                            height: 40px;
+                            phone-field := LineEdit {
+                                text: root.cp-phone;
+                                placeholder-text: "+380 50 123 45 67";
+                            }
+                        }
+                    }
+
+                    Row {
+                        Text {
+                            text: "Email";
+                            font-size: 13px;
+                            color: Theme.text-sub;
+                            vertical-alignment: center;
+                            horizontal-stretch: 0;
+                            min-width: 130px;
+                        }
+                        Rectangle {
+                            background: Theme.surface;
+                            border-width: 1px;
+                            border-color: Theme.border;
+                            border-radius: 8px;
+                            height: 40px;
+                            email-field := LineEdit {
+                                text: root.cp-email;
+                                placeholder-text: "info@company.ua";
+                            }
+                        }
+                    }
+
+                    Row {
+                        Text {
+                            text: "Адреса";
+                            font-size: 13px;
+                            color: Theme.text-sub;
+                            vertical-alignment: center;
+                            horizontal-stretch: 0;
+                            min-width: 130px;
+                        }
+                        Rectangle {
+                            background: Theme.surface;
+                            border-width: 1px;
+                            border-color: Theme.border;
+                            border-radius: 8px;
+                            height: 40px;
+                            address-field := LineEdit {
+                                text: root.cp-address;
+                                placeholder-text: "м. Київ, вул. Хрещатик, 1";
+                            }
+                        }
+                    }
+
+                    Row {
+                        Text {
+                            text: "Примітки";
+                            font-size: 13px;
+                            color: Theme.text-sub;
+                            vertical-alignment: center;
+                            vertical-stretch: 0;
+                            horizontal-stretch: 0;
+                            min-width: 130px;
+                        }
+                        Rectangle {
+                            background: Theme.surface;
+                            border-width: 1px;
+                            border-color: Theme.border;
+                            border-radius: 8px;
+                            height: 88px;
+                            notes-field := TextEdit {
+                                text: root.cp-notes;
+                                wrap: word-wrap;
+                            }
+                        }
+                    }
+                }
+
+                // Розпірка
+                Rectangle { vertical-stretch: 1; }
+
+                // ── Кнопки дій ────────────────────────────────────────────────
+                HorizontalLayout {
+                    alignment: space-between;
+                    vertical-stretch: 0;
+
+                    // Кнопка "← Назад"
+                    Rectangle {
+                        background: Theme.surface;
+                        border-radius: 8px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        height: 40px;
+                        width: 110px;
+
+                        Text {
+                            text: "← Назад";
+                            color: Theme.text-main;
+                            font-size: 13px;
+                            font-weight: 500;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.cancel(); }
+                        }
+                    }
+
+                    // Кнопка "Зберегти" (primary — синя)
+                    Rectangle {
+                        background: Theme.primary;
+                        border-radius: 8px;
+                        height: 40px;
+                        width: 130px;
+
+                        Text {
+                            text: "Зберегти";
+                            color: #ffffff;
+                            font-size: 13px;
+                            font-weight: 600;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                if (root.is-edit-mode) {
+                                    root.update(
+                                        name-field.text,
+                                        edrpou-field.text,
+                                        iban-field.text,
+                                        phone-field.text,
+                                        email-field.text,
+                                        address-field.text,
+                                        notes-field.text
+                                    );
+                                } else {
+                                    root.save(
+                                        name-field.text,
+                                        edrpou-field.text,
+                                        iban-field.text,
+                                        phone-field.text,
+                                        email-field.text,
+                                        address-field.text,
+                                        notes-field.text
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    }
+}

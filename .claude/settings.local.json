@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo check:*)",
+      "Bash(set -a)",
+      "Bash(source .env)",
+      "Bash(sqlx migrate:*)",
+      "Bash(scoop list:*)",
+      "Bash(pg_ctl start:*)",
+      "Bash(DATABASE_URL=\"postgresql://postgres:postgres@localhost:5432/acta\" cargo sqlx prepare)",
+      "Bash(RUST_LOG=info timeout 8 ./target/debug/acta.exe)",
+      "Bash(ls target/debug/*.exe)",
+      "Bash(ls target/debug/acta*)",
+      "Bash(cargo build:*)",
+      "Bash(RUST_LOG=info timeout 6 target/debug/acta.exe)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git remote:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "mcp__obsidian__list_allowed_directories",
+      "mcp__obsidian__directory_tree",
+      "Bash(scoop install:*)",
+      "Bash(typst compile:*)",
+      "Bash(cargo test:*)",
+      "Bash(cargo run:*)",
+      "mcp__obsidian__write_file",
+      "mcp__obsidian__create_directory",
+      "mcp__plugin_figma_figma__get_design_context",
+      "mcp__plugin_figma_figma__get_screenshot"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "obsidian"
+  ]
+}

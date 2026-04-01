@@ -1,0 +1,226 @@
+// Форма створення / редагування задачі
+//
+// UI-логіка тут, бізнес-логіка та валідація дат — у Rust.
+
+import { Theme } from "../theme.slint";
+import { Button, LineEdit, TextEdit, ComboBox } from "std-widgets.slint";
+
+export component TaskForm {
+
+    in property <bool>   is-edit-mode: false;
+    in property <string> task-edit-id: "";
+
+    in property <string> task-title: "";
+    in property <string> task-description: "";
+    in property <int>    task-priority-index: 1;
+    in property <string> task-due-date: "";
+    in property <string> task-reminder-at: "";
+    in property <string> task-act-id: "";
+
+    callback save(string, string, int, string, string);
+    callback update(string, string, int, string, string);
+    callback cancel();
+
+    min-width: 680px;
+    min-height: 500px;
+
+    focus-scope := FocusScope {
+        forward-focus: title-field;
+        key-pressed(event) => {
+            if (event.text == Key.Escape) {
+                root.cancel();
+                return accept;
+            }
+            return reject;
+        }
+
+        VerticalLayout {
+            spacing: 0;
+            padding: 0;
+
+            Rectangle {
+                height: 64px;
+                background: Theme.surface;
+
+                HorizontalLayout {
+                    padding-left: 32px;
+                    padding-right: 32px;
+
+                    Text {
+                        text: root.is-edit-mode ? "Редагування задачі" : "Нова задача";
+                        font-size: 18px;
+                        font-weight: 600;
+                        color: Theme.text-main;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                }
+
+                Rectangle {
+                    y: parent.height - 1px;
+                    height: 1px;
+                    background: Theme.border;
+                }
+            }
+
+            Rectangle {
+                background: Theme.bg;
+                vertical-stretch: 1;
+
+                VerticalLayout {
+                    padding-top: 32px;
+                    padding-left: 32px;
+                    padding-right: 32px;
+                    padding-bottom: 32px;
+                    spacing: 18px;
+
+                    GridLayout {
+                        spacing: 12px;
+                        vertical-stretch: 0;
+
+                        Row {
+                            Text {
+                                text: "Назва *";
+                                font-size: 13px;
+                                color: Theme.text-sub;
+                                vertical-alignment: center;
+                                min-width: 130px;
+                            }
+                            Rectangle {
+                                background: Theme.surface;
+                                border-width: 1px;
+                                border-color: Theme.border;
+                                border-radius: 8px;
+                                height: 40px;
+                                title-field := LineEdit {
+                                    text: root.task-title;
+                                    placeholder-text: "Підготувати акт для клієнта";
+                                }
+                            }
+                        }
+
+                        Row {
+                            Text {
+                                text: "Опис";
+                                font-size: 13px;
+                                color: Theme.text-sub;
+                                vertical-alignment: center;
+                                min-width: 130px;
+                            }
+                            Rectangle {
+                                background: Theme.surface;
+                                border-width: 1px;
+                                border-color: Theme.border;
+                                border-radius: 8px;
+                                height: 92px;
+                                description-field := TextEdit {
+                                    text: root.task-description;
+                                    wrap: word-wrap;
+                                }
+                            }
+                        }
+
+                        Row {
+                            Text {
+                                text: "Пріоритет";
+                                font-size: 13px;
+                                color: Theme.text-sub;
+                                vertical-alignment: center;
+                                min-width: 130px;
+                            }
+                            Rectangle {
+                                background: Theme.surface;
+                                border-width: 1px;
+                                border-color: Theme.border;
+                                border-radius: 8px;
+                                height: 40px;
+                                priority-combo := ComboBox {
+                                    model: ["Низький", "Звичайний", "Високий", "Критичний"];
+                                    current-index: root.task-priority-index;
+                                }
+                            }
+                        }
+
+                        Row {
+                            Text {
+                                text: "Дедлайн";
+                                font-size: 13px;
+                                color: Theme.text-sub;
+                                vertical-alignment: center;
+                                min-width: 130px;
+                            }
+                            Rectangle {
+                                background: Theme.surface;
+                                border-width: 1px;
+                                border-color: Theme.border;
+                                border-radius: 8px;
+                                height: 40px;
+                                due-field := LineEdit {
+                                    text: root.task-due-date;
+                                    placeholder-text: "ДД.ММ.РРРР ГГ:ХХ";
+                                }
+                            }
+                        }
+
+                        Row {
+                            Text {
+                                text: "Нагадування";
+                                font-size: 13px;
+                                color: Theme.text-sub;
+                                vertical-alignment: center;
+                                min-width: 130px;
+                            }
+                            Rectangle {
+                                background: Theme.surface;
+                                border-width: 1px;
+                                border-color: Theme.border;
+                                border-radius: 8px;
+                                height: 40px;
+                                reminder-field := LineEdit {
+                                    text: root.task-reminder-at;
+                                    placeholder-text: "ДД.ММ.РРРР ГГ:ХХ";
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle { vertical-stretch: 1; }
+
+                    HorizontalLayout {
+                        alignment: space-between;
+                        vertical-stretch: 0;
+
+                        Button {
+                            text: "← Назад";
+                            clicked => { root.cancel(); }
+                        }
+
+                        Button {
+                            text: "Зберегти";
+                            primary: true;
+                            clicked => {
+                                if root.is-edit-mode {
+                                    root.update(
+                                        title-field.text,
+                                        description-field.text,
+                                        priority-combo.current-index,
+                                        due-field.text,
+                                        reminder-field.text
+                                    );
+                                } else {
+                                    root.save(
+                                        title-field.text,
+                                        description-field.text,
+                                        priority-combo.current-index,
+                                        due-field.text,
+                                        reminder-field.text
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
