@@ -1,0 +1,149 @@
+// Компонент: список актів виконаних робіт з фільтром по статусу
+//
+// Патерн аналогічний CounterpartyList:
+//   - Дані приходять через `in property`
+//   - Події виходять через `callback`
+//   - UI-логіка тут, бізнес-логіка — в Rust
+
+import { Button, LineEdit, StandardTableView, ProgressIndicator, ComboBox } from "std-widgets.slint";
+
+export component ActList {
+
+    // ── Вхідні дані (Rust → Slint) ─────────────────────────────────────────
+    in property <[[StandardListViewItem]]> rows;
+    in property <[string]>                 row-ids;
+    // Статуси паралельно до рядків: "draft" | "issued" | "signed" | "paid"
+    // Потрібні для визначення чи доступна кнопка "Наступний статус"
+    in property <[string]>                 row-statuses;
+    in property <bool>                     loading: false;
+
+    // ── Колбеки (Slint → Rust) ──────────────────────────────────────────────
+    // 0=Усі, 1=Чернетка, 2=Виставлено, 3=Підписано, 4=Оплачено
+    callback status-filter-changed(int);
+    callback row-selected(string);          // UUID вибраного акту
+    callback create-clicked();
+    callback advance-status-clicked(string); // UUID акту → Rust обчислює наступний статус
+
+    // ── Внутрішній стан ─────────────────────────────────────────────────────
+    private property <int>    selected-row: -1;
+    private property <string> selected-id: "";
+    private property <string> selected-status: "";  // "draft" | "issued" | "signed" | "paid"
+
+    min-width: 600px;
+    min-height: 400px;
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 12px;
+
+        // ── Заголовок + кнопка "Новий акт" ─────────────────────────────────
+        HorizontalLayout {
+            alignment: space-between;
+            vertical-stretch: 0;
+
+            Text {
+                text: "Акти виконаних робіт";
+                font-size: 22px;
+                font-weight: 700;
+                color: #1e293b;
+                vertical-alignment: center;
+            }
+
+            Button {
+                text: "+ Новий акт";
+                clicked => { root.create-clicked(); }
+            }
+        }
+
+        // ── Фільтр по статусу ───────────────────────────────────────────────
+        //
+        // ComboBox зі std-widgets: model = список варіантів,
+        // selected(val) — callback при зміні вибору.
+        // current-index читаємо через ім'я елементу status-combo.
+        HorizontalLayout {
+            spacing: 12px;
+            vertical-stretch: 0;
+
+            Text {
+                text: "Статус:";
+                font-size: 13px;
+                color: #64748b;
+                vertical-alignment: center;
+                width: 60px;
+            }
+
+            status-combo := ComboBox {
+                model: ["Усі", "Чернетка", "Виставлено", "Підписано", "Оплачено"];
+                horizontal-stretch: 0;
+                // При зміні вибору надсилаємо індекс до Rust.
+                // 0=Усі відповідає None у Rust, 1-4 = конкретний статус.
+                selected(val) => {
+                    root.status-filter-changed(status-combo.current-index);
+                }
+            }
+
+            // Розпірка — залишок рядка порожній
+            Rectangle { horizontal-stretch: 1; }
+        }
+
+        // ── Індикатор завантаження ──────────────────────────────────────────
+        if root.loading : ProgressIndicator {
+            indeterminate: true;
+            vertical-stretch: 0;
+        }
+
+        // ── Таблиця актів ───────────────────────────────────────────────────
+        //
+        // Колонки: Номер (фіксована), Дата (фіксована), Контрагент (розтяжна),
+        //          Сума (фіксована), Статус (фіксована)
+        StandardTableView {
+            columns: [
+                { title: "Номер",       width: 140px },
+                { title: "Дата",        width: 100px },
+                { title: "Контрагент",  horizontal-stretch: 1 },
+                { title: "Сума, грн",   width: 130px },
+                { title: "Статус",      width: 110px },
+            ];
+            rows: root.rows;
+
+            current-row-changed(i) => {
+                root.selected-row = i;
+                if i >= 0 && i < root.row-ids.length {
+                    root.selected-id      = root.row-ids[i];
+                    root.selected-status  = root.row-statuses[i];
+                    root.row-selected(root.row-ids[i]);
+                }
+            }
+        }
+
+        // ── Панель дій (з'являється при виборі рядка) ───────────────────────
+        if root.selected-row >= 0 : HorizontalLayout {
+            alignment: end;
+            spacing: 8px;
+            vertical-stretch: 0;
+
+            Text {
+                text: "ID: " + root.selected-id;
+                color: #94a3b8;
+                font-size: 11px;
+                vertical-alignment: center;
+                overflow: elide;
+                horizontal-stretch: 1;
+            }
+
+            // Кнопка доступна для всіх статусів крім "paid" (фінального)
+            Button {
+                text: "Наступний статус ▶";
+                enabled: root.selected-id != "" && root.selected-status != "paid";
+                clicked => {
+                    if (root.selected-id != "") {
+                        root.advance-status-clicked(root.selected-id);
+                        root.selected-row    = -1;
+                        root.selected-id     = "";
+                        root.selected-status = "";
+                    }
+                }
+            }
+        }
+    }
+}

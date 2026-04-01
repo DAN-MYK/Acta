@@ -1,0 +1,130 @@
+// Компонент: список контрагентів з пошуком
+//
+// Патерн: UI-логіка тут, бізнес-логіка — в Rust.
+// Дані приходять через `in property`, події виходять через `callback`.
+
+import { Button, LineEdit, StandardTableView, ProgressIndicator } from "std-widgets.slint";
+
+export component CounterpartyList {
+
+    // ── Вхідні дані (Rust → Slint) ─────────────────────────────────────────
+    //
+    // [[StandardListViewItem]] — таблиця: масив рядків, кожен рядок — масив комірок.
+    // row-ids — паралельний масив UUID, щоб при виборі рядка передати id до Rust.
+    in property <[[StandardListViewItem]]> rows;
+    in property <[string]>                 row-ids;
+    in property <bool>                     loading: false;
+
+    // ── Колбеки (Slint → Rust) ──────────────────────────────────────────────
+    callback search-changed(string);      // викликається при кожній зміні пошуку
+    callback row-selected(string);        // передає UUID вибраного контрагента
+    callback create-clicked();
+    callback archive-clicked(string);     // передає UUID контрагента
+
+    // ── Внутрішній стан компоненту ──────────────────────────────────────────
+    // private — недоступний ззовні, лише всередині цього компоненту
+    private property <int>    selected-row: -1;
+    private property <string> selected-id: "";
+
+    // ── Розмір за замовчуванням ─────────────────────────────────────────────
+    min-width: 600px;
+    min-height: 400px;
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 12px;
+
+        // ── Заголовок + кнопка "Новий" ──────────────────────────────────────
+        HorizontalLayout {
+            alignment: space-between;
+            vertical-stretch: 0;         // не розтягувати — фіксована висота
+
+            Text {
+                text: "Контрагенти";
+                font-size: 22px;
+                font-weight: 700;
+                color: #1e293b;
+                vertical-alignment: center;
+            }
+
+            Button {
+                text: "+ Новий контрагент";
+                clicked => { root.create-clicked(); }
+            }
+        }
+
+        // ── Поле пошуку ─────────────────────────────────────────────────────
+        // edited(text) — callback LineEdit, спрацьовує при кожній зміні тексту
+        LineEdit {
+            placeholder-text: "Пошук за назвою або ЄДРПОУ...";
+            vertical-stretch: 0;
+            edited(text) => { root.search-changed(text); }
+        }
+
+        // ── Індикатор завантаження (видимий лише коли loading = true) ───────
+        // `if condition : Component { ... }` — умовне відображення в Slint
+        if root.loading : ProgressIndicator {
+            indeterminate: true;   // крутилка без відсотка — невідомий прогрес
+            vertical-stretch: 0;
+        }
+
+        // ── Таблиця ─────────────────────────────────────────────────────────
+        //
+        // horizontal-stretch: 1  → колонка розтягується, займає вільний простір
+        // width: Npx             → фіксована ширина
+        //
+        // StandardTableView автоматично отримує вертикальний stretch = 1
+        // (займає весь залишок VerticalLayout).
+        StandardTableView {
+            columns: [
+                { title: "Назва",    horizontal-stretch: 2 },
+                { title: "ЄДРПОУ",   width: 110px },
+                { title: "IBAN",     width: 240px },
+                { title: "Телефон",  width: 130px },
+                { title: "Email",    horizontal-stretch: 1 },
+            ];
+            rows: root.rows;
+
+            // current-row-changed — спрацьовує коли користувач клікає рядок.
+            // `i` — індекс рядка, -1 якщо виділення знято.
+            current-row-changed(i) => {
+                root.selected-row = i;
+                // Перевірка меж масиву — захист від помилки out-of-bounds
+                if i >= 0 && i < root.row-ids.length {
+                    root.selected-id = root.row-ids[i];
+                    root.row-selected(root.row-ids[i]);
+                }
+            }
+        }
+
+        // ── Панель дій — з'являється коли рядок вибрано ─────────────────────
+        if root.selected-row >= 0 : HorizontalLayout {
+            alignment: end;
+            spacing: 8px;
+            vertical-stretch: 0;
+
+            // Показуємо UUID вибраного контрагента (корисно для налагодження)
+            Text {
+                text: "ID: " + root.selected-id;
+                color: #94a3b8;
+                font-size: 11px;
+                vertical-alignment: center;
+                overflow: elide;
+                horizontal-stretch: 1;
+            }
+
+            Button {
+                text: "Архівувати";
+                enabled: root.selected-id != "";
+                clicked => {
+                    if (root.selected-id != "") {
+                        root.archive-clicked(root.selected-id);
+                        // Скидаємо виділення після дії
+                        root.selected-row = -1;
+                        root.selected-id = "";
+                    }
+                }
+            }
+        }
+    }
+}

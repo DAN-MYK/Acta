@@ -1,0 +1,241 @@
+// Головне вікно програми Acta
+//
+// Архітектура:
+//   MainWindow — кореневий компонент, який Rust інстанціює через MainWindow::new()
+//   NavItem    — приватний компонент навігаційного елементу (не экспортується)
+//
+// Навігація: ліва панель з 4 розділами, права — контент поточного розділу.
+// Перемикання через in-out property <int> current-page.
+
+import { CounterpartyList } from "counterparties/counterparty_list.slint";
+import { ActList }          from "acts/act_list.slint";
+// StandardListViewItem не потребує явного імпорту —
+// він доступний через StandardTableView (імпортований у CounterpartyList).
+
+// ── NavItem — елемент бічної навігації ──────────────────────────────────────
+//
+// Не містить `export` — використовується лише в цьому файлі.
+// active: bool — підсвічує активний розділ синім фоном.
+// Анімація: плавна зміна кольору при переходах.
+component NavItem {
+    in property <string> label;
+    in property <bool>   active: false;
+    callback clicked;
+
+    height: 42px;
+    min-width: 0;
+
+    // Rectangle з TouchArea — стандартний патерн кастомної кнопки в Slint.
+    // TouchArea "ловить" кліки, Rectangle — візуальне оформлення.
+    rect := Rectangle {
+        border-radius: 6px;
+        background: root.active ? #3b82f6 : transparent;
+        // animate — плавна анімація зміни фону за 150мс
+        animate background { duration: 150ms; easing: ease; }
+
+        HorizontalLayout {
+            padding-left: 14px;
+            padding-right: 14px;
+
+            Text {
+                text: root.label;
+                font-size: 14px;
+                font-weight: root.active ? 600 : 400;
+                color: root.active ? #ffffff : #94a3b8;
+                vertical-alignment: center;
+                animate color { duration: 150ms; easing: ease; }
+            }
+        }
+
+        TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.clicked(); }
+
+            // Hover ефект — трохи освітлюємо коли не активний
+            pointer-event(e) => {
+                if (e.kind == PointerEventKind.move) {
+                    rect.background = root.active ? #3b82f6 : #ffffff18;
+                }
+            }
+        }
+    }
+}
+
+// ── MainWindow — головне вікно ───────────────────────────────────────────────
+//
+// `inherits Window` — наслідуємо від системного вікна.
+// Всі властивості та колбеки, що починаються з `counterparty-`,
+// делегуються в CounterpartyList.
+export component MainWindow inherits Window {
+    title: "Acta — Управлінський облік";
+    min-width:  1100px;
+    min-height: 680px;
+    preferred-width:  1280px;
+    preferred-height: 800px;
+
+    // ── Стан навігації ───────────────────────────────────────────────────────
+    // in-out — двостороннє: Rust може читати і встановлювати,
+    //          Slint також може змінювати (через NavItem.clicked)
+    in-out property <int> current-page: 0;
+    // 0 = Контрагенти | 1 = Акти | 2 = Накладні | 3 = Платежі
+
+    // ── Дані контрагентів ────────────────────────────────────────────────────
+    // [[StandardListViewItem]] — таблиця (масив масивів) для StandardTableView
+    // [string]                 — паралельний масив UUID
+    in property <[[StandardListViewItem]]> counterparty-rows;
+    in property <[string]>                 counterparty-ids;
+    in property <bool>                     counterparties-loading: false;
+
+    // ── Дані актів ───────────────────────────────────────────────────────────
+    in property <[[StandardListViewItem]]> act-rows;
+    in property <[string]>                 act-row-ids;
+    in property <[string]>                 act-row-statuses;
+    in property <bool>                     acts-loading: false;
+
+    // ── Колбеки контрагентів (делегуються вниз до CounterpartyList) ──────────
+    callback counterparty-search-changed(string);
+    callback counterparty-selected(string);
+    callback counterparty-create-clicked();
+    callback counterparty-archive-clicked(string);
+
+    // ── Колбеки актів ────────────────────────────────────────────────────────
+    // status-filter: 0=Усі, 1=Чернетка, 2=Виставлено, 3=Підписано, 4=Оплачено
+    callback act-status-filter-changed(int);
+    callback act-selected(string);
+    callback act-create-clicked();
+    callback act-advance-status-clicked(string);
+
+    // ── Розмітка ─────────────────────────────────────────────────────────────
+    HorizontalLayout {
+
+        // ══ Бічна панель навігації ══════════════════════════════════════════
+        Rectangle {
+            width: 200px;
+            background: #1e293b;   // темно-синій — фірмовий колір сайдбару
+
+            VerticalLayout {
+                padding: 12px;
+                spacing: 4px;
+
+                // Логотип / назва програми
+                Rectangle {
+                    height: 60px;
+
+                    Text {
+                        text: "ACTA";
+                        font-size: 22px;
+                        font-weight: 700;
+                        color: #ffffff;
+                        letter-spacing: 3px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                // Розділювач
+                Rectangle {
+                    height: 1px;
+                    background: #334155;
+                    vertical-stretch: 0;
+                }
+
+                // Відступ після розділювача
+                Rectangle { height: 8px; vertical-stretch: 0; }
+
+                // Навігаційні елементи
+                NavItem {
+                    label: "Контрагенти";
+                    active: root.current-page == 0;
+                    clicked => { root.current-page = 0; }
+                }
+                NavItem {
+                    label: "Акти";
+                    active: root.current-page == 1;
+                    clicked => { root.current-page = 1; }
+                }
+                NavItem {
+                    label: "Накладні";
+                    active: root.current-page == 2;
+                    clicked => { root.current-page = 2; }
+                }
+                NavItem {
+                    label: "Платежі";
+                    active: root.current-page == 3;
+                    clicked => { root.current-page = 3; }
+                }
+
+                // Розпірка — штовхає версію вниз
+                Rectangle { vertical-stretch: 1; }
+
+                // Версія програми
+                Text {
+                    text: "v0.1.0";
+                    font-size: 11px;
+                    color: #475569;
+                    horizontal-alignment: center;
+                }
+
+                Rectangle { height: 4px; vertical-stretch: 0; }
+            }
+        }
+
+        // ══ Область контенту ════════════════════════════════════════════════
+        Rectangle {
+            background: #f8fafc;   // світло-сірий фон сторінки
+
+            // ── Сторінка 0: Контрагенти ───────────────────────────────────
+            // Умовне відображення: `if condition : Component { ... }`
+            // Компонент існує в пам'яті лише поки умова true.
+            if root.current-page == 0 : CounterpartyList {
+                // Передаємо дані зверху вниз
+                rows:    root.counterparty-rows;
+                row-ids: root.counterparty-ids;
+                loading: root.counterparties-loading;
+
+                // Делегуємо колбеки вгору до MainWindow
+                // Синтаксис: event(args) => { root.callback(args); }
+                search-changed(q)  => { root.counterparty-search-changed(q); }
+                row-selected(id)   => { root.counterparty-selected(id); }
+                create-clicked     => { root.counterparty-create-clicked(); }
+                archive-clicked(id)=> { root.counterparty-archive-clicked(id); }
+            }
+
+            // ── Сторінка 1: Акти виконаних робіт ─────────────────────────
+            if root.current-page == 1 : ActList {
+                rows:             root.act-rows;
+                row-ids:          root.act-row-ids;
+                row-statuses:     root.act-row-statuses;
+                loading:          root.acts-loading;
+
+                status-filter-changed(i)    => { root.act-status-filter-changed(i); }
+                row-selected(id)            => { root.act-selected(id); }
+                create-clicked              => { root.act-create-clicked(); }
+                advance-status-clicked(id)  => { root.act-advance-status-clicked(id); }
+            }
+
+            // ── Заглушки для майбутніх сторінок ──────────────────────────
+
+            if root.current-page == 2 : placeholder-invoices := Rectangle {
+                Text {
+                    text: "📦  Видаткові накладні\nБуде реалізовано у наступній версії";
+                    color: #94a3b8;
+                    font-size: 16px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    wrap: word-wrap;
+                }
+            }
+
+            if root.current-page == 3 : placeholder-payments := Rectangle {
+                Text {
+                    text: "💰  Платежі\nБуде реалізовано у наступній версії";
+                    color: #94a3b8;
+                    font-size: 16px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    wrap: word-wrap;
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,99 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE acts\n        SET number          = $2,\n            counterparty_id = $3,\n            contract_id     = $4,\n            date            = $5,\n            notes           = $6,\n            updated_at      = NOW()\n        WHERE id = $1\n        RETURNING id, number, counterparty_id, contract_id, date, total_amount,\n                  status AS \"status: ActStatus\", notes, bas_id, created_at, updated_at\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "number",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "counterparty_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "contract_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 5,
+        "name": "total_amount",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 6,
+        "name": "status: ActStatus",
+        "type_info": {
+          "Custom": {
+            "name": "act_status",
+            "kind": {
+              "Enum": [
+                "draft",
+                "issued",
+                "signed",
+                "paid"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "notes",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "bas_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 10,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar",
+        "Uuid",
+        "Uuid",
+        "Date",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "71952a8ea0f0e252f5445c594736f64e7c3487ecf61bee4c30a84a606746672f"
+}
