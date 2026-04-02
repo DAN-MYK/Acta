@@ -6,94 +6,140 @@
 //   - При збереженні колбек передає текстові значення полів до Rust
 //   - Позиції: Rust керує списком, Slint лише відображає та сигналізує про зміни
 //
-// Взаємодія з позиціями:
-//   add-item()         → Rust додає нову порожню позицію та оновлює item-* масиви
-//   remove-item(i)     → Rust видаляє позицію і та оновлює item-* масиви
-//   Редагування полів позицій — через окремий колбек (TODO: edit-item)
+// Layout (Figma-spec):
+//   ┌─ Topbar 64px: breadcrumb | [Скасувати] [Зберегти] ─────────────┐
+//   │  ScrollView (flex)            │  Right panel 392px              │
+//   │  ┌── FormCard ─────────────┐  │  ┌── StatusCard ──────────────┐ │
+//   │  │  Основна інформація     │  │  │  radio: Черн/Вист/Підп/Опл │ │
+//   │  │  Послуги / Роботи       │  │  └───────────────────────────┘ │
+//   │  │  Разом / До сплати      │  │  ┌── HintCard ───────────────┐ │
+//   │  │  Примітки               │  │  │  ℹ Підказка               │ │
+//   │  └─────────────────────────┘  │  └───────────────────────────┘ │
+//   │  ── Задачі по акту ────────── │                                 │
+//   └─────────────────────────────────────────────────────────────────┘
 
 import { Theme } from "../theme.slint";
-import { Button, LineEdit, TextEdit, ComboBox, ScrollView, ProgressIndicator, ListView } from "std-widgets.slint";
+import { LineEdit, TextEdit, ComboBox, ScrollView, ProgressIndicator, ListView } from "std-widgets.slint";
 
-export component ActForm {
+// ── Компонент вибору статусу (radio-style картка) ──────────────────────────
+component StatusOption inherits Rectangle {
+    in property <string> title;
+    in property <string> subtitle;
+    in property <bool>   selected: false;
+    in property <color>  accent: Theme.warning;
+    callback clicked();
 
-    // ── Вхідні дані (Rust → Slint) ─────────────────────────────────────────
+    height: 48px;
+    border-radius: 8px;
+    border-width: root.selected ? 2px : 1px;
+    border-color: root.selected ? root.accent : Theme.border;
+    background: root.selected
+        ? root.accent.with-alpha(0.08)
+        : (opt-touch.has-hover ? Theme.hover-bg : Theme.surface);
+    animate background { duration: 80ms; }
 
-    // Контрагенти для ComboBox — паралельні масиви (names[i] ↔ ids[i])
+    // Коло радіо-кнопки
+    Rectangle {
+        x: 12px;
+        y: (parent.height - self.height) / 2;
+        width: 16px;
+        height: 16px;
+        border-radius: 8px;
+        border-width: 2px;
+        border-color: root.selected ? root.accent : Theme.border;
+        background: root.selected ? root.accent : transparent;
+
+        if root.selected : Rectangle {
+            x: 5px; y: 5px;
+            width: 6px; height: 6px;
+            border-radius: 3px;
+            background: #ffffff;
+        }
+    }
+
+    Text {
+        x: 36px; y: 9px;
+        text: root.title;
+        font-size: 13px;
+        font-weight: 600;
+        color: root.selected ? root.accent : Theme.text-main;
+    }
+
+    Text {
+        x: 36px; y: 28px;
+        text: root.subtitle;
+        font-size: 11px;
+        color: Theme.text-sub;
+    }
+
+    opt-touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// ── Головний компонент форми ───────────────────────────────────────────────
+export component ActForm inherits Rectangle {
+
+    // ── Вхідні дані (Rust → Slint) ────────────────────────────────────────
     in property <[string]> counterparty-names;
     in property <[string]> counterparty-ids;
+    in property <string>   act-number: "";
+    in property <string>   act-date: "";
+    in property <string>   act-notes: "";
+    in property <int>      act-cp-index: 0;
+    in property <string>   total-amount: "0.00";
+    in property <bool>     is-edit-mode: false;
+    in property <string>   act-edit-id: "";
 
-    // Поточний номер акту — заповнюється при відкритті форми редагування
-    in property <string> act-number: "";
-    // Дата акту у форматі ДД.ММ.РРРР (для режиму редагування)
-    in property <string> act-date: "";
-    // Примітки акту (для режиму редагування)
-    in property <string> act-notes: "";
-    // Індекс контрагента у ComboBox (для режиму редагування)
-    in property <int>    act-cp-index: 0;
+    // Статус: 0=Чернетка 1=Виставлений 2=Підписаний 3=Оплачений
+    // in-out — щоб Rust міг встановити статус при редагуванні,
+    // а Slint міг змінити через статус-пікер.
+    in-out property <int>  act-status: 0;
 
-    // Підсумкова сума — ЗАВЖДИ обчислюється в Rust, Slint лише відображає
-    in property <string> total-amount: "0.00";
-
-    in property <bool>   is-edit-mode: false;
-    // UUID акту, що редагується — Rust читає при збереженні (update)
-    in property <string> act-edit-id: "";
-
-    // ── Позиції акту: паралельні масиви ──────────────────────────────────────
-    //
-    // Кожен i-й елемент описує одну позицію.
-    // Rust оновлює ці масиви після кожного add-item / remove-item.
+    // ── Позиції акту: паралельні масиви ───────────────────────────────────
     in property <[string]> item-descriptions;
     in property <[string]> item-quantities;
     in property <[string]> item-units;
     in property <[string]> item-prices;
-    in property <[string]> item-amounts;    // quantity × unit_price, рахується Rust
+    in property <[string]> item-amounts;
 
-    // ── Задачі, прив'язані до акту ─────────────────────────────────────────
+    // ── Задачі, прив'язані до акту ────────────────────────────────────────
     in property <[[StandardListViewItem]]> act-task-rows;
     in property <[string]>                 act-task-row-ids;
     in property <[string]>                 act-task-row-statuses;
     in property <[string]>                 act-task-row-priorities;
     in property <bool>                     act-tasks-loading: false;
 
-    // ── Колбеки (Slint → Rust) ──────────────────────────────────────────────
-
-    // save / save-draft: передають текстовий стан усіх полів до Rust для парсингу
+    // ── Колбеки (Slint → Rust) ────────────────────────────────────────────
+    // Зберегти / Чернетка / Оновити — передають текстові значення полів
     callback save(      /* number */ string,
                         /* date   */ string,
-                        /* counterparty_id */ string,
+                        /* cp_id  */ string,
                         /* notes  */ string);
     callback save-draft(/* number */ string,
                         /* date   */ string,
-                        /* counterparty_id */ string,
+                        /* cp_id  */ string,
                         /* notes  */ string);
-    // update: викликається при збереженні в режимі редагування
     callback update(    /* number */ string,
                         /* date   */ string,
-                        /* counterparty_id */ string,
+                        /* cp_id  */ string,
                         /* notes  */ string);
     callback cancel();
-
-    // Rust додає нову порожню позицію, потім оновлює item-* масиви
     callback add-item();
-
-    // Rust видаляє позицію з вказаним індексом, потім оновлює item-* масиви
     callback remove-item(/* index */ int);
-
-    // Користувач відредагував поле позиції:
-    //   index — порядковий номер позиції
-    //   field — "desc" | "qty" | "unit" | "price"
-    //   value — нове значення (рядок)
-    // Rust оновлює модель та перераховує суму/total для qty і price.
+    // field: "desc" | "qty" | "unit" | "price"
     callback item-changed(/* index */ int, /* field */ string, /* value */ string);
 
-    // ── Колбеки задач в межах акту ──────────────────────────────────────────
+    // Задачі
     callback act-task-create-clicked();
     callback act-task-edit-clicked(string);
     callback act-task-toggle-status-clicked(string);
     callback act-task-delete-clicked(string);
 
-    min-width: 700px;
-    min-height: 500px;
+    min-width: 900px;
+    min-height: 600px;
+    background: Theme.bg;
 
     focus-scope := FocusScope {
         forward-focus: number-field;
@@ -106,694 +152,858 @@ export component ActForm {
         }
 
         VerticalLayout {
-            padding: 24px;
-            spacing: 16px;
+            spacing: 0;
 
-        // ── Заголовок ────────────────────────────────────────────────────────
-        //
-        // Умовний текст: `condition ? true-val : false-val` — тернарний оператор Slint
-        HorizontalLayout {
-            vertical-stretch: 0;
-
-            Text {
-                text: root.is-edit-mode ? "Редагування акту" : "Новий акт";
-                font-size: 22px;
-                font-weight: 700;
-                color: Theme.text-main;
-                vertical-alignment: center;
-            }
-        }
-
-        // ── Поля форми ───────────────────────────────────────────────────────
-        //
-        // GridLayout — двоколонна сітка: ліворуч підпис (120px), праворуч поле.
-        // `Row { }` — один рядок сітки.
-        // Named elements (`:=`) — щоб читати їх значення у колбеках кнопок нижче.
-        GridLayout {
-            spacing: 12px;
-            vertical-stretch: 0;
-
-            Row {
-                Text {
-                    text: "Номер акту";
-                    font-size: 13px;
-                    color: Theme.text-sub;
-                    vertical-alignment: center;
-                    horizontal-stretch: 0;
-                    min-width: 120px;
-                }
-                // number-field.text буде прочитано у колбеках save/save-draft
-                Rectangle {
-                    background: Theme.surface;
-                    border-width: 1px;
-                    border-color: Theme.border;
-                    border-radius: 8px;
-                    height: 40px;
-                    number-field := LineEdit {
-                        text: root.act-number;
-                        placeholder-text: "АКТ-001";
-                    }
-                }
-            }
-
-            Row {
-                Text {
-                    text: "Дата";
-                    font-size: 13px;
-                    color: Theme.text-sub;
-                    vertical-alignment: center;
-                    horizontal-stretch: 0;
-                    min-width: 120px;
-                }
-                // Rust парсить рядок у NaiveDate (формат ДД.ММ.РРРР)
-                // act-date: "" для нового акту, "ДД.ММ.РРРР" для редагування
-                Rectangle {
-                    background: Theme.surface;
-                    border-width: 1px;
-                    border-color: Theme.border;
-                    border-radius: 8px;
-                    height: 40px;
-                    date-field := LineEdit {
-                        text: root.act-date;
-                        placeholder-text: "ДД.ММ.РРРР";
-                    }
-                }
-            }
-
-            Row {
-                Text {
-                    text: "Контрагент";
-                    font-size: 13px;
-                    color: Theme.text-sub;
-                    vertical-alignment: center;
-                    horizontal-stretch: 0;
-                    min-width: 120px;
-                }
-                // cp-combo.current-index → counterparty-ids[i] → Rust отримує UUID
-                // act-cp-index: 0 для нового акту, знайдений індекс для редагування
-                // ComboBox обгорнутий у Rectangle щоб задати фон у темній темі
-                Rectangle {
-                    height: 40px;
-                    background: Theme.surface;
-                    border-width: 1px;
-                    border-color: Theme.border;
-                    border-radius: 8px;
-
-                    cp-combo := ComboBox {
-                        model: root.counterparty-names;
-                        current-index: root.act-cp-index;
-                    }
-                }
-            }
-
-            Row {
-                Text {
-                    text: "Примітки";
-                    font-size: 13px;
-                    color: Theme.text-sub;
-                    vertical-alignment: center;
-                    vertical-stretch: 0;
-                    horizontal-stretch: 0;
-                    min-width: 120px;
-                }
-                // TextEdit — багаторядкове поле (на відміну від LineEdit)
-                // wrap: word-wrap — перенос за словами
-                // act-notes: "" для нового акту, наявні нотатки для редагування
-                Rectangle {
-                    background: Theme.surface;
-                    border-width: 1px;
-                    border-color: Theme.border;
-                    border-radius: 8px;
-                    height: 88px;
-                    notes-field := TextEdit {
-                        text: root.act-notes;
-                        wrap: word-wrap;
-                    }
-                }
-            }
-        }
-
-        // ── Секція позицій: заголовок + кнопка додавання ────────────────────
-        HorizontalLayout {
-            alignment: space-between;
-            vertical-stretch: 0;
-
-            Text {
-                text: "Позиції";
-                font-size: 16px;
-                font-weight: 600;
-                color: Theme.text-main;
-                vertical-alignment: center;
-            }
-
-            Button {
-                text: "+ Додати позицію";
-                clicked => { root.add-item(); }
-            }
-        }
-
-        // ── Шапка таблиці позицій ─────────────────────────────────────────────
-        //
-        // Ширини стовпців мають точно збігатися з рядками у ScrollView нижче:
-        //   Найменування — horizontal-stretch: 3 (займає вільний простір)
-        //   К-сть        — 80px, right
-        //   Од.вим.      — 70px, center
-        //   Ціна         — 100px, right
-        //   Сума         — 100px, right
-        //   Кнопка ×     — 36px (порожній Rectangle для вирівнювання)
-        Rectangle {
-            height: 36px;
-            background: Theme.table-header;
-            border-radius: 4px;
-            vertical-stretch: 0;
-
-            HorizontalLayout {
-                padding-left: 12px;
-                padding-right: 4px;
-                spacing: 8px;
-
-                Text {
-                    text: "Найменування";
-                    font-size: 12px;
-                    font-weight: 600;
-                    color: Theme.text-sub;
-                    vertical-alignment: center;
-                    horizontal-stretch: 3;
-                }
-                Text {
-                    text: "К-сть";
-                    font-size: 12px;
-                    font-weight: 600;
-                    color: Theme.text-sub;
-                    vertical-alignment: center;
-                    horizontal-alignment: right;
-                    width: 80px;
-                }
-                Text {
-                    text: "Од.вим.";
-                    font-size: 12px;
-                    font-weight: 600;
-                    color: Theme.text-sub;
-                    vertical-alignment: center;
-                    horizontal-alignment: center;
-                    width: 70px;
-                }
-                Text {
-                    text: "Ціна";
-                    font-size: 12px;
-                    font-weight: 600;
-                    color: Theme.text-sub;
-                    vertical-alignment: center;
-                    horizontal-alignment: right;
-                    width: 100px;
-                }
-                Text {
-                    text: "Сума";
-                    font-size: 12px;
-                    font-weight: 600;
-                    color: Theme.text-sub;
-                    vertical-alignment: center;
-                    horizontal-alignment: right;
-                    width: 100px;
-                }
-                // Порожнє місце навпроти кнопок видалення (для вирівнювання шапки)
-                Rectangle { width: 36px; }
-            }
-        }
-
-        // ── Список позицій (прокручуваний) ───────────────────────────────────
-        //
-        // ScrollView — прокрутка коли позицій більше ніж вміщується.
-        // vertical-stretch: 1 — займає весь залишок VerticalLayout.
-        //
-        // `for desc[i] in root.item-descriptions` — Slint for-loop з індексом:
-        //   desc = поточний елемент масиву
-        //   i    = числовий індекс (0, 1, 2, ...)
-        //
-        // Доступ до паралельних масивів: root.item-quantities[i] тощо.
-        ScrollView {
-            vertical-stretch: 1;
-            min-height: 80px;
-
-            VerticalLayout {
-
-                for desc[i] in root.item-descriptions: VerticalLayout {
-                    spacing: 0;
-
-                    // Рядок позиції — поля редагуються через LineEdit.
-                    // item-changed(i, field, value) → Rust оновлює модель
-                    // та перераховує суму/total при зміні qty або price.
-                    // amount — read-only Text (обчислюється Rust).
-                    Rectangle {
-                        height: 44px;
-                        background: Theme.surface;
-
-                        HorizontalLayout {
-                            padding-left: 12px;
-                            padding-right: 4px;
-                            padding-top: 4px;
-                            padding-bottom: 4px;
-                            spacing: 8px;
-
-                            LineEdit {
-                                text: desc;
-                                font-size: 13px;
-                                horizontal-stretch: 3;
-                                edited(v) => { root.item-changed(i, "desc", v); }
-                            }
-                            LineEdit {
-                                text: root.item-quantities[i];
-                                font-size: 13px;
-                                width: 80px;
-                                edited(v) => { root.item-changed(i, "qty", v); }
-                            }
-                            LineEdit {
-                                text: root.item-units[i];
-                                font-size: 13px;
-                                width: 70px;
-                                edited(v) => { root.item-changed(i, "unit", v); }
-                            }
-                            LineEdit {
-                                text: root.item-prices[i];
-                                font-size: 13px;
-                                width: 100px;
-                                edited(v) => { root.item-changed(i, "price", v); }
-                            }
-                            Text {
-                                text: root.item-amounts[i];
-                                font-size: 13px;
-                                font-weight: 600;
-                                color: Theme.text-main;
-                                vertical-alignment: center;
-                                horizontal-alignment: right;
-                                width: 100px;
-                            }
-
-                            // Кнопка видалення рядка
-                            //
-                            // Кастомний Rectangle + TouchArea замість Button —
-                            // компактніший (36px) та підтримує hover-ефект.
-                            // `del-touch.has-hover` — вбудована властивість TouchArea.
-                            del-rect := Rectangle {
-                                width: 36px;
-                                height: 36px;
-                                border-radius: 4px;
-                                background: del-touch.has-hover ? Theme.danger-border : transparent;
-                                animate background { duration: 100ms; easing: ease; }
-
-                                Text {
-                                    text: "×";
-                                    font-size: 18px;
-                                    color: del-touch.has-hover ? Theme.danger : Theme.text-muted;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                    animate color { duration: 100ms; easing: ease; }
-                                }
-
-                                del-touch := TouchArea {
-                                    mouse-cursor: pointer;
-                                    // `i` захоплюється по значенню у кожній ітерації for-loop
-                                    clicked => { root.remove-item(i); }
-                                }
-                            }
-                        }
-                    }
-
-                    // Горизонтальний розділювач між рядками
-                    Rectangle {
-                        height: 1px;
-                        background: Theme.border;
-                    }
-                }
-
-                // Заглушка для порожнього списку
-                // Видима лише коли item-descriptions.length == 0
-                if root.item-descriptions.length == 0 : Rectangle {
-                    height: 80px;
-
-                    Text {
-                        text: "Позиції відсутні. Натисніть \"+ Додати позицію\".";
-                        color: Theme.text-muted;
-                        font-size: 13px;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                }
-            }
-        }
-
-        // ── Задачі акту ────────────────────────────────────────────────────
-        Rectangle {
-            height: 1px;
-            background: Theme.border;
-            vertical-stretch: 0;
-        }
-
-        VerticalLayout {
-            vertical-stretch: 0;
-            spacing: 12px;
-
-            HorizontalLayout {
-                alignment: space-between;
-                vertical-stretch: 0;
-
-                Text {
-                    text: "Задачі по акту";
-                    font-size: 16px;
-                    font-weight: 600;
-                    color: Theme.text-main;
-                    vertical-alignment: center;
-                }
-
-                Button {
-                    text: "+ Додати задачу";
-                    clicked => { root.act-task-create-clicked(); }
-                }
-            }
-
-            if root.act-tasks-loading : ProgressIndicator {
-                indeterminate: true;
-                vertical-stretch: 0;
-            }
-
+            // ══════════════════════════════════════════════════════════════
+            //  TOPBAR  64px
+            // ══════════════════════════════════════════════════════════════
             Rectangle {
-                min-height: 120px;
-                vertical-stretch: 1;
-                border-radius: 8px;
-                border-width: 1px;
-                border-color: Theme.border;
-                clip: true;
+                height: 64px;
+                background: Theme.surface;
 
-                VerticalLayout {
-                    spacing: 0;
+                Rectangle {
+                    y: 63px;
+                    height: 1px;
+                    background: Theme.border;
+                }
 
-                    Rectangle {
-                        height: 36px;
-                        background: Theme.table-header;
+                HorizontalLayout {
+                    padding-left: 32px;
+                    padding-right: 32px;
+                    spacing: 8px;
 
-                        HorizontalLayout {
-                            padding-left: 12px;
-                            padding-right: 12px;
+                    // Breadcrumb (займає увесь вільний простір)
+                    HorizontalLayout {
+                        spacing: 6px;
+                        horizontal-stretch: 1;
+                        alignment: start;
 
-                            Text { text: "Назва";      color: Theme.text-sub; font-size: 12px; font-weight: 500; horizontal-stretch: 3; vertical-alignment: center; }
-                            Text { text: "Пріоритет";  color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 110px; vertical-alignment: center; }
-                            Text { text: "Дедлайн";    color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 120px; vertical-alignment: center; }
-                            Text { text: "Нагад.";     color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 120px; vertical-alignment: center; }
-                            Text { text: "Статус";     color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 100px; vertical-alignment: center; }
-                            Text { text: "Дії";        color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 180px; vertical-alignment: center; }
-                        }
-                    }
-
-                    ListView {
-                        vertical-stretch: 1;
-
-                        for row[i] in root.act-task-rows : Rectangle {
-                            property <string> raw-status: i < root.act-task-row-statuses.length ? root.act-task-row-statuses[i] : "open";
-                            property <string> raw-priority: i < root.act-task-row-priorities.length ? root.act-task-row-priorities[i] : "normal";
-                            property <color> status-color:
-                                raw-status == "done"       ? Theme.success :
-                                raw-status == "in_progress"? Theme.primary :
-                                raw-status == "cancelled"  ? Theme.text-muted :
-                                Theme.warning;
-                            property <color> status-bg:
-                                raw-status == "done"       ? #1EB16E1F :
-                                raw-status == "in_progress"? #3D75F41A :
-                                raw-status == "cancelled"  ? #ABABB71F :
-                                #F4A31E1F;
-                            property <color> priority-color:
-                                raw-priority == "critical" ? Theme.priority-critical :
-                                raw-priority == "high"     ? Theme.priority-high :
-                                raw-priority == "normal"   ? Theme.primary :
-                                Theme.text-muted;
-                            property <color> priority-bg:
-                                raw-priority == "critical" ? #DC26261A :
-                                raw-priority == "high"     ? #F973161A :
-                                raw-priority == "normal"   ? #3D75F41A :
-                                #ABABB71A;
-
-                            height: 48px;
-                            background: row-touch.has-hover ? Theme.row-hover : Theme.surface;
-                            border-width: 1px;
-                            border-color: Theme.border;
-
-                            HorizontalLayout {
-                                padding-left: 12px;
-                                padding-right: 12px;
-
-                                Text {
-                                    text: row[0].text;
-                                    color: Theme.text-main;
-                                    font-size: 13px;
-                                    font-weight: 500;
-                                    horizontal-stretch: 3;
-                                    vertical-alignment: center;
-                                    overflow: elide;
-                                }
-
-                                Rectangle {
-                                    width: 110px;
-                                    Rectangle {
-                                        width: 90px;
-                                        height: 22px;
-                                        y: (parent.height - self.height) / 2;
-                                        border-radius: 11px;
-                                        background: priority-bg;
-                                        Text {
-                                            text: row[1].text;
-                                            color: priority-color;
-                                            font-size: 11px;
-                                            font-weight: 500;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
-                                        }
-                                    }
-                                }
-
-                                Text {
-                                    text: row[2].text;
-                                    color: Theme.text-sub;
-                                    font-size: 13px;
-                                    width: 120px;
-                                    vertical-alignment: center;
-                                    overflow: elide;
-                                }
-
-                                Text {
-                                    text: row[3].text;
-                                    color: Theme.text-sub;
-                                    font-size: 13px;
-                                    width: 120px;
-                                    vertical-alignment: center;
-                                    overflow: elide;
-                                }
-
-                                Rectangle {
-                                    width: 100px;
-                                    Rectangle {
-                                        width: 84px;
-                                        height: 22px;
-                                        y: (parent.height - self.height) / 2;
-                                        border-radius: 11px;
-                                        background: status-bg;
-                                        Text {
-                                            text: row[4].text;
-                                            color: status-color;
-                                            font-size: 11px;
-                                            font-weight: 500;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
-                                        }
-                                    }
-                                }
-
-                                HorizontalLayout {
-                                    width: 180px;
-                                    spacing: 8px;
-
-                                    Rectangle {
-                                        background: Theme.surface;
-                                        border-width: 1px;
-                                        border-color: Theme.border;
-                                        border-radius: 6px;
-                                        height: 28px;
-                                        width: 60px;
-
-                                        Text {
-                                            text: "✎";
-                                            color: Theme.text-main;
-                                            font-size: 12px;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
-                                        }
-
-                                        TouchArea {
-                                            mouse-cursor: pointer;
-                                            clicked => {
-                                                if i < root.act-task-row-ids.length {
-                                                    root.act-task-edit-clicked(root.act-task-row-ids[i]);
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    Rectangle {
-                                        background: Theme.primary;
-                                        border-radius: 6px;
-                                        height: 28px;
-                                        width: 56px;
-
-                                        Text {
-                                            text: "✓";
-                                            color: #ffffff;
-                                            font-size: 12px;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
-                                        }
-
-                                        TouchArea {
-                                            mouse-cursor: pointer;
-                                            clicked => {
-                                                if i < root.act-task-row-ids.length {
-                                                    root.act-task-toggle-status-clicked(root.act-task-row-ids[i]);
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    Rectangle {
-                                        background: Theme.danger-light;
-                                        border-radius: 6px;
-                                        border-width: 1px;
-                                        border-color: Theme.danger-border;
-                                        height: 28px;
-                                        width: 48px;
-
-                                        Text {
-                                            text: "×";
-                                            color: Theme.danger;
-                                            font-size: 14px;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
-                                        }
-
-                                        TouchArea {
-                                            mouse-cursor: pointer;
-                                            clicked => {
-                                                if i < root.act-task-row-ids.length {
-                                                    root.act-task-delete-clicked(root.act-task-row-ids[i]);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            row-touch := TouchArea {
-                                mouse-cursor: pointer;
-                            }
-                        }
-                    }
-
-                    if !root.act-tasks-loading && root.act-task-rows.length == 0 : Rectangle {
-                        height: 72px;
-                        background: Theme.surface;
-
+                        // "← Акти" — клікабельний
                         Text {
-                            text: "У цьому акті ще немає задач";
+                            text: "← Акти";
+                            font-size: 14px;
+                            color: Theme.primary;
+                            vertical-alignment: center;
+                            TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { root.cancel(); }
+                            }
+                        }
+                        Text {
+                            text: "/";
+                            font-size: 14px;
                             color: Theme.text-muted;
-                            font-size: 13px;
-                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: root.is-edit-mode ? "Редагування акту" : "Новий акт";
+                            font-size: 14px;
+                            font-weight: 600;
+                            color: Theme.text-main;
                             vertical-alignment: center;
                         }
                     }
+
+                    // Кнопка «Скасувати»
+                    Rectangle {
+                        width: 120px;
+                        height: 36px;
+                        y: (parent.height - self.height) / 2;
+                        border-radius: 8px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        background: cancel-touch.has-hover ? Theme.hover-bg : Theme.bg;
+                        animate background { duration: 80ms; }
+
+                        Text {
+                            text: "Скасувати";
+                            font-size: 14px;
+                            color: Theme.text-sub;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        cancel-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.cancel(); }
+                        }
+                    }
+
+                    // Кнопка «Зберегти»
+                    // Логіка: edit → update; draft-статус → save-draft; інакше → save
+                    Rectangle {
+                        width: 112px;
+                        height: 36px;
+                        y: (parent.height - self.height) / 2;
+                        border-radius: 8px;
+                        background: Theme.primary;
+                        animate background { duration: 80ms; }
+
+                        Text {
+                            text: "Зберегти";
+                            font-size: 14px;
+                            font-weight: 600;
+                            color: #ffffff;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        save-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                if (root.is-edit-mode) {
+                                    root.update(
+                                        number-field.text,
+                                        date-field.text,
+                                        root.counterparty-ids[cp-combo.current-index],
+                                        notes-field.text
+                                    );
+                                } else if (root.act-status == 0) {
+                                    root.save-draft(
+                                        number-field.text,
+                                        date-field.text,
+                                        root.counterparty-ids[cp-combo.current-index],
+                                        notes-field.text
+                                    );
+                                } else {
+                                    root.save(
+                                        number-field.text,
+                                        date-field.text,
+                                        root.counterparty-ids[cp-combo.current-index],
+                                        notes-field.text
+                                    );
+                                }
+                            }
+                        }
+                    }
                 }
             }
-        }
 
-        // ── Підсумок ─────────────────────────────────────────────────────────
-        //
-        // Рядок "Разом" вирівняний вправо через `alignment: end`.
-        // total-amount — рядок зі значенням від Rust (вже відформатований).
-        Rectangle {
-            height: 1px;
-            background: Theme.border;
-            vertical-stretch: 0;
-        }
-
-        HorizontalLayout {
-            alignment: end;
-            vertical-stretch: 0;
-
-            Text {
-                text: "Разом: " + root.total-amount + " ₴";
-                font-size: 18px;
-                font-weight: 700;
-                color: Theme.text-main;
-            }
-        }
-
-        // ── Кнопки дій ───────────────────────────────────────────────────────
-        //
-        // Ліворуч:  "← Назад"
-        // Праворуч: "Чернетка" + "Зберегти" (primary — виділений кольором)
-        //
-        // У колбеках читаємо значення named elements:
-        //   number-field.text, date-field.text, notes-field.text — рядки
-        //   cp-combo.current-index — індекс → counterparty-ids[i] → UUID рядком
-        //
-        // Якщо контрагентів нема (ids порожній), current-index = -1,
-        // тоді counterparty-ids[-1] повертає "" (поведінка Slint для out-of-bounds).
-        HorizontalLayout {
-            alignment: space-between;
-            vertical-stretch: 0;
-
-            Button {
-                text: "← Назад";
-                clicked => { root.cancel(); }
-            }
-
+            // ══════════════════════════════════════════════════════════════
+            //  ОСНОВНИЙ КОНТЕНТ: форма зліва + панелі справа
+            // ══════════════════════════════════════════════════════════════
             HorizontalLayout {
-                spacing: 8px;
+                vertical-stretch: 1;
+                spacing: 0;
 
-                Button {
-                    text: "Чернетка";
-                    clicked => {
-                        root.save-draft(
-                            number-field.text,
-                            date-field.text,
-                            root.counterparty-ids[cp-combo.current-index],
-                            notes-field.text
-                        );
+                // ──────────────────────────────────────────────────────────
+                //  ЛІВИЙ СТОВПЕЦЬ: прокручувана форма
+                // ──────────────────────────────────────────────────────────
+                ScrollView {
+                    horizontal-stretch: 1;
+
+                    VerticalLayout {
+                        padding: 32px;
+                        spacing: 20px;
+
+                        // ── Картка основної інформації + позицій ──────────
+                        Rectangle {
+                            border-radius: 12px;
+                            border-width: 1px;
+                            border-color: Theme.border;
+                            background: Theme.surface;
+                            drop-shadow-color: #0000000D;
+                            drop-shadow-blur: 8px;
+                            drop-shadow-offset-y: 2px;
+
+                            VerticalLayout {
+                                padding: 24px;
+                                spacing: 16px;
+
+                                // Заголовок секції
+                                VerticalLayout {
+                                    spacing: 3px;
+                                    Text {
+                                        text: "Основна інформація";
+                                        font-size: 16px;
+                                        font-weight: 600;
+                                        color: Theme.text-main;
+                                    }
+                                    Text {
+                                        text: "* — обов'язкові поля";
+                                        font-size: 12px;
+                                        color: Theme.text-muted;
+                                    }
+                                }
+
+                                Rectangle { height: 1px; background: Theme.border; }
+
+                                // Поле «Контрагент» (повна ширина)
+                                VerticalLayout {
+                                    spacing: 4px;
+                                    Text {
+                                        text: "Контрагент *";
+                                        font-size: 12px;
+                                        font-weight: 600;
+                                        color: Theme.text-sub;
+                                    }
+                                    Rectangle {
+                                        height: 40px;
+                                        background: Theme.surface;
+                                        border-width: 1px;
+                                        border-color: Theme.border;
+                                        border-radius: 8px;
+                                        cp-combo := ComboBox {
+                                            model: root.counterparty-names;
+                                            current-index: root.act-cp-index;
+                                        }
+                                    }
+                                }
+
+                                // «Дата акту» + «Номер акту» поряд у два стовпці
+                                HorizontalLayout {
+                                    spacing: 16px;
+
+                                    // Дата (ліво)
+                                    VerticalLayout {
+                                        spacing: 4px;
+                                        horizontal-stretch: 1;
+                                        Text {
+                                            text: "Дата акту *";
+                                            font-size: 12px;
+                                            font-weight: 600;
+                                            color: Theme.text-sub;
+                                        }
+                                        Rectangle {
+                                            height: 40px;
+                                            background: Theme.surface;
+                                            border-width: 1px;
+                                            border-color: Theme.border;
+                                            border-radius: 8px;
+                                            date-field := LineEdit {
+                                                text: root.act-date;
+                                                placeholder-text: "ДД.ММ.РРРР";
+                                            }
+                                        }
+                                    }
+
+                                    // Номер (право)
+                                    VerticalLayout {
+                                        spacing: 4px;
+                                        horizontal-stretch: 1;
+                                        Text {
+                                            text: "Номер акту *";
+                                            font-size: 12px;
+                                            font-weight: 600;
+                                            color: Theme.text-sub;
+                                        }
+                                        Rectangle {
+                                            height: 40px;
+                                            background: Theme.surface;
+                                            border-width: 1px;
+                                            border-color: Theme.border;
+                                            border-radius: 8px;
+                                            number-field := LineEdit {
+                                                text: root.act-number;
+                                                placeholder-text: "АКТ-001";
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Rectangle { height: 1px; background: Theme.border; }
+
+                                // Заголовок секції позицій + кнопка «+ Додати»
+                                HorizontalLayout {
+                                    alignment: space-between;
+
+                                    Text {
+                                        text: "Послуги / Роботи";
+                                        font-size: 14px;
+                                        font-weight: 600;
+                                        color: Theme.text-main;
+                                        vertical-alignment: center;
+                                    }
+
+                                    Rectangle {
+                                        width: 160px;
+                                        height: 32px;
+                                        border-radius: 8px;
+                                        background: Theme.primary-light;
+
+                                        Text {
+                                            text: "+ Додати позицію";
+                                            font-size: 12px;
+                                            font-weight: 600;
+                                            color: Theme.primary;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                        TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => { root.add-item(); }
+                                        }
+                                    }
+                                }
+
+                                // Шапка таблиці позицій
+                                //
+                                // Ширини стовпців мають точно збігатися з рядками нижче:
+                                //   Найменування — horizontal-stretch: 3
+                                //   К-сть        — 72px
+                                //   Од.вим.      — 70px
+                                //   Ціна         — 100px
+                                //   Сума         — 100px
+                                //   Кнопка ×     — 36px (placeholder)
+                                Rectangle {
+                                    height: 32px;
+                                    border-radius: 6px;
+                                    background: Theme.table-header;
+
+                                    HorizontalLayout {
+                                        padding-left: 12px;
+                                        padding-right: 8px;
+                                        spacing: 8px;
+                                        Text { text: "Найменування"; font-size: 11px; font-weight: 600; color: Theme.text-sub; vertical-alignment: center; horizontal-stretch: 3; }
+                                        Text { text: "К-сть";   font-size: 11px; font-weight: 600; color: Theme.text-sub; vertical-alignment: center; horizontal-alignment: right;  width: 72px;  }
+                                        Text { text: "Од.вим."; font-size: 11px; font-weight: 600; color: Theme.text-sub; vertical-alignment: center; horizontal-alignment: center; width: 70px;  }
+                                        Text { text: "Ціна";    font-size: 11px; font-weight: 600; color: Theme.text-sub; vertical-alignment: center; horizontal-alignment: right;  width: 100px; }
+                                        Text { text: "Сума";    font-size: 11px; font-weight: 600; color: Theme.text-sub; vertical-alignment: center; horizontal-alignment: right;  width: 100px; }
+                                        Rectangle { width: 36px; }
+                                    }
+                                }
+
+                                // Список позицій
+                                //
+                                // `for desc[i] in root.item-descriptions` — for-loop з індексом:
+                                //   desc = поточний елемент, i = числовий індекс
+                                VerticalLayout {
+                                    spacing: 0;
+                                    min-height: 80px;
+
+                                    for desc[i] in root.item-descriptions : VerticalLayout {
+                                        spacing: 0;
+
+                                        Rectangle {
+                                            height: 44px;
+                                            background: Math.mod(i, 2) == 0 ? Theme.surface : Theme.row-alt;
+
+                                            HorizontalLayout {
+                                                padding-left: 12px;
+                                                padding-right: 4px;
+                                                padding-top: 4px;
+                                                padding-bottom: 4px;
+                                                spacing: 8px;
+
+                                                LineEdit {
+                                                    text: desc;
+                                                    font-size: 13px;
+                                                    horizontal-stretch: 3;
+                                                    edited(v) => { root.item-changed(i, "desc", v); }
+                                                }
+                                                LineEdit {
+                                                    text: root.item-quantities[i];
+                                                    font-size: 13px;
+                                                    width: 72px;
+                                                    edited(v) => { root.item-changed(i, "qty", v); }
+                                                }
+                                                LineEdit {
+                                                    text: root.item-units[i];
+                                                    font-size: 13px;
+                                                    width: 70px;
+                                                    edited(v) => { root.item-changed(i, "unit", v); }
+                                                }
+                                                LineEdit {
+                                                    text: root.item-prices[i];
+                                                    font-size: 13px;
+                                                    width: 100px;
+                                                    edited(v) => { root.item-changed(i, "price", v); }
+                                                }
+                                                // amount — read-only, обчислюється в Rust
+                                                Text {
+                                                    text: root.item-amounts[i];
+                                                    font-size: 13px;
+                                                    font-weight: 600;
+                                                    color: Theme.text-main;
+                                                    vertical-alignment: center;
+                                                    horizontal-alignment: right;
+                                                    width: 100px;
+                                                }
+
+                                                // Кнопка видалення рядка
+                                                del-rect := Rectangle {
+                                                    width: 36px;
+                                                    height: 36px;
+                                                    y: (parent.height - self.height) / 2;
+                                                    border-radius: 4px;
+                                                    background: del-touch.has-hover ? Theme.danger-border : transparent;
+                                                    animate background { duration: 100ms; easing: ease; }
+
+                                                    Text {
+                                                        text: "×";
+                                                        font-size: 18px;
+                                                        color: del-touch.has-hover ? Theme.danger : Theme.text-muted;
+                                                        horizontal-alignment: center;
+                                                        vertical-alignment: center;
+                                                        animate color { duration: 100ms; easing: ease; }
+                                                    }
+
+                                                    del-touch := TouchArea {
+                                                        mouse-cursor: pointer;
+                                                        clicked => { root.remove-item(i); }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        Rectangle { height: 1px; background: Theme.border; }
+                                    }
+
+                                    // Empty state позицій
+                                    if root.item-descriptions.length == 0 : Rectangle {
+                                        height: 80px;
+                                        Text {
+                                            text: "Позиції відсутні. Натисніть \"+ Додати позицію\".";
+                                            color: Theme.text-muted;
+                                            font-size: 13px;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+
+                                Rectangle { height: 1px; background: Theme.border; }
+
+                                // Разом + До сплати (вирівняно праворуч)
+                                VerticalLayout {
+                                    spacing: 8px;
+
+                                    HorizontalLayout {
+                                        alignment: end;
+                                        spacing: 32px;
+                                        Text {
+                                            text: "Разом:";
+                                            font-size: 13px;
+                                            color: Theme.text-sub;
+                                            vertical-alignment: center;
+                                        }
+                                        Text {
+                                            text: root.total-amount + " ₴";
+                                            font-size: 15px;
+                                            font-weight: 600;
+                                            color: Theme.text-main;
+                                            vertical-alignment: center;
+                                            min-width: 140px;
+                                            horizontal-alignment: right;
+                                        }
+                                    }
+
+                                    Rectangle { height: 1px; background: Theme.border; }
+
+                                    HorizontalLayout {
+                                        alignment: end;
+                                        spacing: 32px;
+                                        Text {
+                                            text: "До сплати:";
+                                            font-size: 15px;
+                                            font-weight: 600;
+                                            color: Theme.text-main;
+                                            vertical-alignment: center;
+                                        }
+                                        Text {
+                                            text: root.total-amount + " ₴";
+                                            font-size: 20px;
+                                            font-weight: 700;
+                                            color: Theme.primary;
+                                            vertical-alignment: center;
+                                            min-width: 140px;
+                                            horizontal-alignment: right;
+                                        }
+                                    }
+                                }
+
+                                Rectangle { height: 1px; background: Theme.border; }
+
+                                // Примітки
+                                VerticalLayout {
+                                    spacing: 4px;
+                                    Text {
+                                        text: "Примітки";
+                                        font-size: 12px;
+                                        font-weight: 600;
+                                        color: Theme.text-sub;
+                                    }
+                                    Rectangle {
+                                        height: 80px;
+                                        background: Theme.surface;
+                                        border-width: 1px;
+                                        border-color: Theme.border;
+                                        border-radius: 8px;
+                                        notes-field := TextEdit {
+                                            text: root.act-notes;
+                                            wrap: word-wrap;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // ── Секція задач ───────────────────────────────────
+                        VerticalLayout {
+                            spacing: 12px;
+
+                            HorizontalLayout {
+                                alignment: space-between;
+
+                                Text {
+                                    text: "Задачі по акту";
+                                    font-size: 16px;
+                                    font-weight: 600;
+                                    color: Theme.text-main;
+                                    vertical-alignment: center;
+                                }
+
+                                Rectangle {
+                                    width: 140px;
+                                    height: 32px;
+                                    border-radius: 8px;
+                                    background: Theme.primary-light;
+
+                                    Text {
+                                        text: "+ Додати задачу";
+                                        font-size: 12px;
+                                        font-weight: 600;
+                                        color: Theme.primary;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                    TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => { root.act-task-create-clicked(); }
+                                    }
+                                }
+                            }
+
+                            if root.act-tasks-loading : ProgressIndicator {
+                                indeterminate: true;
+                            }
+
+                            Rectangle {
+                                min-height: 120px;
+                                border-radius: 8px;
+                                border-width: 1px;
+                                border-color: Theme.border;
+                                background: Theme.surface;
+                                clip: true;
+
+                                VerticalLayout {
+                                    spacing: 0;
+
+                                    Rectangle {
+                                        height: 36px;
+                                        background: Theme.table-header;
+
+                                        HorizontalLayout {
+                                            padding-left: 12px;
+                                            padding-right: 12px;
+                                            Text { text: "Назва";      color: Theme.text-sub; font-size: 12px; font-weight: 500; horizontal-stretch: 3; vertical-alignment: center; }
+                                            Text { text: "Пріоритет";  color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 110px; vertical-alignment: center; }
+                                            Text { text: "Дедлайн";    color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 120px; vertical-alignment: center; }
+                                            Text { text: "Нагад.";     color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 120px; vertical-alignment: center; }
+                                            Text { text: "Статус";     color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 100px; vertical-alignment: center; }
+                                            Text { text: "Дії";        color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 180px; vertical-alignment: center; }
+                                        }
+                                    }
+
+                                    ListView {
+                                        vertical-stretch: 1;
+
+                                        for row[i] in root.act-task-rows : Rectangle {
+                                            property <string> raw-status: i < root.act-task-row-statuses.length ? root.act-task-row-statuses[i] : "open";
+                                            property <string> raw-priority: i < root.act-task-row-priorities.length ? root.act-task-row-priorities[i] : "normal";
+                                            property <color> status-color:
+                                                raw-status == "done"        ? Theme.success :
+                                                raw-status == "in_progress" ? Theme.primary :
+                                                raw-status == "cancelled"   ? Theme.text-muted :
+                                                Theme.warning;
+                                            property <color> status-bg:
+                                                raw-status == "done"        ? #1EB16E1F :
+                                                raw-status == "in_progress" ? #3D75F41A :
+                                                raw-status == "cancelled"   ? #ABABB71F :
+                                                #F4A31E1F;
+                                            property <color> priority-color:
+                                                raw-priority == "critical" ? Theme.priority-critical :
+                                                raw-priority == "high"     ? Theme.priority-high :
+                                                raw-priority == "normal"   ? Theme.primary :
+                                                Theme.text-muted;
+                                            property <color> priority-bg:
+                                                raw-priority == "critical" ? #DC26261A :
+                                                raw-priority == "high"     ? #F973161A :
+                                                raw-priority == "normal"   ? #3D75F41A :
+                                                #ABABB71A;
+
+                                            height: 48px;
+                                            background: row-touch.has-hover ? Theme.row-hover : Theme.surface;
+
+                                            HorizontalLayout {
+                                                padding-left: 12px;
+                                                padding-right: 12px;
+
+                                                Text {
+                                                    text: row[0].text;
+                                                    color: Theme.text-main;
+                                                    font-size: 13px;
+                                                    font-weight: 500;
+                                                    horizontal-stretch: 3;
+                                                    vertical-alignment: center;
+                                                    overflow: elide;
+                                                }
+
+                                                Rectangle {
+                                                    width: 110px;
+                                                    Rectangle {
+                                                        width: 90px;
+                                                        height: 22px;
+                                                        y: (parent.height - self.height) / 2;
+                                                        border-radius: 11px;
+                                                        background: priority-bg;
+                                                        Text {
+                                                            text: row[1].text;
+                                                            color: priority-color;
+                                                            font-size: 11px;
+                                                            font-weight: 500;
+                                                            horizontal-alignment: center;
+                                                            vertical-alignment: center;
+                                                        }
+                                                    }
+                                                }
+
+                                                Text { text: row[2].text; color: Theme.text-sub; font-size: 13px; width: 120px; vertical-alignment: center; overflow: elide; }
+                                                Text { text: row[3].text; color: Theme.text-sub; font-size: 13px; width: 120px; vertical-alignment: center; overflow: elide; }
+
+                                                Rectangle {
+                                                    width: 100px;
+                                                    Rectangle {
+                                                        width: 84px;
+                                                        height: 22px;
+                                                        y: (parent.height - self.height) / 2;
+                                                        border-radius: 11px;
+                                                        background: status-bg;
+                                                        Text {
+                                                            text: row[4].text;
+                                                            color: status-color;
+                                                            font-size: 11px;
+                                                            font-weight: 500;
+                                                            horizontal-alignment: center;
+                                                            vertical-alignment: center;
+                                                        }
+                                                    }
+                                                }
+
+                                                HorizontalLayout {
+                                                    width: 180px;
+                                                    spacing: 8px;
+
+                                                    Rectangle {
+                                                        background: Theme.surface;
+                                                        border-width: 1px;
+                                                        border-color: Theme.border;
+                                                        border-radius: 6px;
+                                                        height: 28px;
+                                                        width: 60px;
+                                                        Text { text: "✎"; color: Theme.text-main; font-size: 12px; horizontal-alignment: center; vertical-alignment: center; }
+                                                        TouchArea {
+                                                            mouse-cursor: pointer;
+                                                            clicked => {
+                                                                if i < root.act-task-row-ids.length {
+                                                                    root.act-task-edit-clicked(root.act-task-row-ids[i]);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+
+                                                    Rectangle {
+                                                        background: Theme.primary;
+                                                        border-radius: 6px;
+                                                        height: 28px;
+                                                        width: 56px;
+                                                        Text { text: "✓"; color: #ffffff; font-size: 12px; horizontal-alignment: center; vertical-alignment: center; }
+                                                        TouchArea {
+                                                            mouse-cursor: pointer;
+                                                            clicked => {
+                                                                if i < root.act-task-row-ids.length {
+                                                                    root.act-task-toggle-status-clicked(root.act-task-row-ids[i]);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+
+                                                    Rectangle {
+                                                        background: Theme.danger-light;
+                                                        border-radius: 6px;
+                                                        border-width: 1px;
+                                                        border-color: Theme.danger-border;
+                                                        height: 28px;
+                                                        width: 48px;
+                                                        Text { text: "×"; color: Theme.danger; font-size: 14px; horizontal-alignment: center; vertical-alignment: center; }
+                                                        TouchArea {
+                                                            mouse-cursor: pointer;
+                                                            clicked => {
+                                                                if i < root.act-task-row-ids.length {
+                                                                    root.act-task-delete-clicked(root.act-task-row-ids[i]);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            row-touch := TouchArea {
+                                                mouse-cursor: pointer;
+                                            }
+                                        }
+                                    }
+
+                                    if !root.act-tasks-loading && root.act-task-rows.length == 0 : Rectangle {
+                                        height: 72px;
+                                        background: Theme.surface;
+                                        Text {
+                                            text: "У цьому акті ще немає задач";
+                                            color: Theme.text-muted;
+                                            font-size: 13px;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
-                // primary: true — стандартна властивість Button у std-widgets:
-                // відображається з заповненим фоном (акцентний колір теми)
-                //
-                // Умовна логіка: is-edit-mode → update, інакше → save
-                Button {
-                    text: "Зберегти";
-                    primary: true;
-                    clicked => {
-                        if (root.is-edit-mode) {
-                            root.update(
-                                number-field.text,
-                                date-field.text,
-                                root.counterparty-ids[cp-combo.current-index],
-                                notes-field.text
-                            );
-                        } else {
-                            root.save(
-                                number-field.text,
-                                date-field.text,
-                                root.counterparty-ids[cp-combo.current-index],
-                                notes-field.text
-                            );
+                // ──────────────────────────────────────────────────────────
+                //  ПРАВИЙ СТОВПЕЦЬ: статус + підказка (фіксована ширина)
+                // ──────────────────────────────────────────────────────────
+                Rectangle {
+                    width: 392px;
+                    background: Theme.bg;
+
+                    VerticalLayout {
+                        padding-top: 32px;
+                        padding-bottom: 32px;
+                        padding-left: 0px;
+                        padding-right: 32px;
+                        spacing: 16px;
+                        alignment: start;
+
+                        // ── Картка статусу ─────────────────────────────────
+                        //
+                        // act-status: 0=Чернетка, 1=Виставлений, 2=Підписаний, 3=Оплачений
+                        // При натисканні StatusOption → оновлює act-status.
+                        // Кнопка "Зберегти" читає act-status і викликає відповідний callback.
+                        Rectangle {
+                            border-radius: 12px;
+                            border-width: 1px;
+                            border-color: Theme.border;
+                            background: Theme.surface;
+                            drop-shadow-color: #0000000D;
+                            drop-shadow-blur: 8px;
+                            drop-shadow-offset-y: 2px;
+
+                            VerticalLayout {
+                                padding: 24px;
+                                spacing: 10px;
+
+                                Text {
+                                    text: "Статус акту";
+                                    font-size: 15px;
+                                    font-weight: 600;
+                                    color: Theme.text-main;
+                                }
+
+                                StatusOption {
+                                    title: "Чернетка";
+                                    subtitle: "Не відправлений";
+                                    selected: root.act-status == 0;
+                                    accent: Theme.text-sub;
+                                    clicked => { root.act-status = 0; }
+                                }
+                                StatusOption {
+                                    title: "Виставлений";
+                                    subtitle: "Очікує підпису";
+                                    selected: root.act-status == 1;
+                                    accent: Theme.warning;
+                                    clicked => { root.act-status = 1; }
+                                }
+                                StatusOption {
+                                    title: "Підписаний";
+                                    subtitle: "Підписаний сторонами";
+                                    selected: root.act-status == 2;
+                                    accent: Theme.primary;
+                                    clicked => { root.act-status = 2; }
+                                }
+                                StatusOption {
+                                    title: "Оплачений";
+                                    subtitle: "Кошти отримані";
+                                    selected: root.act-status == 3;
+                                    accent: Theme.success;
+                                    clicked => { root.act-status = 3; }
+                                }
+                            }
+                        }
+
+                        // ── Картка підказки ────────────────────────────────
+                        Rectangle {
+                            border-radius: 12px;
+                            border-width: 1px;
+                            border-color: Theme.border;
+                            background: Theme.surface;
+                            drop-shadow-color: #0000000D;
+                            drop-shadow-blur: 8px;
+                            drop-shadow-offset-y: 2px;
+
+                            VerticalLayout {
+                                spacing: 0;
+
+                                // Шапка підказки
+                                Rectangle {
+                                    height: 44px;
+                                    border-radius: 12px;
+                                    background: Theme.primary-light;
+
+                                    Text {
+                                        x: 20px;
+                                        y: (parent.height - self.height) / 2;
+                                        text: "ℹ Підказка";
+                                        font-size: 13px;
+                                        font-weight: 600;
+                                        color: Theme.primary;
+                                    }
+                                }
+
+                                // Пункти підказки
+                                VerticalLayout {
+                                    padding: 16px;
+                                    spacing: 12px;
+
+                                    HorizontalLayout {
+                                        spacing: 10px;
+                                        alignment: start;
+                                        Rectangle { width: 6px; height: 6px; y: 4px; border-radius: 3px; background: Theme.primary; }
+                                        Text { text: "Контрагент та сума є обов'язковими"; font-size: 12px; color: Theme.text-main; wrap: word-wrap; horizontal-stretch: 1; }
+                                    }
+                                    HorizontalLayout {
+                                        spacing: 10px;
+                                        alignment: start;
+                                        Rectangle { width: 6px; height: 6px; y: 4px; border-radius: 3px; background: Theme.primary; }
+                                        Text { text: "«Виставлений» — надішліть PDF клієнту"; font-size: 12px; color: Theme.text-main; wrap: word-wrap; horizontal-stretch: 1; }
+                                    }
+                                    HorizontalLayout {
+                                        spacing: 10px;
+                                        alignment: start;
+                                        Rectangle { width: 6px; height: 6px; y: 4px; border-radius: 3px; background: Theme.primary; }
+                                        Text { text: "«Підписаний» — документ підтверджено"; font-size: 12px; color: Theme.text-main; wrap: word-wrap; horizontal-stretch: 1; }
+                                    }
+                                    HorizontalLayout {
+                                        spacing: 10px;
+                                        alignment: start;
+                                        Rectangle { width: 6px; height: 6px; y: 4px; border-radius: 3px; background: Theme.primary; }
+                                        Text { text: "«Оплачений» — кошти отримано"; font-size: 12px; color: Theme.text-main; wrap: word-wrap; horizontal-stretch: 1; }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
         }
-    }
     }
 }
