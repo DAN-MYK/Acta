@@ -16,27 +16,26 @@ use crate::models::act::{Act, ActItem, ActListRow, ActStatus, NewAct, NewActItem
 /// Згенерувати наступний номер акту у форматі "АКТ-РРРР-NNN".
 ///
 /// Логіка:
-///   1. Шукаємо всі акти поточного року (date >= '2026-01-01').
+///   1. Шукаємо всі акти поточного року в межах компанії.
 ///   2. Серед номерів що відповідають шаблону "АКТ-РРРР-NNN" — беремо максимальний суфікс.
 ///   3. Повертаємо суфікс + 1, відформатований з нулями до трьох цифр.
+///
+/// Нумерація ізольована по компаніях: АКТ-2026-001 у двох різних компаній — це норма.
 ///
 /// Чому MAX(number) не достатньо:
 ///   Лексикографічний MAX рядків не гарантує числовий максимум ("АКТ-2026-9" > "АКТ-2026-10").
 ///   Тому парсимо лише числову частину після останнього дефісу.
-pub async fn generate_next_number(pool: &PgPool) -> Result<String> {
+pub async fn generate_next_number(pool: &PgPool, company_id: Uuid) -> Result<String> {
+    use sqlx::Row;
     let year = chrono::Utc::now().year();
 
-    // Отримуємо всі номери актів поточного року.
-    // EXTRACT(YEAR FROM date) — PostgreSQL функція для виділення року з DATE.
-    // Повертає Option<String> — якщо немає жодного акту, rows буде порожнім Vec.
-    let rows = sqlx::query!(
-        r#"
-        SELECT number
-        FROM acts
-        WHERE EXTRACT(YEAR FROM date)::int = $1
-        "#,
-        year as i32
+    // Отримуємо всі номери актів поточного року для цієї компанії.
+    // Runtime-style query — не потребує cargo sqlx prepare.
+    let rows = sqlx::query(
+        r#"SELECT number FROM acts WHERE company_id = $1 AND EXTRACT(YEAR FROM date)::int = $2"#
     )
+    .bind(company_id)
+    .bind(year as i32)
     .fetch_all(pool)
     .await?;
 
@@ -49,9 +48,8 @@ pub async fn generate_next_number(pool: &PgPool) -> Result<String> {
     let max_seq = rows
         .iter()
         .filter_map(|r| {
-            r.number
-                .rsplit_once('-')
-                .and_then(|(_, seq)| seq.parse::<u32>().ok())
+            let num: Option<String> = r.try_get("number").ok();
+            num.and_then(|n| n.rsplit_once('-').and_then(|(_, s)| s.parse::<u32>().ok()))
         })
         .max()
         .unwrap_or(0); // якщо немає жодного акту — починаємо з 0
@@ -61,47 +59,43 @@ pub async fn generate_next_number(pool: &PgPool) -> Result<String> {
     Ok(format!("АКТ-{year}-{:03}", max_seq + 1))
 }
 
-/// Отримати список активних контрагентів для ComboBox у формі акту.
+/// Отримати список активних контрагентів компанії для ComboBox у формі акту.
 ///
 /// Повертає пари (UUID, назва), відсортовані за назвою.
-/// Rust tuple (Uuid, String) відповідає двом стовпцям SELECT.
+/// Фільтрує лише по активній компанії — контрагенти інших компаній не видно.
 ///
 /// Чому не використовуємо повну структуру Counterparty:
 ///   Для ComboBox потрібні лише id та name — зайві поля марно вантажили б мережу.
-pub async fn counterparties_for_select(pool: &PgPool) -> Result<Vec<(Uuid, String)>> {
-    // query_as! з tuple — sqlx підтримує mapping у кортежі якщо стовпців рівно стільки
-    // скільки елементів у tuple. Порядок полів у SELECT = порядок у tuple.
-    let rows = sqlx::query!(
-        r#"
-        SELECT id, name
-        FROM counterparties
-        WHERE is_archived = FALSE
-        ORDER BY name
-        "#
+pub async fn counterparties_for_select(pool: &PgPool, company_id: Uuid) -> Result<Vec<(Uuid, String)>> {
+    use sqlx::Row;
+    let rows = sqlx::query(
+        "SELECT id, name FROM counterparties WHERE is_archived = FALSE AND company_id = $1 ORDER BY name"
     )
+    .bind(company_id)
     .fetch_all(pool)
     .await?;
 
     // Перетворюємо результат у Vec<(Uuid, String)>
-    // record.id — вже Uuid (sqlx декодує uuid тип автоматично завдяки features = ["uuid"])
-    let result = rows.into_iter().map(|r| (r.id, r.name)).collect();
+    let result = rows.into_iter().map(|r| (r.get("id"), r.get("name"))).collect();
     Ok(result)
 }
 
-/// Отримати список актів з JOIN на назву контрагента.
+/// Отримати список актів компанії з JOIN на назву контрагента.
 ///
 /// `status_filter = None`  → усі акти.
 /// `status_filter = Some(s)` → лише акти з вказаним статусом.
-///
-/// Два окремих `query_as!` замість динамічного SQL —
-/// так зберігається перевірка типів під час компіляції.
-pub async fn list(pool: &PgPool, status_filter: Option<ActStatus>) -> Result<Vec<ActListRow>> {
-    list_filtered(pool, status_filter, None).await
+pub async fn list(pool: &PgPool, company_id: Uuid, status_filter: Option<ActStatus>) -> Result<Vec<ActListRow>> {
+    list_filtered(pool, company_id, status_filter, None).await
 }
 
-/// Отримати список актів з фільтром за статусом і текстовим пошуком.
+/// Отримати список актів компанії з фільтром за статусом і текстовим пошуком.
+///
+/// Всі 4 гілки фільтрують за `company_id` — ізоляція даних між компаніями.
+/// Гілки (None,None) та (Some,None) використовують `query_as!` для compile-time перевірки типів.
+/// Гілки з текстовим пошуком використовують runtime-style через динамічний ILIKE.
 pub async fn list_filtered(
     pool: &PgPool,
+    company_id: Uuid,
     status_filter: Option<ActStatus>,
     search_query: Option<&str>,
 ) -> Result<Vec<ActListRow>> {
@@ -109,40 +103,44 @@ pub async fn list_filtered(
 
     let rows = match (status_filter, search_query) {
         (None, None) => {
-            sqlx::query_as!(
-                ActListRow,
+            // $1 = company_id — runtime-style щоб не потребувати cargo sqlx prepare
+            sqlx::query_as::<_, ActListRow>(
                 r#"
                 SELECT a.id, a.number, a.date,
                        c.name AS counterparty_name,
                        a.total_amount,
-                       a.status AS "status: ActStatus"
+                       a.status
                 FROM acts a
                 JOIN counterparties c ON c.id = a.counterparty_id
+                WHERE a.company_id = $1
                 ORDER BY a.date DESC, a.number
-                "#
+                "#,
             )
+            .bind(company_id)
             .fetch_all(pool)
             .await?
         }
         (Some(status), None) => {
-            sqlx::query_as!(
-                ActListRow,
+            // $1 = status, $2 = company_id
+            sqlx::query_as::<_, ActListRow>(
                 r#"
                 SELECT a.id, a.number, a.date,
                        c.name AS counterparty_name,
                        a.total_amount,
-                       a.status AS "status: ActStatus"
+                       a.status
                 FROM acts a
                 JOIN counterparties c ON c.id = a.counterparty_id
-                WHERE a.status = $1
+                WHERE a.status = $1 AND a.company_id = $2
                 ORDER BY a.date DESC, a.number
                 "#,
-                status as ActStatus
             )
+            .bind(status)
+            .bind(company_id)
             .fetch_all(pool)
             .await?
         }
         (None, Some(q)) => {
+            // $1 = pattern, $2 = company_id
             let pattern = format!("%{q}%");
             sqlx::query_as::<_, ActListRow>(
                 r#"
@@ -152,16 +150,19 @@ pub async fn list_filtered(
                        a.status
                 FROM acts a
                 JOIN counterparties c ON c.id = a.counterparty_id
-                WHERE a.number ILIKE $1 OR c.name ILIKE $1
+                WHERE (a.number ILIKE $1 OR c.name ILIKE $1)
+                  AND a.company_id = $2
                 ORDER BY a.date DESC, a.number
                 LIMIT 100
                 "#,
             )
             .bind(pattern)
+            .bind(company_id)
             .fetch_all(pool)
             .await?
         }
         (Some(status), Some(q)) => {
+            // $1 = status, $2 = pattern, $3 = company_id
             let pattern = format!("%{q}%");
             sqlx::query_as::<_, ActListRow>(
                 r#"
@@ -173,12 +174,14 @@ pub async fn list_filtered(
                 JOIN counterparties c ON c.id = a.counterparty_id
                 WHERE a.status = $1
                   AND (a.number ILIKE $2 OR c.name ILIKE $2)
+                  AND a.company_id = $3
                 ORDER BY a.date DESC, a.number
                 LIMIT 100
                 "#,
             )
             .bind(status)
             .bind(pattern)
+            .bind(company_id)
             .fetch_all(pool)
             .await?
         }
@@ -232,25 +235,27 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<(Act, Vec<ActIt
 ///
 /// `pool.begin()` → транзакція, `tx.commit()` → фіксуємо.
 /// Якщо `tx` виходить зі scope без commit — автоматичний rollback.
-pub async fn create(pool: &PgPool, data: &NewAct) -> Result<Act> {
+///
+/// `company_id` — прив'язує акт до конкретної компанії в мульти-компанійній системі.
+pub async fn create(pool: &PgPool, company_id: Uuid, data: &NewAct) -> Result<Act> {
     let mut tx = pool.begin().await?;
 
     // 1. Вставляємо заголовок акту (total_amount = 0, оновимо після позицій)
-    let act = sqlx::query_as!(
-        Act,
-        r#"
-        INSERT INTO acts (number, counterparty_id, contract_id, date, notes, bas_id)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id, number, counterparty_id, contract_id, date, total_amount,
-                  status AS "status: ActStatus", notes, bas_id, created_at, updated_at
-        "#,
-        data.number,
-        data.counterparty_id,
-        data.contract_id,
-        data.date,
-        data.notes,
-        data.bas_id,
+    // Runtime-style query щоб включити company_id без перегенерації sqlx cache.
+    // ActStatus має #[derive(sqlx::Type)] — тому sqlx декодує ENUM автоматично.
+    let act = sqlx::query_as::<_, Act>(
+        r#"INSERT INTO acts (company_id, number, counterparty_id, contract_id, date, notes, bas_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           RETURNING id, number, counterparty_id, contract_id, date, total_amount,
+                     status, notes, bas_id, created_at, updated_at"#
     )
+    .bind(company_id)
+    .bind(&data.number)
+    .bind(data.counterparty_id)
+    .bind(data.contract_id)
+    .bind(data.date)
+    .bind(&data.notes)
+    .bind(&data.bas_id)
     .fetch_one(&mut *tx)
     .await?;
 
@@ -281,18 +286,15 @@ pub async fn create(pool: &PgPool, data: &NewAct) -> Result<Act> {
         .await?;
     }
 
-    // 3. Оновлюємо total_amount в акті
-    let act = sqlx::query_as!(
-        Act,
-        r#"
-        UPDATE acts SET total_amount = $2, updated_at = NOW()
-        WHERE id = $1
-        RETURNING id, number, counterparty_id, contract_id, date, total_amount,
-                  status AS "status: ActStatus", notes, bas_id, created_at, updated_at
-        "#,
-        act.id,
-        total,
+    // 3. Оновлюємо total_amount в акті (runtime-style для узгодженості з INSERT вище)
+    let act = sqlx::query_as::<_, Act>(
+        r#"UPDATE acts SET total_amount = $2, updated_at = NOW()
+           WHERE id = $1
+           RETURNING id, number, counterparty_id, contract_id, date, total_amount,
+                     status, notes, bas_id, created_at, updated_at"#
     )
+    .bind(act.id)
+    .bind(total)
     .fetch_one(&mut *tx)
     .await?;
 
@@ -504,12 +506,13 @@ mod tests {
 
     #[test]
     fn db_acts_public_api_is_exposed() {
-        let _ = generate_next_number;
-        let _ = counterparties_for_select;
-        let _ = list;
-        let _ = list_filtered;
+        // Перевіряємо що всі публічні функції доступні та компілюються
+        let _ = generate_next_number as fn(&PgPool, Uuid) -> _;
+        let _ = counterparties_for_select as fn(&PgPool, Uuid) -> _;
+        let _ = list as fn(&PgPool, Uuid, Option<ActStatus>) -> _;
+        let _ = list_filtered as fn(&PgPool, Uuid, Option<ActStatus>, Option<&str>) -> _;
         let _ = get_by_id;
-        let _ = create;
+        let _ = create as fn(&PgPool, Uuid, &NewAct) -> _;
         let _ = update;
         let _ = change_status;
         let _ = get_for_edit;

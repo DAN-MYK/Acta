@@ -1,0 +1,162 @@
+// Форма створення / редагування компанії
+//
+// is-edit = false → "Нова компанія"
+// is-edit = true  → "Редагувати компанію" (edit-id заповнено)
+
+import { Button, LineEdit, CheckBox, ScrollView } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+export component CompanyForm {
+    in property <bool>   is-edit: false;
+    in property <string> edit-id: "";
+    in property <string> form-name: "";
+    in property <string> form-edrpou: "";
+    in property <string> form-iban: "";
+    in property <string> form-legal-address: "";
+    in property <string> form-director-name: "";
+    in property <string> form-accountant-name: "";
+    in property <bool>   form-is-vat-payer: false;
+
+    // Параметри: назва, ЄДРПОУ, IBAN, юр.адреса, директор, бухгалтер, платник ПДВ
+    callback save(string, string, string, string, string, string, bool);
+    callback update(string, string, string, string, string, string, bool);
+    callback cancel();
+
+    // Змінні стану полів
+    private property <string> v-name:        root.form-name;
+    private property <string> v-edrpou:      root.form-edrpou;
+    private property <string> v-iban:        root.form-iban;
+    private property <string> v-address:     root.form-legal-address;
+    private property <string> v-director:    root.form-director-name;
+    private property <string> v-accountant:  root.form-accountant-name;
+    private property <bool>   v-vat:         root.form-is-vat-payer;
+
+    VerticalLayout {
+        padding: 24px;
+        spacing: 16px;
+
+        // Заголовок
+        Text {
+            text: root.is-edit ? "✏️  Редагувати компанію" : "🏢  Нова компанія";
+            font-size: 20px;
+            font-weight: 700;
+            color: Theme.text-main;
+        }
+
+        ScrollView {
+            vertical-stretch: 1;
+
+            VerticalLayout {
+                spacing: 12px;
+
+                // Назва (обов'язково)
+                VerticalLayout {
+                    spacing: 4px;
+                    Text { text: "Назва *"; font-size: 12px; color: Theme.text-sub; }
+                    LineEdit {
+                        text: root.v-name;
+                        placeholder-text: "ТОВ «Назва компанії»";
+                        edited(t) => { root.v-name = t; }
+                    }
+                }
+
+                // ЄДРПОУ
+                VerticalLayout {
+                    spacing: 4px;
+                    Text { text: "ЄДРПОУ"; font-size: 12px; color: Theme.text-sub; }
+                    LineEdit {
+                        text: root.v-edrpou;
+                        placeholder-text: "12345678";
+                        edited(t) => { root.v-edrpou = t; }
+                    }
+                }
+
+                // IBAN
+                VerticalLayout {
+                    spacing: 4px;
+                    Text { text: "IBAN"; font-size: 12px; color: Theme.text-sub; }
+                    LineEdit {
+                        text: root.v-iban;
+                        placeholder-text: "UA123456789012345678901234567";
+                        edited(t) => { root.v-iban = t; }
+                    }
+                }
+
+                // Юридична адреса
+                VerticalLayout {
+                    spacing: 4px;
+                    Text { text: "Юридична адреса"; font-size: 12px; color: Theme.text-sub; }
+                    LineEdit {
+                        text: root.v-address;
+                        placeholder-text: "м. Київ, вул. Хрещатик, 1";
+                        edited(t) => { root.v-address = t; }
+                    }
+                }
+
+                // Директор
+                VerticalLayout {
+                    spacing: 4px;
+                    Text { text: "Директор (ПІБ)"; font-size: 12px; color: Theme.text-sub; }
+                    LineEdit {
+                        text: root.v-director;
+                        placeholder-text: "Іванов Іван Іванович";
+                        edited(t) => { root.v-director = t; }
+                    }
+                }
+
+                // Бухгалтер
+                VerticalLayout {
+                    spacing: 4px;
+                    Text { text: "Бухгалтер (ПІБ)"; font-size: 12px; color: Theme.text-sub; }
+                    LineEdit {
+                        text: root.v-accountant;
+                        placeholder-text: "Петренко Петро Петрович";
+                        edited(t) => { root.v-accountant = t; }
+                    }
+                }
+
+                // Платник ПДВ
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: start;
+                    CheckBox {
+                        text: "Платник ПДВ";
+                        checked: root.v-vat;
+                        toggled => { root.v-vat = self.checked; }
+                    }
+                }
+            }
+        }
+
+        // Кнопки
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: end;
+
+            Button {
+                text: "Скасувати";
+                clicked => { root.cancel(); }
+            }
+
+            Button {
+                text: root.is-edit ? "Зберегти зміни" : "Створити";
+                primary: true;
+                clicked => {
+                    if root.is-edit {
+                        root.update(
+                            root.v-name, root.v-edrpou, root.v-iban,
+                            root.v-address, root.v-director, root.v-accountant,
+                            root.v-vat
+                        );
+                    } else {
+                        root.save(
+                            root.v-name, root.v-edrpou, root.v-iban,
+                            root.v-address, root.v-director, root.v-accountant,
+                            root.v-vat
+                        );
+                    }
+                }
+            }
+        }
+    }
+}

@@ -7,6 +7,9 @@ use rust_decimal_macros::dec;
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use uuid::Uuid;
 
+// UUID дефолтної компанії з міграції 012_companies.sql
+const DEFAULT_COMPANY_ID: Uuid = Uuid::from_bytes([0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,1]);
+
 async fn test_pool() -> Result<Option<PgPool>> {
     let url = env::var("TEST_DATABASE_URL")
         .ok()
@@ -51,7 +54,7 @@ async fn counterparties_crud_in_db() -> Result<()> {
     };
 
     let before_archived = db::counterparties::count_archived(&pool).await?;
-    let created = db::counterparties::create(&pool, &new_cp).await?;
+    let created = db::counterparties::create(&pool, DEFAULT_COMPANY_ID, &new_cp).await?;
 
     let fetched = db::counterparties::get_by_id(&pool, created.id)
         .await?
@@ -61,7 +64,7 @@ async fn counterparties_crud_in_db() -> Result<()> {
     let found_by_bas = db::counterparties::find_by_bas_id(&pool, &bas_id).await?;
     assert!(found_by_bas.is_some());
 
-    let search = db::counterparties::search(&pool, "ІТ Контрагент").await?;
+    let search = db::counterparties::search(&pool, DEFAULT_COMPANY_ID, "ІТ Контрагент").await?;
     assert!(search.iter().any(|cp| cp.id == created.id));
 
     let archived = db::counterparties::archive(&pool, created.id).await?;
@@ -87,6 +90,7 @@ async fn acts_create_and_status_flow_in_db() -> Result<()> {
     let suffix = unique_suffix();
     let cp = db::counterparties::create(
         &pool,
+        DEFAULT_COMPANY_ID,
         &models::NewCounterparty {
             name: format!("ІТ Акт Контрагент {suffix}"),
             edrpou: Some(suffix[..8].to_string()),
@@ -102,6 +106,7 @@ async fn acts_create_and_status_flow_in_db() -> Result<()> {
 
     let act = db::acts::create(
         &pool,
+        DEFAULT_COMPANY_ID,
         &models::NewAct {
             number: format!("IT-ACT-{suffix}"),
             counterparty_id: cp.id,
@@ -169,6 +174,7 @@ async fn tasks_create_update_and_delete_in_db() -> Result<()> {
     let suffix = unique_suffix();
     let cp = db::counterparties::create(
         &pool,
+        DEFAULT_COMPANY_ID,
         &models::NewCounterparty {
             name: format!("ІТ Task Контрагент {suffix}"),
             edrpou: Some(suffix[..8].to_string()),

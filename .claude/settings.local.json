@@ -27,7 +27,11 @@
       "mcp__obsidian__write_file",
       "mcp__obsidian__create_directory",
       "mcp__plugin_figma_figma__get_design_context",
-      "mcp__plugin_figma_figma__get_screenshot"
+      "mcp__plugin_figma_figma__get_screenshot",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\([k for k in d.keys\\(\\)], indent=2\\)\\)\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('mcpServers', {}\\), indent=2\\)\\)\")",
+      "Bash(git merge:*)",
+      "Bash(SQLX_OFFLINE=true cargo check)"
     ]
   },
   "enableAllProjectMcpServers": true,

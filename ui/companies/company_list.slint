@@ -1,0 +1,166 @@
+// Список компаній — управління (додавання, редагування, архівування)
+
+import { Button, ListView, ScrollView } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+export struct CompanyItem {
+    id:         string,
+    name:       string,
+    short-name: string,
+    edrpou:     string,
+    is-vat:     bool,
+}
+
+export component CompanyList {
+    in property <[CompanyItem]> companies;
+    in property <bool>          loading: false;
+
+    callback add();
+    callback edit(string /*id*/);
+    callback archive(string /*id*/);
+    callback select(string /*id*/);  // клік по рядку — обрати як активну
+
+    VerticalLayout {
+        padding: 24px;
+        spacing: 16px;
+
+        // Заголовок + кнопка
+        HorizontalLayout {
+            spacing: 8px;
+
+            Text {
+                text: "🏢  Компанії";
+                font-size: 22px;
+                font-weight: 700;
+                color: Theme.text-main;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+
+            Button {
+                text: "+ Додати компанію";
+                primary: true;
+                clicked => { root.add(); }
+            }
+        }
+
+        // Підзаголовок
+        Text {
+            text: "Оберіть активну компанію або керуйте списком";
+            font-size: 13px;
+            color: Theme.text-sub;
+        }
+
+        // Список
+        if root.companies.length == 0 && !root.loading : Rectangle {
+            vertical-stretch: 1;
+            VerticalLayout {
+                alignment: center;
+                spacing: 12px;
+                Text {
+                    text: "Компаній ще немає";
+                    font-size: 16px;
+                    color: Theme.text-muted;
+                    horizontal-alignment: center;
+                }
+                Button {
+                    text: "+ Додати першу компанію";
+                    primary: true;
+                    clicked => { root.add(); }
+                }
+            }
+        }
+
+        if root.companies.length > 0 : ListView {
+            vertical-stretch: 1;
+
+            for c in root.companies : Rectangle {
+                height: 68px;
+                border-radius: 8px;
+                background: touch.has-hover ? Theme.row-alt : Theme.surface;
+                border-width: 1px;
+                border-color: Theme.border;
+
+                animate background { duration: 100ms; }
+
+                touch := TouchArea {
+                    clicked => { root.select(c.id); }
+                    mouse-cursor: pointer;
+
+                    HorizontalLayout {
+                        padding-left: 16px;
+                        padding-right: 16px;
+                        spacing: 12px;
+                        alignment: center;
+
+                        // Іконка
+                        Rectangle {
+                            width: 40px;
+                            height: 40px;
+                            border-radius: 8px;
+                            background: #e8f0fe;
+
+                            Text {
+                                text: "🏢";
+                                font-size: 20px;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        // Назва + ЄДРПОУ
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            alignment: center;
+                            spacing: 2px;
+
+                            Text {
+                                text: c.name;
+                                font-size: 15px;
+                                font-weight: 600;
+                                color: Theme.text-main;
+                            }
+
+                            Text {
+                                text: c.edrpou != "" ? "ЄДРПОУ: " + c.edrpou : "ЄДРПОУ не вказано";
+                                font-size: 12px;
+                                color: Theme.text-sub;
+                            }
+                        }
+
+                        // ПДВ бейдж
+                        if c.is-vat : Rectangle {
+                            width: 60px;
+                            height: 22px;
+                            border-radius: 4px;
+                            background: #e8f5e9;
+                            border-width: 1px;
+                            border-color: #a5d6a7;
+                            Text {
+                                text: "ПДВ";
+                                font-size: 11px;
+                                color: #388e3c;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        // Дії
+                        Button {
+                            text: "✏";
+                            clicked => {
+                                root.edit(c.id);
+                            }
+                        }
+                        Button {
+                            text: "🗄";
+                            clicked => {
+                                root.archive(c.id);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

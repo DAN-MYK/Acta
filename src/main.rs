@@ -5,7 +5,7 @@
 // ВАЖЛИВО: має бути на рівні модуля — не всередині функції.
 slint::include_modules!();
 
-use acta::{db, models, notifications};
+use acta::{config::AppConfig, db, models, notifications};
 
 use anyhow::Result;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, TimeZone, Utc};
@@ -15,9 +15,13 @@ use sqlx::postgres::PgPoolOptions;
 use std::sync::{Arc, Mutex};
 
 use models::{
-    ActStatus, NewAct, NewActItem, NewCounterparty, NewTask, Task, TaskPriority, TaskStatus,
-    UpdateAct, UpdateCounterparty,
+    ActStatus, Company, NewAct, NewActItem, NewCompany, NewCounterparty, NewTask, Task,
+    TaskPriority, TaskStatus, UpdateAct, UpdateCompany, UpdateCounterparty,
 };
+
+// UUID дефолтної компанії (з міграції 012) — використовується якщо ще не обрано іншу.
+const DEFAULT_COMPANY_ID: uuid::Uuid =
+    uuid::Uuid::from_bytes([0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,1]);
 
 #[derive(Clone, Default)]
 struct CounterpartyListState {
@@ -63,12 +67,81 @@ async fn main() -> Result<()> {
     let act_state = Arc::new(Mutex::new(ActListState::default()));
     let task_state = Arc::new(Mutex::new(TaskListState::default()));
 
+    // ── Активна компанія — спільна між усіма callbacks ───────────────────────
+    // Починаємо з DEFAULT_COMPANY_ID (дефолтна компанія з міграції).
+    // При виборі компанії в UI → оновлюємо цей Arc.
+    let active_company_id: Arc<Mutex<uuid::Uuid>> =
+        Arc::new(Mutex::new(DEFAULT_COMPANY_ID));
+
+    // ── Початкове завантаження компаній ─────────────────────────────────────
+    let config = AppConfig::load();
+    {
+        let companies = db::companies::list(&pool).await.unwrap_or_default();
+        // Відображаємо список у UI (для сторінки Компанії)
+        apply_company_rows(&ui, &companies);
+        ui.set_active_company_subtitle(SharedString::from(
+            "Оберіть компанію для роботи",
+        ));
+
+        match companies.len() {
+            0 => {
+                // Немає жодної компанії → одразу на сторінку Компанії (создати)
+                ui.set_current_page(6);
+                ui.set_active_company_name(SharedString::from("Оберіть компанію"));
+                ui.set_active_company_id(SharedString::from(""));
+                ui.set_active_company_subtitle(SharedString::from(
+                    "Створіть першу компанію",
+                ));
+                reset_company_form(&ui);
+                ui.set_show_company_form(true);
+            }
+            1 => {
+                // Єдина компанія — обираємо автоматично
+                let c = &companies[0];
+                *active_company_id.lock().unwrap() = c.id;
+                ui.set_active_company_name(SharedString::from(
+                    company_display_name(c).as_str(),
+                ));
+                ui.set_active_company_id(SharedString::from(c.id.to_string().as_str()));
+                ui.set_active_company_subtitle(SharedString::from(
+                    company_subtitle(c).as_str(),
+                ));
+                tracing::info!("Активна компанія: '{}'", c.name);
+            }
+            _ => {
+                // Кілька компаній — відновити останню або показати вибір
+                let restored = config.last_company_id.and_then(|lid| {
+                    companies.iter().find(|c| c.id == lid).cloned()
+                });
+                if let Some(c) = restored {
+                    *active_company_id.lock().unwrap() = c.id;
+                    ui.set_active_company_name(SharedString::from(
+                        company_display_name(&c).as_str(),
+                    ));
+                    ui.set_active_company_id(SharedString::from(c.id.to_string().as_str()));
+                    ui.set_active_company_subtitle(SharedString::from(
+                        company_subtitle(&c).as_str(),
+                    ));
+                    tracing::info!("Відновлено останню компанію: '{}'", c.name);
+                } else {
+                    ui.set_show_company_picker(true);
+                    ui.set_active_company_name(SharedString::from("Оберіть компанію"));
+                    ui.set_active_company_id(SharedString::from(""));
+                    ui.set_active_company_subtitle(SharedString::from(
+                        "Доступно кілька компаній",
+                    ));
+                }
+            }
+        }
+    }
+
     // ── Початкове завантаження ───────────────────────────────────────────────
     // Тут ми ще в main thread (до ui.run()), тому ModelRc будувати безпечно.
-    reload_counterparties(&pool, ui.as_weak(), String::new(), false, false).await?;
+    let cid = *active_company_id.lock().unwrap();
+    reload_counterparties(&pool, ui.as_weak(), cid, String::new(), false, false).await?;
 
     // ── Початкове завантаження актів ─────────────────────────────────────────
-    reload_acts(&pool, ui.as_weak(), None, String::new(), false).await?;
+    reload_acts(&pool, ui.as_weak(), cid, None, String::new(), false).await?;
 
     // ── Початкове завантаження задач ────────────────────────────────────────
     ui.set_tasks_loading(true);
@@ -86,10 +159,12 @@ async fn main() -> Result<()> {
     let pool_search = pool.clone();
     let ui_weak = ui.as_weak();
     let counterparty_state_search = counterparty_state.clone();
+    let active_company_id_search = active_company_id.clone();
 
     ui.on_counterparty_search_changed(move |query| {
         let pool = pool_search.clone();
         let ui_handle = ui_weak.clone();
+        let cid = *active_company_id_search.lock().unwrap();
         let (query_str, include_archived) = {
             let mut state = counterparty_state_search.lock().unwrap();
             state.query = query.to_string();
@@ -98,7 +173,7 @@ async fn main() -> Result<()> {
 
         tokio::spawn(async move {
             if let Err(e) =
-                reload_counterparties(&pool, ui_handle, query_str, include_archived, false).await
+                reload_counterparties(&pool, ui_handle, cid, query_str, include_archived, false).await
             {
                 tracing::error!("Помилка пошуку: {e}");
             }
@@ -182,10 +257,12 @@ async fn main() -> Result<()> {
     let pool_cp_filter = pool.clone();
     let ui_weak_cp_filter = ui.as_weak();
     let counterparty_state_filter = counterparty_state.clone();
+    let active_company_id_cp_filter = active_company_id.clone();
 
     ui.on_counterparty_filter_clicked(move || {
         let pool = pool_cp_filter.clone();
         let ui_handle = ui_weak_cp_filter.clone();
+        let cid = *active_company_id_cp_filter.lock().unwrap();
         let (query, include_archived) = {
             let mut state = counterparty_state_filter.lock().unwrap();
             state.include_archived = !state.include_archived;
@@ -194,7 +271,7 @@ async fn main() -> Result<()> {
 
         tokio::spawn(async move {
             if let Err(e) =
-                reload_counterparties(&pool, ui_handle, query, include_archived, false).await
+                reload_counterparties(&pool, ui_handle, cid, query, include_archived, false).await
             {
                 tracing::error!("Помилка фільтра контрагентів: {e}");
             }
@@ -207,10 +284,12 @@ async fn main() -> Result<()> {
     let pool_acts_filter = pool.clone();
     let ui_weak_acts_filter = ui.as_weak();
     let act_state_filter = act_state.clone();
+    let active_company_id_acts_filter = active_company_id.clone();
 
     ui.on_act_status_filter_changed(move |filter_idx| {
         let pool = pool_acts_filter.clone();
         let ui_handle = ui_weak_acts_filter.clone();
+        let cid = *active_company_id_acts_filter.lock().unwrap();
 
         // Перетворюємо індекс ComboBox в Option<ActStatus>
         let status_filter = match filter_idx {
@@ -227,7 +306,7 @@ async fn main() -> Result<()> {
         };
 
         tokio::spawn(async move {
-            if let Err(e) = reload_acts(&pool, ui_handle, status_filter, query, false).await {
+            if let Err(e) = reload_acts(&pool, ui_handle, cid, status_filter, query, false).await {
                 tracing::error!("Помилка фільтру актів: {e}");
             }
         });
@@ -236,10 +315,12 @@ async fn main() -> Result<()> {
     let pool_acts_search = pool.clone();
     let ui_weak_acts_search = ui.as_weak();
     let act_state_search = act_state.clone();
+    let active_company_id_acts_search = active_company_id.clone();
 
     ui.on_act_search_changed(move |query| {
         let pool = pool_acts_search.clone();
         let ui_handle = ui_weak_acts_search.clone();
+        let cid = *active_company_id_acts_search.lock().unwrap();
         let (query, status_filter) = {
             let mut state = act_state_search.lock().unwrap();
             state.query = query.to_string();
@@ -247,7 +328,7 @@ async fn main() -> Result<()> {
         };
 
         tokio::spawn(async move {
-            if let Err(e) = reload_acts(&pool, ui_handle, status_filter, query, false).await {
+            if let Err(e) = reload_acts(&pool, ui_handle, cid, status_filter, query, false).await {
                 tracing::error!("Помилка пошуку актів: {e}");
             }
         });
@@ -267,16 +348,18 @@ async fn main() -> Result<()> {
     // Обидві операції виконуються паралельно через tokio::join!
     let pool_create_act = pool.clone();
     let ui_weak_create_act = ui.as_weak();
+    let active_company_id_create = active_company_id.clone();
 
     ui.on_act_create_clicked(move || {
         let pool = pool_create_act.clone();
         let ui_handle = ui_weak_create_act.clone();
+        let cid = *active_company_id_create.lock().unwrap();
 
         tokio::spawn(async move {
             // tokio::join! — запускає обидва futures паралельно (не послідовно)
             let (cp_result, num_result) = tokio::join!(
-                db::acts::counterparties_for_select(&pool),
-                db::acts::generate_next_number(&pool),
+                db::acts::counterparties_for_select(&pool, cid),
+                db::acts::generate_next_number(&pool, cid),
             );
 
             let counterparties = match cp_result {
@@ -352,12 +435,14 @@ async fn main() -> Result<()> {
     let pool_acts_status = pool.clone();
     let ui_weak_acts_status = ui.as_weak();
     let act_state_advance = act_state.clone();
+    let active_company_id_advance = active_company_id.clone();
 
     ui.on_act_advance_status_clicked(move |id| {
         let pool = pool_acts_status.clone();
         let ui_handle = ui_weak_acts_status.clone();
         let id_str = id.to_string();
         let act_state = act_state_advance.clone();
+        let cid = *active_company_id_advance.lock().unwrap();
 
         tokio::spawn(async move {
             let Ok(uuid) = id_str.parse::<uuid::Uuid>() else {
@@ -382,7 +467,7 @@ async fn main() -> Result<()> {
                         (state.query.clone(), state.status_filter.clone())
                     };
                     if let Err(e) =
-                        reload_acts(&pool, ui_handle.clone(), status_filter, query, false).await
+                        reload_acts(&pool, ui_handle.clone(), cid, status_filter, query, false).await
                     {
                         tracing::error!("Помилка оновлення списку актів після зміни статусу: {e}");
                     }
@@ -399,11 +484,13 @@ async fn main() -> Result<()> {
     // потім заповнюємо всі поля форми та перемикаємось у edit-mode.
     let pool_edit = pool.clone();
     let ui_weak_edit = ui.as_weak();
+    let active_company_id_edit = active_company_id.clone();
 
     ui.on_act_edit_clicked(move |act_id| {
         let pool = pool_edit.clone();
         let ui_handle = ui_weak_edit.clone();
         let id_str = act_id.to_string();
+        let cid = *active_company_id_edit.lock().unwrap();
 
         tokio::spawn(async move {
             let Ok(uuid) = id_str.parse::<uuid::Uuid>() else {
@@ -414,7 +501,7 @@ async fn main() -> Result<()> {
             // tokio::join! — два незалежних запити паралельно (урок 2026-04-01)
             let (act_result, cp_result, tasks_result) = tokio::join!(
                 db::acts::get_for_edit(&pool, uuid),
-                db::acts::counterparties_for_select(&pool),
+                db::acts::counterparties_for_select(&pool, cid),
                 db::tasks::list_by_act(&pool, uuid),
             );
 
@@ -525,6 +612,7 @@ async fn main() -> Result<()> {
     let pool_update = pool.clone();
     let ui_weak_update = ui.as_weak();
     let act_state_update = act_state.clone();
+    let active_company_id_update = active_company_id.clone();
 
     ui.on_act_form_update(move |number, date_str, cp_id_str, notes| {
         let Some(ui_ref) = ui_weak_update.upgrade() else {
@@ -536,6 +624,7 @@ async fn main() -> Result<()> {
 
         let pool = pool_update.clone();
         let ui_weak = ui_weak_update.clone();
+        let cid = *active_company_id_update.lock().unwrap();
         let number = number.to_string();
         let date_str = date_str.to_string();
         let cp_id_str = cp_id_str.to_string();
@@ -604,7 +693,7 @@ async fn main() -> Result<()> {
                         (state.query.clone(), state.status_filter.clone())
                     };
                     if let Err(e) =
-                        reload_acts(&pool, ui_weak.clone(), status_filter, query, true).await
+                        reload_acts(&pool, ui_weak.clone(), cid, status_filter, query, true).await
                     {
                         tracing::error!("Помилка оновлення списку актів після редагування: {e}");
                     }
@@ -626,6 +715,7 @@ async fn main() -> Result<()> {
     let pool_cp_save = pool.clone();
     let ui_weak_cp_save = ui.as_weak();
     let counterparty_state_save = counterparty_state.clone();
+    let active_company_id_cp_save = active_company_id.clone();
 
     ui.on_cp_form_save(move |name, edrpou, iban, phone, email, address, notes| {
         let pool = pool_cp_save.clone();
@@ -638,6 +728,7 @@ async fn main() -> Result<()> {
         let address_s = address.to_string();
         let notes_s = notes.to_string();
         let counterparty_state = counterparty_state_save.clone();
+        let cid = *active_company_id_cp_save.lock().unwrap();
 
         tokio::spawn(async move {
             if name_s.trim().is_empty() {
@@ -681,7 +772,7 @@ async fn main() -> Result<()> {
                 bas_id: None,
             };
 
-            match db::counterparties::create(&pool, &data).await {
+            match db::counterparties::create(&pool, cid, &data).await {
                 Ok(cp) => {
                     tracing::info!("Контрагента '{}' створено (id={}).", cp.name, cp.id);
                     show_toast(
@@ -694,7 +785,7 @@ async fn main() -> Result<()> {
                         (state.query.clone(), state.include_archived)
                     };
                     if let Err(e) =
-                        reload_counterparties(&pool, ui_weak, query, include_archived, true).await
+                        reload_counterparties(&pool, ui_weak, cid, query, include_archived, true).await
                     {
                         tracing::error!(
                             "Помилка оновлення списку контрагентів після створення: {e}"
@@ -713,6 +804,7 @@ async fn main() -> Result<()> {
     let pool_cp_update = pool.clone();
     let ui_weak_cp_update = ui.as_weak();
     let counterparty_state_update = counterparty_state.clone();
+    let active_company_id_cp_update = active_company_id.clone();
 
     ui.on_cp_form_update(move |name, edrpou, iban, phone, email, address, notes| {
         let Some(ui_ref) = ui_weak_cp_update.upgrade() else {
@@ -722,6 +814,7 @@ async fn main() -> Result<()> {
 
         let pool = pool_cp_update.clone();
         let ui_weak = ui_weak_cp_update.clone();
+        let cid = *active_company_id_cp_update.lock().unwrap();
         let name_s = name.to_string();
         let edrpou_s = edrpou.to_string();
         let iban_s = iban.to_string();
@@ -789,7 +882,7 @@ async fn main() -> Result<()> {
                         (state.query.clone(), state.include_archived)
                     };
                     if let Err(e) =
-                        reload_counterparties(&pool, ui_weak, query, include_archived, true).await
+                        reload_counterparties(&pool, ui_weak, cid, query, include_archived, true).await
                     {
                         tracing::error!(
                             "Помилка оновлення списку контрагентів після редагування: {e}"
@@ -809,12 +902,14 @@ async fn main() -> Result<()> {
     let pool_archive = pool.clone();
     let ui_weak_archive = ui.as_weak();
     let counterparty_state_archive = counterparty_state.clone();
+    let active_company_id_archive = active_company_id.clone();
 
     ui.on_counterparty_archive_clicked(move |id| {
         let pool = pool_archive.clone();
         let ui_handle = ui_weak_archive.clone();
         let id_str = id.to_string();
         let counterparty_state = counterparty_state_archive.clone();
+        let cid = *active_company_id_archive.lock().unwrap();
 
         tokio::spawn(async move {
             // Перетворюємо рядок у UUID — let-else для чистого раннього виходу
@@ -836,7 +931,7 @@ async fn main() -> Result<()> {
                         (state.query.clone(), state.include_archived)
                     };
                     if let Err(e) =
-                        reload_counterparties(&pool, ui_handle, query, include_archived, false)
+                        reload_counterparties(&pool, ui_handle, cid, query, include_archived, false)
                             .await
                     {
                         tracing::error!(
@@ -999,17 +1094,20 @@ async fn main() -> Result<()> {
     let pool_save = pool.clone();
     let ui_weak_save = ui.as_weak();
     let act_state_save = act_state.clone();
+    let active_company_id_save = active_company_id.clone();
 
     ui.on_act_form_save(move |number, date_str, cp_id_str, notes| {
         let Some(ui_ref) = ui_weak_save.upgrade() else {
             return;
         };
         let items = collect_form_items(&ui_ref);
+        let cid = *active_company_id_save.lock().unwrap();
 
         spawn_save_act(
             pool_save.clone(),
             ui_weak_save.clone(),
             act_state_save.clone(),
+            cid,
             number.to_string(),
             date_str.to_string(),
             cp_id_str.to_string(),
@@ -1030,17 +1128,20 @@ async fn main() -> Result<()> {
     let pool_draft = pool.clone();
     let ui_weak_draft = ui.as_weak();
     let act_state_draft = act_state.clone();
+    let active_company_id_draft = active_company_id.clone();
 
     ui.on_act_form_save_draft(move |number, date_str, cp_id_str, notes| {
         let Some(ui_ref) = ui_weak_draft.upgrade() else {
             return;
         };
         let items = collect_form_items(&ui_ref);
+        let cid = *active_company_id_draft.lock().unwrap();
 
         spawn_save_act(
             pool_draft.clone(),
             ui_weak_draft.clone(),
             act_state_draft.clone(),
+            cid,
             number.to_string(),
             date_str.to_string(),
             cp_id_str.to_string(),
@@ -1415,6 +1516,403 @@ async fn main() -> Result<()> {
         }
     });
 
+    // ── Колбек: переключити активну компанію ─────────────────────────────────
+    let ui_weak_switch = ui.as_weak();
+    ui.on_switch_company(move || {
+        if let Some(ui) = ui_weak_switch.upgrade() {
+            ui.set_show_company_picker(true);
+        }
+    });
+
+    // ── Колбек: обрати активну компанію ──────────────────────────────────────
+    let pool_company_select = pool.clone();
+    let ui_weak_company_select = ui.as_weak();
+    let active_company_id_select = active_company_id.clone();
+    let counterparty_state_company_select = counterparty_state.clone();
+    let act_state_company_select = act_state.clone();
+
+    ui.on_company_select_clicked(move |id_str| {
+        let pool = pool_company_select.clone();
+        let ui_handle = ui_weak_company_select.clone();
+        let active_company_id = active_company_id_select.clone();
+        let counterparty_state = counterparty_state_company_select.clone();
+        let act_state = act_state_company_select.clone();
+        let id_s = id_str.to_string();
+
+        tokio::spawn(async move {
+            let Ok(uuid) = id_s.parse::<uuid::Uuid>() else {
+                tracing::error!("Некоректний UUID компанії: {id_s}");
+                return;
+            };
+
+            match db::companies::get_by_id(&pool, uuid).await {
+                Ok(Some(company)) => {
+                    // Оновлюємо активну компанію
+                    *active_company_id.lock().unwrap() = company.id;
+
+                    // Зберігаємо вибір у конфігу
+                    let mut cfg = AppConfig::load();
+                    cfg.last_company_id = Some(company.id);
+                    cfg.save();
+
+                    let name = company_display_name(&company);
+                    let subtitle = company_subtitle(&company);
+                    let id_str = company.id.to_string();
+                    let company_id = company.id;
+                    let (cp_query, include_archived) = {
+                        let state = counterparty_state.lock().unwrap();
+                        (state.query.clone(), state.include_archived)
+                    };
+                    let (act_query, status_filter) = {
+                        let state = act_state.lock().unwrap();
+                        (state.query.clone(), state.status_filter.clone())
+                    };
+
+                    ui_handle.upgrade_in_event_loop(move |ui| {
+                        ui.set_active_company_name(SharedString::from(name.as_str()));
+                        ui.set_active_company_id(SharedString::from(id_str.as_str()));
+                        ui.set_active_company_subtitle(SharedString::from(subtitle.as_str()));
+                        ui.set_show_company_picker(false);
+                        ui.set_show_cp_form(false);
+                        ui.set_show_act_form(false);
+                        ui.set_show_task_form(false);
+                    }).ok();
+
+                    if let Err(e) = reload_counterparties(
+                        &pool,
+                        ui_handle.clone(),
+                        company_id,
+                        cp_query,
+                        include_archived,
+                        false,
+                    )
+                    .await
+                    {
+                        tracing::error!("Помилка оновлення контрагентів після вибору компанії: {e}");
+                    }
+
+                    if let Err(e) = reload_acts(
+                        &pool,
+                        ui_handle.clone(),
+                        company_id,
+                        status_filter,
+                        act_query,
+                        false,
+                    )
+                    .await
+                    {
+                        tracing::error!("Помилка оновлення актів після вибору компанії: {e}");
+                    }
+                }
+                Ok(None) => tracing::warn!("Компанію {uuid} не знайдено."),
+                Err(e) => tracing::error!("Помилка вибору компанії: {e}"),
+            }
+        });
+    });
+
+    // ── Колбек: додати нову компанію ─────────────────────────────────────────
+    let ui_weak_company_add = ui.as_weak();
+    ui.on_company_add_clicked(move || {
+        if let Some(ui) = ui_weak_company_add.upgrade() {
+            reset_company_form(&ui);
+            ui.set_show_company_picker(false);
+            ui.set_current_page(6);
+            ui.set_show_company_form(true);
+        }
+    });
+
+    // ── Колбек: редагувати компанію ───────────────────────────────────────────
+    let pool_company_edit = pool.clone();
+    let ui_weak_company_edit = ui.as_weak();
+
+    ui.on_company_edit_clicked(move |id_str| {
+        let pool = pool_company_edit.clone();
+        let ui_handle = ui_weak_company_edit.clone();
+        let id_s = id_str.to_string();
+
+        tokio::spawn(async move {
+            let Ok(uuid) = id_s.parse::<uuid::Uuid>() else {
+                tracing::error!("Некоректний UUID компанії: {id_s}");
+                return;
+            };
+
+            match db::companies::get_by_id(&pool, uuid).await {
+                Ok(Some(c)) => {
+                    ui_handle.upgrade_in_event_loop(move |ui| {
+                        ui.set_company_form_is_edit(true);
+                        ui.set_company_form_edit_id(SharedString::from(c.id.to_string().as_str()));
+                        ui.set_company_form_name(SharedString::from(c.name.as_str()));
+                        ui.set_company_form_edrpou(SharedString::from(c.edrpou.as_deref().unwrap_or("")));
+                        ui.set_company_form_iban(SharedString::from(c.iban.as_deref().unwrap_or("")));
+                        ui.set_company_form_legal_address(SharedString::from(c.legal_address.as_deref().unwrap_or("")));
+                        ui.set_company_form_director(SharedString::from(c.director_name.as_deref().unwrap_or("")));
+                        ui.set_company_form_accountant(SharedString::from(c.accountant_name.as_deref().unwrap_or("")));
+                        ui.set_company_form_is_vat(c.is_vat_payer);
+                        ui.set_show_company_form(true);
+                    }).ok();
+                }
+                Ok(None) => tracing::warn!("Компанію {uuid} не знайдено."),
+                Err(e) => tracing::error!("Помилка завантаження компанії: {e}"),
+            }
+        });
+    });
+
+    // ── Колбек: архівувати компанію ───────────────────────────────────────────
+    let pool_company_archive = pool.clone();
+    let ui_weak_company_archive = ui.as_weak();
+    let active_company_id_archive = active_company_id.clone();
+
+    ui.on_company_archive_clicked(move |id_str| {
+        let pool = pool_company_archive.clone();
+        let ui_handle = ui_weak_company_archive.clone();
+        let active_company_id = active_company_id_archive.clone();
+        let id_s = id_str.to_string();
+
+        tokio::spawn(async move {
+            let Ok(uuid) = id_s.parse::<uuid::Uuid>() else {
+                tracing::error!("Некоректний UUID компанії: {id_s}");
+                return;
+            };
+
+            match db::companies::archive(&pool, uuid).await {
+                Ok(true) => {
+                    show_toast(ui_handle.clone(), "Компанію архівовано".to_string(), false);
+                    if let Err(e) = reload_companies(&pool, ui_handle).await {
+                        tracing::error!("Помилка оновлення списку компаній: {e}");
+                    }
+
+                    if *active_company_id.lock().unwrap() == uuid {
+                        match db::companies::list(&pool).await {
+                            Ok(companies) if !companies.is_empty() => {
+                                let replacement = companies[0].clone();
+                                *active_company_id.lock().unwrap() = replacement.id;
+
+                                let mut cfg = AppConfig::load();
+                                cfg.last_company_id = Some(replacement.id);
+                                cfg.save();
+
+                                let name = company_display_name(&replacement);
+                                let subtitle = company_subtitle(&replacement);
+                                let replacement_id = replacement.id.to_string();
+
+                                ui_handle
+                                    .upgrade_in_event_loop(move |ui| {
+                                        ui.set_active_company_name(SharedString::from(name.as_str()));
+                                        ui.set_active_company_id(SharedString::from(
+                                            replacement_id.as_str(),
+                                        ));
+                                        ui.set_active_company_subtitle(SharedString::from(
+                                            subtitle.as_str(),
+                                        ));
+                                    })
+                                    .ok();
+                            }
+                            Ok(_) => {
+                                ui_handle
+                                    .upgrade_in_event_loop(|ui| {
+                                        ui.set_active_company_name(SharedString::from(
+                                            "Оберіть компанію",
+                                        ));
+                                        ui.set_active_company_id(SharedString::from(""));
+                                        ui.set_active_company_subtitle(SharedString::from(
+                                            "Створіть першу компанію",
+                                        ));
+                                        ui.set_show_company_picker(false);
+                                        ui.set_current_page(6);
+                                        reset_company_form(ui);
+                                        ui.set_show_company_form(true);
+                                    })
+                                    .ok();
+                            }
+                            Err(e) => tracing::error!(
+                                "Помилка пошуку заміни активної компанії після архівації: {e}"
+                            ),
+                        }
+                    }
+                }
+                Ok(false) => tracing::warn!("Компанію {uuid} не знайдено."),
+                Err(e) => tracing::error!("Помилка архівування компанії: {e}"),
+            }
+        });
+    });
+
+    // ── Колбек: зберегти нову компанію ──────────────────────────────────────
+    let pool_company_save = pool.clone();
+    let ui_weak_company_save = ui.as_weak();
+    let active_company_id_company_save = active_company_id.clone();
+    let counterparty_state_company_save = counterparty_state.clone();
+    let act_state_company_save = act_state.clone();
+
+    ui.on_company_form_save(move |name, edrpou, iban, address, director, accountant, is_vat| {
+        let pool = pool_company_save.clone();
+        let ui_weak = ui_weak_company_save.clone();
+        let active_company_id = active_company_id_company_save.clone();
+        let counterparty_state = counterparty_state_company_save.clone();
+        let act_state = act_state_company_save.clone();
+        let data = NewCompany {
+            name: name.to_string(),
+            short_name: None,
+            edrpou: if edrpou.trim().is_empty() { None } else { Some(edrpou.to_string()) },
+            ipn: None,
+            iban: if iban.trim().is_empty() { None } else { Some(iban.to_string()) },
+            legal_address: if address.trim().is_empty() { None } else { Some(address.to_string()) },
+            director_name: if director.trim().is_empty() { None } else { Some(director.to_string()) },
+            tax_system: None,
+            is_vat_payer: is_vat,
+        };
+
+        tokio::spawn(async move {
+            if data.name.trim().is_empty() {
+                show_toast(ui_weak, "Введіть назву компанії".to_string(), true);
+                return;
+            }
+            match db::companies::create(&pool, &data).await {
+                Ok(c) => {
+                    tracing::info!("Компанію '{}' створено (id={}).", c.name, c.id);
+                    show_toast(ui_weak.clone(), format!("Компанію '{}' створено", c.name), false);
+                    *active_company_id.lock().unwrap() = c.id;
+
+                    let mut cfg = AppConfig::load();
+                    cfg.last_company_id = Some(c.id);
+                    cfg.save();
+
+                    if let Err(e) = reload_companies(&pool, ui_weak.clone()).await {
+                        tracing::error!("Помилка оновлення списку компаній: {e}");
+                    }
+
+                    let (cp_query, include_archived) = {
+                        let state = counterparty_state.lock().unwrap();
+                        (state.query.clone(), state.include_archived)
+                    };
+                    let (act_query, status_filter) = {
+                        let state = act_state.lock().unwrap();
+                        (state.query.clone(), state.status_filter.clone())
+                    };
+
+                    if let Err(e) = reload_counterparties(
+                        &pool,
+                        ui_weak.clone(),
+                        c.id,
+                        cp_query,
+                        include_archived,
+                        false,
+                    )
+                    .await
+                    {
+                        tracing::error!("Помилка оновлення контрагентів після створення компанії: {e}");
+                    }
+
+                    if let Err(e) = reload_acts(
+                        &pool,
+                        ui_weak.clone(),
+                        c.id,
+                        status_filter,
+                        act_query,
+                        false,
+                    )
+                    .await
+                    {
+                        tracing::error!("Помилка оновлення актів після створення компанії: {e}");
+                    }
+
+                    let name = company_display_name(&c);
+                    let subtitle = company_subtitle(&c);
+                    let id = c.id.to_string();
+                    ui_weak
+                        .upgrade_in_event_loop(move |ui| {
+                            ui.set_active_company_name(SharedString::from(name.as_str()));
+                            ui.set_active_company_id(SharedString::from(id.as_str()));
+                            ui.set_active_company_subtitle(SharedString::from(subtitle.as_str()));
+                            ui.set_show_company_picker(false);
+                            ui.set_show_company_form(false);
+                            ui.set_current_page(0);
+                        })
+                        .ok();
+                }
+                Err(e) => {
+                    tracing::error!("Помилка створення компанії: {e}");
+                    show_toast(ui_weak, format!("Помилка: {e}"), true);
+                }
+            }
+        });
+    });
+
+    // ── Колбек: оновити компанію ─────────────────────────────────────────────
+    let pool_company_update = pool.clone();
+    let ui_weak_company_update = ui.as_weak();
+    let active_company_id_company_update = active_company_id.clone();
+
+    ui.on_company_form_update(move |name, edrpou, iban, address, director, accountant, is_vat| {
+        let Some(ui_ref) = ui_weak_company_update.upgrade() else { return; };
+        let edit_id = ui_ref.get_company_form_edit_id().to_string();
+        let pool = pool_company_update.clone();
+        let ui_weak = ui_weak_company_update.clone();
+        let active_company_id = active_company_id_company_update.clone();
+
+        tokio::spawn(async move {
+            let Ok(uuid) = edit_id.parse::<uuid::Uuid>() else {
+                tracing::error!("Некоректний edit_id компанії: {edit_id}");
+                return;
+            };
+            let data = UpdateCompany {
+                name: name.to_string(),
+                short_name: None,
+                edrpou: if edrpou.trim().is_empty() { None } else { Some(edrpou.to_string()) },
+                iban: if iban.trim().is_empty() { None } else { Some(iban.to_string()) },
+                legal_address: if address.trim().is_empty() { None } else { Some(address.to_string()) },
+                director_name: if director.trim().is_empty() { None } else { Some(director.to_string()) },
+                accountant_name: if accountant.trim().is_empty() { None } else { Some(accountant.to_string()) },
+                tax_system: None,
+                is_vat_payer: is_vat,
+                logo_path: None,
+            };
+            match db::companies::update(&pool, uuid, &data).await {
+                Ok(Some(c)) => {
+                    tracing::info!("Компанію '{}' оновлено.", c.name);
+                    show_toast(ui_weak.clone(), format!("Компанію '{}' оновлено", c.name), false);
+                    if let Err(e) = reload_companies(&pool, ui_weak.clone()).await {
+                        tracing::error!("Помилка оновлення списку компаній: {e}");
+                    }
+
+                    if *active_company_id.lock().unwrap() == c.id {
+                        let name = company_display_name(&c);
+                        let subtitle = company_subtitle(&c);
+                        let id = c.id.to_string();
+                        ui_weak
+                            .upgrade_in_event_loop(move |ui| {
+                                ui.set_active_company_name(SharedString::from(name.as_str()));
+                                ui.set_active_company_id(SharedString::from(id.as_str()));
+                                ui.set_active_company_subtitle(SharedString::from(
+                                    subtitle.as_str(),
+                                ));
+                                ui.set_show_company_form(false);
+                            })
+                            .ok();
+                    } else {
+                        ui_weak
+                            .upgrade_in_event_loop(|ui| {
+                                ui.set_show_company_form(false);
+                            })
+                            .ok();
+                    }
+                }
+                Ok(None) => tracing::warn!("Компанію {uuid} не знайдено."),
+                Err(e) => {
+                    tracing::error!("Помилка оновлення компанії: {e}");
+                    show_toast(ui_weak, format!("Помилка: {e}"), true);
+                }
+            }
+        });
+    });
+
+    // ── Колбек: скасувати форму компанії ─────────────────────────────────────
+    let ui_weak_company_cancel = ui.as_weak();
+    ui.on_company_form_cancel(move || {
+        if let Some(ui) = ui_weak_company_cancel.upgrade() {
+            ui.set_show_company_form(false);
+        }
+    });
+
     // run() блокує до закриття вікна
     ui.run()?;
     Ok(())
@@ -1600,12 +2098,13 @@ fn collect_form_items(ui: &MainWindow) -> Vec<NewActItem> {
 async fn reload_counterparties(
     pool: &sqlx::PgPool,
     ui_weak: Weak<MainWindow>,
+    company_id: uuid::Uuid,
     query: String,
     include_archived: bool,
     close_form: bool,
 ) -> Result<()> {
     let counterparties =
-        db::counterparties::list_filtered(pool, normalized_query(&query), include_archived).await?;
+        db::counterparties::list_filtered(pool, company_id, normalized_query(&query), include_archived).await?;
     let archived_cnt = db::counterparties::count_archived(pool).await.unwrap_or(0) as i32;
     let data = to_table_data(&counterparties);
     let total = data.ids.len() as i32;
@@ -1635,11 +2134,12 @@ async fn reload_counterparties(
 async fn reload_acts(
     pool: &sqlx::PgPool,
     ui_weak: Weak<MainWindow>,
+    company_id: uuid::Uuid,
     status_filter: Option<ActStatus>,
     query: String,
     close_form: bool,
 ) -> Result<()> {
-    let acts = db::acts::list_filtered(pool, status_filter, normalized_query(&query)).await?;
+    let acts = db::acts::list_filtered(pool, company_id, status_filter, normalized_query(&query)).await?;
     let data = to_acts_table_data(&acts);
 
     ui_weak
@@ -1655,6 +2155,57 @@ async fn reload_acts(
         .map_err(anyhow::Error::from)?;
 
     Ok(())
+}
+
+/// Завантажити список компаній і оновити UI.
+async fn reload_companies(
+    pool: &sqlx::PgPool,
+    ui_weak: Weak<MainWindow>,
+) -> Result<()> {
+    let companies = db::companies::list(pool).await?;
+    ui_weak.upgrade_in_event_loop(move |ui| {
+        apply_company_rows(ui, &companies);
+    }).map_err(anyhow::Error::from)?;
+    Ok(())
+}
+
+/// Перетворити Vec<Company> у ModelRc і встановити у UI.
+fn apply_company_rows(ui: &MainWindow, companies: &[Company]) {
+    let items: Vec<CompanyItem> = companies.iter().map(|c| CompanyItem {
+        id:         SharedString::from(c.id.to_string().as_str()),
+        name:       SharedString::from(c.name.as_str()),
+        short_name: SharedString::from(c.short_name.as_deref().unwrap_or("")),
+        edrpou:     SharedString::from(c.edrpou.as_deref().unwrap_or("")),
+        is_vat:     c.is_vat_payer,
+    }).collect();
+    ui.set_company_rows(ModelRc::new(VecModel::from(items)));
+}
+
+fn company_display_name(company: &Company) -> String {
+    company
+        .short_name
+        .clone()
+        .unwrap_or_else(|| company.name.clone())
+}
+
+fn company_subtitle(company: &Company) -> String {
+    company
+        .edrpou
+        .as_ref()
+        .map(|edrpou| format!("ЄДРПОУ: {edrpou}"))
+        .unwrap_or_else(|| "ЄДРПОУ не вказано".to_string())
+}
+
+fn reset_company_form(ui: &MainWindow) {
+    ui.set_company_form_is_edit(false);
+    ui.set_company_form_edit_id(SharedString::from(""));
+    ui.set_company_form_name(SharedString::from(""));
+    ui.set_company_form_edrpou(SharedString::from(""));
+    ui.set_company_form_iban(SharedString::from(""));
+    ui.set_company_form_legal_address(SharedString::from(""));
+    ui.set_company_form_director(SharedString::from(""));
+    ui.set_company_form_accountant(SharedString::from(""));
+    ui.set_company_form_is_vat(false);
 }
 
 fn normalized_query(query: &str) -> Option<&str> {
@@ -1678,6 +2229,7 @@ fn spawn_save_act(
     pool: sqlx::PgPool,
     ui_weak: Weak<MainWindow>,
     act_state: Arc<Mutex<ActListState>>,
+    company_id: uuid::Uuid,
     number: String,
     date_str: String,
     cp_id_str: String,
@@ -1727,7 +2279,7 @@ fn spawn_save_act(
             items,
         };
 
-        match db::acts::create(&pool, &new_act).await {
+        match db::acts::create(&pool, company_id, &new_act).await {
             Ok(act) => {
                 tracing::info!("Акт '{}' збережено (id={}).", act.number, act.id);
                 show_toast(
@@ -1742,7 +2294,7 @@ fn spawn_save_act(
                     (state.query.clone(), state.status_filter.clone())
                 };
                 if let Err(e) =
-                    reload_acts(&pool, ui_weak.clone(), status_filter, query, true).await
+                    reload_acts(&pool, ui_weak.clone(), company_id, status_filter, query, true).await
                 {
                     tracing::error!("Помилка оновлення списку актів після збереження: {e}");
                 }

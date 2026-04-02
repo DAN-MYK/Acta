@@ -4,10 +4,11 @@
 //   MainWindow — кореневий компонент, який Rust інстанціює через MainWindow::new()
 //   NavItem    — приватний компонент навігаційного елементу (не экспортується)
 //
-// Навігація: ліва панель з 5 розділами, права — контент поточного розділу.
+// Навігація: ліва панель з основними розділами, права — контент поточного розділу.
 // Перемикання через in-out property <int> current-page.
-// Нумерація сторінок: 0=Контрагенти, 1=Акти, 2=Накладні, 3=Платежі, 4=Звіти
+// Нумерація сторінок: 0=Контрагенти, 1=Акти, 2=Накладні, 3=Платежі, 4=Звіти, 5=To-Do, 6=Компанії, 7=Календар платежів
 
+import { Button, ListView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { CounterpartyList } from "counterparties/counterparty_list.slint";
 import { CounterpartyForm } from "counterparties/counterparty_form.slint";
@@ -15,6 +16,8 @@ import { ActList }          from "acts/act_list.slint";
 import { ActForm }          from "acts/act_form.slint";
 import { TaskList }         from "tasks/task_list.slint";
 import { TaskForm }         from "tasks/task_form.slint";
+import { CompanyList, CompanyItem } from "companies/company_list.slint";
+import { CompanyForm }      from "companies/company_form.slint";
 
 // ── NavItem — елемент бічної навігації ──────────────────────────────────────
 //
@@ -31,7 +34,7 @@ component NavItem {
     rect := Rectangle {
         border-radius: 8px;
         background: root.active ? Theme.primary
-            : (nav-touch.has-hover ? #E8EDFE : transparent);
+            : (nav-touch.has-hover ? Theme.sidebar-hover : transparent);
         animate background { duration: 120ms; easing: ease; }
 
         // Ліва акцентна смужка — біла, 3px × 24px, видно лише для активного
@@ -53,7 +56,7 @@ component NavItem {
                 text: root.label;
                 font-size: 13px;
                 font-weight: root.active ? 500 : 400;
-                color: root.active ? #ffffff : Theme.text-sub;
+                color: root.active ? #ffffff : Theme.sidebar-text;
                 vertical-alignment: center;
                 animate color { duration: 150ms; easing: ease; }
             }
@@ -75,7 +78,7 @@ export component MainWindow inherits Window {
     preferred-height: 900px;
 
     // ── Стан навігації ───────────────────────────────────────────────────────
-    // 0=Контрагенти | 1=Акти | 2=Накладні | 3=Платежі | 4=Звіти | 5=Завдання
+    // 0=Контрагенти | 1=Акти | 2=Накладні | 3=Платежі | 4=Звіти | 5=To-Do | 6=Компанії | 7=Календар платежів
     in-out property <int> current-page: 0;
 
     // ── Дані контрагентів ────────────────────────────────────────────────────
@@ -196,6 +199,39 @@ export component MainWindow inherits Window {
     callback task-form-update(string, string, int, string, string);
     callback task-form-cancel();
 
+    // ── Активна компанія ─────────────────────────────────────────────────────
+    in property <string>          active-company-name: "Оберіть компанію";
+    in property <string>          active-company-id: "";
+    in property <string>          active-company-subtitle: "Оберіть компанію для роботи";
+    in-out property <bool>        show-company-picker: false;
+    callback switch-company();
+
+    // ── Дані сторінки компаній ───────────────────────────────────────────────
+    in property <[CompanyItem]>   company-rows;
+    in property <bool>            companies-loading: false;
+
+    // ── Стан форми компанії ──────────────────────────────────────────────────
+    in property <bool>   show-company-form: false;
+    in property <bool>   company-form-is-edit: false;
+    in property <string> company-form-edit-id: "";
+    in property <string> company-form-name: "";
+    in property <string> company-form-edrpou: "";
+    in property <string> company-form-iban: "";
+    in property <string> company-form-legal-address: "";
+    in property <string> company-form-director: "";
+    in property <string> company-form-accountant: "";
+    in property <bool>   company-form-is-vat: false;
+
+    // ── Колбеки компаній ─────────────────────────────────────────────────────
+    callback company-add-clicked();
+    callback company-edit-clicked(string);
+    callback company-archive-clicked(string);
+    callback company-select-clicked(string);
+    // Параметри: назва, ЄДРПОУ, IBAN, адреса, директор, бухгалтер, ПДВ
+    callback company-form-save(string, string, string, string, string, string, bool);
+    callback company-form-update(string, string, string, string, string, string, bool);
+    callback company-form-cancel();
+
     // ── Toast-сповіщення ─────────────────────────────────────────────────────
     // Rust встановлює message → toast з'являється, через 3с Rust очищає.
     // in-out: Slint може прибрати кнопкою ×, Rust може теж.
@@ -214,49 +250,121 @@ export component MainWindow inherits Window {
             width: 220px;
             background: Theme.sidebar-bg;
             border-width: 1px;
-            border-color: Theme.border;
+            border-color: Theme.sidebar-border;
 
             VerticalLayout {
                 spacing: 0;
                 padding: 0;
 
-                // ── Логотип (88px: "Acta" + підпис + розділювач) ────────────
-                // Абсолютне позиціонування відповідає Figma: y=24, y=48, y=72
+                // ── Логотип + switcher блок ────────────────────────────────
                 Rectangle {
-                    height: 88px;
+                    height: 76px;
 
                     Text {
                         x: 20px;
-                        y: 24px;
+                        y: 16px;
                         text: "Acta";
                         font-size: 20px;
                         font-weight: 600;
-                        color: Theme.text-main;
+                        color: #ffffff;
                     }
 
                     Text {
                         x: 20px;
-                        y: 48px;
+                        y: 40px;
                         text: "Управлінський облік";
                         font-size: 11px;
-                        color: Theme.text-muted;
-                    }
-
-                    Rectangle {
-                        x: 20px;
-                        y: 72px;
-                        width: 180px;
-                        height: 1px;
-                        background: Theme.border;
+                        color: Theme.sidebar-text-muted;
                     }
                 }
 
+                // ── Перемикач активної компанії ────────────────────────────
+                Rectangle {
+                    height: 64px;
+                    vertical-stretch: 0;
+
+                    HorizontalLayout {
+                        padding-left: 12px;
+                        padding-right: 12px;
+                        alignment: center;
+
+                        company-btn := Rectangle {
+                            height: 52px;
+                            border-radius: 8px;
+                            background: company-touch.has-hover ? Theme.sidebar-switcher-hover : Theme.sidebar-switcher-bg;
+                            horizontal-stretch: 1;
+                            animate background { duration: 100ms; }
+
+                            company-touch := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { root.switch-company(); }
+
+                                HorizontalLayout {
+                                    padding-left: 8px;
+                                    padding-right: 8px;
+                                    spacing: 8px;
+                                    alignment: center;
+
+                                    Rectangle {
+                                        width: 32px;
+                                        height: 32px;
+                                        border-radius: 16px;
+                                        background: Theme.primary;
+
+                                        Text {
+                                            text: "ФІ";
+                                            color: #ffffff;
+                                            font-size: 11px;
+                                            font-weight: 600;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: 1px;
+                                        alignment: center;
+
+                                        Text {
+                                            text: root.active-company-name;
+                                            font-size: 12px;
+                                            color: #F6F8FC;
+                                            overflow: elide;
+                                        }
+                                        Text {
+                                            text: root.active-company-subtitle;
+                                            font-size: 10px;
+                                            color: Theme.sidebar-text-muted;
+                                            overflow: elide;
+                                        }
+                                    }
+
+                                    Text {
+                                        text: "▾";
+                                        font-size: 10px;
+                                        color: Theme.sidebar-text-muted;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    height: 1px;
+                    x: 20px;
+                    width: 180px;
+                    background: Theme.sidebar-border;
+                    vertical-stretch: 0;
+                }
+
                 // ── Навігаційні пункти (з відступами 12px з боків, 8px між) ──
-                // Порядок відповідає Figma: Акти, Накладні, Контрагенти, Платежі, Звіти
                 VerticalLayout {
                     padding-left: 12px;
                     padding-right: 12px;
-                    padding-top: 4px;
+                    padding-top: 12px;
                     spacing: 8px;
                     vertical-stretch: 0;
 
@@ -281,7 +389,7 @@ export component MainWindow inherits Window {
                         clicked => { root.current-page = 3; }
                     }
                     NavItem {
-                        label: "📝  Завдання";
+                        label: "✅  To-Do";
                         active: root.current-page == 5;
                         clicked => { root.current-page = 5; }
                     }
@@ -289,6 +397,11 @@ export component MainWindow inherits Window {
                         label: "📊  Звіти";
                         active: root.current-page == 4;
                         clicked => { root.current-page = 4; }
+                    }
+                    NavItem {
+                        label: "📅  Календар платежів";
+                        active: root.current-page == 7;
+                        clicked => { root.current-page = 7; }
                     }
                 }
 
@@ -317,7 +430,7 @@ export component MainWindow inherits Window {
                         height: parent.height;
                         text: "⚙️  Налаштування";
                         font-size: 13px;
-                        color: Theme.text-sub;
+                        color: Theme.sidebar-text-muted;
                         vertical-alignment: center;
                     }
                 }
@@ -417,7 +530,7 @@ export component MainWindow inherits Window {
                 act-task-delete-clicked(id) => { root.act-task-delete-clicked(id); }
             }
 
-            // ── Сторінка 5: Завдання — список ─────────────────────────────
+            // ── Сторінка 5: To-Do — список ────────────────────────────────
             if root.current-page == 5 && !root.show-task-form : TaskList {
                 rows:             root.task-rows;
                 row-ids:          root.task-row-ids;
@@ -433,7 +546,7 @@ export component MainWindow inherits Window {
                 edit-clicked(id)          => { root.task-edit-clicked(id); }
             }
 
-            // ── Сторінка 5: Завдання — форма ──────────────────────────────
+            // ── Сторінка 5: To-Do — форма ─────────────────────────────────
             if root.current-page == 5 && root.show-task-form : TaskForm {
                 is-edit-mode:           root.task-form-is-edit;
                 task-edit-id:           root.task-form-edit-id;
@@ -447,6 +560,34 @@ export component MainWindow inherits Window {
                 save(t, d, p, due, rem)   => { root.task-form-save(t, d, p, due, rem); }
                 update(t, d, p, due, rem) => { root.task-form-update(t, d, p, due, rem); }
                 cancel                    => { root.task-form-cancel(); }
+            }
+
+            // ── Сторінка 6: Компанії — список ────────────────────────────
+            if root.current-page == 6 && !root.show-company-form : CompanyList {
+                companies:   root.company-rows;
+                loading:     root.companies-loading;
+
+                add          => { root.company-add-clicked(); }
+                edit(id)     => { root.company-edit-clicked(id); }
+                archive(id)  => { root.company-archive-clicked(id); }
+                select(id)   => { root.company-select-clicked(id); }
+            }
+
+            // ── Сторінка 6: Компанії — форма ─────────────────────────────
+            if root.current-page == 6 && root.show-company-form : CompanyForm {
+                is-edit:           root.company-form-is-edit;
+                edit-id:           root.company-form-edit-id;
+                form-name:         root.company-form-name;
+                form-edrpou:       root.company-form-edrpou;
+                form-iban:         root.company-form-iban;
+                form-legal-address: root.company-form-legal-address;
+                form-director-name: root.company-form-director;
+                form-accountant-name: root.company-form-accountant;
+                form-is-vat-payer: root.company-form-is-vat;
+
+                save(nm, ed, ib, ad, dr, ac, vt)   => { root.company-form-save(nm, ed, ib, ad, dr, ac, vt); }
+                update(nm, ed, ib, ad, dr, ac, vt) => { root.company-form-update(nm, ed, ib, ad, dr, ac, vt); }
+                cancel                              => { root.company-form-cancel(); }
             }
 
             // ── Заглушки для майбутніх сторінок ──────────────────────────
@@ -481,6 +622,193 @@ export component MainWindow inherits Window {
                     horizontal-alignment: center;
                     vertical-alignment: center;
                     wrap: word-wrap;
+                }
+            }
+
+            if root.current-page == 7 : Rectangle {
+                Text {
+                    text: "📅  Календар платежів\nБуде реалізовано у наступній версії";
+                    color: #94a3b8;
+                    font-size: 16px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    wrap: word-wrap;
+                }
+            }
+        }
+    }
+
+    // ── Company Picker overlay ───────────────────────────────────────────────
+    // Показується при старті якщо компаній > 1 і не відомо яку обрати.
+    // Rust встановлює show-company-picker=true, user обирає → callback company-select-clicked.
+    if root.show-company-picker : Rectangle {
+        background: Theme.overlay;
+
+        Rectangle {
+            width: 680px;
+            height: 700px;
+            x: (parent.width  - self.width)  / 2;
+            y: 100px;
+            border-radius: 16px;
+            background: Theme.surface;
+            border-width: 1px;
+            border-color: Theme.border;
+            drop-shadow-blur: 32px;
+            drop-shadow-color: #00000033;
+
+            VerticalLayout {
+                padding: 32px;
+                spacing: 16px;
+
+                VerticalLayout {
+                    spacing: 2px;
+                    Text {
+                        text: "Acta";
+                        font-size: 32px;
+                        font-weight: 700;
+                        color: Theme.text-main;
+                        horizontal-alignment: center;
+                    }
+                    Text {
+                        text: "Управлінський облік";
+                        font-size: 14px;
+                        color: Theme.text-muted;
+                        horizontal-alignment: center;
+                    }
+                }
+
+                VerticalLayout {
+                    spacing: 4px;
+                    Text {
+                        text: "Оберіть компанію";
+                        font-size: 24px;
+                        font-weight: 700;
+                        color: Theme.text-main;
+                        horizontal-alignment: center;
+                    }
+                    Text {
+                        text: "для продовження роботи";
+                        font-size: 14px;
+                        color: Theme.text-sub;
+                        horizontal-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    height: 44px;
+                    background: Theme.surface;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    border-radius: 10px;
+
+                    Text {
+                        x: 14px;
+                        height: parent.height;
+                        text: "🔍  Пошук компанії...";
+                        color: Theme.text-muted;
+                        font-size: 14px;
+                        vertical-alignment: center;
+                    }
+                }
+
+                ListView {
+                    vertical-stretch: 1;
+
+                    for c in root.company-rows : Rectangle {
+                        height: 60px;
+                        border-radius: 10px;
+                        background: pick-touch.has-hover ? Theme.hover-bg : Theme.surface;
+                        border-width: 1px;
+                        border-color: Theme.border;
+
+                        animate background { duration: 100ms; }
+
+                        pick-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                root.show-company-picker = false;
+                                root.company-select-clicked(c.id);
+                            }
+
+                            HorizontalLayout {
+                                padding-left: 12px;
+                                padding-right: 16px;
+                                spacing: 12px;
+                                alignment: center;
+
+                                Rectangle {
+                                    width: 36px;
+                                    height: 36px;
+                                    border-radius: 18px;
+                                    background: Theme.primary-light;
+
+                                    Text {
+                                        text: "ФІ";
+                                        color: Theme.primary;
+                                        font-size: 12px;
+                                        font-weight: 600;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                }
+
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    alignment: center;
+                                    spacing: 2px;
+                                    Text {
+                                        text: c.name;
+                                        font-size: 14px;
+                                        font-weight: 600;
+                                        color: Theme.text-main;
+                                    }
+                                    Text {
+                                        text: c.edrpou != "" ? "ЄДРПОУ: " + c.edrpou : "";
+                                        font-size: 12px;
+                                        color: Theme.text-sub;
+                                    }
+                                }
+
+                                Text {
+                                    text: "✓";
+                                    font-size: 16px;
+                                    color: root.active-company-id == c.id ? Theme.primary : transparent;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Text {
+                    text: "+ Додати нову компанію";
+                    color: Theme.primary;
+                    font-size: 14px;
+                    font-weight: 600;
+                    horizontal-alignment: center;
+                }
+
+                Rectangle {
+                    height: 44px;
+                    background: Theme.primary-light;
+                    border-radius: 10px;
+
+                    TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            root.show-company-picker = false;
+                            root.current-page = 6;
+                        }
+
+                        Text {
+                            text: "⚙️  Управління компаніями";
+                            font-size: 14px;
+                            font-weight: 600;
+                            color: Theme.primary;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
                 }
             }
         }

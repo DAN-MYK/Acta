@@ -71,5 +71,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # .env файл
 dotenvy = "0.15"
 
+# Конфігурація (config.rs) — збереження налаштувань між сесіями
+toml = "0.8"
+dirs = "5"
+
 [build-dependencies]
 slint-build = "1.9"
