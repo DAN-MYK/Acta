@@ -49,6 +49,7 @@ export component ActList {
             HorizontalLayout {
                 padding-left: 32px;
                 padding-right: 32px;
+                spacing: 16px;
 
                 Text {
                     text: "Акти виконаних робіт";
@@ -57,6 +58,13 @@ export component ActList {
                     color: Theme.text-main;
                     vertical-alignment: center;
                     horizontal-stretch: 1;
+                }
+
+                if root.rows.length > 0 : Text {
+                    text: root.rows.length + " записів";
+                    color: Theme.text-muted;
+                    font-size: 12px;
+                    vertical-alignment: center;
                 }
 
                 new-btn := Rectangle {
@@ -183,7 +191,7 @@ export component ActList {
                         // Заголовок таблиці
                         Rectangle {
                             height: 40px;
-                            background: #F1F1F4;
+                            background: Theme.table-header;
 
                             HorizontalLayout {
                                 padding-left: 16px;
@@ -250,10 +258,10 @@ export component ActList {
 
                                 height: 52px;
                                 background: root.selected-row == i
-                                    ? #EFF1FE
+                                    ? Theme.row-selected
                                     : (row-touch.has-hover
-                                        ? #EEEEF5
-                                        : (Math.mod(i, 2) == 0 ? Theme.surface : #FCFCFD));
+                                        ? Theme.row-hover
+                                        : (Math.mod(i, 2) == 0 ? Theme.surface : Theme.row-stripe));
                                 border-width: 1px;
                                 border-color: Theme.border;
                                 animate background { duration: 80ms; easing: ease; }

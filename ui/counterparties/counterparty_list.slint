@@ -228,7 +228,7 @@ export component CounterpartyList {
 
                         Rectangle {
                             height: 40px;
-                            background: #F4F6FA;
+                            background: Theme.table-header;
 
                             HorizontalLayout {
                                 padding-left: 16px;
@@ -282,8 +282,8 @@ export component CounterpartyList {
 
                                 height: 52px;
                                 background: root.selected-row == i
-                                    ? #EFF3FF
-                                    : (row-touch.has-hover ? #F7F9FC : (Math.mod(i, 2) == 0 ? Theme.surface : #FCFCFD));
+                                    ? Theme.row-selected
+                                    : (row-touch.has-hover ? Theme.row-hover : (Math.mod(i, 2) == 0 ? Theme.surface : Theme.row-stripe));
                                 border-width: 1px;
                                 border-color: Theme.border;
                                 animate background { duration: 100ms; easing: ease; }
@@ -362,7 +362,7 @@ export component CounterpartyList {
                                                 height: 24px;
                                                 y: (parent.height - self.height) / 2;
                                                 border-radius: 6px;
-                                                background: #EEF2FF;
+                                                background: Theme.btn-action-bg;
 
                                                 Text {
                                                     text: "Відкрити";
@@ -390,11 +390,11 @@ export component CounterpartyList {
                                                 height: 24px;
                                                 y: (parent.height - self.height) / 2;
                                                 border-radius: 6px;
-                                                background: #FEF2F2;
+                                                background: Theme.danger-light;
 
                                                 Text {
                                                     text: "Архів";
-                                                    color: #DC2626;
+                                                    color: Theme.danger;
                                                     font-size: 10px;
                                                     font-weight: 500;
                                                     horizontal-alignment: center;

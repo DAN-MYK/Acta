@@ -193,7 +193,7 @@ export component InvoiceForm {
             // ── Шапка таблиці позицій ──────────────────────────────────────
             Rectangle {
                 height: 36px;
-                background: #F1F1F4;
+                background: Theme.table-header;
                 border-radius: 4px;
                 vertical-stretch: 0;
 
@@ -309,13 +309,13 @@ export component InvoiceForm {
                                     width: 36px;
                                     height: 36px;
                                     border-radius: 4px;
-                                    background: del-touch.has-hover ? #fee2e2 : transparent;
+                                    background: del-touch.has-hover ? Theme.danger-border : transparent;
                                     animate background { duration: 100ms; easing: ease; }
 
                                     Text {
                                         text: "×";
                                         font-size: 18px;
-                                        color: del-touch.has-hover ? #dc2626 : Theme.text-muted;
+                                        color: del-touch.has-hover ? Theme.danger : Theme.text-muted;
                                         horizontal-alignment: center;
                                         vertical-alignment: center;
                                         animate color { duration: 100ms; easing: ease; }

@@ -19,4 +19,22 @@ export global Theme {
     out property <color> row-alt: #F5F5F8;
     out property <color> hover-bg: #F3F5FA;
     out property <color> overlay: #10141C73;
+
+    // ── Таблиці / рядки ──────────────────────────────────────────────────────
+    out property <color> table-header:  #F4F6FA;   // фон заголовку таблиці
+    out property <color> row-stripe:    #FCFCFD;   // непарні рядки (zebra)
+    out property <color> row-hover:     #EEEEF5;   // наведення на рядок
+    out property <color> row-selected:  #EFF1FE;   // вибраний рядок
+
+    // ── Кнопки дій ───────────────────────────────────────────────────────────
+    out property <color> btn-action-bg: #EEF2FF;   // світло-синій фон secondary-кнопок
+
+    // ── Небезпечні дії ───────────────────────────────────────────────────────
+    out property <color> danger:        #DC2626;   // червоний текст / іконка
+    out property <color> danger-light:  #FEF2F2;   // фон кнопки "Видалити"
+    out property <color> danger-border: #FECACA;   // межа кнопки "Видалити"
+
+    // ── Пріоритети ────────────────────────────────────────────────────────────
+    out property <color> priority-high:     #F97316;   // помаранчевий (Високий)
+    out property <color> priority-critical: #DC2626;   // червоний (Критичний)
 }

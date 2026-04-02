@@ -263,7 +263,7 @@ export component ActForm {
         //   Кнопка ×     — 36px (порожній Rectangle для вирівнювання)
         Rectangle {
             height: 36px;
-            background: #F1F1F4;
+            background: Theme.table-header;
             border-radius: 4px;
             vertical-stretch: 0;
 
@@ -398,13 +398,13 @@ export component ActForm {
                                 width: 36px;
                                 height: 36px;
                                 border-radius: 4px;
-                                background: del-touch.has-hover ? #fee2e2 : transparent;
+                                background: del-touch.has-hover ? Theme.danger-border : transparent;
                                 animate background { duration: 100ms; easing: ease; }
 
                                 Text {
                                     text: "×";
                                     font-size: 18px;
-                                    color: del-touch.has-hover ? #dc2626 : Theme.text-muted;
+                                    color: del-touch.has-hover ? Theme.danger : Theme.text-muted;
                                     horizontal-alignment: center;
                                     vertical-alignment: center;
                                     animate color { duration: 100ms; easing: ease; }
@@ -489,7 +489,7 @@ export component ActForm {
 
                     Rectangle {
                         height: 36px;
-                        background: #F1F1F4;
+                        background: Theme.table-header;
 
                         HorizontalLayout {
                             padding-left: 12px;
@@ -521,8 +521,8 @@ export component ActForm {
                                 raw-status == "cancelled"  ? #ABABB71F :
                                 #F4A31E1F;
                             property <color> priority-color:
-                                raw-priority == "critical" ? #DC2626 :
-                                raw-priority == "high"     ? #F97316 :
+                                raw-priority == "critical" ? Theme.priority-critical :
+                                raw-priority == "high"     ? Theme.priority-high :
                                 raw-priority == "normal"   ? Theme.primary :
                                 Theme.text-muted;
                             property <color> priority-bg:
@@ -532,7 +532,7 @@ export component ActForm {
                                 #ABABB71A;
 
                             height: 48px;
-                            background: row-touch.has-hover ? #F8F8FC : Theme.surface;
+                            background: row-touch.has-hover ? Theme.row-hover : Theme.surface;
                             border-width: 1px;
                             border-color: Theme.border;
 
@@ -661,16 +661,16 @@ export component ActForm {
                                     }
 
                                     Rectangle {
-                                        background: #FEF2F2;
+                                        background: Theme.danger-light;
                                         border-radius: 6px;
                                         border-width: 1px;
-                                        border-color: #FECACA;
+                                        border-color: Theme.danger-border;
                                         height: 28px;
                                         width: 48px;
 
                                         Text {
                                             text: "×";
-                                            color: #DC2626;
+                                            color: Theme.danger;
                                             font-size: 14px;
                                             horizontal-alignment: center;
                                             vertical-alignment: center;

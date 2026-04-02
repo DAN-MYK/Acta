@@ -430,24 +430,25 @@ export component MainWindow inherits Window {
                         clicked => { root.current-page = 0; }
                     }
                     NavItem {
-                        label: "💳  Платежі";
-                        active: root.current-page == 3;
-                        clicked => { root.current-page = 3; }
-                    }
-                    NavItem {
                         label: "✅  To-Do";
                         active: root.current-page == 5;
                         clicked => { root.current-page = 5; }
                     }
+                    // Нереалізовані розділи — заглушки, приховані opacity
+                    NavItem {
+                        label: "💳  Платежі";
+                        active: false;
+                        opacity: 0.4;
+                    }
                     NavItem {
                         label: "📊  Звіти";
-                        active: root.current-page == 4;
-                        clicked => { root.current-page = 4; }
+                        active: false;
+                        opacity: 0.4;
                     }
                     NavItem {
                         label: "📅  Календар платежів";
-                        active: root.current-page == 7;
-                        clicked => { root.current-page = 7; }
+                        active: false;
+                        opacity: 0.4;
                     }
                 }
 
@@ -686,7 +687,7 @@ export component MainWindow inherits Window {
             if root.current-page == 3 : Rectangle {
                 Text {
                     text: "💰  Платежі\nБуде реалізовано у наступній версії";
-                    color: #94a3b8;
+                    color: Theme.text-muted;
                     font-size: 16px;
                     horizontal-alignment: center;
                     vertical-alignment: center;
@@ -697,7 +698,7 @@ export component MainWindow inherits Window {
             if root.current-page == 4 : Rectangle {
                 Text {
                     text: "📊  Звіти\nБуде реалізовано у наступній версії";
-                    color: #94a3b8;
+                    color: Theme.text-muted;
                     font-size: 16px;
                     horizontal-alignment: center;
                     vertical-alignment: center;
@@ -708,7 +709,7 @@ export component MainWindow inherits Window {
             if root.current-page == 7 : Rectangle {
                 Text {
                     text: "📅  Календар платежів\nБуде реалізовано у наступній версії";
-                    color: #94a3b8;
+                    color: Theme.text-muted;
                     font-size: 16px;
                     horizontal-alignment: center;
                     vertical-alignment: center;
