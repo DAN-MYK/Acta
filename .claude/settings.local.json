@@ -37,7 +37,13 @@
       "Bash(SQLX_OFFLINE=true cargo test --lib)",
       "Bash(SQLX_OFFLINE=true cargo build)",
       "Bash(cargo clean:*)",
-      "Bash(scoop prefix:*)"
+      "Bash(scoop prefix:*)",
+      "Bash(psql:*)",
+      "mcp__obsidian__list_directory",
+      "mcp__plugin_figma_figma__get_code_connect_suggestions",
+      "mcp__obsidian__read_file",
+      "Bash(kill %1)",
+      "Bash(wait)"
     ]
   },
   "enableAllProjectMcpServers": true,

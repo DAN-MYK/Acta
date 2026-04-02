@@ -1,0 +1,607 @@
+// Dashboard — головний екран після вибору компанії.
+//
+// Архітектура:
+//   - DashboardActRow / DashboardPaymentRow — експортовані структури для Rust
+//   - DashboardPage — основний компонент (без sidebar, тільки контент)
+//   - KpiCard, DashboardStatusBadge — приватні компоненти цього файлу
+//
+// Дані приходять через in-properties з Rust.
+// Навігаційні actions — через callbacks.
+
+import { Theme } from "../theme.slint";
+
+// ── Структури даних ──────────────────────────────────────────────────────────
+
+export struct DashboardActRow {
+    num:          string,
+    contractor:   string,
+    amount:       string,
+    status:       string,   // "draft" | "issued" | "signed" | "paid"
+    date:         string,
+}
+
+export struct DashboardPaymentRow {
+    date-label:   string,
+    contractor:   string,
+    amount:       string,
+    is-overdue:   bool,
+}
+
+// ── KpiCard ──────────────────────────────────────────────────────────────────
+
+component KpiCard inherits Rectangle {
+    in property <color>  accent;
+    in property <color>  icon-bg;
+    in property <string> value;
+    in property <string> label;
+    in property <string> trend;
+    in property <color>  trend-color;
+
+    height: 100px;
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: Theme.surface;
+    drop-shadow-color: #0000000D;
+    drop-shadow-blur: 8px;
+    drop-shadow-offset-y: 2px;
+
+    // Кольорова смужка зверху
+    Rectangle {
+        x: 0; y: 0;
+        width: parent.width; height: 4px;
+        border-radius: 10px;
+        background: accent;
+    }
+
+    // Іконка — кольоровий кружок
+    Rectangle {
+        x: 16px; y: 20px;
+        width: 40px; height: 40px;
+        border-radius: 20px;
+        background: icon-bg;
+
+        Rectangle {
+            x: 12px; y: 12px;
+            width: 16px; height: 16px;
+            border-radius: 8px;
+            background: accent;
+            opacity: 0.8;
+        }
+    }
+
+    Text {
+        x: 68px; y: 14px;
+        text: value;
+        font-size: 22px;
+        font-weight: 700;
+        color: Theme.text-main;
+    }
+    Text {
+        x: 68px; y: 44px;
+        text: label;
+        font-size: 12px;
+        color: Theme.text-sub;
+    }
+    Text {
+        x: 68px; y: 63px;
+        text: trend;
+        font-size: 11px;
+        color: trend-color;
+    }
+}
+
+// ── DashboardPage ────────────────────────────────────────────────────────────
+
+export component DashboardPage {
+
+    // ── KPI properties ────────────────────────────────────────────────────────
+    in property <string> kpi-revenue:            "0 ₴";
+    in property <string> kpi-revenue-trend:      "";
+    in property <string> kpi-unpaid:             "0 ₴";
+    in property <string> kpi-unpaid-trend:       "";
+    in property <string> kpi-acts-month:         "0";
+    in property <string> kpi-acts-trend:         "";
+    in property <string> kpi-counterparties:     "0";
+    in property <string> kpi-cp-trend:           "";
+    in property <string> current-month-label:    "";
+
+    // ── Бар-чарт виручки (6 місяців, [0]=найстаріший, [5]=поточний) ──────────
+    in property <[string]> chart-bar-labels:        ["", "", "", "", "", ""];
+    in property <[string]> chart-bar-value-labels:  ["", "", "", "", "", ""];
+    in property <[float]>  chart-bar-fractions:     [0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+
+    // ── Розподіл статусів (поточний місяць) ───────────────────────────────────
+    in property <int> status-paid:   0;
+    in property <int> status-issued: 0;
+    in property <int> status-signed: 0;
+    in property <int> status-draft:  0;
+    private property <int> status-total: root.status-paid + root.status-issued
+                                        + root.status-signed + root.status-draft;
+
+    // ── Останні акти (до 5 рядків) ────────────────────────────────────────────
+    in property <[DashboardActRow]> recent-acts;
+
+    // ── Очікувані платежі (до 3 рядків) ──────────────────────────────────────
+    in property <[DashboardPaymentRow]> upcoming-payments;
+
+    // ── Callbacks ─────────────────────────────────────────────────────────────
+    callback new-act-clicked();
+    callback all-acts-clicked();
+    callback add-todo-clicked();
+
+    min-width: 800px;
+    min-height: 600px;
+
+    VerticalLayout {
+        spacing: 0;
+
+        // ══════════════════════════════════════════════════════
+        //  TOPBAR  (64px)
+        // ══════════════════════════════════════════════════════
+        Rectangle {
+            height: 64px;
+            background: Theme.surface;
+
+            // Нижня межа
+            Rectangle { y: 63px; height: 1px; background: Theme.border; }
+
+            HorizontalLayout {
+                padding-left: 32px;
+                padding-right: 32px;
+                alignment: space-between;
+
+                // Заголовок + підзаголовок
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 3px;
+                    horizontal-stretch: 1;
+
+                    Text {
+                        text: "Головна";
+                        font-size: 20px;
+                        font-weight: 600;
+                        color: Theme.text-main;
+                    }
+                    Text {
+                        text: root.current-month-label;
+                        font-size: 12px;
+                        color: Theme.text-sub;
+                    }
+                }
+
+                // Кнопка «+ Новий акт»
+                Rectangle {
+                    width: 148px;
+                    height: 36px;
+                    y: (64px - 36px) / 2;
+                    border-radius: 8px;
+                    background: btn-touch.has-hover ? #2d64e3 : Theme.primary;
+                    animate background { duration: 120ms; }
+
+                    btn-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.new-act-clicked(); }
+
+                        Text {
+                            text: "+ Новий акт";
+                            font-size: 13px;
+                            font-weight: 600;
+                            color: #ffffff;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+
+        // ══════════════════════════════════════════════════════
+        //  CONTENT AREA
+        // ══════════════════════════════════════════════════════
+        Rectangle {
+            background: Theme.bg;
+            vertical-stretch: 1;
+
+            // ── KPI картки (ряд 1) ──────────────────────────────
+            HorizontalLayout {
+                x: 32px;
+                y: 16px;
+                width: parent.width - 64px;
+                height: 100px;
+                spacing: 16px;
+
+                KpiCard {
+                    horizontal-stretch: 1;
+                    accent:    Theme.success;
+                    icon-bg:   #D1FAE5;
+                    value:     root.kpi-revenue;
+                    label:     "Виручка (місяць)";
+                    trend:     root.kpi-revenue-trend;
+                    trend-color: Theme.success;
+                }
+                KpiCard {
+                    horizontal-stretch: 1;
+                    accent:    Theme.warning;
+                    icon-bg:   #FEF3C7;
+                    value:     root.kpi-unpaid;
+                    label:     "Неоплачено";
+                    trend:     root.kpi-unpaid-trend;
+                    trend-color: Theme.warning;
+                }
+                KpiCard {
+                    horizontal-stretch: 1;
+                    accent:    Theme.primary;
+                    icon-bg:   Theme.primary-light;
+                    value:     root.kpi-acts-month;
+                    label:     "Актів за місяць";
+                    trend:     root.kpi-acts-trend;
+                    trend-color: Theme.success;
+                }
+                KpiCard {
+                    horizontal-stretch: 1;
+                    accent:    #8D59F4;
+                    icon-bg:   #EDE9FE;
+                    value:     root.kpi-counterparties;
+                    label:     "Контрагенти";
+                    trend:     root.kpi-cp-trend;
+                    trend-color: Theme.success;
+                }
+            }
+
+            // ── Графіки (ряд 2) ─────────────────────────────────
+            HorizontalLayout {
+                x: 32px;
+                y: 132px;
+                width: parent.width - 64px;
+                height: 260px;
+                spacing: 16px;
+
+                // ─ Бар-чарт виручки ────────────────────────────
+                Rectangle {
+                    horizontal-stretch: 1;
+                    border-radius: 12px;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    background: Theme.surface;
+                    clip: true;
+
+                    Text { x: 24px; y: 18px; text: "Виручка по місяцях";       font-size: 15px; font-weight: 600; color: Theme.text-main; }
+                    Text { x: 24px; y: 38px; text: "Останні 6 місяців · грн";  font-size: 12px; color: Theme.text-sub; }
+
+                    // Горизонтальні лінії сітки
+                    Rectangle { x: 56px; y: 66px;  height: 1px; width: parent.width - 72px; background: Theme.border; }
+                    Rectangle { x: 56px; y: 109px; height: 1px; width: parent.width - 72px; background: Theme.border; }
+                    Rectangle { x: 56px; y: 152px; height: 1px; width: parent.width - 72px; background: Theme.border; }
+                    Rectangle { x: 56px; y: 195px; height: 1px; width: parent.width - 72px; background: Theme.border; }
+                    Rectangle { x: 56px; y: 236px; height: 1px; width: parent.width - 72px; background: Theme.border; }
+
+                    // Бар 0 — найстаріший місяць
+                    Rectangle {
+                        x: 68px;
+                        y: 236px - (170px * root.chart-bar-fractions[0]);
+                        width: 38px;
+                        height: root.chart-bar-fractions[0] > 0 ? 170px * root.chart-bar-fractions[0] : 2px;
+                        border-radius: 4px;
+                        background: Theme.primary-light;
+                    }
+                    Text { x: 64px; y: 218px - (170px * root.chart-bar-fractions[0]); text: root.chart-bar-value-labels[0]; font-size: 10px; color: Theme.text-sub; }
+                    Text { x: 64px; y: 242px; text: root.chart-bar-labels[0]; font-size: 11px; color: Theme.text-sub; }
+
+                    // Бар 1
+                    Rectangle {
+                        x: 120px;
+                        y: 236px - (170px * root.chart-bar-fractions[1]);
+                        width: 38px;
+                        height: root.chart-bar-fractions[1] > 0 ? 170px * root.chart-bar-fractions[1] : 2px;
+                        border-radius: 4px;
+                        background: Theme.primary-light;
+                    }
+                    Text { x: 116px; y: 218px - (170px * root.chart-bar-fractions[1]); text: root.chart-bar-value-labels[1]; font-size: 10px; color: Theme.text-sub; }
+                    Text { x: 116px; y: 242px; text: root.chart-bar-labels[1]; font-size: 11px; color: Theme.text-sub; }
+
+                    // Бар 2
+                    Rectangle {
+                        x: 172px;
+                        y: 236px - (170px * root.chart-bar-fractions[2]);
+                        width: 38px;
+                        height: root.chart-bar-fractions[2] > 0 ? 170px * root.chart-bar-fractions[2] : 2px;
+                        border-radius: 4px;
+                        background: Theme.primary-light;
+                    }
+                    Text { x: 168px; y: 218px - (170px * root.chart-bar-fractions[2]); text: root.chart-bar-value-labels[2]; font-size: 10px; color: Theme.text-sub; }
+                    Text { x: 168px; y: 242px; text: root.chart-bar-labels[2]; font-size: 11px; color: Theme.text-sub; }
+
+                    // Бар 3
+                    Rectangle {
+                        x: 224px;
+                        y: 236px - (170px * root.chart-bar-fractions[3]);
+                        width: 38px;
+                        height: root.chart-bar-fractions[3] > 0 ? 170px * root.chart-bar-fractions[3] : 2px;
+                        border-radius: 4px;
+                        background: Theme.primary-light;
+                    }
+                    Text { x: 220px; y: 218px - (170px * root.chart-bar-fractions[3]); text: root.chart-bar-value-labels[3]; font-size: 10px; color: Theme.text-sub; }
+                    Text { x: 220px; y: 242px; text: root.chart-bar-labels[3]; font-size: 11px; color: Theme.text-sub; }
+
+                    // Бар 4
+                    Rectangle {
+                        x: 276px;
+                        y: 236px - (170px * root.chart-bar-fractions[4]);
+                        width: 38px;
+                        height: root.chart-bar-fractions[4] > 0 ? 170px * root.chart-bar-fractions[4] : 2px;
+                        border-radius: 4px;
+                        background: Theme.primary-light;
+                    }
+                    Text { x: 272px; y: 218px - (170px * root.chart-bar-fractions[4]); text: root.chart-bar-value-labels[4]; font-size: 10px; color: Theme.text-sub; }
+                    Text { x: 272px; y: 242px; text: root.chart-bar-labels[4]; font-size: 11px; color: Theme.text-sub; }
+
+                    // Бар 5 — поточний місяць (синій)
+                    Rectangle {
+                        x: 328px;
+                        y: 236px - (170px * root.chart-bar-fractions[5]);
+                        width: 38px;
+                        height: root.chart-bar-fractions[5] > 0 ? 170px * root.chart-bar-fractions[5] : 2px;
+                        border-radius: 4px;
+                        background: Theme.primary;
+                    }
+                    Text { x: 324px; y: 218px - (170px * root.chart-bar-fractions[5]); text: root.chart-bar-value-labels[5]; font-size: 10px; font-weight: 600; color: Theme.primary; }
+                    Text { x: 324px; y: 242px; text: root.chart-bar-labels[5]; font-size: 11px; font-weight: 500; color: Theme.text-sub; }
+                }
+
+                // ─ Статуси актів (donut placeholder + легенда) ─
+                Rectangle {
+                    width: 340px;
+                    horizontal-stretch: 0;
+                    border-radius: 12px;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    background: Theme.surface;
+
+                    Text { x: 24px; y: 18px; text: "Статуси актів";   font-size: 15px; font-weight: 600; color: Theme.text-main; }
+                    Text { x: 24px; y: 38px; text: "Поточний місяць"; font-size: 12px; color: Theme.text-sub; }
+
+                    // Donut — кольорові кола (placeholder, не масштабується за даними)
+                    Rectangle {
+                        x: 24px; y: 64px;
+                        width: 116px; height: 116px;
+                        border-radius: 58px;
+                        background: Theme.success;
+
+                        Rectangle { x: 8px; y: 8px; width: 100px; height: 100px; border-radius: 50px; background: Theme.primary; }
+                        Rectangle { x: 16px; y: 16px; width: 84px; height: 84px; border-radius: 42px; background: Theme.warning; }
+                        Rectangle { x: 24px; y: 24px; width: 68px; height: 68px; border-radius: 34px; background: Theme.border; }
+                        // Внутрішнє біле коло — ефект donut
+                        Rectangle { x: 26px; y: 26px; width: 64px; height: 64px; border-radius: 32px; background: Theme.surface; }
+                    }
+
+                    // Число актів + підпис у центрі donut
+                    Text { x: 56px; y: 110px; text: "\{root.status-total}"; font-size: 18px; font-weight: 700; color: Theme.text-main; }
+                    Text { x: 48px; y: 132px; text: "актів"; font-size: 11px; color: Theme.text-sub; }
+
+                    // Легенда
+                    Rectangle { x: 158px; y: 72px;  width: 10px; height: 10px; border-radius: 5px; background: Theme.success; }
+                    Text { x: 174px; y: 67px;  text: "Оплачені";  font-size: 12px; color: Theme.text-main; }
+                    Text { x: 290px; y: 67px;  text: "\{root.status-paid}";   font-size: 12px; font-weight: 600; color: Theme.success; }
+
+                    Rectangle { x: 158px; y: 108px; width: 10px; height: 10px; border-radius: 5px; background: Theme.primary; }
+                    Text { x: 174px; y: 103px; text: "Виставлені"; font-size: 12px; color: Theme.text-main; }
+                    Text { x: 290px; y: 103px; text: "\{root.status-issued}"; font-size: 12px; font-weight: 600; color: Theme.primary; }
+
+                    Rectangle { x: 158px; y: 144px; width: 10px; height: 10px; border-radius: 5px; background: Theme.warning; }
+                    Text { x: 174px; y: 139px; text: "Підписані";  font-size: 12px; color: Theme.text-main; }
+                    Text { x: 290px; y: 139px; text: "\{root.status-signed}"; font-size: 12px; font-weight: 600; color: Theme.text-sub; }
+
+                    Rectangle { x: 158px; y: 180px; width: 10px; height: 10px; border-radius: 5px; background: Theme.text-muted; }
+                    Text { x: 174px; y: 175px; text: "Чернетки";   font-size: 12px; color: Theme.text-main; }
+                    Text { x: 290px; y: 175px; text: "\{root.status-draft}";  font-size: 12px; font-weight: 600; color: Theme.text-muted; }
+                }
+            }
+
+            // ── Нижній ряд: таблиця актів + (to-do + платежі) ───
+            HorizontalLayout {
+                x: 32px;
+                y: 408px;
+                width: parent.width - 64px;
+                height: parent.height - 408px - 16px;
+                spacing: 16px;
+
+                // ─ Таблиця «Останні акти» ───────────────────────
+                Rectangle {
+                    horizontal-stretch: 1;
+                    border-radius: 12px;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    background: Theme.surface;
+                    clip: true;
+
+                    Text { x: 24px; y: 20px; text: "Останні акти"; font-size: 15px; font-weight: 600; color: Theme.text-main; }
+
+                    // «Всі акти →» посилання
+                    all-acts-area := TouchArea {
+                        x: parent.width - 96px; y: 18px;
+                        width: 80px; height: 20px;
+                        mouse-cursor: pointer;
+                        clicked => { root.all-acts-clicked(); }
+
+                        Text {
+                            text: "Всі акти →";
+                            font-size: 12px;
+                            font-weight: 600;
+                            color: Theme.primary;
+                        }
+                    }
+
+                    // Шапка таблиці
+                    Rectangle {
+                        y: 48px;
+                        height: 32px;
+                        background: Theme.table-header;
+
+                        Text { x: 24px;  text: "Номер";       width: 130px; font-size: 12px; font-weight: 600; color: Theme.text-sub; vertical-alignment: center; height: 32px; }
+                        Text { x: 154px; text: "Контрагент";  width: 200px; font-size: 12px; font-weight: 600; color: Theme.text-sub; vertical-alignment: center; height: 32px; }
+                        Text { x: 380px; text: "Сума";        width: 110px; font-size: 12px; font-weight: 600; color: Theme.text-sub; vertical-alignment: center; height: 32px; }
+                        Text { x: 490px; text: "Статус";      width: 100px; font-size: 12px; font-weight: 600; color: Theme.text-sub; vertical-alignment: center; height: 32px; }
+                        Text { x: 590px; text: "Дата";        width: 90px;  font-size: 12px; font-weight: 600; color: Theme.text-sub; vertical-alignment: center; height: 32px; }
+                    }
+
+                    // Рядки (for loop — до 5 актів)
+                    for row[i] in root.recent-acts : Rectangle {
+                        y: 80px + i * 44px;
+                        height: 44px;
+                        background: transparent;
+
+                        // Розділювач
+                        Rectangle { y: 43px; height: 1px; x: 24px; width: parent.width - 48px; background: Theme.border; }
+
+                        Text { x: 24px;  text: row.num;        width: 130px; font-size: 13px; font-weight: 500; color: Theme.text-main;  vertical-alignment: center; height: 44px; }
+                        Text { x: 154px; text: row.contractor;  width: 220px; font-size: 12px; color: Theme.text-main;  vertical-alignment: center; height: 44px; overflow: elide; }
+                        Text { x: 380px; text: row.amount;      width: 110px; font-size: 13px; font-weight: 600; color: Theme.text-main;  vertical-alignment: center; height: 44px; }
+
+                        // Бейдж статусу
+                        Rectangle {
+                            x: 490px;
+                            y: (44px - 22px) / 2;
+                            width: 90px; height: 22px;
+                            border-radius: 5px;
+                            background: row.status == "paid"   ? #D1FAE5 :
+                                        row.status == "issued" ? #FEF3C7 :
+                                        row.status == "signed" ? Theme.primary-light :
+                                        Theme.row-alt;
+
+                            Text {
+                                x: 8px;
+                                text: row.status == "paid"   ? "Оплачений"  :
+                                      row.status == "issued" ? "Виставлений":
+                                      row.status == "signed" ? "Підписаний" :
+                                      "Чернетка";
+                                font-size: 11px; font-weight: 600;
+                                color: row.status == "paid"   ? Theme.success :
+                                       row.status == "issued" ? Theme.warning :
+                                       row.status == "signed" ? Theme.primary :
+                                       Theme.text-muted;
+                                vertical-alignment: center;
+                                height: parent.height;
+                            }
+                        }
+
+                        Text { x: 590px; text: row.date; width: 90px; font-size: 12px; color: Theme.text-sub; vertical-alignment: center; height: 44px; }
+                    }
+
+                    // Заглушка якщо актів немає
+                    if root.recent-acts.length == 0 : Text {
+                        x: 24px; y: 100px;
+                        text: "Ще немає жодного акту. Натисніть «+ Новий акт» щоб створити перший.";
+                        font-size: 13px;
+                        color: Theme.text-muted;
+                        wrap: word-wrap;
+                        width: parent.width - 48px;
+                    }
+                }
+
+                // ─ Правий стовпчик: To-Do + Платежі ────────────
+                VerticalLayout {
+                    width: 340px;
+                    horizontal-stretch: 0;
+                    spacing: 16px;
+
+                    // To-Do widget
+                    Rectangle {
+                        height: 130px;
+                        border-radius: 12px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        background: Theme.surface;
+
+                        Text { x: 24px; y: 18px; text: "To-Do"; font-size: 14px; font-weight: 600; color: Theme.text-main; }
+
+                        todo-touch := TouchArea {
+                            x: parent.width - 96px; y: 16px;
+                            width: 80px; height: 22px;
+                            mouse-cursor: pointer;
+                            clicked => { root.add-todo-clicked(); }
+
+                            Text {
+                                text: "Відкрити →";
+                                font-size: 12px;
+                                color: Theme.primary;
+                            }
+                        }
+
+                        Text {
+                            x: 24px; y: 52px;
+                            text: "Відкрийте розділ To-Do для\nуправління завданнями.";
+                            font-size: 12px;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
+                            width: parent.width - 48px;
+                        }
+                    }
+
+                    // Очікувані платежі
+                    Rectangle {
+                        vertical-stretch: 1;
+                        border-radius: 12px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        background: Theme.surface;
+                        clip: true;
+
+                        Text { x: 24px; y: 18px; text: "Очікувані платежі"; font-size: 14px; font-weight: 600; color: Theme.text-main; }
+
+                        // Рядки платежів
+                        for p[pi] in root.upcoming-payments : Rectangle {
+                            y: 50px + pi * 44px;
+                            height: 44px;
+                            background: p.is-overdue ? #FEF2F2 : transparent;
+
+                            // Дата-бейдж
+                            Rectangle {
+                                x: 16px; y: 12px;
+                                width: 58px; height: 20px;
+                                border-radius: 6px;
+                                background: p.is-overdue ? #FEE2E2 : #FEF3C7;
+
+                                Text {
+                                    x: 4px;
+                                    text: p.date-label;
+                                    font-size: 10px; font-weight: 600;
+                                    color: p.is-overdue ? Theme.danger : Theme.warning;
+                                    vertical-alignment: center;
+                                    height: parent.height;
+                                }
+                            }
+
+                            Text {
+                                x: 84px; y: 0;
+                                text: p.contractor;
+                                font-size: 12px;
+                                color: p.is-overdue ? Theme.danger : Theme.text-main;
+                                width: 140px;
+                                overflow: elide;
+                                vertical-alignment: center;
+                                height: 44px;
+                            }
+                            Text {
+                                x: 240px; y: 0;
+                                text: p.amount;
+                                font-size: 12px; font-weight: 600;
+                                color: p.is-overdue ? Theme.danger : Theme.text-main;
+                                vertical-alignment: center;
+                                height: 44px;
+                            }
+                        }
+
+                        // Заглушка якщо платежів немає
+                        if root.upcoming-payments.length == 0 : Text {
+                            x: 24px; y: 52px;
+                            text: "Немає очікуваних платежів";
+                            font-size: 12px;
+                            color: Theme.text-muted;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

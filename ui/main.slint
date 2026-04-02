@@ -1,15 +1,16 @@
-// Головне вікно програми Acta
+// Р“РѕР»РѕРІРЅРµ РІС–РєРЅРѕ РїСЂРѕРіСЂР°РјРё Acta
 //
-// Архітектура:
-//   MainWindow — кореневий компонент, який Rust інстанціює через MainWindow::new()
-//   NavItem    — приватний компонент навігаційного елементу (не экспортується)
+// РђСЂС…С–С‚РµРєС‚СѓСЂР°:
+//   MainWindow вЂ” РєРѕСЂРµРЅРµРІРёР№ РєРѕРјРїРѕРЅРµРЅС‚, СЏРєРёР№ Rust С–РЅСЃС‚Р°РЅС†С–СЋС” С‡РµСЂРµР· MainWindow::new()
+//   NavItem    вЂ” РїСЂРёРІР°С‚РЅРёР№ РєРѕРјРїРѕРЅРµРЅС‚ РЅР°РІС–РіР°С†С–Р№РЅРѕРіРѕ РµР»РµРјРµРЅС‚Сѓ (РЅРµ СЌРєСЃРїРѕСЂС‚СѓС”С‚СЊСЃСЏ)
 //
-// Навігація: ліва панель з основними розділами, права — контент поточного розділу.
-// Перемикання через in-out property <int> current-page.
-// Нумерація сторінок: 0=Контрагенти, 1=Акти, 2=Накладні, 3=Платежі, 4=Звіти, 5=To-Do, 6=Компанії, 7=Календар платежів
+// РќР°РІС–РіР°С†С–СЏ: Р»С–РІР° РїР°РЅРµР»СЊ Р· РѕСЃРЅРѕРІРЅРёРјРё СЂРѕР·РґС–Р»Р°РјРё, РїСЂР°РІР° вЂ” РєРѕРЅС‚РµРЅС‚ РїРѕС‚РѕС‡РЅРѕРіРѕ СЂРѕР·РґС–Р»Сѓ.
+// РџРµСЂРµРјРёРєР°РЅРЅСЏ С‡РµСЂРµР· in-out property <int> current-page.
+// РќСѓРјРµСЂР°С†С–СЏ СЃС‚РѕСЂС–РЅРѕРє: 0=РљРѕРЅС‚СЂР°РіРµРЅС‚Рё, 1=РђРєС‚Рё, 2=РќР°РєР»Р°РґРЅС–, 3=РџР»Р°С‚РµР¶С–, 4=Р—РІС–С‚Рё, 5=To-Do, 6=РљРѕРјРїР°РЅС–С—, 7=РљР°Р»РµРЅРґР°СЂ РїР»Р°С‚РµР¶С–РІ
 
 import { Button, ListView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { DashboardPage, DashboardActRow, DashboardPaymentRow } from "dashboard/dashboard.slint";
 import { CounterpartyList } from "counterparties/counterparty_list.slint";
 import { CounterpartyForm } from "counterparties/counterparty_form.slint";
 import { ActList }          from "acts/act_list.slint";
@@ -21,13 +22,27 @@ import { InvoiceForm }      from "invoices/invoice_form.slint";
 import { CompanyList, CompanyItem } from "companies/company_list.slint";
 import { CompanyForm }      from "companies/company_form.slint";
 
-// ── NavItem — елемент бічної навігації ──────────────────────────────────────
+global MenuIcons {
+    out property <image> dashboard: @image-url("assets/menu/dashboard.svg");
+    out property <image> acts: @image-url("assets/menu/acts.svg");
+    out property <image> invoices: @image-url("assets/menu/invoices.svg");
+    out property <image> counterparties: @image-url("assets/menu/counterparties.svg");
+    out property <image> payments: @image-url("assets/menu/payments.svg");
+    out property <image> reports: @image-url("assets/menu/reports.svg");
+    out property <image> todo: @image-url("assets/menu/todo.svg");
+    out property <image> calendar: @image-url("assets/menu/calendar.svg");
+    out property <image> settings: @image-url("assets/menu/settings.svg");
+}
+
+// в”Ђв”Ђ NavItem вЂ” РµР»РµРјРµРЅС‚ Р±С–С‡РЅРѕС— РЅР°РІС–РіР°С†С–С— в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 //
-// active: bool — підсвічує активний розділ синім фоном + білою лівою смужкою.
-// label: string — включає emoji, наприклад "📄  Акти"
+// active: bool вЂ” РїС–РґСЃРІС–С‡СѓС” Р°РєС‚РёРІРЅРёР№ СЂРѕР·РґС–Р» СЃРёРЅС–Рј С„РѕРЅРѕРј + Р±С–Р»РѕСЋ Р»С–РІРѕСЋ СЃРјСѓР¶РєРѕСЋ.
+// label: string вЂ” РІРєР»СЋС‡Р°С” emoji, РЅР°РїСЂРёРєР»Р°Рґ "рџ“„  РђРєС‚Рё"
 component NavItem {
     in property <string> label;
+    in property <image>  icon;
     in property <bool>   active: false;
+    in property <bool>   disabled: false;
     callback clicked;
 
     height: 36px;
@@ -35,55 +50,106 @@ component NavItem {
 
     rect := Rectangle {
         border-radius: 8px;
-        background: root.active ? Theme.primary
-            : (nav-touch.has-hover ? Theme.sidebar-hover : transparent);
+        background: root.active
+            ? Theme.primary.with-alpha(0.18)
+            : ((nav-touch.has-hover && !root.disabled) ? Theme.sidebar-hover : transparent);
         animate background { duration: 120ms; easing: ease; }
 
-        // Ліва акцентна смужка — біла, 3px × 24px, видно лише для активного
-        // Позиціонована x=-3 щоб виходити за лівий край rect (sidebar не кліпає)
+        // Р›С–РІР° Р°РєС†РµРЅС‚РЅР° СЃРјСѓР¶РєР° вЂ” Р±С–Р»Р°, 3px Г— 24px, РІРёРґРЅРѕ Р»РёС€Рµ РґР»СЏ Р°РєС‚РёРІРЅРѕРіРѕ
+        // РџРѕР·РёС†С–РѕРЅРѕРІР°РЅР° x=-3 С‰РѕР± РІРёС…РѕРґРёС‚Рё Р·Р° Р»С–РІРёР№ РєСЂР°Р№ rect (sidebar РЅРµ РєР»С–РїР°С”)
         if root.active : Rectangle {
             x: -3px;
-            y: (parent.height - 24px) / 2;
+            y: (parent.height - 22px) / 2;
             width: 3px;
-            height: 24px;
+            height: 22px;
             border-radius: 2px;
-            background: #ffffff;
+            background: Theme.primary;
         }
 
         HorizontalLayout {
-            padding-left: 12px;
+            padding-left: 10px;
             padding-right: 12px;
+            spacing: 8px;
+            alignment: center;
+
+            Rectangle {
+                width: 18px;
+                height: 18px;
+                background: transparent;
+                opacity: root.disabled ? 0.45 : 1.0;
+
+                Image {
+                    width: parent.width;
+                    height: parent.height;
+                    source: root.icon;
+                    image-fit: contain;
+                }
+            }
 
             Text {
                 text: root.label;
                 font-size: 13px;
-                font-weight: root.active ? 500 : 400;
-                color: root.active ? #ffffff : Theme.sidebar-text;
+                font-weight: root.active ? 600 : 400;
+                color: root.active ? #ffffff : (root.disabled ? Theme.sidebar-label.with-alpha(0.55) : Theme.sidebar-text);
                 vertical-alignment: center;
                 animate color { duration: 150ms; easing: ease; }
             }
         }
 
         nav-touch := TouchArea {
-            mouse-cursor: pointer;
-            clicked => { root.clicked(); }
+            enabled: !root.disabled;
+            mouse-cursor: root.disabled ? default : pointer;
+            clicked => {
+                if (!root.disabled) {
+                    root.clicked();
+                }
+            }
         }
     }
 }
 
-// ── MainWindow — головне вікно ───────────────────────────────────────────────
+// в”Ђв”Ђ MainWindow вЂ” РіРѕР»РѕРІРЅРµ РІС–РєРЅРѕ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 export component MainWindow inherits Window {
-    title: "Acta — Управлінський облік";
+    title: "Acta вЂ” РЈРїСЂР°РІР»С–РЅСЃСЊРєРёР№ РѕР±Р»С–Рє";
     min-width:  1100px;
     min-height: 680px;
     preferred-width:  1440px;
     preferred-height: 900px;
 
-    // ── Стан навігації ───────────────────────────────────────────────────────
-    // 0=Контрагенти | 1=Акти | 2=Накладні | 3=Платежі | 4=Звіти | 5=To-Do | 6=Компанії | 7=Календар платежів
-    in-out property <int> current-page: 0;
+    // в”Ђв”Ђ РЎС‚Р°РЅ РЅР°РІС–РіР°С†С–С— в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+    // 0=РљРѕРЅС‚СЂР°РіРµРЅС‚Рё | 1=РђРєС‚Рё | 2=РќР°РєР»Р°РґРЅС– | 3=РџР»Р°С‚РµР¶С– | 4=Р—РІС–С‚Рё | 5=To-Do | 6=РљРѕРјРїР°РЅС–С— | 7=РљР°Р»РµРЅРґР°СЂ РїР»Р°С‚РµР¶С–РІ | 8=Dashboard
+    in-out property <int> current-page: 8;
 
-    // ── Дані контрагентів ────────────────────────────────────────────────────
+    // в”Ђв”Ђ Р”Р°РЅС– Dashboard в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+    in property <string> dashboard-kpi-revenue:        "0 в‚ґ";
+    in property <string> dashboard-kpi-revenue-trend:  "";
+    in property <string> dashboard-kpi-unpaid:         "0 в‚ґ";
+    in property <string> dashboard-kpi-unpaid-trend:   "";
+    in property <string> dashboard-kpi-acts-month:     "0";
+    in property <string> dashboard-kpi-acts-trend:     "";
+    in property <string> dashboard-kpi-counterparties: "0";
+    in property <string> dashboard-kpi-cp-trend:       "";
+    in property <string> dashboard-month-label:        "";
+
+    in property <[string]>           dashboard-chart-bar-labels:       ["", "", "", "", "", ""];
+    in property <[string]>           dashboard-chart-bar-value-labels:  ["", "", "", "", "", ""];
+    in property <[float]>            dashboard-chart-bar-fractions:     [0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+
+    in property <int>                dashboard-status-paid:   0;
+    in property <int>                dashboard-status-issued: 0;
+    in property <int>                dashboard-status-signed: 0;
+    in property <int>                dashboard-status-draft:  0;
+
+    in property <[DashboardActRow]>     dashboard-recent-acts;
+    in property <[DashboardPaymentRow]> dashboard-upcoming-payments;
+
+    // в”Ђв”Ђ РљРѕР»Р±РµРєРё Dashboard в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+    callback dashboard-refresh();
+    callback dashboard-new-act-clicked();
+    callback dashboard-all-acts-clicked();
+    callback dashboard-add-todo-clicked();
+
+    // в”Ђв”Ђ Р”Р°РЅС– РєРѕРЅС‚СЂР°РіРµРЅС‚С–РІ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     in property <[[StandardListViewItem]]> counterparty-rows;
     in property <[string]>                 counterparty-ids;
     in property <[bool]>                   counterparty-archived;
@@ -96,7 +162,7 @@ export component MainWindow inherits Window {
     in property <int>                      counterparty-current-page: 1;
     in property <int>                      counterparty-total-pages: 1;
 
-    // ── Стан форми контрагента ───────────────────────────────────────────────
+    // в”Ђв”Ђ РЎС‚Р°РЅ С„РѕСЂРјРё РєРѕРЅС‚СЂР°РіРµРЅС‚Р° в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     in property <bool>   show-cp-form: false;
     in property <bool>   cp-form-is-edit: false;
     in property <string> cp-form-edit-id: "";
@@ -109,18 +175,18 @@ export component MainWindow inherits Window {
     in property <string> cp-form-address: "";
     in property <string> cp-form-notes: "";
 
-    // ── Дані актів ───────────────────────────────────────────────────────────
+    // в”Ђв”Ђ Р”Р°РЅС– Р°РєС‚С–РІ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     in property <[[StandardListViewItem]]> act-rows;
     in property <[string]>                 act-row-ids;
     in property <[string]>                 act-row-statuses;
     in property <bool>                     acts-loading: false;
     in property <[int]>                    act-status-counts: [0, 0, 0, 0, 0];
     in property <int>                      act-kpi-acts-month: 0;
-    in property <string>                   act-kpi-revenue: "0 ₴";
-    in property <string>                   act-kpi-unpaid: "0 ₴";
+    in property <string>                   act-kpi-revenue: "0 в‚ґ";
+    in property <string>                   act-kpi-unpaid: "0 в‚ґ";
     in property <int>                      act-kpi-overdue: 0;
 
-    // ── Стан форми акту ──────────────────────────────────────────────────────
+    // в”Ђв”Ђ РЎС‚Р°РЅ С„РѕСЂРјРё Р°РєС‚Сѓ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     in property <bool>     show-act-form: false;
     in property <bool>     act-form-is-edit: false;
     in property <string>   act-form-number: "";
@@ -142,13 +208,13 @@ export component MainWindow inherits Window {
     in property <[string]>                 act-task-row-priorities;
     in property <bool>                     act-tasks-loading: false;
 
-    // ── Дані накладних ──────────────────────────────────────────────────────
+    // в”Ђв”Ђ Р”Р°РЅС– РЅР°РєР»Р°РґРЅРёС… в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     in property <[[StandardListViewItem]]> invoice-rows;
     in property <[string]>                 invoice-row-ids;
     in property <[string]>                 invoice-row-statuses;
     in property <bool>                     invoices-loading: false;
 
-    // ── Стан форми накладної ─────────────────────────────────────────────────
+    // в”Ђв”Ђ РЎС‚Р°РЅ С„РѕСЂРјРё РЅР°РєР»Р°РґРЅРѕС— в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     in property <bool>     show-invoice-form: false;
     in property <bool>     invoice-form-is-edit: false;
     in property <string>   invoice-form-number: "";
@@ -165,14 +231,14 @@ export component MainWindow inherits Window {
     in property <[string]> invoice-form-item-prices;
     in property <[string]> invoice-form-item-amounts;
 
-    // ── Дані задач ─────────────────────────────────────────────────────────
+    // в”Ђв”Ђ Р”Р°РЅС– Р·Р°РґР°С‡ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     in property <[[StandardListViewItem]]> task-rows;
     in property <[string]>                 task-row-ids;
     in property <[string]>                 task-row-statuses;
     in property <[string]>                 task-row-priorities;
     in property <bool>                     tasks-loading: false;
 
-    // ── Стан форми задачі ──────────────────────────────────────────────────
+    // в”Ђв”Ђ РЎС‚Р°РЅ С„РѕСЂРјРё Р·Р°РґР°С‡С– в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     in property <bool>   show-task-form: false;
     in property <bool>   task-form-is-edit: false;
     in property <string> task-form-edit-id: "";
@@ -184,7 +250,7 @@ export component MainWindow inherits Window {
     in property <string> task-form-act-id: "";
     in property <int>    task-form-return-page: 5;
 
-    // ── Колбеки контрагентів ─────────────────────────────────────────────────
+    // в”Ђв”Ђ РљРѕР»Р±РµРєРё РєРѕРЅС‚СЂР°РіРµРЅС‚С–РІ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     callback counterparty-search-changed(string);
     callback counterparty-selected(string);
     callback counterparty-edit-clicked(string);
@@ -194,13 +260,13 @@ export component MainWindow inherits Window {
     callback counterparty-prev-page-clicked();
     callback counterparty-next-page-clicked();
 
-    // ── Колбеки форми контрагента ────────────────────────────────────────────
-    // Параметри: назва, ЄДРПОУ, IBAN, телефон, email, адреса, примітки
+    // в”Ђв”Ђ РљРѕР»Р±РµРєРё С„РѕСЂРјРё РєРѕРЅС‚СЂР°РіРµРЅС‚Р° в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+    // РџР°СЂР°РјРµС‚СЂРё: РЅР°Р·РІР°, Р„Р”Р РџРћРЈ, IBAN, С‚РµР»РµС„РѕРЅ, email, Р°РґСЂРµСЃР°, РїСЂРёРјС–С‚РєРё
     callback cp-form-save(   string, string, string, string, string, string, string, string);
     callback cp-form-update( string, string, string, string, string, string, string, string);
     callback cp-form-cancel();
 
-    // ── Колбеки актів ────────────────────────────────────────────────────────
+    // в”Ђв”Ђ РљРѕР»Р±РµРєРё Р°РєС‚С–РІ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     callback act-status-filter-changed(int);
     callback act-search-changed(string);
     callback act-selected(string);
@@ -209,7 +275,7 @@ export component MainWindow inherits Window {
     callback act-edit-clicked(string);
     callback act-pdf-clicked(string);
 
-    // ── Колбеки форми акту ───────────────────────────────────────────────────
+    // в”Ђв”Ђ РљРѕР»Р±РµРєРё С„РѕСЂРјРё Р°РєС‚Сѓ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     callback act-form-save(string, string, string, string);
     callback act-form-save-draft(string, string, string, string);
     callback act-form-update(string, string, string, string);
@@ -222,7 +288,7 @@ export component MainWindow inherits Window {
     callback act-task-toggle-status-clicked(string);
     callback act-task-delete-clicked(string);
 
-    // ── Колбеки накладних ───────────────────────────────────────────────────
+    // в”Ђв”Ђ РљРѕР»Р±РµРєРё РЅР°РєР»Р°РґРЅРёС… в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     callback invoice-status-filter-changed(int);
     callback invoice-search-changed(string);
     callback invoice-selected(string);
@@ -230,7 +296,7 @@ export component MainWindow inherits Window {
     callback invoice-advance-status-clicked(string);
     callback invoice-edit-clicked(string);
 
-    // ── Колбеки форми накладної ──────────────────────────────────────────────
+    // в”Ђв”Ђ РљРѕР»Р±РµРєРё С„РѕСЂРјРё РЅР°РєР»Р°РґРЅРѕС— в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     callback invoice-form-save(string, string, string, string);
     callback invoice-form-update(string, string, string, string);
     callback invoice-form-cancel();
@@ -238,7 +304,7 @@ export component MainWindow inherits Window {
     callback invoice-form-remove-item(int);
     callback invoice-form-item-changed(int, string, string);
 
-    // ── Колбеки задач ──────────────────────────────────────────────────────
+    // в”Ђв”Ђ РљРѕР»Р±РµРєРё Р·Р°РґР°С‡ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     callback task-search-changed(string);
     callback task-selected(string);
     callback task-create-clicked();
@@ -246,23 +312,23 @@ export component MainWindow inherits Window {
     callback task-delete-clicked(string);
     callback task-edit-clicked(string);
 
-    // ── Колбеки форми задачі ────────────────────────────────────────────────
+    // в”Ђв”Ђ РљРѕР»Р±РµРєРё С„РѕСЂРјРё Р·Р°РґР°С‡С– в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     callback task-form-save(string, string, int, string, string);
     callback task-form-update(string, string, int, string, string);
     callback task-form-cancel();
 
-    // ── Активна компанія ─────────────────────────────────────────────────────
-    in property <string>          active-company-name: "Оберіть компанію";
+    // в”Ђв”Ђ РђРєС‚РёРІРЅР° РєРѕРјРїР°РЅС–СЏ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+    in property <string>          active-company-name: "РћР±РµСЂС–С‚СЊ РєРѕРјРїР°РЅС–СЋ";
     in property <string>          active-company-id: "";
-    in property <string>          active-company-subtitle: "Оберіть компанію для роботи";
+    in property <string>          active-company-subtitle: "РћР±РµСЂС–С‚СЊ РєРѕРјРїР°РЅС–СЋ РґР»СЏ СЂРѕР±РѕС‚Рё";
     in-out property <bool>        show-company-picker: false;
     callback switch-company();
 
-    // ── Дані сторінки компаній ───────────────────────────────────────────────
+    // в”Ђв”Ђ Р”Р°РЅС– СЃС‚РѕСЂС–РЅРєРё РєРѕРјРїР°РЅС–Р№ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     in property <[CompanyItem]>   company-rows;
     in property <bool>            companies-loading: false;
 
-    // ── Стан форми компанії ──────────────────────────────────────────────────
+    // в”Ђв”Ђ РЎС‚Р°РЅ С„РѕСЂРјРё РєРѕРјРїР°РЅС–С— в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     in property <bool>   show-company-form: false;
     in property <bool>   company-form-is-edit: false;
     in property <string> company-form-edit-id: "";
@@ -274,30 +340,30 @@ export component MainWindow inherits Window {
     in property <string> company-form-accountant: "";
     in property <bool>   company-form-is-vat: false;
 
-    // ── Колбеки компаній ─────────────────────────────────────────────────────
+    // в”Ђв”Ђ РљРѕР»Р±РµРєРё РєРѕРјРїР°РЅС–Р№ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     callback company-add-clicked();
     callback company-edit-clicked(string);
     callback company-archive-clicked(string);
     callback company-select-clicked(string);
-    // Параметри: назва, ЄДРПОУ, IBAN, адреса, директор, бухгалтер, ПДВ
+    // РџР°СЂР°РјРµС‚СЂРё: РЅР°Р·РІР°, Р„Р”Р РџРћРЈ, IBAN, Р°РґСЂРµСЃР°, РґРёСЂРµРєС‚РѕСЂ, Р±СѓС…РіР°Р»С‚РµСЂ, РџР”Р’
     callback company-form-save(string, string, string, string, string, string, bool);
     callback company-form-update(string, string, string, string, string, string, bool);
     callback company-form-cancel();
 
-    // ── Toast-сповіщення ─────────────────────────────────────────────────────
-    // Rust встановлює message → toast з'являється, через 3с Rust очищає.
-    // in-out: Slint може прибрати кнопкою ×, Rust може теж.
+    // в”Ђв”Ђ Toast-СЃРїРѕРІС–С‰РµРЅРЅСЏ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+    // Rust РІСЃС‚Р°РЅРѕРІР»СЋС” message в†’ toast Р·'СЏРІР»СЏС”С‚СЊСЃСЏ, С‡РµСЂРµР· 3СЃ Rust РѕС‡РёС‰Р°С”.
+    // in-out: Slint РјРѕР¶Рµ РїСЂРёР±СЂР°С‚Рё РєРЅРѕРїРєРѕСЋ Г—, Rust РјРѕР¶Рµ С‚РµР¶.
     in-out property <string> toast-message: "";
     in property <bool>       toast-is-error: false;
 
-    // ── Розмітка ─────────────────────────────────────────────────────────────
-    // Rectangle-обгортка потрібна щоб накладати toast overlay поверх layout.
+    // в”Ђв”Ђ Р РѕР·РјС–С‚РєР° в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+    // Rectangle-РѕР±РіРѕСЂС‚РєР° РїРѕС‚СЂС–Р±РЅР° С‰РѕР± РЅР°РєР»Р°РґР°С‚Рё toast overlay РїРѕРІРµСЂС… layout.
     Rectangle {
 
     HorizontalLayout {
 
 
-        // ══ Бічна панель навігації (220px) ══════════════════════════════════
+        // в•ђв•ђ Р‘С–С‡РЅР° РїР°РЅРµР»СЊ РЅР°РІС–РіР°С†С–С— (220px) в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
         Rectangle {
             width: 220px;
             background: Theme.sidebar-bg;
@@ -308,7 +374,7 @@ export component MainWindow inherits Window {
                 spacing: 0;
                 padding: 0;
 
-                // ── Логотип + switcher блок ────────────────────────────────
+                // в”Ђв”Ђ Р›РѕРіРѕС‚РёРї + switcher Р±Р»РѕРє в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
                 Rectangle {
                     height: 76px;
 
@@ -324,13 +390,13 @@ export component MainWindow inherits Window {
                     Text {
                         x: 20px;
                         y: 40px;
-                        text: "Управлінський облік";
+                        text: "РЈРїСЂР°РІР»С–РЅСЃСЊРєРёР№ РѕР±Р»С–Рє";
                         font-size: 11px;
                         color: Theme.sidebar-text-muted;
                     }
                 }
 
-                // ── Перемикач активної компанії ────────────────────────────
+                // в”Ђв”Ђ РџРµСЂРµРјРёРєР°С‡ Р°РєС‚РёРІРЅРѕС— РєРѕРјРїР°РЅС–С— в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
                 Rectangle {
                     height: 64px;
                     vertical-stretch: 0;
@@ -364,7 +430,7 @@ export component MainWindow inherits Window {
                                         background: Theme.primary;
 
                                         Text {
-                                            text: "ФІ";
+                                            text: "Р¤Р†";
                                             color: #ffffff;
                                             font-size: 11px;
                                             font-weight: 600;
@@ -393,7 +459,7 @@ export component MainWindow inherits Window {
                                     }
 
                                     Text {
-                                        text: "▾";
+                                        text: "в–ѕ";
                                         font-size: 10px;
                                         color: Theme.sidebar-text-muted;
                                         vertical-alignment: center;
@@ -412,57 +478,106 @@ export component MainWindow inherits Window {
                     vertical-stretch: 0;
                 }
 
-                // ── Навігаційні пункти (з відступами 12px з боків, 8px між) ──
+                // в”Ђв”Ђ РќР°РІС–РіР°С†С–Р№РЅС– РїСѓРЅРєС‚Рё (Р· РІС–РґСЃС‚СѓРїР°РјРё 12px Р· Р±РѕРєС–РІ, 8px РјС–Р¶) в”Ђв”Ђ
+                Text {
+                    x: 20px;
+                    height: 28px;
+                    text: "МЕНЮ";
+                    font-size: 9px;
+                    font-weight: 600;
+                    color: Theme.sidebar-label;
+                    vertical-alignment: center;
+                }
+
                 VerticalLayout {
                     padding-left: 12px;
                     padding-right: 12px;
-                    padding-top: 12px;
-                    spacing: 8px;
+                    spacing: 6px;
                     vertical-stretch: 0;
 
                     NavItem {
-                        label: "📄  Акти";
+                        label: "Головна";
+                        icon: MenuIcons.dashboard;
+                        active: root.current-page == 8;
+                        clicked => {
+                            root.current-page = 8;
+                            root.dashboard-refresh();
+                        }
+                    }
+                    NavItem {
+                        label: "Акти";
+                        icon: MenuIcons.acts;
                         active: root.current-page == 1;
                         clicked => { root.current-page = 1; }
                     }
                     NavItem {
-                        label: "📦  Накладні";
+                        label: "Накладні";
+                        icon: MenuIcons.invoices;
                         active: root.current-page == 2;
                         clicked => { root.current-page = 2; }
                     }
                     NavItem {
-                        label: "👥  Контрагенти";
+                        label: "Контрагенти";
+                        icon: MenuIcons.counterparties;
                         active: root.current-page == 0;
                         clicked => { root.current-page = 0; }
                     }
                     NavItem {
-                        label: "✅  To-Do";
-                        active: root.current-page == 5;
-                        clicked => { root.current-page = 5; }
-                    }
-                    // Нереалізовані розділи — заглушки, приховані opacity
-                    NavItem {
-                        label: "💳  Платежі";
-                        active: false;
-                        opacity: 0.4;
+                        label: "Платежі";
+                        icon: MenuIcons.payments;
+                        active: root.current-page == 3;
+                        clicked => { root.current-page = 3; }
                     }
                     NavItem {
-                        label: "📊  Звіти";
-                        active: false;
-                        opacity: 0.4;
-                    }
-                    NavItem {
-                        label: "📅  Календар платежів";
-                        active: false;
-                        opacity: 0.4;
+                        label: "Звіти";
+                        icon: MenuIcons.reports;
+                        active: root.current-page == 4;
+                        clicked => { root.current-page = 4; }
                     }
                 }
 
-                // Розпірка — штовхає нижній блок до дна
+                Rectangle {
+                    height: 1px;
+                    x: 20px;
+                    width: 180px;
+                    background: Theme.sidebar-border;
+                    vertical-stretch: 0;
+                }
+
+                Text {
+                    x: 20px;
+                    height: 28px;
+                    text: "УТИЛІТИ";
+                    font-size: 9px;
+                    font-weight: 600;
+                    color: Theme.sidebar-label;
+                    vertical-alignment: center;
+                }
+
+                VerticalLayout {
+                    padding-left: 12px;
+                    padding-right: 12px;
+                    spacing: 6px;
+                    vertical-stretch: 0;
+
+                    NavItem {
+                        label: "To-Do";
+                        icon: MenuIcons.todo;
+                        active: root.current-page == 5;
+                        clicked => { root.current-page = 5; }
+                    }
+                    NavItem {
+                        label: "Календар платежів";
+                        icon: MenuIcons.calendar;
+                        active: root.current-page == 7;
+                        clicked => { root.current-page = 7; }
+                    }
+                }
+
                 Rectangle { vertical-stretch: 1; }
 
-                // ── Нижня секція: розділювач + Налаштування ──────────────────
-                // HorizontalLayout для вирівняного розділювача (x=20, ширина 180px)
+                // в”Ђв”Ђ РќРёР¶РЅСЏ СЃРµРєС†С–СЏ: СЂРѕР·РґС–Р»СЋРІР°С‡ + РќР°Р»Р°С€С‚СѓРІР°РЅРЅСЏ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+                // HorizontalLayout РґР»СЏ РІРёСЂС–РІРЅСЏРЅРѕРіРѕ СЂРѕР·РґС–Р»СЋРІР°С‡Р° (x=20, С€РёСЂРёРЅР° 180px)
                 HorizontalLayout {
                     height: 1px;
                     padding-left: 20px;
@@ -470,21 +585,21 @@ export component MainWindow inherits Window {
                     vertical-stretch: 0;
 
                     Rectangle {
-                        background: Theme.border;
+                        background: Theme.sidebar-border;
                     }
                 }
 
                 Rectangle {
-                    height: 34px;
+                    height: 40px;
                     vertical-stretch: 0;
 
-                    Text {
-                        x: 20px;
-                        height: parent.height;
-                        text: "⚙️  Налаштування";
-                        font-size: 13px;
-                        color: Theme.sidebar-text-muted;
-                        vertical-alignment: center;
+                    NavItem {
+                        x: 12px;
+                        width: parent.width - 24px;
+                        label: "Налаштування";
+                        icon: MenuIcons.settings;
+                        active: false;
+                        disabled: true;
                     }
                 }
 
@@ -492,11 +607,11 @@ export component MainWindow inherits Window {
             }
         }
 
-        // ══ Область контенту ════════════════════════════════════════════════
+        // в•ђв•ђ РћР±Р»Р°СЃС‚СЊ РєРѕРЅС‚РµРЅС‚Сѓ в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
         Rectangle {
             background: Theme.bg;
 
-            // ── Сторінка 0: Контрагенти — список ────────────────────────────
+            // в”Ђв”Ђ РЎС‚РѕСЂС–РЅРєР° 0: РљРѕРЅС‚СЂР°РіРµРЅС‚Рё вЂ” СЃРїРёСЃРѕРє в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
             if root.current-page == 0 && !root.show-cp-form : CounterpartyList {
                 rows:             root.counterparty-rows;
                 row-ids:          root.counterparty-ids;
@@ -520,7 +635,7 @@ export component MainWindow inherits Window {
                 next-page-clicked   => { root.counterparty-next-page-clicked(); }
             }
 
-            // ── Сторінка 0: Контрагенти — форма ─────────────────────────────
+            // в”Ђв”Ђ РЎС‚РѕСЂС–РЅРєР° 0: РљРѕРЅС‚СЂР°РіРµРЅС‚Рё вЂ” С„РѕСЂРјР° в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
             if root.current-page == 0 && root.show-cp-form : CounterpartyForm {
                 is-edit-mode: root.cp-form-is-edit;
                 cp-edit-id:   root.cp-form-edit-id;
@@ -538,7 +653,7 @@ export component MainWindow inherits Window {
                 cancel                              => { root.cp-form-cancel(); }
             }
 
-            // ── Сторінка 1: Акти — список ────────────────────────────────────
+            // в”Ђв”Ђ РЎС‚РѕСЂС–РЅРєР° 1: РђРєС‚Рё вЂ” СЃРїРёСЃРѕРє в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
             if root.current-page == 1 && !root.show-act-form : ActList {
                 rows:             root.act-rows;
                 row-ids:          root.act-row-ids;
@@ -559,7 +674,7 @@ export component MainWindow inherits Window {
                 pdf-clicked(id)             => { root.act-pdf-clicked(id); }
             }
 
-            // ── Сторінка 1: Акти — форма ─────────────────────────────────────
+            // в”Ђв”Ђ РЎС‚РѕСЂС–РЅРєР° 1: РђРєС‚Рё вЂ” С„РѕСЂРјР° в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
             if root.current-page == 1 && root.show-act-form : ActForm {
                 act-number:           root.act-form-number;
                 act-date:             root.act-form-date;
@@ -594,7 +709,7 @@ export component MainWindow inherits Window {
                 act-task-delete-clicked(id) => { root.act-task-delete-clicked(id); }
             }
 
-            // ── Сторінка 5: To-Do — список ────────────────────────────────
+            // в”Ђв”Ђ РЎС‚РѕСЂС–РЅРєР° 5: To-Do вЂ” СЃРїРёСЃРѕРє в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
             if root.current-page == 5 && !root.show-task-form : TaskList {
                 rows:             root.task-rows;
                 row-ids:          root.task-row-ids;
@@ -610,7 +725,7 @@ export component MainWindow inherits Window {
                 edit-clicked(id)          => { root.task-edit-clicked(id); }
             }
 
-            // ── Сторінка 5: To-Do — форма ─────────────────────────────────
+            // в”Ђв”Ђ РЎС‚РѕСЂС–РЅРєР° 5: To-Do вЂ” С„РѕСЂРјР° в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
             if root.current-page == 5 && root.show-task-form : TaskForm {
                 is-edit-mode:           root.task-form-is-edit;
                 task-edit-id:           root.task-form-edit-id;
@@ -626,7 +741,7 @@ export component MainWindow inherits Window {
                 cancel                    => { root.task-form-cancel(); }
             }
 
-            // ── Сторінка 6: Компанії — список ────────────────────────────
+            // в”Ђв”Ђ РЎС‚РѕСЂС–РЅРєР° 6: РљРѕРјРїР°РЅС–С— вЂ” СЃРїРёСЃРѕРє в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
             if root.current-page == 6 && !root.show-company-form : CompanyList {
                 companies:   root.company-rows;
                 loading:     root.companies-loading;
@@ -637,7 +752,7 @@ export component MainWindow inherits Window {
                 select(id)   => { root.company-select-clicked(id); }
             }
 
-            // ── Сторінка 6: Компанії — форма ─────────────────────────────
+            // в”Ђв”Ђ РЎС‚РѕСЂС–РЅРєР° 6: РљРѕРјРїР°РЅС–С— вЂ” С„РѕСЂРјР° в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
             if root.current-page == 6 && root.show-company-form : CompanyForm {
                 is-edit:           root.company-form-is-edit;
                 edit-id:           root.company-form-edit-id;
@@ -654,9 +769,9 @@ export component MainWindow inherits Window {
                 cancel                              => { root.company-form-cancel(); }
             }
 
-            // ── Заглушки для майбутніх сторінок ──────────────────────────
+            // в”Ђв”Ђ Р—Р°РіР»СѓС€РєРё РґР»СЏ РјР°Р№Р±СѓС‚РЅС–С… СЃС‚РѕСЂС–РЅРѕРє в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
-            // ── Сторінка 2: Накладні — список ───────────────────────────────
+            // в”Ђв”Ђ РЎС‚РѕСЂС–РЅРєР° 2: РќР°РєР»Р°РґРЅС– вЂ” СЃРїРёСЃРѕРє в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
             if root.current-page == 2 && !root.show-invoice-form : InvoiceList {
                 rows:             root.invoice-rows;
                 row-ids:          root.invoice-row-ids;
@@ -671,7 +786,7 @@ export component MainWindow inherits Window {
                 edit-clicked(id)            => { root.invoice-edit-clicked(id); }
             }
 
-            // ── Сторінка 2: Накладні — форма ─────────────────────────────────
+            // в”Ђв”Ђ РЎС‚РѕСЂС–РЅРєР° 2: РќР°РєР»Р°РґРЅС– вЂ” С„РѕСЂРјР° в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
             if root.current-page == 2 && root.show-invoice-form : InvoiceForm {
                 invoice-number:       root.invoice-form-number;
                 invoice-date:         root.invoice-form-date;
@@ -696,9 +811,35 @@ export component MainWindow inherits Window {
                 item-changed(idx, fld, val) => { root.invoice-form-item-changed(idx, fld, val); }
             }
 
+            // в”Ђв”Ђ РЎС‚РѕСЂС–РЅРєР° 8: Dashboard в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+            if root.current-page == 8 : DashboardPage {
+                kpi-revenue:             root.dashboard-kpi-revenue;
+                kpi-revenue-trend:       root.dashboard-kpi-revenue-trend;
+                kpi-unpaid:              root.dashboard-kpi-unpaid;
+                kpi-unpaid-trend:        root.dashboard-kpi-unpaid-trend;
+                kpi-acts-month:          root.dashboard-kpi-acts-month;
+                kpi-acts-trend:          root.dashboard-kpi-acts-trend;
+                kpi-counterparties:      root.dashboard-kpi-counterparties;
+                kpi-cp-trend:            root.dashboard-kpi-cp-trend;
+                current-month-label:     root.dashboard-month-label;
+                chart-bar-labels:        root.dashboard-chart-bar-labels;
+                chart-bar-value-labels:  root.dashboard-chart-bar-value-labels;
+                chart-bar-fractions:     root.dashboard-chart-bar-fractions;
+                status-paid:             root.dashboard-status-paid;
+                status-issued:           root.dashboard-status-issued;
+                status-signed:           root.dashboard-status-signed;
+                status-draft:            root.dashboard-status-draft;
+                recent-acts:             root.dashboard-recent-acts;
+                upcoming-payments:       root.dashboard-upcoming-payments;
+
+                new-act-clicked  => { root.dashboard-new-act-clicked(); }
+                all-acts-clicked => { root.dashboard-all-acts-clicked(); }
+                add-todo-clicked => { root.dashboard-add-todo-clicked(); }
+            }
+
             if root.current-page == 3 : Rectangle {
                 Text {
-                    text: "💰  Платежі\nБуде реалізовано у наступній версії";
+                    text: "рџ’°  РџР»Р°С‚РµР¶С–\nР‘СѓРґРµ СЂРµР°Р»С–Р·РѕРІР°РЅРѕ Сѓ РЅР°СЃС‚СѓРїРЅС–Р№ РІРµСЂСЃС–С—";
                     color: Theme.text-muted;
                     font-size: 16px;
                     horizontal-alignment: center;
@@ -709,7 +850,7 @@ export component MainWindow inherits Window {
 
             if root.current-page == 4 : Rectangle {
                 Text {
-                    text: "📊  Звіти\nБуде реалізовано у наступній версії";
+                    text: "рџ“Љ  Р—РІС–С‚Рё\nР‘СѓРґРµ СЂРµР°Р»С–Р·РѕРІР°РЅРѕ Сѓ РЅР°СЃС‚СѓРїРЅС–Р№ РІРµСЂСЃС–С—";
                     color: Theme.text-muted;
                     font-size: 16px;
                     horizontal-alignment: center;
@@ -720,7 +861,7 @@ export component MainWindow inherits Window {
 
             if root.current-page == 7 : Rectangle {
                 Text {
-                    text: "📅  Календар платежів\nБуде реалізовано у наступній версії";
+                    text: "рџ“…  РљР°Р»РµРЅРґР°СЂ РїР»Р°С‚РµР¶С–РІ\nР‘СѓРґРµ СЂРµР°Р»С–Р·РѕРІР°РЅРѕ Сѓ РЅР°СЃС‚СѓРїРЅС–Р№ РІРµСЂСЃС–С—";
                     color: Theme.text-muted;
                     font-size: 16px;
                     horizontal-alignment: center;
@@ -731,9 +872,9 @@ export component MainWindow inherits Window {
         }
     }
 
-    // ── Company Picker overlay ───────────────────────────────────────────────
-    // Показується при старті якщо компаній > 1 і не відомо яку обрати.
-    // Rust встановлює show-company-picker=true, user обирає → callback company-select-clicked.
+    // в”Ђв”Ђ Company Picker overlay в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+    // РџРѕРєР°Р·СѓС”С‚СЊСЃСЏ РїСЂРё СЃС‚Р°СЂС‚С– СЏРєС‰Рѕ РєРѕРјРїР°РЅС–Р№ > 1 С– РЅРµ РІС–РґРѕРјРѕ СЏРєСѓ РѕР±СЂР°С‚Рё.
+    // Rust РІСЃС‚Р°РЅРѕРІР»СЋС” show-company-picker=true, user РѕР±РёСЂР°С” в†’ callback company-select-clicked.
     if root.show-company-picker : Rectangle {
         background: Theme.overlay;
 
@@ -763,7 +904,7 @@ export component MainWindow inherits Window {
                         horizontal-alignment: center;
                     }
                     Text {
-                        text: "Управлінський облік";
+                        text: "РЈРїСЂР°РІР»С–РЅСЃСЊРєРёР№ РѕР±Р»С–Рє";
                         font-size: 14px;
                         color: Theme.text-muted;
                         horizontal-alignment: center;
@@ -773,14 +914,14 @@ export component MainWindow inherits Window {
                 VerticalLayout {
                     spacing: 4px;
                     Text {
-                        text: "Оберіть компанію";
+                        text: "РћР±РµСЂС–С‚СЊ РєРѕРјРїР°РЅС–СЋ";
                         font-size: 24px;
                         font-weight: 700;
                         color: Theme.text-main;
                         horizontal-alignment: center;
                     }
                     Text {
-                        text: "для продовження роботи";
+                        text: "РґР»СЏ РїСЂРѕРґРѕРІР¶РµРЅРЅСЏ СЂРѕР±РѕС‚Рё";
                         font-size: 14px;
                         color: Theme.text-sub;
                         horizontal-alignment: center;
@@ -797,7 +938,7 @@ export component MainWindow inherits Window {
                     Text {
                         x: 14px;
                         height: parent.height;
-                        text: "🔍  Пошук компанії...";
+                        text: "рџ”Ќ  РџРѕС€СѓРє РєРѕРјРїР°РЅС–С—...";
                         color: Theme.text-muted;
                         font-size: 14px;
                         vertical-alignment: center;
@@ -856,14 +997,14 @@ export component MainWindow inherits Window {
                                         color: Theme.text-main;
                                     }
                                     Text {
-                                        text: c.edrpou != "" ? "ЄДРПОУ: " + c.edrpou : "";
+                                        text: c.edrpou != "" ? "Р„Р”Р РџРћРЈ: " + c.edrpou : "";
                                         font-size: 12px;
                                         color: Theme.text-sub;
                                     }
                                 }
 
                                 Text {
-                                    text: "✓";
+                                    text: "вњ“";
                                     font-size: 16px;
                                     color: root.active-company-id == c.id ? Theme.primary : transparent;
                                     vertical-alignment: center;
@@ -874,7 +1015,7 @@ export component MainWindow inherits Window {
                 }
 
                 Text {
-                    text: "+ Додати нову компанію";
+                    text: "+ Р”РѕРґР°С‚Рё РЅРѕРІСѓ РєРѕРјРїР°РЅС–СЋ";
                     color: Theme.primary;
                     font-size: 14px;
                     font-weight: 600;
@@ -894,7 +1035,7 @@ export component MainWindow inherits Window {
                         }
 
                         Text {
-                            text: "⚙️  Управління компаніями";
+                            text: "вљ™пёЏ  РЈРїСЂР°РІР»С–РЅРЅСЏ РєРѕРјРїР°РЅС–СЏРјРё";
                             font-size: 14px;
                             font-weight: 600;
                             color: Theme.primary;
@@ -907,9 +1048,9 @@ export component MainWindow inherits Window {
         }
     }
 
-    // ── Toast overlay (fixed bottom-right) ───────────────────────────────────
-    // Слухає toast-message: якщо не порожній — показує повідомлення.
-    // Rust встановлює через set_toast_message(), очищає через таймер (~3с).
+    // в”Ђв”Ђ Toast overlay (fixed bottom-right) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+    // РЎР»СѓС…Р°С” toast-message: СЏРєС‰Рѕ РЅРµ РїРѕСЂРѕР¶РЅС–Р№ вЂ” РїРѕРєР°Р·СѓС” РїРѕРІС–РґРѕРјР»РµРЅРЅСЏ.
+    // Rust РІСЃС‚Р°РЅРѕРІР»СЋС” С‡РµСЂРµР· set_toast_message(), РѕС‡РёС‰Р°С” С‡РµСЂРµР· С‚Р°Р№РјРµСЂ (~3СЃ).
     if root.toast-message != "" : Rectangle {
         x: parent.width - self.width - 24px;
         y: parent.height - self.height - 24px;
@@ -920,14 +1061,14 @@ export component MainWindow inherits Window {
         border-width: 1px;
         border-color: root.toast-is-error ? #FECACA : #A7F3D0;
 
-        // Іконка та текст
+        // Р†РєРѕРЅРєР° С‚Р° С‚РµРєСЃС‚
         HorizontalLayout {
             padding-left: 16px;
             padding-right: 8px;
             spacing: 10px;
 
             Text {
-                text: root.toast-is-error ? "✕" : "✓";
+                text: root.toast-is-error ? "вњ•" : "вњ“";
                 color: root.toast-is-error ? #DC2626 : #16A34A;
                 font-size: 14px;
                 font-weight: 700;
@@ -945,7 +1086,7 @@ export component MainWindow inherits Window {
                 overflow: elide;
             }
 
-            // Кнопка ×
+            // РљРЅРѕРїРєР° Г—
             Rectangle {
                 width: 28px;
                 height: 28px;
@@ -957,7 +1098,7 @@ export component MainWindow inherits Window {
                 animate background { duration: 100ms; easing: ease; }
 
                 Text {
-                    text: "×";
+                    text: "Г—";
                     color: root.toast-is-error ? #DC2626 : #16A34A;
                     font-size: 16px;
                     horizontal-alignment: center;
@@ -973,3 +1114,4 @@ export component MainWindow inherits Window {
     }
     }
 }
+

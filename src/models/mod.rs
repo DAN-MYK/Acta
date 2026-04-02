@@ -2,6 +2,7 @@
 pub mod act;
 pub mod company;
 pub mod counterparty;
+pub mod dashboard;
 pub mod invoice;
 pub mod task;
 

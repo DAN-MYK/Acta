@@ -3,6 +3,7 @@
 pub mod acts;
 pub mod companies;
 pub mod counterparties;
+pub mod dashboard;
 pub mod invoices;
 pub mod tasks;
 
