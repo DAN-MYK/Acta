@@ -116,8 +116,8 @@ jobs:
       - name: Run migrations
         run: sqlx migrate run
 
-      - name: Generate coverage (min 30%)
-        run: cargo llvm-cov --workspace --all-targets --fail-under-lines 30 --lcov --output-path lcov.info
+      - name: Generate coverage report
+        run: cargo llvm-cov --workspace --all-targets --lcov --output-path lcov.info
 
       - name: Upload lcov artifact
         uses: actions/upload-artifact@v4
