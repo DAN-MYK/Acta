@@ -1,0 +1,62 @@
+// Уніфікована KPI/статистична картка.
+//
+// Використовується:
+//   - counterparties/counterparty_list.slint — 3 картки (Всього / Активних / В архіві)
+//   - acts/act_list.slint — 4 KPI картки (Актів / Виручка / Неоплачено / Прострочено)
+//
+// Структура: 3px акцентна лінія зверху + велике число + label + опційний secondary підпис.
+
+import { Theme } from "../theme.slint";
+
+export component StatCard inherits Rectangle {
+    in property <brush>  accent;
+    in property <string> value;
+    in property <string> label;
+    /// Дрібний підпис під label. Якщо порожній — не відображається.
+    in property <string> secondary: "";
+
+    background: Theme.surface;
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: Theme.border;
+    height: 84px;
+    horizontal-stretch: 1;
+    clip: true;
+
+    // Кольорова акцентна лінія зверху
+    Rectangle {
+        x: 0; y: 0;
+        width: parent.width;
+        height: 3px;
+        background: root.accent;
+    }
+
+    VerticalLayout {
+        padding-top: 12px;
+        padding-left: 16px;
+        padding-right: 16px;
+        padding-bottom: 8px;
+        spacing: 2px;
+
+        Text {
+            text: root.value;
+            font-size: 20px;
+            font-weight: 700;
+            color: Theme.text-main;
+            overflow: elide;
+        }
+
+        Text {
+            text: root.label;
+            font-size: 11px;
+            font-weight: 500;
+            color: Theme.text-sub;
+        }
+
+        if root.secondary != "" : Text {
+            text: root.secondary;
+            font-size: 10px;
+            color: Theme.text-muted;
+        }
+    }
+}

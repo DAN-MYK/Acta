@@ -114,6 +114,11 @@ export component MainWindow inherits Window {
     in property <[string]>                 act-row-ids;
     in property <[string]>                 act-row-statuses;
     in property <bool>                     acts-loading: false;
+    in property <[int]>                    act-status-counts: [0, 0, 0, 0, 0];
+    in property <int>                      act-kpi-acts-month: 0;
+    in property <string>                   act-kpi-revenue: "0 ₴";
+    in property <string>                   act-kpi-unpaid: "0 ₴";
+    in property <int>                      act-kpi-overdue: 0;
 
     // ── Стан форми акту ──────────────────────────────────────────────────────
     in property <bool>     show-act-form: false;
@@ -202,6 +207,7 @@ export component MainWindow inherits Window {
     callback act-create-clicked();
     callback act-advance-status-clicked(string);
     callback act-edit-clicked(string);
+    callback act-pdf-clicked(string);
 
     // ── Колбеки форми акту ───────────────────────────────────────────────────
     callback act-form-save(string, string, string, string);
@@ -538,6 +544,11 @@ export component MainWindow inherits Window {
                 row-ids:          root.act-row-ids;
                 row-statuses:     root.act-row-statuses;
                 loading:          root.acts-loading;
+                status-counts:    root.act-status-counts;
+                kpi-acts-month:   root.act-kpi-acts-month;
+                kpi-revenue:      root.act-kpi-revenue;
+                kpi-unpaid:       root.act-kpi-unpaid;
+                kpi-overdue:      root.act-kpi-overdue;
 
                 status-filter-changed(i)    => { root.act-status-filter-changed(i); }
                 search-changed(q)           => { root.act-search-changed(q); }
@@ -545,6 +556,7 @@ export component MainWindow inherits Window {
                 create-clicked              => { root.act-create-clicked(); }
                 advance-status-clicked(id)  => { root.act-advance-status-clicked(id); }
                 edit-clicked(id)            => { root.act-edit-clicked(id); }
+                pdf-clicked(id)             => { root.act-pdf-clicked(id); }
             }
 
             // ── Сторінка 1: Акти — форма ─────────────────────────────────────

@@ -1,0 +1,31 @@
+// Уніфікований кольоровий бейдж статусу (таблетка).
+//
+// Використовується:
+//   - acts/act_list.slint — 4 статуси актів (Чернетка/Виставлено/Підписано/Оплачено)
+//   - invoices/invoice_list.slint — ті самі 4 статуси
+//   - counterparties/counterparty_list.slint — Активний / Архів
+//
+// Кольори передаються ззовні — компонент не знає про домен,
+// лише відображає передані badge-color і badge-bg.
+
+import { Theme } from "../theme.slint";
+
+export component StatusBadge inherits Rectangle {
+    in property <string> label;
+    in property <color>  badge-color: Theme.text-muted;
+    in property <color>  badge-bg:    #ABABB71F;
+
+    width: 84px;
+    height: 24px;
+    border-radius: 12px;
+    background: root.badge-bg;
+
+    Text {
+        text: root.label;
+        color: root.badge-color;
+        font-size: 11px;
+        font-weight: 500;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}

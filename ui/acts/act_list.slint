@@ -8,7 +8,9 @@
 //   - Панель дій з'являється при виборі рядка
 
 import { Theme } from "../theme.slint";
-import { ProgressIndicator, ComboBox, ListView } from "std-widgets.slint";
+import { ProgressIndicator, ListView } from "std-widgets.slint";
+import { StatCard } from "../components/stat_card.slint";
+import { StatusBadge } from "../components/status_badge.slint";
 
 export component ActList {
 
@@ -27,12 +29,21 @@ export component ActList {
     callback create-clicked();
     callback advance-status-clicked(string);
     callback edit-clicked(string);
+    callback pdf-clicked(string);
 
     // ── Внутрішній стан ─────────────────────────────────────────────────────
     private property <int>    selected-row: -1;
     private property <string> selected-id: "";
     private property <string> selected-status: "";
     private property <string> selected-number: "";
+    in property <[int]>    status-counts: [0, 0, 0, 0, 0];
+    private property <int> active-tab: 0;
+
+    // ── KPI дані (Rust → Slint) ──────────────────────────────────────────────
+    in property <int>    kpi-acts-month: 0;
+    in property <string> kpi-revenue: "0 ₴";
+    in property <string> kpi-unpaid: "0 ₴";
+    in property <int>    kpi-overdue: 0;
 
     min-width: 600px;
     min-height: 400px;
@@ -52,19 +63,12 @@ export component ActList {
                 spacing: 16px;
 
                 Text {
-                    text: "Акти виконаних робіт";
+                    text: "Акти";
                     font-size: 18px;
                     font-weight: 600;
                     color: Theme.text-main;
                     vertical-alignment: center;
                     horizontal-stretch: 1;
-                }
-
-                if root.rows.length > 0 : Text {
-                    text: root.rows.length + " записів";
-                    color: Theme.text-muted;
-                    font-size: 12px;
-                    vertical-alignment: center;
                 }
 
                 new-btn := Rectangle {
@@ -97,6 +101,63 @@ export component ActList {
             }
         }
 
+        // ── Вкладки статусів (44px) ──────────────────────────────────────────
+        Rectangle {
+            height: 44px;
+            background: Theme.surface;
+
+            property <[string]> _tab-names: ["Всі", "Чернетка", "Виставлені", "Підписані", "Оплачені"];
+
+            HorizontalLayout {
+                alignment: start;
+                padding-left: 32px;
+                spacing: 0;
+
+                for tab-name[ti] in _tab-names : Rectangle {
+                    property <bool> is-active: root.active-tab == ti;
+                    property <int>  tab-count: ti < root.status-counts.length
+                        ? root.status-counts[ti] : 0;
+
+                    if is-active : Rectangle {
+                        y: parent.height - 2px;
+                        height: 2px;
+                        background: Theme.primary;
+                    }
+
+                    HorizontalLayout {
+                        alignment: center;
+                        spacing: 4px;
+                        padding-left: 12px;
+                        padding-right: 12px;
+
+                        Text {
+                            text: tab-count > 0
+                                ? tab-name + " (" + tab-count + ")"
+                                : tab-name;
+                            font-size: 13px;
+                            font-weight: is-active ? 600 : 400;
+                            color: is-active ? Theme.primary : Theme.text-sub;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            root.active-tab = ti;
+                            root.status-filter-changed(ti);
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                y: parent.height - 1px;
+                height: 1px;
+                background: Theme.border;
+            }
+        }
+
         // ── Основний контент ─────────────────────────────────────────────────
         Rectangle {
             background: Theme.bg;
@@ -109,10 +170,44 @@ export component ActList {
                 padding-bottom: 24px;
                 spacing: 16px;
 
-                // ── Фільтр за статусом ────────────────────────────────────────
+                // ── KPI картки ───────────────────────────────────────────────
+                HorizontalLayout {
+                    height: 84px;
+                    spacing: 12px;
+                    vertical-stretch: 0;
+
+                    StatCard {
+                        accent: Theme.primary;
+                        value: root.kpi-acts-month + "";
+                        label: "Актів за місяць";
+                        secondary: "поточний місяць";
+                    }
+
+                    StatCard {
+                        accent: Theme.success;
+                        value: root.kpi-revenue;
+                        label: "Виручка";
+                        secondary: "оплачені цього місяця";
+                    }
+
+                    StatCard {
+                        accent: Theme.warning;
+                        value: root.kpi-unpaid;
+                        label: "Неоплачено";
+                        secondary: "виставлені та підписані";
+                    }
+
+                    StatCard {
+                        accent: root.kpi-overdue > 0 ? Theme.danger : Theme.text-muted;
+                        value: root.kpi-overdue + "";
+                        label: "Прострочено";
+                        secondary: "більше 30 днів";
+                    }
+                }
+
+                // ── Пошук ────────────────────────────────────────────────────
                 HorizontalLayout {
                     height: 40px;
-                    spacing: 12px;
                     vertical-stretch: 0;
 
                     search-rect := Rectangle {
@@ -145,31 +240,6 @@ export component ActList {
                             vertical-alignment: center;
                         }
                     }
-
-                    Text {
-                        text: "Статус:";
-                        font-size: 13px;
-                        color: Theme.text-sub;
-                        vertical-alignment: center;
-                        width: 52px;
-                    }
-
-                    // ComboBox обгорнутий у стилізований Rectangle
-                    Rectangle {
-                        background: Theme.surface;
-                        border-radius: 8px;
-                        border-width: 1px;
-                        border-color: Theme.border;
-                        width: 180px;
-
-                        status-combo := ComboBox {
-                            model: ["Усі", "Чернетка", "Виставлено", "Підписано", "Оплачено"];
-                            selected => {
-                                root.status-filter-changed(status-combo.current-index);
-                            }
-                        }
-                    }
-
                 }
 
                 if root.loading : ProgressIndicator {
@@ -202,6 +272,7 @@ export component ActList {
                                 Text { text: "Контрагент"; color: Theme.text-sub; font-size: 12px; font-weight: 500; horizontal-stretch: 3; vertical-alignment: center; }
                                 Text { text: "Сума, ₴";    color: Theme.text-sub; font-size: 12px; font-weight: 500; horizontal-stretch: 1; vertical-alignment: center; }
                                 Text { text: "Статус";     color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 100px; vertical-alignment: center; }
+                                Text { text: "Дії";        color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 120px; vertical-alignment: center; }
                             }
                         }
 
@@ -308,24 +379,52 @@ export component ActList {
                                         vertical-alignment: center;
                                         overflow: elide;
                                     }
-                                    // Status badge — кольорова таблетка
+                                    // Status badge
                                     Rectangle {
                                         width: 100px;
-
-                                        Rectangle {
-                                            width: 84px;
-                                            height: 24px;
+                                        StatusBadge {
                                             y: (parent.height - self.height) / 2;
-                                            border-radius: 12px;
-                                            background: badge-bg;
+                                            label: row[4].text;
+                                            badge-color: badge-color;
+                                            badge-bg: badge-bg;
+                                        }
+                                    }
 
-                                            Text {
-                                                text: row[4].text;
-                                                color: badge-color;
-                                                font-size: 11px;
-                                                font-weight: 500;
-                                                horizontal-alignment: center;
-                                                vertical-alignment: center;
+                                    // Дії — PDF кнопка
+                                    Rectangle {
+                                        width: 120px;
+
+                                        HorizontalLayout {
+                                            alignment: start;
+                                            padding-left: 4px;
+                                            spacing: 0;
+
+                                            pdf-btn := Rectangle {
+                                                width: 46px;
+                                                height: 26px;
+                                                y: (parent.height - self.height) / 2;
+                                                border-radius: 6px;
+                                                background: pdf-btn-touch.has-hover
+                                                    ? Theme.primary-light : Theme.btn-action-bg;
+                                                animate background { duration: 80ms; }
+
+                                                Text {
+                                                    text: "PDF";
+                                                    color: Theme.primary;
+                                                    font-size: 11px;
+                                                    font-weight: 600;
+                                                    horizontal-alignment: center;
+                                                    vertical-alignment: center;
+                                                }
+
+                                                pdf-btn-touch := TouchArea {
+                                                    mouse-cursor: pointer;
+                                                    clicked => {
+                                                        if i < root.row-ids.length {
+                                                            root.pdf-clicked(root.row-ids[i]);
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
                                     }

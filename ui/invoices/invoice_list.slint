@@ -7,6 +7,7 @@
 
 import { Theme } from "../theme.slint";
 import { ProgressIndicator, ComboBox, ListView } from "std-widgets.slint";
+import { StatusBadge } from "../components/status_badge.slint";
 
 export component InvoiceList {
 
@@ -298,22 +299,11 @@ export component InvoiceList {
                                     }
                                     Rectangle {
                                         width: 100px;
-
-                                        Rectangle {
-                                            width: 84px;
-                                            height: 24px;
+                                        StatusBadge {
                                             y: (parent.height - self.height) / 2;
-                                            border-radius: 12px;
-                                            background: badge-bg;
-
-                                            Text {
-                                                text: row[4].text;
-                                                color: badge-color;
-                                                font-size: 11px;
-                                                font-weight: 500;
-                                                horizontal-alignment: center;
-                                                vertical-alignment: center;
-                                            }
+                                            label: row[4].text;
+                                            badge-color: badge-color;
+                                            badge-bg: badge-bg;
                                         }
                                     }
                                 }

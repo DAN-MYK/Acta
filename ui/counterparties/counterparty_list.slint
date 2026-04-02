@@ -2,45 +2,8 @@
 
 import { Theme } from "../theme.slint";
 import { ProgressIndicator, ListView } from "std-widgets.slint";
-
-component StatCard inherits Rectangle {
-    in property <brush> accent;
-    in property <string> value;
-    in property <string> label;
-
-    width: 156px;
-    height: 78px;
-    background: Theme.surface;
-    border-radius: 12px;
-    border-width: 1px;
-    border-color: Theme.border;
-    clip: true;
-
-    Rectangle {
-        x: 0;
-        y: 0;
-        width: parent.width;
-        height: 3px;
-        background: root.accent;
-    }
-
-    Text {
-        x: 16px;
-        y: 10px;
-        text: root.value;
-        font-size: 24px;
-        font-weight: 700;
-        color: Theme.text-main;
-    }
-
-    Text {
-        x: 16px;
-        y: 42px;
-        text: root.label;
-        font-size: 11px;
-        color: Theme.text-sub;
-    }
-}
+import { StatCard } from "../components/stat_card.slint";
+import { StatusBadge } from "../components/status_badge.slint";
 
 export component CounterpartyList {
     in property <[[StandardListViewItem]]> rows;
@@ -193,7 +156,7 @@ export component CounterpartyList {
                 }
 
                 HorizontalLayout {
-                    height: 78px;
+                    height: 84px;
                     spacing: 16px;
                     vertical-stretch: 0;
 
@@ -255,19 +218,21 @@ export component CounterpartyList {
 
                             VerticalLayout {
                                 alignment: center;
-                                spacing: 8px;
+                                spacing: 6px;
 
                                 Text {
-                                    text: "Контрагентів ще немає";
-                                    font-size: 15px;
+                                    text: root.show-archived ? "В архіві нікого немає" : "Нічого не знайдено";
+                                    font-size: 14px;
                                     font-weight: 600;
-                                    color: Theme.text-main;
+                                    color: Theme.text-sub;
                                     horizontal-alignment: center;
                                 }
 
                                 Text {
-                                    text: "Додайте першого контрагента, щоб з’явився список.";
-                                    font-size: 13px;
+                                    text: root.show-archived
+                                        ? "Архівованих контрагентів не знайдено"
+                                        : "Спробуйте змінити запит або додайте нового контрагента";
+                                    font-size: 12px;
                                     color: Theme.text-muted;
                                     horizontal-alignment: center;
                                 }
@@ -332,22 +297,12 @@ export component CounterpartyList {
 
                                     Rectangle {
                                         width: 88px;
-
-                                        Rectangle {
+                                        StatusBadge {
                                             width: 72px;
-                                            height: 24px;
                                             y: (parent.height - self.height) / 2;
-                                            border-radius: 12px;
-                                            background: is-archived ? #ABABB71F : #1EB16E1F;
-
-                                            Text {
-                                                text: is-archived ? "Архів" : "Активний";
-                                                color: is-archived ? Theme.text-muted : Theme.success;
-                                                font-size: 11px;
-                                                font-weight: 500;
-                                                horizontal-alignment: center;
-                                                vertical-alignment: center;
-                                            }
+                                            label: is-archived ? "Архів" : "Активний";
+                                            badge-color: is-archived ? Theme.text-muted : Theme.success;
+                                            badge-bg: is-archived ? #ABABB71F : #1EB16E1F;
                                         }
                                     }
 
@@ -432,81 +387,72 @@ export component CounterpartyList {
                 }
 
                 HorizontalLayout {
-                    height: 48px;
-                    spacing: 10px;
+                    height: 40px;
+                    spacing: 6px;
                     vertical-stretch: 0;
 
                     Text {
                         text: root.pagination-text;
                         color: Theme.text-muted;
-                        font-size: 13px;
+                        font-size: 12px;
                         vertical-alignment: center;
                         horizontal-stretch: 1;
                     }
 
+                    // Кнопка "← Назад" — compact secondary стиль
                     Rectangle {
-                        background: root.current-page > 1 ? Theme.surface : Theme.hover-bg;
-                        border-radius: 8px;
-                        border-width: 1px;
-                        border-color: Theme.border;
-                        width: 104px;
-                        height: 36px;
+                        background: prev-touch.has-hover && root.current-page > 1
+                            ? Theme.hover-bg : transparent;
+                        border-radius: 6px;
+                        width: 72px;
+                        height: 28px;
                         y: (parent.height - self.height) / 2;
+                        animate background { duration: 80ms; }
 
                         Text {
                             text: "← Назад";
-                            color: root.current-page > 1 ? Theme.text-main : Theme.text-muted;
+                            color: root.current-page > 1 ? Theme.text-sub : Theme.text-muted;
                             font-size: 12px;
-                            font-weight: 500;
                             horizontal-alignment: center;
                             vertical-alignment: center;
                         }
 
-                        TouchArea {
+                        prev-touch := TouchArea {
                             enabled: root.current-page > 1;
                             mouse-cursor: self.enabled ? pointer : default;
                             clicked => { root.prev-page-clicked(); }
                         }
                     }
 
-                    Rectangle {
-                        background: Theme.surface;
-                        border-radius: 8px;
-                        border-width: 1px;
-                        border-color: Theme.border;
-                        width: 108px;
-                        height: 36px;
-                        y: (parent.height - self.height) / 2;
-
-                        Text {
-                            text: root.current-page + " / " + root.total-pages;
-                            color: Theme.text-sub;
-                            font-size: 12px;
-                            font-weight: 500;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
+                    // Лічильник сторінок
+                    Text {
+                        text: root.current-page + " / " + root.total-pages;
+                        color: Theme.text-muted;
+                        font-size: 12px;
+                        vertical-alignment: center;
+                        width: 52px;
+                        horizontal-alignment: center;
                     }
 
+                    // Кнопка "Далі →"
                     Rectangle {
-                        background: root.current-page < root.total-pages ? Theme.surface : Theme.hover-bg;
-                        border-radius: 8px;
-                        border-width: 1px;
-                        border-color: Theme.border;
-                        width: 104px;
-                        height: 36px;
+                        background: next-touch.has-hover && root.current-page < root.total-pages
+                            ? Theme.hover-bg : transparent;
+                        border-radius: 6px;
+                        width: 60px;
+                        height: 28px;
                         y: (parent.height - self.height) / 2;
+                        animate background { duration: 80ms; }
 
                         Text {
                             text: "Далі →";
-                            color: root.current-page < root.total-pages ? Theme.text-main : Theme.text-muted;
+                            color: root.current-page < root.total-pages ? Theme.text-sub : Theme.text-muted;
                             font-size: 12px;
-                            font-weight: 500;
                             horizontal-alignment: center;
                             vertical-alignment: center;
                         }
 
-                        TouchArea {
+                        next-touch := TouchArea {
                             enabled: root.current-page < root.total-pages;
                             mouse-cursor: self.enabled ? pointer : default;
                             clicked => { root.next-page-clicked(); }

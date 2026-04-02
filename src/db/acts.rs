@@ -6,12 +6,33 @@
 // Якщо будь-який крок провалився — транзакція автоматично відкатується при drop().
 
 use anyhow::{Result, bail};
-use chrono::Datelike; // .year() для chrono::DateTime
+use chrono::{Datelike, Duration}; // .year(), Duration для дат
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+/// KPI-агрегати для сторінки списку актів.
+pub struct ActKpi {
+    /// Кількість актів створених у поточному місяці.
+    pub acts_this_month: i64,
+    /// Сума оплачених актів поточного місяця.
+    pub revenue_this_month: Decimal,
+    /// Загальна сума виставлених і підписаних (ще не оплачених) актів.
+    pub unpaid_total: Decimal,
+    /// Кількість актів у статусі "виставлено"/"підписано" старших за 30 днів.
+    pub overdue_count: i64,
+}
+
 use crate::models::act::{Act, ActItem, ActListRow, ActStatus, NewAct, NewActItem, UpdateAct};
+
+fn count_index_for_status(status: &ActStatus) -> usize {
+    match status {
+        ActStatus::Draft => 1,
+        ActStatus::Issued => 2,
+        ActStatus::Signed => 3,
+        ActStatus::Paid => 4,
+    }
+}
 
 /// Згенерувати наступний номер акту у форматі "АКТ-РРРР-NNN".
 ///
@@ -188,6 +209,72 @@ pub async fn list_filtered(
     };
 
     Ok(rows)
+}
+
+/// Повернути кількість актів за кожним статусом для компанії.
+///
+/// Результат: `[всього, draft, issued, signed, paid]` (5 елементів).
+/// Використовується для відображення лічильників на вкладках списку актів.
+pub async fn count_by_status(pool: &PgPool, company_id: Uuid) -> Result<Vec<i32>> {
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        "SELECT status, COUNT(*)::int AS cnt FROM acts WHERE company_id = $1 GROUP BY status",
+    )
+    .bind(company_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut counts = [0i32; 5];
+    for row in &rows {
+        let status: ActStatus = row.get("status");
+        let cnt: i32 = row.get("cnt");
+        let idx = count_index_for_status(&status);
+        counts[idx] = cnt;
+        counts[0] += cnt; // індекс 0 = "Всі" = сума
+    }
+
+    Ok(counts.to_vec())
+}
+
+/// Повернути KPI-агрегати для сторінки списку актів.
+///
+/// Усі 4 метрики обчислюються одним SQL запитом через FILTER:
+///   - `acts_this_month`    — COUNT актів з датою >= перше число поточного місяця
+///   - `revenue_this_month` — SUM(total_amount) WHERE status='paid' AND date >= перше місяця
+///   - `unpaid_total`       — SUM(total_amount) WHERE status IN ('issued','signed')
+///   - `overdue_count`      — COUNT WHERE status IN ('issued','signed') AND date < today-30d
+pub async fn get_kpi(pool: &PgPool, company_id: Uuid) -> Result<ActKpi> {
+    use sqlx::Row;
+
+    let today = chrono::Utc::now().date_naive();
+    let first_of_month = chrono::NaiveDate::from_ymd_opt(today.year(), today.month(), 1)
+        .unwrap_or(today);
+    let overdue_threshold = today - Duration::days(30);
+
+    let row = sqlx::query(
+        r#"
+        SELECT
+            COUNT(*) FILTER (WHERE date >= $2)                                                       AS acts_this_month,
+            COALESCE(SUM(total_amount) FILTER (WHERE status = 'paid' AND date >= $2), 0::numeric)    AS revenue_this_month,
+            COALESCE(SUM(total_amount) FILTER (WHERE status IN ('issued','signed')), 0::numeric)     AS unpaid_total,
+            COUNT(*) FILTER (WHERE status IN ('issued','signed') AND date < $3)                      AS overdue_count
+        FROM acts
+        WHERE company_id = $1
+        "#,
+    )
+    .bind(company_id)
+    .bind(first_of_month)
+    .bind(overdue_threshold)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(ActKpi {
+        acts_this_month:    row.get::<i64, _>("acts_this_month"),
+        revenue_this_month: row.get::<Decimal, _>("revenue_this_month"),
+        unpaid_total:       row.get::<Decimal, _>("unpaid_total"),
+        overdue_count:      row.get::<i64, _>("overdue_count"),
+    })
 }
 
 /// Отримати один акт разом з усіма його позиціями.
@@ -503,6 +590,14 @@ pub async fn advance_status(pool: &PgPool, id: Uuid) -> Result<Option<Act>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn count_index_for_status_matches_tabs_order() {
+        assert_eq!(count_index_for_status(&ActStatus::Draft), 1);
+        assert_eq!(count_index_for_status(&ActStatus::Issued), 2);
+        assert_eq!(count_index_for_status(&ActStatus::Signed), 3);
+        assert_eq!(count_index_for_status(&ActStatus::Paid), 4);
+    }
 
     #[test]
     fn db_acts_public_api_is_exposed() {

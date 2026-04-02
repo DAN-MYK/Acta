@@ -5,7 +5,7 @@
 // ВАЖЛИВО: має бути на рівні модуля — не всередині функції.
 slint::include_modules!();
 
-use acta::{config::AppConfig, db, models, notifications};
+use acta::{config::AppConfig, db, models, notifications, pdf};
 
 use anyhow::Result;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, TimeZone, Utc};
@@ -546,6 +546,108 @@ async fn main() -> Result<()> {
                 }
                 Ok(None) => tracing::warn!("Акт {uuid} не знайдено."),
                 Err(e) => tracing::error!("Помилка зміни статусу: {e}"),
+            }
+        });
+    });
+
+    // ── Колбек: генерувати PDF акту ──────────────────────────────────────────
+    //
+    // 1. Завантажуємо акт + компанію паралельно (tokio::join!).
+    // 2. Потім — контрагента (потрібен act.counterparty_id).
+    // 3. Генеруємо PDF через Typst і відкриваємо у системному переглядачі.
+    let pool_pdf = pool.clone();
+    let active_company_id_pdf = active_company_id.clone();
+
+    ui.on_act_pdf_clicked(move |act_id| {
+        let pool = pool_pdf.clone();
+        let id_str = act_id.to_string();
+        let cid = *active_company_id_pdf.lock().unwrap();
+
+        tokio::spawn(async move {
+            let Ok(uuid) = id_str.parse::<uuid::Uuid>() else {
+                tracing::error!("PDF: некоректний UUID акту: {id_str}");
+                return;
+            };
+
+            // Акт і компанія — незалежні, беремо паралельно
+            let (act_result, company_result) = tokio::join!(
+                db::acts::get_by_id(&pool, uuid),
+                db::companies::get_by_id(&pool, cid)
+            );
+
+            let Some((act, items)) = (match act_result {
+                Ok(v) => v,
+                Err(e) => { tracing::error!("PDF: помилка завантаження акту: {e}"); return; }
+            }) else {
+                tracing::warn!("PDF: акт {uuid} не знайдено.");
+                return;
+            };
+
+            let company = match company_result {
+                Ok(Some(v)) => v,
+                Ok(None) => { tracing::warn!("PDF: компанія {cid} не знайдена."); return; }
+                Err(e) => { tracing::error!("PDF: помилка компанії: {e}"); return; }
+            };
+
+            // Контрагент — потребує act.counterparty_id, тому після join!
+            let cp = match db::counterparties::get_by_id(&pool, act.counterparty_id).await {
+                Ok(Some(v)) => v,
+                Ok(None) => { tracing::warn!("PDF: контрагент не знайдено."); return; }
+                Err(e) => { tracing::error!("PDF: помилка контрагента: {e}"); return; }
+            };
+
+            let pdf_items: Vec<pdf::generator::PdfActItem> = items
+                .iter()
+                .enumerate()
+                .map(|(i, item)| pdf::generator::PdfActItem {
+                    num: (i + 1) as u32,
+                    name: item.description.clone(),
+                    qty: item.quantity.to_string(),
+                    unit: item.unit.clone(),
+                    price: item.unit_price.to_string(),
+                    amount: item.amount.to_string(),
+                })
+                .collect();
+
+            let data = pdf::generator::PdfActData {
+                number: act.number.clone(),
+                date: act.date.format("%d.%m.%Y").to_string(),
+                company: pdf::generator::PdfCompany {
+                    name: company.name.clone(),
+                    edrpou: company.edrpou.unwrap_or_default(),
+                    iban: company.iban.unwrap_or_default(),
+                    address: company.legal_address.unwrap_or_default(),
+                },
+                client: pdf::generator::PdfCompany {
+                    name: cp.name.clone(),
+                    edrpou: cp.edrpou.unwrap_or_default(),
+                    iban: cp.iban.unwrap_or_default(),
+                    address: cp.address.unwrap_or_default(),
+                },
+                items: pdf_items,
+                total: format!("{:.2}", act.total_amount),
+                total_words: pdf::generator::amount_to_words(&act.total_amount),
+                notes: act.notes.unwrap_or_default(),
+            };
+
+            let output_path = match pdf::generator::ensure_output_dir(&act.number) {
+                Ok(p) => p,
+                Err(e) => { tracing::error!("PDF: помилка директорії: {e}"); return; }
+            };
+
+            if let Err(e) = pdf::generator::generate_act_pdf(&data, &output_path) {
+                tracing::error!("PDF: помилка генерації: {e}");
+                return;
+            }
+
+            tracing::info!("PDF '{}' → {}", act.number, output_path.display());
+
+            // Відкриваємо у системному переглядачі PDF (Windows)
+            if let Err(e) = std::process::Command::new("cmd")
+                .args(["/C", "start", "", &output_path.to_string_lossy()])
+                .spawn()
+            {
+                tracing::error!("PDF: не вдалось відкрити файл: {e}");
             }
         });
     });
@@ -2394,7 +2496,7 @@ fn to_acts_table_data(acts: &[models::ActListRow]) -> ActsTableData {
                 // NaiveDate → "дд.мм.рррр" для відображення в таблиці
                 SharedString::from(a.date.format("%d.%m.%Y").to_string().as_str()),
                 SharedString::from(a.counterparty_name.as_str()),
-                SharedString::from(format!("{:.2}", a.total_amount).as_str()),
+                SharedString::from(format_amount_ua(a.total_amount).as_str()),
                 SharedString::from(a.status.label()),
             ]
         })
@@ -2597,8 +2699,19 @@ async fn reload_acts(
     query: String,
     close_form: bool,
 ) -> Result<()> {
-    let acts = db::acts::list_filtered(pool, company_id, status_filter, normalized_query(&query)).await?;
+    // Три незалежних запити паралельно (урок: tokio::join!)
+    let (acts_result, counts_result, kpi_result) = tokio::join!(
+        db::acts::list_filtered(pool, company_id, status_filter, normalized_query(&query)),
+        db::acts::count_by_status(pool, company_id),
+        db::acts::get_kpi(pool, company_id)
+    );
+    let acts = acts_result?;
+    let counts = counts_result?;
+    let kpi = kpi_result?;
     let data = to_acts_table_data(&acts);
+
+    let kpi_revenue = format_kpi_amount(kpi.revenue_this_month);
+    let kpi_unpaid  = format_kpi_amount(kpi.unpaid_total);
 
     ui_weak
         .upgrade_in_event_loop(move |ui| {
@@ -2606,6 +2719,11 @@ async fn reload_acts(
             ui.set_act_rows(rows);
             ui.set_act_row_ids(ids);
             ui.set_act_row_statuses(statuses);
+            ui.set_act_status_counts(ModelRc::new(VecModel::from(counts)));
+            ui.set_act_kpi_acts_month(kpi.acts_this_month as i32);
+            ui.set_act_kpi_revenue(SharedString::from(kpi_revenue.as_str()));
+            ui.set_act_kpi_unpaid(SharedString::from(kpi_unpaid.as_str()));
+            ui.set_act_kpi_overdue(kpi.overdue_count as i32);
             if close_form {
                 ui.set_show_act_form(false);
             }
@@ -2638,7 +2756,7 @@ async fn reload_invoices(
                 SharedString::from(inv.number.as_str()),
                 SharedString::from(inv.date.format("%d.%m.%Y").to_string().as_str()),
                 SharedString::from(inv.counterparty_name.as_str()),
-                SharedString::from(format!("{:.2}", inv.total_amount).as_str()),
+                SharedString::from(format_amount_ua(inv.total_amount).as_str()),
                 SharedString::from(status_label),
             ]
         })
@@ -2788,6 +2906,37 @@ fn company_initials(company: &CompanySummary) -> String {
 
 fn format_company_total(amount: &Decimal) -> String {
     format!("{} грн", amount.round_dp(2))
+}
+
+/// Форматує суму в українському вигляді: "78\u{00A0}000,00 ₴".
+/// Тисячі розділяються нерозривним пробілом, дробова частина через кому.
+fn format_amount_ua(amount: Decimal) -> String {
+    let s = format!("{:.2}", amount.abs());
+    let (int_part, dec_part) = s.split_once('.').unwrap_or((&s, "00"));
+    let len = int_part.len();
+    let mut result = String::with_capacity(len + len / 3 + 8);
+    for (i, ch) in int_part.chars().enumerate() {
+        if i > 0 && (len - i) % 3 == 0 {
+            result.push('\u{00A0}');
+        }
+        result.push(ch);
+    }
+    format!("{},{} ₴", result, dec_part)
+}
+
+/// Форматує грошову суму для KPI-картки: "78\u{00A0}000 ₴".
+/// Тисячі розділяються нерозривним пробілом, копійки відкидаються.
+fn format_kpi_amount(amount: Decimal) -> String {
+    let s = amount.round().abs().to_string();
+    let len = s.len();
+    let mut result = String::with_capacity(len + len / 3 + 2);
+    for (i, ch) in s.chars().enumerate() {
+        if i > 0 && (len - i) % 3 == 0 {
+            result.push('\u{00A0}');
+        }
+        result.push(ch);
+    }
+    format!("{} ₴", result)
 }
 
 fn reset_company_form(ui: &MainWindow) {
@@ -3291,13 +3440,58 @@ fn spawn_save_task(
 
 #[cfg(test)]
 mod tests {
-    use chrono::Utc;
+    use std::sync::{Arc, Mutex};
+
+    use chrono::{TimeZone, Utc};
     use rust_decimal::Decimal;
+    use slint::{Model, SharedString};
     use uuid::Uuid;
 
-    use crate::models::{ActListRow, ActStatus, Counterparty};
+    use crate::models::{
+        ActListRow, ActStatus, Company, CompanySummary, Counterparty, Task, TaskPriority, TaskStatus,
+    };
 
-    use super::{normalized_query, to_acts_table_data, to_table_data};
+    use super::{
+        MainWindow, build_acts_models, build_models, build_task_models, company_display_name,
+        company_initials, company_subtitle, format_amount_ua, format_company_total, format_kpi_amount,
+        format_task_datetime, normalized_query, parse_task_datetime, task_matches_query,
+        task_priority_from_index, task_priority_index, to_acts_table_data, to_table_data,
+        to_tasks_table_data,
+    };
+
+    fn sample_counterparty() -> Counterparty {
+        Counterparty {
+            id: Uuid::new_v4(),
+            name: "ТОВ Приклад".to_string(),
+            edrpou: None,
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            is_archived: false,
+            bas_id: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    fn sample_task() -> Task {
+        Task {
+            id: Uuid::new_v4(),
+            title: "Перевірити оплату".to_string(),
+            description: Some("До кінця дня".to_string()),
+            status: TaskStatus::InProgress,
+            priority: TaskPriority::Critical,
+            due_date: Some(Utc.with_ymd_and_hms(2026, 4, 3, 18, 45, 0).unwrap()),
+            reminder_at: None,
+            counterparty_id: None,
+            act_id: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
 
     #[test]
     fn normalized_query_returns_none_for_empty_input() {
@@ -3312,21 +3506,7 @@ mod tests {
 
     #[test]
     fn to_table_data_uses_placeholders_for_missing_optional_fields() {
-        let cp = Counterparty {
-            id: Uuid::new_v4(),
-            name: "ТОВ Приклад".to_string(),
-            edrpou: None,
-            ipn: None,
-            iban: None,
-            address: None,
-            phone: None,
-            email: None,
-            notes: None,
-            is_archived: false,
-            bas_id: None,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-        };
+        let cp = sample_counterparty();
 
         let table = to_table_data(&[cp]);
         assert_eq!(table.rows.len(), 1);
@@ -3353,8 +3533,173 @@ mod tests {
         assert_eq!(table.rows[0][0].as_str(), "АКТ-2026-007");
         assert_eq!(table.rows[0][1].as_str(), "01.04.2026");
         assert_eq!(table.rows[0][2].as_str(), "ФОП Іваненко");
-        assert_eq!(table.rows[0][3].as_str(), "123.45");
+        assert_eq!(table.rows[0][3].as_str(), "123,45 ₴");
         assert_eq!(table.rows[0][4].as_str(), "Виставлено");
         assert_eq!(table.statuses[0].as_str(), "issued");
+    }
+
+    #[test]
+    fn task_priority_index_roundtrip_works() {
+        assert_eq!(task_priority_from_index(0), TaskPriority::Low);
+        assert_eq!(task_priority_from_index(1), TaskPriority::Normal);
+        assert_eq!(task_priority_from_index(2), TaskPriority::High);
+        assert_eq!(task_priority_from_index(99), TaskPriority::Critical);
+
+        assert_eq!(task_priority_index(&TaskPriority::Low), 0);
+        assert_eq!(task_priority_index(&TaskPriority::Normal), 1);
+        assert_eq!(task_priority_index(&TaskPriority::High), 2);
+        assert_eq!(task_priority_index(&TaskPriority::Critical), 3);
+    }
+
+    #[test]
+    fn format_task_datetime_and_parse_roundtrip_work() {
+        let dt = Utc.with_ymd_and_hms(2026, 4, 2, 14, 30, 0).unwrap();
+        assert_eq!(format_task_datetime(Some(dt)).as_str(), "02.04.2026 14:30");
+        assert_eq!(format_task_datetime(None).as_str(), "—");
+
+        assert_eq!(parse_task_datetime("   ").expect("empty is allowed"), None);
+        assert_eq!(
+            parse_task_datetime("02.04.2026 14:30")
+                .expect("valid datetime")
+                .expect("datetime exists"),
+            dt
+        );
+        assert!(parse_task_datetime("2026-04-02 14:30").is_err());
+    }
+
+    #[test]
+    fn task_matches_query_uses_title_and_description_case_insensitively() {
+        let task = Task {
+            title: "Підготувати акт".to_string(),
+            description: Some("Узгодити з клієнтом фінальну версію".to_string()),
+            ..sample_task()
+        };
+
+        assert!(task_matches_query(&task, None));
+        assert!(task_matches_query(&task, Some("АКТ")));
+        assert!(task_matches_query(&task, Some("клієнтом")));
+        assert!(!task_matches_query(&task, Some("накладна")));
+    }
+
+    #[test]
+    fn to_tasks_table_data_formats_rows_and_metadata() {
+        let task = sample_task();
+        let table = to_tasks_table_data(&[task.clone()]);
+        assert_eq!(table.rows.len(), 1);
+        assert_eq!(table.rows[0][0].as_str(), "Перевірити оплату");
+        assert_eq!(table.rows[0][1].as_str(), "Критичний");
+        assert_eq!(table.rows[0][2].as_str(), "03.04.2026 18:45");
+        assert_eq!(table.rows[0][3].as_str(), "—");
+        assert_eq!(table.rows[0][4].as_str(), "В роботі");
+        assert_eq!(table.ids[0].as_str(), task.id.to_string());
+        assert_eq!(table.statuses[0].as_str(), "in_progress");
+        assert_eq!(table.priorities[0].as_str(), "critical");
+    }
+
+    #[test]
+    fn build_models_helpers_create_expected_row_counts() {
+        let counterparty_data = to_table_data(&[sample_counterparty()]);
+        let (rows, ids, archived) = build_models(counterparty_data);
+        assert_eq!(rows.row_count(), 1);
+        assert_eq!(ids.row_count(), 1);
+        assert_eq!(archived.row_count(), 1);
+
+        let act_data = to_acts_table_data(&[ActListRow {
+            id: Uuid::new_v4(),
+            number: "АКТ-1".to_string(),
+            date: chrono::NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
+            counterparty_name: "ФОП".to_string(),
+            total_amount: Decimal::new(1000, 2),
+            status: ActStatus::Draft,
+        }]);
+        let (act_rows, act_ids, act_statuses) = build_acts_models(act_data);
+        assert_eq!(act_rows.row_count(), 1);
+        assert_eq!(act_ids.row_count(), 1);
+        assert_eq!(act_statuses.row_count(), 1);
+
+        let task_data = to_tasks_table_data(&[sample_task()]);
+        let (task_rows, task_ids, task_statuses, task_priorities) = build_task_models(task_data);
+        assert_eq!(task_rows.row_count(), 1);
+        assert_eq!(task_ids.row_count(), 1);
+        assert_eq!(task_statuses.row_count(), 1);
+        assert_eq!(task_priorities.row_count(), 1);
+    }
+
+    #[test]
+    fn company_helpers_format_text_for_ui() {
+        let company = Company {
+            id: Uuid::new_v4(),
+            name: "Товариство Приклад".to_string(),
+            short_name: Some("Приклад".to_string()),
+            edrpou: Some("12345678".to_string()),
+            ipn: None,
+            iban: None,
+            legal_address: None,
+            actual_address: None,
+            phone: None,
+            email: None,
+            director_name: None,
+            accountant_name: None,
+            tax_system: None,
+            is_vat_payer: false,
+            logo_path: None,
+            notes: None,
+            is_archived: false,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        let summary = CompanySummary {
+            id: company.id,
+            name: company.name.clone(),
+            short_name: company.short_name.clone(),
+            edrpou: company.edrpou.clone(),
+            is_vat_payer: false,
+            act_count: 3,
+            total_amount: Decimal::new(123456, 2),
+        };
+
+        assert_eq!(company_display_name(&company), "Приклад");
+        assert_eq!(company_subtitle(&company), "ЄДРПОУ: 12345678");
+        assert_eq!(company_initials(&summary), "П");
+        assert_eq!(format_company_total(&Decimal::new(123456, 2)), "1234.56 грн");
+        assert_eq!(format_kpi_amount(Decimal::new(78000, 0)), "78 000 ₴");
+        assert_eq!(format_amount_ua(Decimal::new(12345, 2)), "123,45 ₴");
+        assert_eq!(format_amount_ua(Decimal::new(7800000, 2)), "78 000,00 ₴");
+        assert_eq!(format_amount_ua(Decimal::new(0, 2)), "0,00 ₴");
+    }
+
+    #[test]
+    fn slint_callback_harness_covers_callbacks_and_properties() {
+        let ui = MainWindow::new().expect("MainWindow should be constructible in tests");
+        let received_query = Arc::new(Mutex::new(None::<String>));
+        let query_capture = Arc::clone(&received_query);
+        let call_count = Arc::new(Mutex::new(0usize));
+        let count_capture = Arc::clone(&call_count);
+
+        ui.on_task_search_changed(move |query| {
+            *query_capture.lock().expect("mutex poisoned") = Some(query.to_string());
+        });
+        ui.on_company_add_clicked(move || {
+            *count_capture.lock().expect("mutex poisoned") += 1;
+        });
+
+        ui.invoke_task_search_changed(SharedString::from("рахунок"));
+        ui.invoke_company_add_clicked();
+        ui.invoke_company_add_clicked();
+
+        ui.set_current_page(6);
+        ui.set_show_company_picker(true);
+        ui.set_toast_message(SharedString::from("Збережено"));
+        ui.set_task_form_title(SharedString::from("Передзвонити клієнту"));
+
+        assert_eq!(
+            received_query.lock().expect("mutex poisoned").as_deref(),
+            Some("рахунок")
+        );
+        assert_eq!(*call_count.lock().expect("mutex poisoned"), 2);
+        assert_eq!(ui.get_current_page(), 6);
+        assert!(ui.get_show_company_picker());
+        assert_eq!(ui.get_toast_message().as_str(), "Збережено");
+        assert_eq!(ui.get_task_form_title().as_str(), "Передзвонити клієнту");
     }
 }

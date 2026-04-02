@@ -1,13 +1,9 @@
-// Центральний стан застосунку — активна компанія + пул з'єднань
-//
-// AppState клонується (завдяки Arc) у всі колбеки UI без копіювання даних.
-// RwLock дозволяє читати active_company з кількох місць одночасно,
-// але запис (зміна активної компанії) є ексклюзивним.
+﻿use std::sync::{Arc, RwLock};
 
-use std::sync::{Arc, RwLock};
 use uuid::Uuid;
-use sqlx::PgPool;
+
 use crate::models::company::Company;
+use sqlx::PgPool;
 
 /// Глобальний стан програми — клонується (Arc) в усі колбеки UI.
 ///
@@ -57,3 +53,66 @@ impl AppState {
         self.active_company.read().unwrap().clone()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use chrono::Utc;
+    use sqlx::postgres::PgPoolOptions;
+
+    use super::*;
+
+    fn lazy_pool() -> PgPool {
+        PgPoolOptions::new()
+            .connect_lazy("postgres://postgres:postgres@localhost/acta_test")
+            .expect("lazy pool")
+    }
+
+    fn sample_company() -> Company {
+        Company {
+            id: Uuid::new_v4(),
+            name: "ТОВ Тест".to_string(),
+            short_name: Some("Тест".to_string()),
+            edrpou: Some("12345678".to_string()),
+            ipn: Some("1234567890".to_string()),
+            iban: Some("UA123456789012345678901234567".to_string()),
+            legal_address: Some("м. Київ".to_string()),
+            actual_address: None,
+            phone: None,
+            email: None,
+            director_name: Some("Директор".to_string()),
+            accountant_name: None,
+            tax_system: Some("general".to_string()),
+            is_vat_payer: true,
+            logo_path: None,
+            notes: None,
+            is_archived: false,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    #[tokio::test]
+    async fn new_state_has_no_active_company() {
+        let state = AppState::new(lazy_pool());
+        assert!(state.active().is_none());
+    }
+
+    #[tokio::test]
+    async fn company_id_returns_error_when_company_is_missing() {
+        let state = AppState::new(lazy_pool());
+        let err = state.company_id().expect_err("company should be missing");
+        assert!(err.to_string().contains("Не обрано активну компанію"));
+    }
+
+    #[tokio::test]
+    async fn set_active_updates_current_company() {
+        let state = AppState::new(lazy_pool());
+        let company = sample_company();
+
+        state.set_active(company.clone());
+
+        assert_eq!(state.company_id().expect("company id"), company.id);
+        assert_eq!(state.active().expect("active company").name, company.name);
+    }
+}
+
