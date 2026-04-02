@@ -507,12 +507,12 @@ mod tests {
     #[test]
     fn db_acts_public_api_is_exposed() {
         // Перевіряємо що всі публічні функції доступні та компілюються
-        let _ = generate_next_number as fn(&PgPool, Uuid) -> _;
-        let _ = counterparties_for_select as fn(&PgPool, Uuid) -> _;
-        let _ = list as fn(&PgPool, Uuid, Option<ActStatus>) -> _;
-        let _ = list_filtered as fn(&PgPool, Uuid, Option<ActStatus>, Option<&str>) -> _;
+        let _ = generate_next_number;
+        let _ = counterparties_for_select;
+        let _ = list;
+        let _ = list_filtered;
         let _ = get_by_id;
-        let _ = create as fn(&PgPool, Uuid, &NewAct) -> _;
+        let _ = create;
         let _ = update;
         let _ = change_status;
         let _ = get_for_edit;

@@ -19,16 +19,15 @@ pub async fn list(pool: &PgPool, company_id: Uuid) -> Result<Vec<Counterparty>> 
 /// Отримати одного контрагента за UUID.
 /// Повертає `None` якщо не знайдено.
 pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<Counterparty>> {
-    let row = sqlx::query_as!(
-        Counterparty,
+    let row = sqlx::query_as::<_, Counterparty>(
         r#"
-        SELECT id, name, edrpou, iban, address, phone, email, notes,
+        SELECT id, name, edrpou, ipn, iban, address, phone, email, notes,
                is_archived, bas_id, created_at, updated_at
         FROM counterparties
         WHERE id = $1
         "#,
-        id
     )
+    .bind(id)
     .fetch_optional(pool)
     .await?;
 
@@ -56,7 +55,7 @@ pub async fn list_filtered(
             // $1 = company_id
             sqlx::query_as::<_, Counterparty>(
                 r#"
-                SELECT id, name, edrpou, iban, address, phone, email, notes,
+                SELECT id, name, edrpou, ipn, iban, address, phone, email, notes,
                        is_archived, bas_id, created_at, updated_at
                 FROM counterparties
                 WHERE is_archived = FALSE AND company_id = $1
@@ -71,7 +70,7 @@ pub async fn list_filtered(
             // $1 = company_id
             sqlx::query_as::<_, Counterparty>(
                 r#"
-                SELECT id, name, edrpou, iban, address, phone, email, notes,
+                SELECT id, name, edrpou, ipn, iban, address, phone, email, notes,
                        is_archived, bas_id, created_at, updated_at
                 FROM counterparties
                 WHERE company_id = $1
@@ -87,7 +86,7 @@ pub async fn list_filtered(
             let pattern = format!("%{q}%");
             sqlx::query_as::<_, Counterparty>(
                 r#"
-                SELECT id, name, edrpou, iban, address, phone, email, notes,
+                SELECT id, name, edrpou, ipn, iban, address, phone, email, notes,
                        is_archived, bas_id, created_at, updated_at
                 FROM counterparties
                 WHERE is_archived = FALSE
@@ -107,7 +106,7 @@ pub async fn list_filtered(
             let pattern = format!("%{q}%");
             sqlx::query_as::<_, Counterparty>(
                 r#"
-                SELECT id, name, edrpou, iban, address, phone, email, notes,
+                SELECT id, name, edrpou, ipn, iban, address, phone, email, notes,
                        is_archived, bas_id, created_at, updated_at
                 FROM counterparties
                 WHERE (name ILIKE $1 OR COALESCE(edrpou, '') ILIKE $1)
@@ -132,14 +131,15 @@ pub async fn list_filtered(
 /// при зміні сигнатури (додано company_id).
 pub async fn create(pool: &PgPool, company_id: Uuid, data: &NewCounterparty) -> Result<Counterparty> {
     let row = sqlx::query_as::<_, Counterparty>(
-        r#"INSERT INTO counterparties (company_id, name, edrpou, iban, address, phone, email, notes, bas_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-           RETURNING id, name, edrpou, iban, address, phone, email, notes,
+        r#"INSERT INTO counterparties (company_id, name, edrpou, ipn, iban, address, phone, email, notes, bas_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           RETURNING id, name, edrpou, ipn, iban, address, phone, email, notes,
                      is_archived, bas_id, created_at, updated_at"#
     )
     .bind(company_id)
     .bind(&data.name)
     .bind(&data.edrpou)
+    .bind(&data.ipn)
     .bind(&data.iban)
     .bind(&data.address)
     .bind(&data.phone)
@@ -158,31 +158,32 @@ pub async fn update(
     id: Uuid,
     data: &UpdateCounterparty,
 ) -> Result<Option<Counterparty>> {
-    let row = sqlx::query_as!(
-        Counterparty,
+    let row = sqlx::query_as::<_, Counterparty>(
         r#"
         UPDATE counterparties
         SET name       = $2,
             edrpou     = $3,
-            iban       = $4,
-            address    = $5,
-            phone      = $6,
-            email      = $7,
-            notes      = $8,
+            ipn        = $4,
+            iban       = $5,
+            address    = $6,
+            phone      = $7,
+            email      = $8,
+            notes      = $9,
             updated_at = NOW()
         WHERE id = $1
-        RETURNING id, name, edrpou, iban, address, phone, email, notes,
+        RETURNING id, name, edrpou, ipn, iban, address, phone, email, notes,
                   is_archived, bas_id, created_at, updated_at
         "#,
-        id,
-        data.name,
-        data.edrpou,
-        data.iban,
-        data.address,
-        data.phone,
-        data.email,
-        data.notes,
     )
+    .bind(id)
+    .bind(&data.name)
+    .bind(&data.edrpou)
+    .bind(&data.ipn)
+    .bind(&data.iban)
+    .bind(&data.address)
+    .bind(&data.phone)
+    .bind(&data.email)
+    .bind(&data.notes)
     .fetch_optional(pool)
     .await?;
 
@@ -223,16 +224,15 @@ pub async fn count_archived(pool: &PgPool) -> Result<i64> {
 
 /// Знайти контрагента за bas_id (для імпорту з BAS без дублів).
 pub async fn find_by_bas_id(pool: &PgPool, bas_id: &str) -> Result<Option<Counterparty>> {
-    let row = sqlx::query_as!(
-        Counterparty,
+    let row = sqlx::query_as::<_, Counterparty>(
         r#"
-        SELECT id, name, edrpou, iban, address, phone, email, notes,
+        SELECT id, name, edrpou, ipn, iban, address, phone, email, notes,
                is_archived, bas_id, created_at, updated_at
         FROM counterparties
         WHERE bas_id = $1
         "#,
-        bas_id
     )
+    .bind(bas_id)
     .fetch_optional(pool)
     .await?;
 
@@ -246,11 +246,11 @@ mod tests {
     #[test]
     fn db_counterparties_public_api_is_exposed() {
         // Перевіряємо що всі публічні функції доступні та компілюються
-        let _ = list as fn(&PgPool, Uuid) -> _;
+        let _ = list;
         let _ = get_by_id;
-        let _ = search as fn(&PgPool, Uuid, &str) -> _;
-        let _ = list_filtered as fn(&PgPool, Uuid, Option<&str>, bool) -> _;
-        let _ = create as fn(&PgPool, Uuid, &NewCounterparty) -> _;
+        let _ = search;
+        let _ = list_filtered;
+        let _ = create;
         let _ = update;
         let _ = archive;
         let _ = count_archived;

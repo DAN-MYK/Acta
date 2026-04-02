@@ -1,40 +1,69 @@
-// Форма створення / редагування контрагента
-//
-// Архітектура ідентична ActForm:
-//   - UI-логіка тут, бізнес-логіка — в Rust
-//   - Дані приходять через `in property`, події виходять через `callback`
-//   - При збереженні колбек передає текстові значення полів до Rust
+// Форма створення / редагування контрагента в card-layout стилі Figma.
 
 import { Theme } from "../theme.slint";
-import { LineEdit, TextEdit } from "std-widgets.slint";
+import { LineEdit } from "std-widgets.slint";
+
+component FormField inherits Rectangle {
+    in property <string> label;
+    in property <string> placeholder;
+    in-out property <string> value;
+
+    background: transparent;
+    min-height: 70px;
+
+    VerticalLayout {
+        spacing: 6px;
+
+        Text {
+            text: root.label;
+            font-size: 12px;
+            color: Theme.text-sub;
+        }
+
+        Rectangle {
+            height: 40px;
+            background: Theme.surface;
+            border-width: 1px;
+            border-color: Theme.border;
+            border-radius: 8px;
+
+            field := LineEdit {
+                text <=> root.value;
+                placeholder-text: root.placeholder;
+            }
+        }
+    }
+}
 
 export component CounterpartyForm {
-
-    // ── Вхідні дані (Rust → Slint) ─────────────────────────────────────────
     in property <bool>   is-edit-mode: false;
-    // UUID контрагента що редагується — Rust читає при збереженні
     in property <string> cp-edit-id: "";
-
-    // Поточні значення полів (заповнюються при редагуванні)
     in property <string> cp-name: "";
     in property <string> cp-edrpou: "";
+    in property <string> cp-ipn: "";
     in property <string> cp-iban: "";
     in property <string> cp-phone: "";
     in property <string> cp-email: "";
     in property <string> cp-address: "";
     in property <string> cp-notes: "";
 
-    // ── Колбеки (Slint → Rust) ──────────────────────────────────────────────
-    // Параметри: назва, ЄДРПОУ, IBAN, телефон, email, адреса, примітки
-    callback save(   string, string, string, string, string, string, string);
-    callback update( string, string, string, string, string, string, string);
+    callback save(string, string, string, string, string, string, string, string);
+    callback update(string, string, string, string, string, string, string, string);
     callback cancel();
 
-    min-width: 600px;
-    min-height: 400px;
+    min-width: 700px;
+    min-height: 480px;
+
+    private property <string> name-value: root.cp-name;
+    private property <string> edrpou-value: root.cp-edrpou;
+    private property <string> ipn-value: root.cp-ipn;
+    private property <string> iban-value: root.cp-iban;
+    private property <string> phone-value: root.cp-phone;
+    private property <string> email-value: root.cp-email;
+    private property <string> address-value: root.cp-address;
+    private property <string> notes-value: root.cp-notes;
 
     focus-scope := FocusScope {
-        forward-focus: name-field;
         key-pressed(event) => {
             if (event.text == Key.Escape) {
                 root.cancel();
@@ -47,228 +76,47 @@ export component CounterpartyForm {
             spacing: 0;
             padding: 0;
 
-        // ── Topbar ───────────────────────────────────────────────────────────
-        Rectangle {
-            height: 64px;
-            background: Theme.surface;
-
-            HorizontalLayout {
-                padding-left: 32px;
-                padding-right: 32px;
-
-                Text {
-                    text: root.is-edit-mode
-                        ? "Редагування контрагента"
-                        : "Новий контрагент";
-                    font-size: 18px;
-                    font-weight: 600;
-                    color: Theme.text-main;
-                    vertical-alignment: center;
-                    horizontal-stretch: 1;
-                }
-            }
-
             Rectangle {
-                y: parent.height - 1px;
-                height: 1px;
-                background: Theme.border;
-            }
-        }
+                height: 56px;
+                background: Theme.surface;
 
-        // ── Контент ──────────────────────────────────────────────────────────
-        Rectangle {
-            background: Theme.bg;
-            vertical-stretch: 1;
-
-            VerticalLayout {
-                padding-top: 32px;
-                padding-left: 32px;
-                padding-right: 32px;
-                padding-bottom: 32px;
-                spacing: 20px;
-
-                // ── Поля форми ────────────────────────────────────────────────
-                GridLayout {
-                    spacing: 12px;
-                    vertical-stretch: 0;
-
-                    Row {
-                        Text {
-                            text: "Назва *";
-                            font-size: 13px;
-                            color: Theme.text-sub;
-                            vertical-alignment: center;
-                            horizontal-stretch: 0;
-                            min-width: 130px;
-                        }
-                        Rectangle {
-                            background: Theme.surface;
-                            border-width: 1px;
-                            border-color: Theme.border;
-                            border-radius: 8px;
-                            height: 40px;
-                            name-field := LineEdit {
-                                text: root.cp-name;
-                                placeholder-text: "ТОВ «Назва компанії»";
-                            }
-                        }
-                    }
-
-                    Row {
-                        Text {
-                            text: "ЄДРПОУ";
-                            font-size: 13px;
-                            color: Theme.text-sub;
-                            vertical-alignment: center;
-                            horizontal-stretch: 0;
-                            min-width: 130px;
-                        }
-                        Rectangle {
-                            background: Theme.surface;
-                            border-width: 1px;
-                            border-color: Theme.border;
-                            border-radius: 8px;
-                            height: 40px;
-                            edrpou-field := LineEdit {
-                                text: root.cp-edrpou;
-                                placeholder-text: "12345678";
-                            }
-                        }
-                    }
-
-                    Row {
-                        Text {
-                            text: "IBAN";
-                            font-size: 13px;
-                            color: Theme.text-sub;
-                            vertical-alignment: center;
-                            horizontal-stretch: 0;
-                            min-width: 130px;
-                        }
-                        Rectangle {
-                            background: Theme.surface;
-                            border-width: 1px;
-                            border-color: Theme.border;
-                            border-radius: 8px;
-                            height: 40px;
-                            iban-field := LineEdit {
-                                text: root.cp-iban;
-                                placeholder-text: "UA123456789012345678901234567";
-                            }
-                        }
-                    }
-
-                    Row {
-                        Text {
-                            text: "Телефон";
-                            font-size: 13px;
-                            color: Theme.text-sub;
-                            vertical-alignment: center;
-                            horizontal-stretch: 0;
-                            min-width: 130px;
-                        }
-                        Rectangle {
-                            background: Theme.surface;
-                            border-width: 1px;
-                            border-color: Theme.border;
-                            border-radius: 8px;
-                            height: 40px;
-                            phone-field := LineEdit {
-                                text: root.cp-phone;
-                                placeholder-text: "+380 50 123 45 67";
-                            }
-                        }
-                    }
-
-                    Row {
-                        Text {
-                            text: "Email";
-                            font-size: 13px;
-                            color: Theme.text-sub;
-                            vertical-alignment: center;
-                            horizontal-stretch: 0;
-                            min-width: 130px;
-                        }
-                        Rectangle {
-                            background: Theme.surface;
-                            border-width: 1px;
-                            border-color: Theme.border;
-                            border-radius: 8px;
-                            height: 40px;
-                            email-field := LineEdit {
-                                text: root.cp-email;
-                                placeholder-text: "info@company.ua";
-                            }
-                        }
-                    }
-
-                    Row {
-                        Text {
-                            text: "Адреса";
-                            font-size: 13px;
-                            color: Theme.text-sub;
-                            vertical-alignment: center;
-                            horizontal-stretch: 0;
-                            min-width: 130px;
-                        }
-                        Rectangle {
-                            background: Theme.surface;
-                            border-width: 1px;
-                            border-color: Theme.border;
-                            border-radius: 8px;
-                            height: 40px;
-                            address-field := LineEdit {
-                                text: root.cp-address;
-                                placeholder-text: "м. Київ, вул. Хрещатик, 1";
-                            }
-                        }
-                    }
-
-                    Row {
-                        Text {
-                            text: "Примітки";
-                            font-size: 13px;
-                            color: Theme.text-sub;
-                            vertical-alignment: center;
-                            vertical-stretch: 0;
-                            horizontal-stretch: 0;
-                            min-width: 130px;
-                        }
-                        Rectangle {
-                            background: Theme.surface;
-                            border-width: 1px;
-                            border-color: Theme.border;
-                            border-radius: 8px;
-                            height: 88px;
-                            notes-field := TextEdit {
-                                text: root.cp-notes;
-                                wrap: word-wrap;
-                            }
-                        }
-                    }
-                }
-
-                // Розпірка
-                Rectangle { vertical-stretch: 1; }
-
-                // ── Кнопки дій ────────────────────────────────────────────────
                 HorizontalLayout {
-                    alignment: space-between;
-                    vertical-stretch: 0;
+                    padding-left: 32px;
+                    padding-right: 32px;
+                    spacing: 12px;
+                    alignment: center;
 
-                    // Кнопка "← Назад"
+                    Text {
+                        text: "← Контрагенти";
+                        font-size: 12px;
+                        color: Theme.text-sub;
+                    }
+
+                    Text {
+                        text: "/";
+                        font-size: 12px;
+                        color: Theme.text-muted;
+                    }
+
+                    Text {
+                        text: root.is-edit-mode ? "Редагування контрагента" : "Новий контрагент";
+                        font-size: 12px;
+                        color: Theme.text-muted;
+                        horizontal-stretch: 1;
+                    }
+
                     Rectangle {
-                        background: Theme.surface;
+                        width: 102px;
+                        height: 32px;
                         border-radius: 8px;
                         border-width: 1px;
                         border-color: Theme.border;
-                        height: 40px;
-                        width: 110px;
+                        background: Theme.surface;
 
                         Text {
-                            text: "← Назад";
-                            color: Theme.text-main;
-                            font-size: 13px;
+                            text: "Скасувати";
+                            color: Theme.text-sub;
+                            font-size: 12px;
                             font-weight: 500;
                             horizontal-alignment: center;
                             vertical-alignment: center;
@@ -280,17 +128,16 @@ export component CounterpartyForm {
                         }
                     }
 
-                    // Кнопка "Зберегти" (primary — синя)
                     Rectangle {
-                        background: Theme.primary;
+                        width: 96px;
+                        height: 32px;
                         border-radius: 8px;
-                        height: 40px;
-                        width: 130px;
+                        background: Theme.primary;
 
                         Text {
                             text: "Зберегти";
                             color: #ffffff;
-                            font-size: 13px;
+                            font-size: 12px;
                             font-weight: 600;
                             horizontal-alignment: center;
                             vertical-alignment: center;
@@ -301,31 +148,182 @@ export component CounterpartyForm {
                             clicked => {
                                 if (root.is-edit-mode) {
                                     root.update(
-                                        name-field.text,
-                                        edrpou-field.text,
-                                        iban-field.text,
-                                        phone-field.text,
-                                        email-field.text,
-                                        address-field.text,
-                                        notes-field.text
+                                        root.name-value,
+                                        root.edrpou-value,
+                                        root.ipn-value,
+                                        root.iban-value,
+                                        root.phone-value,
+                                        root.email-value,
+                                        root.address-value,
+                                        root.notes-value
                                     );
                                 } else {
                                     root.save(
-                                        name-field.text,
-                                        edrpou-field.text,
-                                        iban-field.text,
-                                        phone-field.text,
-                                        email-field.text,
-                                        address-field.text,
-                                        notes-field.text
+                                        root.name-value,
+                                        root.edrpou-value,
+                                        root.ipn-value,
+                                        root.iban-value,
+                                        root.phone-value,
+                                        root.email-value,
+                                        root.address-value,
+                                        root.notes-value
                                     );
                                 }
                             }
                         }
                     }
                 }
+
+                Rectangle {
+                    y: parent.height - 1px;
+                    height: 1px;
+                    background: Theme.border;
+                }
+            }
+
+            Rectangle {
+                background: Theme.bg;
+                vertical-stretch: 1;
+
+                HorizontalLayout {
+                    padding-top: 20px;
+                    padding-left: 20px;
+                    padding-right: 20px;
+                    padding-bottom: 20px;
+                    spacing: 16px;
+                    alignment: start;
+
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        vertical-stretch: 1;
+                        background: Theme.surface;
+                        border-radius: 14px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+
+                        VerticalLayout {
+                            padding: 18px;
+                            spacing: 18px;
+
+                            Text {
+                                text: "Основна інформація";
+                                font-size: 16px;
+                                font-weight: 600;
+                                color: Theme.text-main;
+                            }
+
+                            FormField {
+                                label: "Назва компанії";
+                                placeholder: "Введіть назву...";
+                                value <=> root.name-value;
+                            }
+
+                            HorizontalLayout {
+                                spacing: 16px;
+
+                                FormField {
+                                    horizontal-stretch: 1;
+                                    label: "ЄДРПОУ";
+                                    placeholder: "12345678";
+                                    value <=> root.edrpou-value;
+                                }
+
+                                FormField {
+                                    horizontal-stretch: 1;
+                                    label: "ІПН / РНОКПП";
+                                    placeholder: "1234567890";
+                                    value <=> root.ipn-value;
+                                }
+                            }
+
+                            FormField {
+                                label: "IBAN";
+                                placeholder: "UA12345678901234567890123456";
+                                value <=> root.iban-value;
+                            }
+
+                            Rectangle {
+                                height: 1px;
+                                background: Theme.border;
+                            }
+
+                            Text {
+                                text: "Контактна інформація";
+                                font-size: 16px;
+                                font-weight: 600;
+                                color: Theme.text-main;
+                            }
+
+                            HorizontalLayout {
+                                spacing: 16px;
+
+                                FormField {
+                                    horizontal-stretch: 1;
+                                    label: "Телефон";
+                                    placeholder: "+380 44 123-45-67";
+                                    value <=> root.phone-value;
+                                }
+
+                                FormField {
+                                    horizontal-stretch: 1;
+                                    label: "Email";
+                                    placeholder: "info@company.ua";
+                                    value <=> root.email-value;
+                                }
+                            }
+
+                            FormField {
+                                label: "Адреса";
+                                placeholder: "м. Київ, вул. Хрещатик, 1";
+                                value <=> root.address-value;
+                            }
+
+                        }
+                    }
+
+                    Rectangle {
+                        width: 260px;
+                        background: Theme.surface;
+                        border-radius: 14px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        vertical-stretch: 0;
+
+                        VerticalLayout {
+                            padding: 18px;
+                            spacing: 10px;
+
+                            Text {
+                                text: "Підказка";
+                                font-size: 16px;
+                                font-weight: 600;
+                                color: Theme.text-main;
+                            }
+
+                            Text {
+                                text: "ЄДРПОУ — 8-значний код для юридичних осіб або ФОП.";
+                                font-size: 12px;
+                                color: Theme.text-sub;
+                                wrap: word-wrap;
+                            }
+
+                            Text {
+                                text: "IBAN — 29 символів, починається з UA та 6-значного МФО.";
+                                font-size: 12px;
+                                color: Theme.text-sub;
+                                wrap: word-wrap;
+                            }
+
+                            Text {
+                                text: "Телефон, email та адреса є необов'язковими. ІПН / РНОКПП заповнюйте для ФОП або фізичних осіб.";
+                                font-size: 12px;
+                                color: Theme.text-sub;
+                                wrap: word-wrap;
+                            }
+                        }
+                    }
+                }
             }
         }
-    }
     }
 }

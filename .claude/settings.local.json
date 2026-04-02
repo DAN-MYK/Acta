@@ -31,7 +31,12 @@
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\([k for k in d.keys\\(\\)], indent=2\\)\\)\")",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('mcpServers', {}\\), indent=2\\)\\)\")",
       "Bash(git merge:*)",
-      "Bash(SQLX_OFFLINE=true cargo check)"
+      "Bash(SQLX_OFFLINE=true cargo check)",
+      "Bash(git rm:*)",
+      "Bash(SQLX_OFFLINE=true cargo test --lib pdf)",
+      "Bash(SQLX_OFFLINE=true cargo test --lib)",
+      "Bash(SQLX_OFFLINE=true cargo build)",
+      "Bash(cargo clean:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

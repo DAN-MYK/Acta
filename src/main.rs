@@ -23,11 +23,13 @@ use models::{
 // UUID дефолтної компанії (з міграції 012) — використовується якщо ще не обрано іншу.
 const DEFAULT_COMPANY_ID: uuid::Uuid =
     uuid::Uuid::from_bytes([0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,1]);
+const COUNTERPARTY_PAGE_SIZE: usize = 10;
 
 #[derive(Clone, Default)]
 struct CounterpartyListState {
     query: String,
     include_archived: bool,
+    page: usize,
 }
 
 #[derive(Clone, Default)]
@@ -147,7 +149,7 @@ async fn main() -> Result<()> {
     // ── Початкове завантаження ───────────────────────────────────────────────
     // Тут ми ще в main thread (до ui.run()), тому ModelRc будувати безпечно.
     let cid = *active_company_id.lock().unwrap();
-    reload_counterparties(&pool, ui.as_weak(), cid, String::new(), false, false).await?;
+    reload_counterparties(&pool, ui.as_weak(), cid, String::new(), false, 0, false).await?;
 
     // ── Початкове завантаження актів ─────────────────────────────────────────
     reload_acts(&pool, ui.as_weak(), cid, None, String::new(), false).await?;
@@ -180,12 +182,13 @@ async fn main() -> Result<()> {
         let (query_str, include_archived) = {
             let mut state = counterparty_state_search.lock().unwrap();
             state.query = query.to_string();
+            state.page = 0;
             (state.query.clone(), state.include_archived)
         };
 
         tokio::spawn(async move {
             if let Err(e) =
-                reload_counterparties(&pool, ui_handle, cid, query_str, include_archived, false).await
+                reload_counterparties(&pool, ui_handle, cid, query_str, include_archived, 0, false).await
             {
                 tracing::error!("Помилка пошуку: {e}");
             }
@@ -219,6 +222,9 @@ async fn main() -> Result<()> {
                             ui.set_cp_form_name(SharedString::from(cp.name.as_str()));
                             ui.set_cp_form_edrpou(SharedString::from(
                                 cp.edrpou.as_deref().unwrap_or(""),
+                            ));
+                            ui.set_cp_form_ipn(SharedString::from(
+                                cp.ipn.as_deref().unwrap_or(""),
                             ));
                             ui.set_cp_form_iban(SharedString::from(
                                 cp.iban.as_deref().unwrap_or(""),
@@ -254,6 +260,7 @@ async fn main() -> Result<()> {
         if let Some(ui) = ui_weak_cp_create.upgrade() {
             ui.set_cp_form_name(SharedString::from(""));
             ui.set_cp_form_edrpou(SharedString::from(""));
+            ui.set_cp_form_ipn(SharedString::from(""));
             ui.set_cp_form_iban(SharedString::from(""));
             ui.set_cp_form_phone(SharedString::from(""));
             ui.set_cp_form_email(SharedString::from(""));
@@ -278,14 +285,67 @@ async fn main() -> Result<()> {
         let (query, include_archived) = {
             let mut state = counterparty_state_filter.lock().unwrap();
             state.include_archived = !state.include_archived;
+            state.page = 0;
             (state.query.clone(), state.include_archived)
         };
 
         tokio::spawn(async move {
             if let Err(e) =
-                reload_counterparties(&pool, ui_handle, cid, query, include_archived, false).await
+                reload_counterparties(&pool, ui_handle, cid, query, include_archived, 0, false).await
             {
                 tracing::error!("Помилка фільтра контрагентів: {e}");
+            }
+        });
+    });
+
+    let pool_cp_prev_page = pool.clone();
+    let ui_weak_cp_prev_page = ui.as_weak();
+    let counterparty_state_prev_page = counterparty_state.clone();
+    let active_company_id_prev_page = active_company_id.clone();
+    ui.on_counterparty_prev_page_clicked(move || {
+        let pool = pool_cp_prev_page.clone();
+        let ui_handle = ui_weak_cp_prev_page.clone();
+        let cid = *active_company_id_prev_page.lock().unwrap();
+        let (query, include_archived, page, should_reload) = {
+            let mut state = counterparty_state_prev_page.lock().unwrap();
+            if state.page == 0 {
+                (state.query.clone(), state.include_archived, state.page, false)
+            } else {
+                state.page -= 1;
+                (state.query.clone(), state.include_archived, state.page, true)
+            }
+        };
+
+        if should_reload {
+            tokio::spawn(async move {
+                if let Err(e) =
+                    reload_counterparties(&pool, ui_handle, cid, query, include_archived, page, false).await
+                {
+                    tracing::error!("Помилка пагінації контрагентів: {e}");
+                }
+            });
+        }
+    });
+
+    let pool_cp_next_page = pool.clone();
+    let ui_weak_cp_next_page = ui.as_weak();
+    let counterparty_state_next_page = counterparty_state.clone();
+    let active_company_id_next_page = active_company_id.clone();
+    ui.on_counterparty_next_page_clicked(move || {
+        let pool = pool_cp_next_page.clone();
+        let ui_handle = ui_weak_cp_next_page.clone();
+        let cid = *active_company_id_next_page.lock().unwrap();
+        let (query, include_archived, page) = {
+            let mut state = counterparty_state_next_page.lock().unwrap();
+            state.page += 1;
+            (state.query.clone(), state.include_archived, state.page)
+        };
+
+        tokio::spawn(async move {
+            if let Err(e) =
+                reload_counterparties(&pool, ui_handle, cid, query, include_archived, page, false).await
+            {
+                tracing::error!("Помилка пагінації контрагентів: {e}");
             }
         });
     });
@@ -729,11 +789,12 @@ async fn main() -> Result<()> {
     let counterparty_state_save = counterparty_state.clone();
     let active_company_id_cp_save = active_company_id.clone();
 
-    ui.on_cp_form_save(move |name, edrpou, iban, phone, email, address, notes| {
+    ui.on_cp_form_save(move |name, edrpou, ipn, iban, phone, email, address, notes| {
         let pool = pool_cp_save.clone();
         let ui_weak = ui_weak_cp_save.clone();
         let name_s = name.to_string();
         let edrpou_s = edrpou.to_string();
+        let ipn_s = ipn.to_string();
         let iban_s = iban.to_string();
         let phone_s = phone.to_string();
         let email_s = email.to_string();
@@ -755,6 +816,11 @@ async fn main() -> Result<()> {
                     None
                 } else {
                     Some(edrpou_s)
+                },
+                ipn: if ipn_s.trim().is_empty() {
+                    None
+                } else {
+                    Some(ipn_s)
                 },
                 iban: if iban_s.trim().is_empty() {
                     None
@@ -792,12 +858,12 @@ async fn main() -> Result<()> {
                         format!("Контрагента '{}' створено", cp.name),
                         false,
                     );
-                    let (query, include_archived) = {
+                    let (query, include_archived, page) = {
                         let state = counterparty_state.lock().unwrap();
-                        (state.query.clone(), state.include_archived)
+                        (state.query.clone(), state.include_archived, state.page)
                     };
                     if let Err(e) =
-                        reload_counterparties(&pool, ui_weak, cid, query, include_archived, true).await
+                        reload_counterparties(&pool, ui_weak, cid, query, include_archived, page, true).await
                     {
                         tracing::error!(
                             "Помилка оновлення списку контрагентів після створення: {e}"
@@ -818,7 +884,7 @@ async fn main() -> Result<()> {
     let counterparty_state_update = counterparty_state.clone();
     let active_company_id_cp_update = active_company_id.clone();
 
-    ui.on_cp_form_update(move |name, edrpou, iban, phone, email, address, notes| {
+    ui.on_cp_form_update(move |name, edrpou, ipn, iban, phone, email, address, notes| {
         let Some(ui_ref) = ui_weak_cp_update.upgrade() else {
             return;
         };
@@ -829,6 +895,7 @@ async fn main() -> Result<()> {
         let cid = *active_company_id_cp_update.lock().unwrap();
         let name_s = name.to_string();
         let edrpou_s = edrpou.to_string();
+        let ipn_s = ipn.to_string();
         let iban_s = iban.to_string();
         let phone_s = phone.to_string();
         let email_s = email.to_string();
@@ -853,6 +920,11 @@ async fn main() -> Result<()> {
                     None
                 } else {
                     Some(edrpou_s)
+                },
+                ipn: if ipn_s.trim().is_empty() {
+                    None
+                } else {
+                    Some(ipn_s)
                 },
                 iban: if iban_s.trim().is_empty() {
                     None
@@ -889,12 +961,12 @@ async fn main() -> Result<()> {
                         format!("Контрагента '{}' оновлено", cp.name),
                         false,
                     );
-                    let (query, include_archived) = {
+                    let (query, include_archived, page) = {
                         let state = counterparty_state.lock().unwrap();
-                        (state.query.clone(), state.include_archived)
+                        (state.query.clone(), state.include_archived, state.page)
                     };
                     if let Err(e) =
-                        reload_counterparties(&pool, ui_weak, cid, query, include_archived, true).await
+                        reload_counterparties(&pool, ui_weak, cid, query, include_archived, page, true).await
                     {
                         tracing::error!(
                             "Помилка оновлення списку контрагентів після редагування: {e}"
@@ -938,12 +1010,12 @@ async fn main() -> Result<()> {
                         "Контрагента архівовано".to_string(),
                         false,
                     );
-                    let (query, include_archived) = {
+                    let (query, include_archived, page) = {
                         let state = counterparty_state.lock().unwrap();
-                        (state.query.clone(), state.include_archived)
+                        (state.query.clone(), state.include_archived, state.page)
                     };
                     if let Err(e) =
-                        reload_counterparties(&pool, ui_handle, cid, query, include_archived, false)
+                        reload_counterparties(&pool, ui_handle, cid, query, include_archived, page, false)
                             .await
                     {
                         tracing::error!(
@@ -1892,9 +1964,9 @@ async fn main() -> Result<()> {
                     let subtitle = company_subtitle(&company);
                     let id_str = company.id.to_string();
                     let company_id = company.id;
-                    let (cp_query, include_archived) = {
+                    let (cp_query, include_archived, cp_page) = {
                         let state = counterparty_state.lock().unwrap();
-                        (state.query.clone(), state.include_archived)
+                        (state.query.clone(), state.include_archived, state.page)
                     };
                     let (act_query, status_filter) = {
                         let state = act_state.lock().unwrap();
@@ -1917,6 +1989,7 @@ async fn main() -> Result<()> {
                         company_id,
                         cp_query,
                         include_archived,
+                        cp_page,
                         false,
                     )
                     .await
@@ -2115,9 +2188,9 @@ async fn main() -> Result<()> {
                         tracing::error!("Помилка оновлення списку компаній: {e}");
                     }
 
-                    let (cp_query, include_archived) = {
+                    let (cp_query, include_archived, cp_page) = {
                         let state = counterparty_state.lock().unwrap();
-                        (state.query.clone(), state.include_archived)
+                        (state.query.clone(), state.include_archived, state.page)
                     };
                     let (act_query, status_filter) = {
                         let state = act_state.lock().unwrap();
@@ -2130,6 +2203,7 @@ async fn main() -> Result<()> {
                         c.id,
                         cp_query,
                         include_archived,
+                        cp_page,
                         false,
                     )
                     .await
@@ -2437,15 +2511,50 @@ async fn reload_counterparties(
     company_id: uuid::Uuid,
     query: String,
     include_archived: bool,
+    page: usize,
     close_form: bool,
 ) -> Result<()> {
-    let counterparties =
-        db::counterparties::list_filtered(pool, company_id, normalized_query(&query), include_archived).await?;
-    let archived_cnt = db::counterparties::count_archived(pool).await.unwrap_or(0) as i32;
-    let data = to_table_data(&counterparties);
-    let total = data.ids.len() as i32;
-    let active = data.archived.iter().filter(|archived| !**archived).count() as i32;
-    let pagination = SharedString::from(format!("Показано {} контрагентів", total).as_str());
+    let filter_query = normalized_query(&query);
+    let all_counterparties =
+        db::counterparties::list_filtered(pool, company_id, filter_query, true).await?;
+
+    let total_all = all_counterparties.len();
+    let active_all = all_counterparties.iter().filter(|cp| !cp.is_archived).count();
+    let archived_all = all_counterparties.iter().filter(|cp| cp.is_archived).count();
+
+    let filtered_counterparties: Vec<_> = if include_archived {
+        all_counterparties
+    } else {
+        all_counterparties
+            .into_iter()
+            .filter(|cp| !cp.is_archived)
+            .collect()
+    };
+
+    let current_page = page.min(total_filtered_pages(filtered_counterparties.len()).saturating_sub(1));
+
+    let start = current_page * COUNTERPARTY_PAGE_SIZE;
+    let end = (start + COUNTERPARTY_PAGE_SIZE).min(filtered_counterparties.len());
+    let page_slice = if start < filtered_counterparties.len() {
+        &filtered_counterparties[start..end]
+    } else {
+        &filtered_counterparties[0..0]
+    };
+
+    let data = to_table_data(page_slice);
+    let total_pages = total_filtered_pages(filtered_counterparties.len()) as i32;
+    let page_label = if filtered_counterparties.is_empty() {
+        "Показано 0 з 0 контрагентів".to_string()
+    } else {
+        format!(
+            "Показано {}-{} з {} контрагентів",
+            start + 1,
+            end,
+            filtered_counterparties.len()
+        )
+    };
+    let pagination = SharedString::from(page_label.as_str());
+    let current_page_ui = (current_page + 1) as i32;
 
     ui_weak
         .upgrade_in_event_loop(move |ui| {
@@ -2453,11 +2562,13 @@ async fn reload_counterparties(
             ui.set_counterparty_rows(rows);
             ui.set_counterparty_ids(ids);
             ui.set_counterparty_archived(archived);
-            ui.set_counterparty_total_count(total);
-            ui.set_counterparty_active_count(active);
-            ui.set_counterparty_archived_count(archived_cnt);
+            ui.set_counterparty_total_count(total_all as i32);
+            ui.set_counterparty_active_count(active_all as i32);
+            ui.set_counterparty_archived_count(archived_all as i32);
             ui.set_counterparty_pagination_text(pagination);
             ui.set_counterparty_show_archived(include_archived);
+            ui.set_counterparty_current_page(current_page_ui);
+            ui.set_counterparty_total_pages(total_pages.max(1));
             if close_form {
                 ui.set_show_cp_form(false);
             }
@@ -2465,6 +2576,11 @@ async fn reload_counterparties(
         .map_err(anyhow::Error::from)?;
 
     Ok(())
+}
+
+fn total_filtered_pages(total_items: usize) -> usize {
+    let pages = total_items.div_ceil(COUNTERPARTY_PAGE_SIZE);
+    pages.max(1)
 }
 
 async fn reload_acts(

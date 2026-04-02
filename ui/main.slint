@@ -93,6 +93,8 @@ export component MainWindow inherits Window {
     in property <int>                      counterparty-archived-count: 0;
     in property <string>                   counterparty-pagination-text: "";
     in property <bool>                     counterparty-show-archived: false;
+    in property <int>                      counterparty-current-page: 1;
+    in property <int>                      counterparty-total-pages: 1;
 
     // ── Стан форми контрагента ───────────────────────────────────────────────
     in property <bool>   show-cp-form: false;
@@ -100,6 +102,7 @@ export component MainWindow inherits Window {
     in property <string> cp-form-edit-id: "";
     in property <string> cp-form-name: "";
     in property <string> cp-form-edrpou: "";
+    in property <string> cp-form-ipn: "";
     in property <string> cp-form-iban: "";
     in property <string> cp-form-phone: "";
     in property <string> cp-form-email: "";
@@ -183,11 +186,13 @@ export component MainWindow inherits Window {
     callback counterparty-create-clicked();
     callback counterparty-archive-clicked(string);
     callback counterparty-filter-clicked();
+    callback counterparty-prev-page-clicked();
+    callback counterparty-next-page-clicked();
 
     // ── Колбеки форми контрагента ────────────────────────────────────────────
     // Параметри: назва, ЄДРПОУ, IBAN, телефон, email, адреса, примітки
-    callback cp-form-save(   string, string, string, string, string, string, string);
-    callback cp-form-update( string, string, string, string, string, string, string);
+    callback cp-form-save(   string, string, string, string, string, string, string, string);
+    callback cp-form-update( string, string, string, string, string, string, string, string);
     callback cp-form-cancel();
 
     // ── Колбеки актів ────────────────────────────────────────────────────────
@@ -495,6 +500,8 @@ export component MainWindow inherits Window {
                 archived-count:   root.counterparty-archived-count;
                 pagination-text:  root.counterparty-pagination-text;
                 show-archived:    root.counterparty-show-archived;
+                current-page:     root.counterparty-current-page;
+                total-pages:      root.counterparty-total-pages;
 
                 search-changed(q)   => { root.counterparty-search-changed(q); }
                 row-selected(id)    => { root.counterparty-selected(id); }
@@ -502,6 +509,8 @@ export component MainWindow inherits Window {
                 create-clicked      => { root.counterparty-create-clicked(); }
                 archive-clicked(id) => { root.counterparty-archive-clicked(id); }
                 filter-clicked      => { root.counterparty-filter-clicked(); }
+                prev-page-clicked   => { root.counterparty-prev-page-clicked(); }
+                next-page-clicked   => { root.counterparty-next-page-clicked(); }
             }
 
             // ── Сторінка 0: Контрагенти — форма ─────────────────────────────
@@ -510,14 +519,15 @@ export component MainWindow inherits Window {
                 cp-edit-id:   root.cp-form-edit-id;
                 cp-name:      root.cp-form-name;
                 cp-edrpou:    root.cp-form-edrpou;
+                cp-ipn:       root.cp-form-ipn;
                 cp-iban:      root.cp-form-iban;
                 cp-phone:     root.cp-form-phone;
                 cp-email:     root.cp-form-email;
                 cp-address:   root.cp-form-address;
                 cp-notes:     root.cp-form-notes;
 
-                save(nm, ed, ib, ph, em, ad, nt)    => { root.cp-form-save(nm, ed, ib, ph, em, ad, nt); }
-                update(nm, ed, ib, ph, em, ad, nt)  => { root.cp-form-update(nm, ed, ib, ph, em, ad, nt); }
+                save(nm, ed, ip, ib, ph, em, ad, nt)    => { root.cp-form-save(nm, ed, ip, ib, ph, em, ad, nt); }
+                update(nm, ed, ip, ib, ph, em, ad, nt)  => { root.cp-form-update(nm, ed, ip, ib, ph, em, ad, nt); }
                 cancel                              => { root.cp-form-cancel(); }
             }
 

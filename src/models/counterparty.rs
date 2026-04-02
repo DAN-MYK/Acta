@@ -15,6 +15,7 @@ pub struct Counterparty {
     pub id: Uuid,
     pub name: String,
     pub edrpou: Option<String>, // ЄДРПОУ може бути відсутнім (ФОП без реєстрації)
+    pub ipn: Option<String>,    // ІПН / РНОКПП для ФОП або фізичних осіб
     pub iban: Option<String>,
     pub address: Option<String>,
     pub phone: Option<String>,
@@ -34,6 +35,7 @@ pub struct Counterparty {
 pub struct NewCounterparty {
     pub name: String,
     pub edrpou: Option<String>,
+    pub ipn: Option<String>,
     pub iban: Option<String>,
     pub address: Option<String>,
     pub phone: Option<String>,
@@ -54,6 +56,7 @@ pub struct NewCounterparty {
 pub struct UpdateCounterparty {
     pub name: String,
     pub edrpou: Option<String>,
+    pub ipn: Option<String>,
     pub iban: Option<String>,
     pub address: Option<String>,
     pub phone: Option<String>,
@@ -70,6 +73,7 @@ mod tests {
         let cp = NewCounterparty {
             name: "ТОВ Приклад".to_string(),
             edrpou: Some("12345678".to_string()),
+            ipn: None,
             iban: None,
             address: None,
             phone: Some("+380501112233".to_string()),
@@ -88,6 +92,7 @@ mod tests {
         let original = UpdateCounterparty {
             name: "ФОП Іваненко".to_string(),
             edrpou: None,
+            ipn: Some("1234567890".to_string()),
             iban: Some("UA123".to_string()),
             address: Some("Київ".to_string()),
             phone: None,
@@ -97,6 +102,7 @@ mod tests {
 
         let cloned = original.clone();
         assert_eq!(cloned.name, original.name);
+        assert_eq!(cloned.ipn, original.ipn);
         assert_eq!(cloned.iban, original.iban);
         assert_eq!(cloned.notes, original.notes);
     }
