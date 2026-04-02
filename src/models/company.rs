@@ -1,5 +1,6 @@
 // Модель компанії — юридична особа, від імені якої ведеться облік
 use chrono::{DateTime, Utc};
+use rust_decimal::Decimal;
 use sqlx::FromRow;
 use uuid::Uuid;
 
@@ -26,6 +27,18 @@ pub struct Company {
     pub is_archived:     bool,
     pub created_at:      DateTime<Utc>,
     pub updated_at:      DateTime<Utc>,
+}
+
+/// Компанія разом зі статистикою для екрана керування компаніями.
+#[derive(Debug, Clone, FromRow)]
+pub struct CompanySummary {
+    pub id:              Uuid,
+    pub name:            String,
+    pub short_name:      Option<String>,
+    pub edrpou:          Option<String>,
+    pub is_vat_payer:    bool,
+    pub act_count:       i64,
+    pub total_amount:    Decimal,
 }
 
 /// Дані для створення нової компанії.

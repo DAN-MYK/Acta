@@ -15,8 +15,9 @@ use sqlx::postgres::PgPoolOptions;
 use std::sync::{Arc, Mutex};
 
 use models::{
-    ActStatus, Company, NewAct, NewActItem, NewCompany, NewCounterparty, NewTask, Task,
-    TaskPriority, TaskStatus, UpdateAct, UpdateCompany, UpdateCounterparty,
+    ActStatus, Company, CompanySummary, InvoiceStatus, NewAct, NewActItem, NewCompany,
+    NewCounterparty, NewInvoice, NewInvoiceItem, NewTask, Task, TaskPriority, TaskStatus,
+    UpdateAct, UpdateCompany, UpdateCounterparty, UpdateInvoice,
 };
 
 // UUID дефолтної компанії (з міграції 012) — використовується якщо ще не обрано іншу.
@@ -33,6 +34,12 @@ struct CounterpartyListState {
 struct ActListState {
     query: String,
     status_filter: Option<ActStatus>,
+}
+
+#[derive(Clone, Default)]
+struct InvoiceListState {
+    query: String,
+    status_filter: Option<models::InvoiceStatus>,
 }
 
 #[derive(Clone, Default)]
@@ -65,6 +72,7 @@ async fn main() -> Result<()> {
 
     let counterparty_state = Arc::new(Mutex::new(CounterpartyListState::default()));
     let act_state = Arc::new(Mutex::new(ActListState::default()));
+    let invoice_state = Arc::new(Mutex::new(InvoiceListState::default()));
     let task_state = Arc::new(Mutex::new(TaskListState::default()));
 
     // ── Активна компанія — спільна між усіма callbacks ───────────────────────
@@ -77,8 +85,9 @@ async fn main() -> Result<()> {
     let config = AppConfig::load();
     {
         let companies = db::companies::list(&pool).await.unwrap_or_default();
+        let company_rows = db::companies::list_with_summary(&pool).await.unwrap_or_default();
         // Відображаємо список у UI (для сторінки Компанії)
-        apply_company_rows(&ui, &companies);
+        apply_company_rows(&ui, &company_rows, *active_company_id.lock().unwrap());
         ui.set_active_company_subtitle(SharedString::from(
             "Оберіть компанію для роботи",
         ));
@@ -142,6 +151,9 @@ async fn main() -> Result<()> {
 
     // ── Початкове завантаження актів ─────────────────────────────────────────
     reload_acts(&pool, ui.as_weak(), cid, None, String::new(), false).await?;
+
+    // ── Початкове завантаження накладних ─────────────────────────────────────
+    reload_invoices(&pool, ui.as_weak(), cid, None, String::new(), false).await?;
 
     // ── Початкове завантаження задач ────────────────────────────────────────
     ui.set_tasks_loading(true);
@@ -1516,6 +1528,327 @@ async fn main() -> Result<()> {
         }
     });
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ── Видаткові накладні ──────────────────────────────────────────────────────
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    let pool_inv_filter = pool.clone();
+    let ui_weak_inv_filter = ui.as_weak();
+    let invoice_state_filter = invoice_state.clone();
+    let active_company_id_inv_filter = active_company_id.clone();
+    ui.on_invoice_status_filter_changed(move |filter_idx| {
+        let pool = pool_inv_filter.clone();
+        let ui_handle = ui_weak_inv_filter.clone();
+        let inv_state = invoice_state_filter.clone();
+        let cid = *active_company_id_inv_filter.lock().unwrap();
+        tokio::spawn(async move {
+            let status_filter = match filter_idx {
+                1 => Some(InvoiceStatus::Draft),
+                2 => Some(InvoiceStatus::Issued),
+                3 => Some(InvoiceStatus::Signed),
+                4 => Some(InvoiceStatus::Paid),
+                _ => None,
+            };
+            let query = {
+                let mut state = inv_state.lock().unwrap();
+                state.status_filter = status_filter.clone();
+                state.query.clone()
+            };
+            if let Err(e) = reload_invoices(&pool, ui_handle, cid, status_filter, query, false).await {
+                tracing::error!("Помилка фільтру накладних: {e}");
+            }
+        });
+    });
+
+    let pool_inv_search = pool.clone();
+    let ui_weak_inv_search = ui.as_weak();
+    let invoice_state_search = invoice_state.clone();
+    let active_company_id_inv_search = active_company_id.clone();
+    ui.on_invoice_search_changed(move |query| {
+        let pool = pool_inv_search.clone();
+        let ui_handle = ui_weak_inv_search.clone();
+        let inv_state = invoice_state_search.clone();
+        let cid = *active_company_id_inv_search.lock().unwrap();
+        let query = query.to_string();
+        tokio::spawn(async move {
+            let (status_filter, query) = {
+                let mut state = inv_state.lock().unwrap();
+                state.query = query.clone();
+                (state.status_filter.clone(), query)
+            };
+            if let Err(e) = reload_invoices(&pool, ui_handle, cid, status_filter, query, false).await {
+                tracing::error!("Помилка пошуку накладних: {e}");
+            }
+        });
+    });
+
+    ui.on_invoice_selected(|_id| {});
+
+    let pool_inv_create = pool.clone();
+    let ui_weak_inv_create = ui.as_weak();
+    let active_company_id_inv_create = active_company_id.clone();
+    ui.on_invoice_create_clicked(move || {
+        let pool = pool_inv_create.clone();
+        let ui_weak = ui_weak_inv_create.clone();
+        let cid = *active_company_id_inv_create.lock().unwrap();
+        tokio::spawn(async move {
+            let (cps, next_number) = tokio::join!(
+                db::invoices::counterparties_for_select(&pool, cid),
+                db::invoices::generate_next_number(&pool, cid),
+            );
+            let cps = cps.unwrap_or_default();
+            let next_number = next_number.unwrap_or_else(|_| "НАК-001".into());
+            let today = chrono::Local::now().format("%d.%m.%Y").to_string();
+            ui_weak.upgrade_in_event_loop(move |ui| {
+                let (names, ids): (Vec<SharedString>, Vec<SharedString>) = cps.iter()
+                    .map(|(id, name)| (SharedString::from(name.as_str()), SharedString::from(id.to_string().as_str())))
+                    .unzip();
+                ui.set_invoice_form_cp_names(ModelRc::new(VecModel::from(names)));
+                ui.set_invoice_form_cp_ids(ModelRc::new(VecModel::from(ids)));
+                ui.set_invoice_form_number(SharedString::from(next_number.as_str()));
+                ui.set_invoice_form_date(SharedString::from(today.as_str()));
+                ui.set_invoice_form_notes(SharedString::from(""));
+                ui.set_invoice_form_cp_index(0);
+                ui.set_invoice_form_is_edit(false);
+                ui.set_invoice_form_edit_id(SharedString::from(""));
+                ui.set_invoice_form_total(SharedString::from("0.00"));
+                let empty: Vec<SharedString> = vec![];
+                ui.set_invoice_form_item_descriptions(ModelRc::new(VecModel::from(empty.clone())));
+                ui.set_invoice_form_item_quantities(ModelRc::new(VecModel::from(empty.clone())));
+                ui.set_invoice_form_item_units(ModelRc::new(VecModel::from(empty.clone())));
+                ui.set_invoice_form_item_prices(ModelRc::new(VecModel::from(empty.clone())));
+                ui.set_invoice_form_item_amounts(ModelRc::new(VecModel::from(empty)));
+                ui.set_show_invoice_form(true);
+            }).ok();
+        });
+    });
+
+    let pool_inv_advance = pool.clone();
+    let ui_weak_inv_advance = ui.as_weak();
+    let invoice_state_advance = invoice_state.clone();
+    let active_company_id_inv_advance = active_company_id.clone();
+    ui.on_invoice_advance_status_clicked(move |id| {
+        let pool = pool_inv_advance.clone();
+        let ui_weak = ui_weak_inv_advance.clone();
+        let inv_state = invoice_state_advance.clone();
+        let cid = *active_company_id_inv_advance.lock().unwrap();
+        let id_str = id.to_string();
+        tokio::spawn(async move {
+            let invoice_id = match uuid::Uuid::parse_str(&id_str) {
+                Ok(id) => id,
+                Err(_) => { tracing::error!("Невалідний UUID накладної: {id_str}"); return; }
+            };
+            match db::invoices::advance_status(&pool, invoice_id).await {
+                Ok(Some(inv)) => {
+                    let (status_filter, query) = {
+                        let state = inv_state.lock().unwrap();
+                        (state.status_filter.clone(), state.query.clone())
+                    };
+                    if let Err(e) = reload_invoices(&pool, ui_weak, cid, status_filter, query, false).await {
+                        tracing::error!("Помилка оновлення накладних: {e}");
+                    }
+                    let _ = inv; // suppress unused
+                }
+                Ok(None) => tracing::error!("Накладну {id_str} не знайдено"),
+                Err(e) => tracing::error!("Помилка зміни статусу накладної: {e}"),
+            }
+        });
+    });
+
+    let pool_inv_edit = pool.clone();
+    let ui_weak_inv_edit = ui.as_weak();
+    let active_company_id_inv_edit = active_company_id.clone();
+    ui.on_invoice_edit_clicked(move |inv_id| {
+        let pool = pool_inv_edit.clone();
+        let ui_weak = ui_weak_inv_edit.clone();
+        let cid = *active_company_id_inv_edit.lock().unwrap();
+        let id_str = inv_id.to_string();
+        tokio::spawn(async move {
+            let invoice_uuid = match uuid::Uuid::parse_str(&id_str) {
+                Ok(id) => id,
+                Err(_) => { tracing::error!("Невалідний UUID накладної: {id_str}"); return; }
+            };
+            let (result, cps) = tokio::join!(
+                db::invoices::get_for_edit(&pool, invoice_uuid),
+                db::invoices::counterparties_for_select(&pool, cid),
+            );
+            let (invoice, items) = match result {
+                Ok(Some(data)) => data,
+                Ok(None) => { tracing::error!("Накладна {id_str} не знайдена"); return; }
+                Err(e) => { tracing::error!("Помилка завантаження накладної: {e}"); return; }
+            };
+            let cps = cps.unwrap_or_default();
+            let cp_id_str = invoice.counterparty_id.to_string();
+            let cp_index = cps.iter().position(|(id, _)| id.to_string() == cp_id_str).unwrap_or(0);
+            ui_weak.upgrade_in_event_loop(move |ui| {
+                let (names, ids): (Vec<SharedString>, Vec<SharedString>) = cps.iter()
+                    .map(|(id, name)| (SharedString::from(name.as_str()), SharedString::from(id.to_string().as_str())))
+                    .unzip();
+                ui.set_invoice_form_cp_names(ModelRc::new(VecModel::from(names)));
+                ui.set_invoice_form_cp_ids(ModelRc::new(VecModel::from(ids)));
+                ui.set_invoice_form_number(SharedString::from(invoice.number.as_str()));
+                ui.set_invoice_form_date(SharedString::from(invoice.date.format("%d.%m.%Y").to_string().as_str()));
+                ui.set_invoice_form_notes(SharedString::from(invoice.notes.as_deref().unwrap_or("")));
+                ui.set_invoice_form_cp_index(cp_index as i32);
+                ui.set_invoice_form_is_edit(true);
+                ui.set_invoice_form_edit_id(SharedString::from(invoice.id.to_string().as_str()));
+                ui.set_invoice_form_total(SharedString::from(invoice.total_amount.to_string().as_str()));
+                let descs: Vec<SharedString> = items.iter().map(|it| SharedString::from(it.description.as_str())).collect();
+                let qtys: Vec<SharedString> = items.iter().map(|it| SharedString::from(it.quantity.to_string().as_str())).collect();
+                let units_v: Vec<SharedString> = items.iter().map(|it| SharedString::from(it.unit.as_deref().unwrap_or(""))).collect();
+                let prices: Vec<SharedString> = items.iter().map(|it| SharedString::from(it.price.to_string().as_str())).collect();
+                let amounts: Vec<SharedString> = items.iter().map(|it| SharedString::from(it.amount.to_string().as_str())).collect();
+                ui.set_invoice_form_item_descriptions(ModelRc::new(VecModel::from(descs)));
+                ui.set_invoice_form_item_quantities(ModelRc::new(VecModel::from(qtys)));
+                ui.set_invoice_form_item_units(ModelRc::new(VecModel::from(units_v)));
+                ui.set_invoice_form_item_prices(ModelRc::new(VecModel::from(prices)));
+                ui.set_invoice_form_item_amounts(ModelRc::new(VecModel::from(amounts)));
+                ui.set_show_invoice_form(true);
+            }).ok();
+        });
+    });
+
+    let ui_weak_inv_cancel = ui.as_weak();
+    ui.on_invoice_form_cancel(move || {
+        if let Some(ui) = ui_weak_inv_cancel.upgrade() {
+            ui.set_show_invoice_form(false);
+        }
+    });
+
+    let ui_weak_inv_add = ui.as_weak();
+    ui.on_invoice_form_add_item(move || {
+        if let Some(ui) = ui_weak_inv_add.upgrade() {
+            fn push_inv(model: ModelRc<SharedString>, val: &str) -> ModelRc<SharedString> {
+                use slint::Model;
+                let mut v: Vec<SharedString> = (0..model.row_count()).filter_map(|i| model.row_data(i)).collect();
+                v.push(SharedString::from(val));
+                ModelRc::new(VecModel::from(v))
+            }
+            ui.set_invoice_form_item_descriptions(push_inv(ui.get_invoice_form_item_descriptions(), ""));
+            ui.set_invoice_form_item_quantities(push_inv(ui.get_invoice_form_item_quantities(), "1"));
+            ui.set_invoice_form_item_units(push_inv(ui.get_invoice_form_item_units(), "шт"));
+            ui.set_invoice_form_item_prices(push_inv(ui.get_invoice_form_item_prices(), "0.00"));
+            ui.set_invoice_form_item_amounts(push_inv(ui.get_invoice_form_item_amounts(), "0.00"));
+        }
+    });
+
+    let ui_weak_inv_remove = ui.as_weak();
+    ui.on_invoice_form_remove_item(move |idx| {
+        if let Some(ui) = ui_weak_inv_remove.upgrade() {
+            use slint::Model;
+            fn remove_inv(model: ModelRc<SharedString>, idx: usize) -> ModelRc<SharedString> {
+                let mut v: Vec<SharedString> = (0..model.row_count()).filter_map(|i| model.row_data(i)).collect();
+                if idx < v.len() { v.remove(idx); }
+                ModelRc::new(VecModel::from(v))
+            }
+            let idx = idx as usize;
+            ui.set_invoice_form_item_descriptions(remove_inv(ui.get_invoice_form_item_descriptions(), idx));
+            ui.set_invoice_form_item_quantities(remove_inv(ui.get_invoice_form_item_quantities(), idx));
+            ui.set_invoice_form_item_units(remove_inv(ui.get_invoice_form_item_units(), idx));
+            ui.set_invoice_form_item_prices(remove_inv(ui.get_invoice_form_item_prices(), idx));
+            ui.set_invoice_form_item_amounts(remove_inv(ui.get_invoice_form_item_amounts(), idx));
+            recalculate_invoice_total(&ui);
+        }
+    });
+
+    let ui_weak_inv_item = ui.as_weak();
+    ui.on_invoice_form_item_changed(move |idx, field, value| {
+        if let Some(ui) = ui_weak_inv_item.upgrade() {
+            use slint::Model;
+            fn update_inv(model: ModelRc<SharedString>, idx: usize, val: SharedString) -> ModelRc<SharedString> {
+                let mut v: Vec<SharedString> = (0..model.row_count()).filter_map(|i| model.row_data(i)).collect();
+                if idx < v.len() { v[idx] = val; }
+                ModelRc::new(VecModel::from(v))
+            }
+            let idx = idx as usize;
+            match field.as_str() {
+                "desc"  => { ui.set_invoice_form_item_descriptions(update_inv(ui.get_invoice_form_item_descriptions(), idx, value)); }
+                "qty"   => { ui.set_invoice_form_item_quantities(update_inv(ui.get_invoice_form_item_quantities(), idx, value)); recalculate_invoice_total(&ui); }
+                "unit"  => { ui.set_invoice_form_item_units(update_inv(ui.get_invoice_form_item_units(), idx, value)); }
+                "price" => { ui.set_invoice_form_item_prices(update_inv(ui.get_invoice_form_item_prices(), idx, value)); recalculate_invoice_total(&ui); }
+                _ => {}
+            }
+        }
+    });
+
+    let pool_inv_save = pool.clone();
+    let ui_weak_inv_save = ui.as_weak();
+    let invoice_state_save = invoice_state.clone();
+    let active_company_id_inv_save = active_company_id.clone();
+    ui.on_invoice_form_save(move |number, date_str, cp_id_str, notes| {
+        let cid = *active_company_id_inv_save.lock().unwrap();
+        let items = collect_invoice_items_from_ui(&ui_weak_inv_save);
+        spawn_save_invoice(
+            pool_inv_save.clone(),
+            ui_weak_inv_save.clone(),
+            invoice_state_save.clone(),
+            cid,
+            number.to_string(),
+            date_str.to_string(),
+            cp_id_str.to_string(),
+            if notes.is_empty() { None } else { Some(notes.to_string()) },
+            items,
+        );
+    });
+
+    let pool_inv_upd = pool.clone();
+    let ui_weak_inv_upd = ui.as_weak();
+    let invoice_state_upd = invoice_state.clone();
+    let active_company_id_inv_upd = active_company_id.clone();
+    ui.on_invoice_form_update(move |number, date_str, cp_id_str, notes| {
+        let cid = *active_company_id_inv_upd.lock().unwrap();
+        let edit_id = ui_weak_inv_upd
+            .upgrade()
+            .map(|ui| ui.get_invoice_form_edit_id().to_string())
+            .unwrap_or_default();
+        let items = collect_invoice_items_from_ui(&ui_weak_inv_upd);
+        let pool = pool_inv_upd.clone();
+        let ui_weak = ui_weak_inv_upd.clone();
+        let inv_state = invoice_state_upd.clone();
+        let number = number.to_string();
+        let date_str = date_str.to_string();
+        let cp_id_str = cp_id_str.to_string();
+        let notes = notes.to_string();
+        tokio::spawn(async move {
+            let invoice_uuid = match uuid::Uuid::parse_str(&edit_id) {
+                Ok(id) => id,
+                Err(_) => { tracing::error!("Невалідний UUID накладної: {edit_id}"); return; }
+            };
+            let date = match NaiveDate::parse_from_str(&date_str, "%d.%m.%Y") {
+                Ok(d) => d,
+                Err(_) => { tracing::error!("Невірний формат дати: '{date_str}'"); return; }
+            };
+            let cp_uuid = match uuid::Uuid::parse_str(&cp_id_str) {
+                Ok(id) => id,
+                Err(_) => { tracing::error!("Невалідний UUID контрагента: '{cp_id_str}'"); return; }
+            };
+            let update_data = UpdateInvoice {
+                number: number.clone(),
+                counterparty_id: cp_uuid,
+                contract_id: None,
+                date,
+                notes: if notes.is_empty() { None } else { Some(notes) },
+            };
+            match db::invoices::update_with_items(&pool, invoice_uuid, update_data, items).await {
+                Ok(inv) => {
+                    tracing::info!("Накладну '{}' оновлено.", inv.number);
+                    show_toast(ui_weak.clone(), format!("Накладну '{}' оновлено", inv.number), false);
+                    let (status_filter, query) = {
+                        let state = inv_state.lock().unwrap();
+                        (state.status_filter.clone(), state.query.clone())
+                    };
+                    if let Err(e) = reload_invoices(&pool, ui_weak, cid, status_filter, query, true).await {
+                        tracing::error!("Помилка оновлення списку накладних: {e}");
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Помилка оновлення накладної: {e}");
+                    show_toast(ui_weak, format!("Помилка: {e}"), true);
+                }
+            }
+        });
+    });
+
     // ── Колбек: переключити активну компанію ─────────────────────────────────
     let ui_weak_switch = ui.as_weak();
     ui.on_switch_company(move || {
@@ -1677,7 +2010,8 @@ async fn main() -> Result<()> {
             match db::companies::archive(&pool, uuid).await {
                 Ok(true) => {
                     show_toast(ui_handle.clone(), "Компанію архівовано".to_string(), false);
-                    if let Err(e) = reload_companies(&pool, ui_handle).await {
+                    let active_id = *active_company_id.lock().unwrap();
+                    if let Err(e) = reload_companies(&pool, ui_handle.clone(), active_id).await {
                         tracing::error!("Помилка оновлення списку компаній: {e}");
                     }
 
@@ -1719,7 +2053,7 @@ async fn main() -> Result<()> {
                                         ));
                                         ui.set_show_company_picker(false);
                                         ui.set_current_page(6);
-                                        reset_company_form(ui);
+                                        reset_company_form(&ui);
                                         ui.set_show_company_form(true);
                                     })
                                     .ok();
@@ -1743,7 +2077,7 @@ async fn main() -> Result<()> {
     let counterparty_state_company_save = counterparty_state.clone();
     let act_state_company_save = act_state.clone();
 
-    ui.on_company_form_save(move |name, edrpou, iban, address, director, accountant, is_vat| {
+    ui.on_company_form_save(move |name, edrpou, iban, address, director, _accountant, is_vat| {
         let pool = pool_company_save.clone();
         let ui_weak = ui_weak_company_save.clone();
         let active_company_id = active_company_id_company_save.clone();
@@ -1776,7 +2110,8 @@ async fn main() -> Result<()> {
                     cfg.last_company_id = Some(c.id);
                     cfg.save();
 
-                    if let Err(e) = reload_companies(&pool, ui_weak.clone()).await {
+                    let active_id = c.id;
+                    if let Err(e) = reload_companies(&pool, ui_weak.clone(), active_id).await {
                         tracing::error!("Помилка оновлення списку компаній: {e}");
                     }
 
@@ -1870,7 +2205,8 @@ async fn main() -> Result<()> {
                 Ok(Some(c)) => {
                     tracing::info!("Компанію '{}' оновлено.", c.name);
                     show_toast(ui_weak.clone(), format!("Компанію '{}' оновлено", c.name), false);
-                    if let Err(e) = reload_companies(&pool, ui_weak.clone()).await {
+                    let active_id = *active_company_id.lock().unwrap();
+                    if let Err(e) = reload_companies(&pool, ui_weak.clone(), active_id).await {
                         tracing::error!("Помилка оновлення списку компаній: {e}");
                     }
 
@@ -2157,26 +2493,136 @@ async fn reload_acts(
     Ok(())
 }
 
+/// Завантажити список накладних компанії і оновити UI.
+async fn reload_invoices(
+    pool: &sqlx::PgPool,
+    ui_weak: Weak<MainWindow>,
+    company_id: uuid::Uuid,
+    status_filter: Option<InvoiceStatus>,
+    query: String,
+    close_form: bool,
+) -> Result<()> {
+    let invoices = db::invoices::list_filtered(pool, company_id, status_filter, normalized_query(&query)).await?;
+    let rows: Vec<Vec<SharedString>> = invoices
+        .iter()
+        .map(|inv| {
+            let status_label = match inv.status {
+                InvoiceStatus::Draft => "Чернетка",
+                InvoiceStatus::Issued => "Виставлено",
+                InvoiceStatus::Signed => "Підписано",
+                InvoiceStatus::Paid => "Оплачено",
+            };
+            vec![
+                SharedString::from(inv.number.as_str()),
+                SharedString::from(inv.date.format("%d.%m.%Y").to_string().as_str()),
+                SharedString::from(inv.counterparty_name.as_str()),
+                SharedString::from(format!("{:.2}", inv.total_amount).as_str()),
+                SharedString::from(status_label),
+            ]
+        })
+        .collect();
+    let ids: Vec<SharedString> = invoices.iter().map(|inv| SharedString::from(inv.id.to_string().as_str())).collect();
+    let statuses: Vec<SharedString> = invoices.iter().map(|inv| SharedString::from(inv.status.as_str())).collect();
+
+    ui_weak
+        .upgrade_in_event_loop(move |ui| {
+            let slint_rows: Vec<_> = rows
+                .into_iter()
+                .map(|row| {
+                    let items: Vec<StandardListViewItem> = row
+                        .into_iter()
+                        .map(StandardListViewItem::from)
+                        .collect();
+                    ModelRc::new(VecModel::from(items))
+                })
+                .collect();
+            ui.set_invoice_rows(ModelRc::new(VecModel::from(slint_rows)));
+            ui.set_invoice_row_ids(ModelRc::new(VecModel::from(ids)));
+            ui.set_invoice_row_statuses(ModelRc::new(VecModel::from(statuses)));
+            if close_form {
+                ui.set_show_invoice_form(false);
+            }
+        })
+        .map_err(anyhow::Error::from)?;
+
+    Ok(())
+}
+
+/// Зібрати позиції накладної з UI-полів у Vec<NewInvoiceItem>.
+fn collect_invoice_items_from_ui(ui_weak: &Weak<MainWindow>) -> Vec<NewInvoiceItem> {
+    use slint::Model;
+    let Some(ui) = ui_weak.upgrade() else { return vec![]; };
+    let descs = ui.get_invoice_form_item_descriptions();
+    let qtys = ui.get_invoice_form_item_quantities();
+    let units = ui.get_invoice_form_item_units();
+    let prices = ui.get_invoice_form_item_prices();
+    let count = descs.row_count();
+    let mut items = Vec::with_capacity(count);
+    for i in 0..count {
+        let desc = descs.row_data(i).unwrap_or_default().to_string();
+        let qty_str = qtys.row_data(i).unwrap_or_default().to_string();
+        let unit = units.row_data(i).unwrap_or_default().to_string();
+        let price_str = prices.row_data(i).unwrap_or_default().to_string();
+        let quantity = qty_str.parse::<Decimal>().unwrap_or(Decimal::ONE);
+        let price = price_str.parse::<Decimal>().unwrap_or(Decimal::ZERO);
+        items.push(NewInvoiceItem {
+            position: (i + 1) as i16,
+            description: desc,
+            unit: if unit.is_empty() { None } else { Some(unit) },
+            quantity,
+            price,
+        });
+    }
+    items
+}
+
+/// Перерахувати total-amount у формі накладної на основі позицій.
+fn recalculate_invoice_total(ui: &MainWindow) {
+    use slint::Model;
+    let qtys = ui.get_invoice_form_item_quantities();
+    let prices = ui.get_invoice_form_item_prices();
+    let mut total = Decimal::ZERO;
+    for i in 0..qtys.row_count() {
+        let qty = qtys.row_data(i).unwrap_or_default().to_string().parse::<Decimal>().unwrap_or(Decimal::ZERO);
+        let price = prices.row_data(i).unwrap_or_default().to_string().parse::<Decimal>().unwrap_or(Decimal::ZERO);
+        // Оновлюємо amount для рядка (відображення)
+        let amounts = ui.get_invoice_form_item_amounts();
+        let mut amounts_v: Vec<SharedString> = (0..amounts.row_count()).filter_map(|j| amounts.row_data(j)).collect();
+        let amount = (qty * price).round_dp(2);
+        if i < amounts_v.len() {
+            amounts_v[i] = SharedString::from(amount.to_string().as_str());
+        }
+        ui.set_invoice_form_item_amounts(ModelRc::new(VecModel::from(amounts_v)));
+        total += amount;
+    }
+    ui.set_invoice_form_total(SharedString::from(format!("{:.2}", total).as_str()));
+}
+
 /// Завантажити список компаній і оновити UI.
 async fn reload_companies(
     pool: &sqlx::PgPool,
     ui_weak: Weak<MainWindow>,
+    active_company_id: uuid::Uuid,
 ) -> Result<()> {
-    let companies = db::companies::list(pool).await?;
+    let companies = db::companies::list_with_summary(pool).await?;
     ui_weak.upgrade_in_event_loop(move |ui| {
-        apply_company_rows(ui, &companies);
+        apply_company_rows(&ui, &companies, active_company_id);
     }).map_err(anyhow::Error::from)?;
     Ok(())
 }
 
-/// Перетворити Vec<Company> у ModelRc і встановити у UI.
-fn apply_company_rows(ui: &MainWindow, companies: &[Company]) {
+/// Перетворити Vec<CompanySummary> у ModelRc і встановити у UI.
+fn apply_company_rows(ui: &MainWindow, companies: &[CompanySummary], active_company_id: uuid::Uuid) {
     let items: Vec<CompanyItem> = companies.iter().map(|c| CompanyItem {
-        id:         SharedString::from(c.id.to_string().as_str()),
-        name:       SharedString::from(c.name.as_str()),
-        short_name: SharedString::from(c.short_name.as_deref().unwrap_or("")),
-        edrpou:     SharedString::from(c.edrpou.as_deref().unwrap_or("")),
-        is_vat:     c.is_vat_payer,
+        id:           SharedString::from(c.id.to_string().as_str()),
+        name:         SharedString::from(c.name.as_str()),
+        short_name:   SharedString::from(c.short_name.as_deref().unwrap_or("")),
+        edrpou:       SharedString::from(c.edrpou.as_deref().unwrap_or("")),
+        is_vat:       c.is_vat_payer,
+        act_count:    c.act_count as i32,
+        total_amount: SharedString::from(format_company_total(&c.total_amount).as_str()),
+        is_current:   c.id == active_company_id,
+        initials:     SharedString::from(company_initials(c).as_str()),
     }).collect();
     ui.set_company_rows(ModelRc::new(VecModel::from(items)));
 }
@@ -2194,6 +2640,32 @@ fn company_subtitle(company: &Company) -> String {
         .as_ref()
         .map(|edrpou| format!("ЄДРПОУ: {edrpou}"))
         .unwrap_or_else(|| "ЄДРПОУ не вказано".to_string())
+}
+
+fn company_initials(company: &CompanySummary) -> String {
+    let source = company
+        .short_name
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(company.name.as_str());
+
+    let mut letters = source
+        .split(|c: char| c.is_whitespace() || c == '-' || c == '—')
+        .filter(|part| !part.is_empty())
+        .filter_map(|part| part.chars().next())
+        .take(2)
+        .collect::<String>()
+        .to_uppercase();
+
+    if letters.is_empty() {
+        letters = "К".to_string();
+    }
+
+    letters
+}
+
+fn format_company_total(amount: &Decimal) -> String {
+    format!("{} грн", amount.round_dp(2))
 }
 
 fn reset_company_form(ui: &MainWindow) {
@@ -2301,6 +2773,68 @@ fn spawn_save_act(
             }
             Err(e) => {
                 tracing::error!("Помилка збереження акту: {e}");
+                show_toast(ui_weak.clone(), format!("Помилка: {e}"), true);
+            }
+        }
+    });
+}
+
+/// Запустити збереження нової накладної у фоновому tokio завданні.
+fn spawn_save_invoice(
+    pool: sqlx::PgPool,
+    ui_weak: Weak<MainWindow>,
+    inv_state: Arc<Mutex<InvoiceListState>>,
+    company_id: uuid::Uuid,
+    number: String,
+    date_str: String,
+    cp_id_str: String,
+    notes: Option<String>,
+    items: Vec<NewInvoiceItem>,
+) {
+    tokio::spawn(async move {
+        if number.trim().is_empty() {
+            tracing::error!("Номер накладної не може бути порожнім");
+            return;
+        }
+        if date_str.trim().is_empty() {
+            tracing::error!("Дата накладної не може бути порожньою");
+            return;
+        }
+        if cp_id_str.trim().is_empty() {
+            tracing::error!("Контрагент не вибраний");
+            return;
+        }
+        let date = match NaiveDate::parse_from_str(&date_str, "%d.%m.%Y") {
+            Ok(d) => d,
+            Err(_) => { tracing::error!("Невірний формат дати: '{date_str}'"); return; }
+        };
+        let cp_uuid = match uuid::Uuid::parse_str(&cp_id_str) {
+            Ok(id) => id,
+            Err(_) => { tracing::error!("Невалідний UUID контрагента: '{cp_id_str}'"); return; }
+        };
+        let new_invoice = NewInvoice {
+            number: number.clone(),
+            counterparty_id: cp_uuid,
+            contract_id: None,
+            date,
+            notes,
+            bas_id: None,
+            items,
+        };
+        match db::invoices::create(&pool, company_id, &new_invoice).await {
+            Ok(inv) => {
+                tracing::info!("Накладну '{}' збережено (id={}).", inv.number, inv.id);
+                show_toast(ui_weak.clone(), format!("Накладну '{}' збережено", inv.number), false);
+                let (status_filter, query) = {
+                    let state = inv_state.lock().unwrap();
+                    (state.status_filter.clone(), state.query.clone())
+                };
+                if let Err(e) = reload_invoices(&pool, ui_weak, company_id, status_filter, query, true).await {
+                    tracing::error!("Помилка оновлення списку накладних: {e}");
+                }
+            }
+            Err(e) => {
+                tracing::error!("Помилка збереження накладної: {e}");
                 show_toast(ui_weak.clone(), format!("Помилка: {e}"), true);
             }
         }

@@ -1,0 +1,405 @@
+// Форма створення/редагування видаткової накладної
+//
+// Аналогічна ActForm, але:
+//   - Немає секції задач (MVP)
+//   - Поле "ціна" — `price` (не `unit_price` як в актах)
+//   - Без кнопки "Чернетка" — лише "Зберегти"
+
+import { Theme } from "../theme.slint";
+import { Button, LineEdit, TextEdit, ComboBox, ScrollView } from "std-widgets.slint";
+
+export component InvoiceForm {
+
+    // ── Вхідні дані ────────────────────────────────────────────────────────
+    in property <[string]> counterparty-names;
+    in property <[string]> counterparty-ids;
+
+    in property <string> invoice-number: "";
+    in property <string> invoice-date: "";
+    in property <string> invoice-notes: "";
+    in property <int>    invoice-cp-index: 0;
+
+    // Підсумкова сума — обчислюється в Rust
+    in property <string> total-amount: "0.00";
+
+    in property <bool>   is-edit-mode: false;
+    in property <string> invoice-edit-id: "";
+
+    // ── Позиції: паралельні масиви ─────────────────────────────────────────
+    in property <[string]> item-descriptions;
+    in property <[string]> item-quantities;
+    in property <[string]> item-units;
+    in property <[string]> item-prices;    // "price" (не "unit-price")
+    in property <[string]> item-amounts;   // quantity × price, рахує Rust
+
+    // ── Колбеки ─────────────────────────────────────────────────────────────
+    callback save(   /* number */ string, /* date */ string,
+                     /* counterparty_id */ string, /* notes */ string);
+    callback update( /* number */ string, /* date */ string,
+                     /* counterparty_id */ string, /* notes */ string);
+    callback cancel();
+
+    callback add-item();
+    callback remove-item(/* index */ int);
+
+    // index — позиція, field — "desc"|"qty"|"unit"|"price", value — нове значення
+    callback item-changed(/* index */ int, /* field */ string, /* value */ string);
+
+    min-width: 700px;
+    min-height: 500px;
+
+    focus-scope := FocusScope {
+        forward-focus: number-field;
+        key-pressed(event) => {
+            if (event.text == Key.Escape) {
+                root.cancel();
+                return accept;
+            }
+            return reject;
+        }
+
+        VerticalLayout {
+            padding: 24px;
+            spacing: 16px;
+
+            // ── Заголовок ──────────────────────────────────────────────────
+            HorizontalLayout {
+                vertical-stretch: 0;
+
+                Text {
+                    text: root.is-edit-mode ? "Редагування накладної" : "Нова накладна";
+                    font-size: 22px;
+                    font-weight: 700;
+                    color: Theme.text-main;
+                    vertical-alignment: center;
+                }
+            }
+
+            // ── Поля форми ─────────────────────────────────────────────────
+            GridLayout {
+                spacing: 12px;
+                vertical-stretch: 0;
+
+                Row {
+                    Text {
+                        text: "Номер";
+                        font-size: 13px;
+                        color: Theme.text-sub;
+                        vertical-alignment: center;
+                        horizontal-stretch: 0;
+                        min-width: 120px;
+                    }
+                    Rectangle {
+                        background: Theme.surface;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        border-radius: 8px;
+                        height: 40px;
+                        number-field := LineEdit {
+                            text: root.invoice-number;
+                            placeholder-text: "НАК-001";
+                        }
+                    }
+                }
+
+                Row {
+                    Text {
+                        text: "Дата";
+                        font-size: 13px;
+                        color: Theme.text-sub;
+                        vertical-alignment: center;
+                        horizontal-stretch: 0;
+                        min-width: 120px;
+                    }
+                    Rectangle {
+                        background: Theme.surface;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        border-radius: 8px;
+                        height: 40px;
+                        date-field := LineEdit {
+                            text: root.invoice-date;
+                            placeholder-text: "ДД.ММ.РРРР";
+                        }
+                    }
+                }
+
+                Row {
+                    Text {
+                        text: "Контрагент";
+                        font-size: 13px;
+                        color: Theme.text-sub;
+                        vertical-alignment: center;
+                        horizontal-stretch: 0;
+                        min-width: 120px;
+                    }
+                    Rectangle {
+                        height: 40px;
+                        background: Theme.surface;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        border-radius: 8px;
+
+                        cp-combo := ComboBox {
+                            model: root.counterparty-names;
+                            current-index: root.invoice-cp-index;
+                        }
+                    }
+                }
+
+                Row {
+                    Text {
+                        text: "Примітки";
+                        font-size: 13px;
+                        color: Theme.text-sub;
+                        vertical-alignment: center;
+                        vertical-stretch: 0;
+                        horizontal-stretch: 0;
+                        min-width: 120px;
+                    }
+                    Rectangle {
+                        background: Theme.surface;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        border-radius: 8px;
+                        height: 88px;
+                        notes-field := TextEdit {
+                            text: root.invoice-notes;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+
+            // ── Секція позицій: заголовок + кнопка ────────────────────────
+            HorizontalLayout {
+                alignment: space-between;
+                vertical-stretch: 0;
+
+                Text {
+                    text: "Позиції";
+                    font-size: 16px;
+                    font-weight: 600;
+                    color: Theme.text-main;
+                    vertical-alignment: center;
+                }
+
+                Button {
+                    text: "+ Додати позицію";
+                    clicked => { root.add-item(); }
+                }
+            }
+
+            // ── Шапка таблиці позицій ──────────────────────────────────────
+            Rectangle {
+                height: 36px;
+                background: #F1F1F4;
+                border-radius: 4px;
+                vertical-stretch: 0;
+
+                HorizontalLayout {
+                    padding-left: 12px;
+                    padding-right: 4px;
+                    spacing: 8px;
+
+                    Text {
+                        text: "Найменування";
+                        font-size: 12px;
+                        font-weight: 600;
+                        color: Theme.text-sub;
+                        vertical-alignment: center;
+                        horizontal-stretch: 3;
+                    }
+                    Text {
+                        text: "К-сть";
+                        font-size: 12px;
+                        font-weight: 600;
+                        color: Theme.text-sub;
+                        vertical-alignment: center;
+                        horizontal-alignment: right;
+                        width: 80px;
+                    }
+                    Text {
+                        text: "Од.вим.";
+                        font-size: 12px;
+                        font-weight: 600;
+                        color: Theme.text-sub;
+                        vertical-alignment: center;
+                        horizontal-alignment: center;
+                        width: 70px;
+                    }
+                    Text {
+                        text: "Ціна";
+                        font-size: 12px;
+                        font-weight: 600;
+                        color: Theme.text-sub;
+                        vertical-alignment: center;
+                        horizontal-alignment: right;
+                        width: 100px;
+                    }
+                    Text {
+                        text: "Сума";
+                        font-size: 12px;
+                        font-weight: 600;
+                        color: Theme.text-sub;
+                        vertical-alignment: center;
+                        horizontal-alignment: right;
+                        width: 100px;
+                    }
+                    Rectangle { width: 36px; }
+                }
+            }
+
+            // ── Список позицій ─────────────────────────────────────────────
+            ScrollView {
+                vertical-stretch: 1;
+                min-height: 80px;
+
+                VerticalLayout {
+
+                    for desc[i] in root.item-descriptions: VerticalLayout {
+                        spacing: 0;
+
+                        Rectangle {
+                            height: 44px;
+                            background: Theme.surface;
+
+                            HorizontalLayout {
+                                padding-left: 12px;
+                                padding-right: 4px;
+                                padding-top: 4px;
+                                padding-bottom: 4px;
+                                spacing: 8px;
+
+                                LineEdit {
+                                    text: desc;
+                                    font-size: 13px;
+                                    horizontal-stretch: 3;
+                                    edited(v) => { root.item-changed(i, "desc", v); }
+                                }
+                                LineEdit {
+                                    text: root.item-quantities[i];
+                                    font-size: 13px;
+                                    width: 80px;
+                                    edited(v) => { root.item-changed(i, "qty", v); }
+                                }
+                                LineEdit {
+                                    text: root.item-units[i];
+                                    font-size: 13px;
+                                    width: 70px;
+                                    edited(v) => { root.item-changed(i, "unit", v); }
+                                }
+                                LineEdit {
+                                    text: root.item-prices[i];
+                                    font-size: 13px;
+                                    width: 100px;
+                                    edited(v) => { root.item-changed(i, "price", v); }
+                                }
+                                Text {
+                                    text: root.item-amounts[i];
+                                    font-size: 13px;
+                                    font-weight: 600;
+                                    color: Theme.text-main;
+                                    vertical-alignment: center;
+                                    horizontal-alignment: right;
+                                    width: 100px;
+                                }
+
+                                del-rect := Rectangle {
+                                    width: 36px;
+                                    height: 36px;
+                                    border-radius: 4px;
+                                    background: del-touch.has-hover ? #fee2e2 : transparent;
+                                    animate background { duration: 100ms; easing: ease; }
+
+                                    Text {
+                                        text: "×";
+                                        font-size: 18px;
+                                        color: del-touch.has-hover ? #dc2626 : Theme.text-muted;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                        animate color { duration: 100ms; easing: ease; }
+                                    }
+
+                                    del-touch := TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => { root.remove-item(i); }
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            height: 1px;
+                            background: Theme.border;
+                        }
+                    }
+
+                    if root.item-descriptions.length == 0 : Rectangle {
+                        height: 80px;
+
+                        Text {
+                            text: "Позиції відсутні. Натисніть \"+ Додати позицію\".";
+                            color: Theme.text-muted;
+                            font-size: 13px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+
+            // ── Підсумок ───────────────────────────────────────────────────
+            Rectangle {
+                height: 1px;
+                background: Theme.border;
+                vertical-stretch: 0;
+            }
+
+            HorizontalLayout {
+                alignment: end;
+                vertical-stretch: 0;
+
+                Text {
+                    text: "Разом: " + root.total-amount + " ₴";
+                    font-size: 18px;
+                    font-weight: 700;
+                    color: Theme.text-main;
+                }
+            }
+
+            // ── Кнопки дій ────────────────────────────────────────────────
+            HorizontalLayout {
+                alignment: space-between;
+                vertical-stretch: 0;
+
+                Button {
+                    text: "← Назад";
+                    clicked => { root.cancel(); }
+                }
+
+                Button {
+                    text: "Зберегти";
+                    primary: true;
+                    clicked => {
+                        if (root.is-edit-mode) {
+                            root.update(
+                                number-field.text,
+                                date-field.text,
+                                root.counterparty-ids[cp-combo.current-index],
+                                notes-field.text
+                            );
+                        } else {
+                            root.save(
+                                number-field.text,
+                                date-field.text,
+                                root.counterparty-ids[cp-combo.current-index],
+                                notes-field.text
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

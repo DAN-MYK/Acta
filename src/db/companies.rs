@@ -8,7 +8,7 @@ use anyhow::Result;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::models::company::{Company, NewCompany, UpdateCompany};
+use crate::models::company::{Company, CompanySummary, NewCompany, UpdateCompany};
 
 /// SQL для SELECT всіх полів компанії (спільний рядок щоб не дублювати)
 const SELECT_COLS: &str = "id, name, short_name, edrpou, ipn, iban, legal_address, actual_address,
@@ -23,6 +23,27 @@ pub async fn list(pool: &PgPool) -> Result<Vec<Company>> {
                 phone, email, director_name, accountant_name, tax_system, is_vat_payer,
                 logo_path, notes, is_archived, created_at, updated_at
          FROM companies WHERE is_archived = FALSE ORDER BY name"
+    )
+    .fetch_all(pool)
+    .await?)
+}
+
+/// Активні компанії разом зі статистикою по актах для карток управління.
+pub async fn list_with_summary(pool: &PgPool) -> Result<Vec<CompanySummary>> {
+    Ok(sqlx::query_as::<_, CompanySummary>(
+        r#"SELECT
+                c.id,
+                c.name,
+                c.short_name,
+                c.edrpou,
+                c.is_vat_payer,
+                COUNT(a.id)::BIGINT AS act_count,
+                COALESCE(SUM(a.total_amount), 0)::DECIMAL(15,2) AS total_amount
+           FROM companies c
+           LEFT JOIN acts a ON a.company_id = c.id
+           WHERE c.is_archived = FALSE
+           GROUP BY c.id, c.name, c.short_name, c.edrpou, c.is_vat_payer
+           ORDER BY c.name"#
     )
     .fetch_all(pool)
     .await?)
@@ -122,6 +143,7 @@ mod tests {
     #[test]
     fn db_companies_public_api_is_exposed() {
         let _ = list;
+        let _ = list_with_summary;
         let _ = list_all;
         let _ = get_by_id;
         let _ = create;

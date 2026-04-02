@@ -16,6 +16,8 @@ import { ActList }          from "acts/act_list.slint";
 import { ActForm }          from "acts/act_form.slint";
 import { TaskList }         from "tasks/task_list.slint";
 import { TaskForm }         from "tasks/task_form.slint";
+import { InvoiceList }      from "invoices/invoice_list.slint";
+import { InvoiceForm }      from "invoices/invoice_form.slint";
 import { CompanyList, CompanyItem } from "companies/company_list.slint";
 import { CompanyForm }      from "companies/company_form.slint";
 
@@ -132,6 +134,29 @@ export component MainWindow inherits Window {
     in property <[string]>                 act-task-row-priorities;
     in property <bool>                     act-tasks-loading: false;
 
+    // ── Дані накладних ──────────────────────────────────────────────────────
+    in property <[[StandardListViewItem]]> invoice-rows;
+    in property <[string]>                 invoice-row-ids;
+    in property <[string]>                 invoice-row-statuses;
+    in property <bool>                     invoices-loading: false;
+
+    // ── Стан форми накладної ─────────────────────────────────────────────────
+    in property <bool>     show-invoice-form: false;
+    in property <bool>     invoice-form-is-edit: false;
+    in property <string>   invoice-form-number: "";
+    in property <string>   invoice-form-date: "";
+    in property <string>   invoice-form-notes: "";
+    in property <int>      invoice-form-cp-index: 0;
+    in property <string>   invoice-form-edit-id: "";
+    in property <string>   invoice-form-total: "0.00";
+    in property <[string]> invoice-form-cp-names;
+    in property <[string]> invoice-form-cp-ids;
+    in property <[string]> invoice-form-item-descriptions;
+    in property <[string]> invoice-form-item-quantities;
+    in property <[string]> invoice-form-item-units;
+    in property <[string]> invoice-form-item-prices;
+    in property <[string]> invoice-form-item-amounts;
+
     // ── Дані задач ─────────────────────────────────────────────────────────
     in property <[[StandardListViewItem]]> task-rows;
     in property <[string]>                 task-row-ids;
@@ -185,6 +210,22 @@ export component MainWindow inherits Window {
     callback act-task-edit-clicked(string);
     callback act-task-toggle-status-clicked(string);
     callback act-task-delete-clicked(string);
+
+    // ── Колбеки накладних ───────────────────────────────────────────────────
+    callback invoice-status-filter-changed(int);
+    callback invoice-search-changed(string);
+    callback invoice-selected(string);
+    callback invoice-create-clicked();
+    callback invoice-advance-status-clicked(string);
+    callback invoice-edit-clicked(string);
+
+    // ── Колбеки форми накладної ──────────────────────────────────────────────
+    callback invoice-form-save(string, string, string, string);
+    callback invoice-form-update(string, string, string, string);
+    callback invoice-form-cancel();
+    callback invoice-form-add-item();
+    callback invoice-form-remove-item(int);
+    callback invoice-form-item-changed(int, string, string);
 
     // ── Колбеки задач ──────────────────────────────────────────────────────
     callback task-search-changed(string);
@@ -592,15 +633,44 @@ export component MainWindow inherits Window {
 
             // ── Заглушки для майбутніх сторінок ──────────────────────────
 
-            if root.current-page == 2 : Rectangle {
-                Text {
-                    text: "📦  Видаткові накладні\nБуде реалізовано у наступній версії";
-                    color: #94a3b8;
-                    font-size: 16px;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    wrap: word-wrap;
-                }
+            // ── Сторінка 2: Накладні — список ───────────────────────────────
+            if root.current-page == 2 && !root.show-invoice-form : InvoiceList {
+                rows:             root.invoice-rows;
+                row-ids:          root.invoice-row-ids;
+                row-statuses:     root.invoice-row-statuses;
+                loading:          root.invoices-loading;
+
+                status-filter-changed(i)    => { root.invoice-status-filter-changed(i); }
+                search-changed(q)           => { root.invoice-search-changed(q); }
+                row-selected(id)            => { root.invoice-selected(id); }
+                create-clicked              => { root.invoice-create-clicked(); }
+                advance-status-clicked(id)  => { root.invoice-advance-status-clicked(id); }
+                edit-clicked(id)            => { root.invoice-edit-clicked(id); }
+            }
+
+            // ── Сторінка 2: Накладні — форма ─────────────────────────────────
+            if root.current-page == 2 && root.show-invoice-form : InvoiceForm {
+                invoice-number:       root.invoice-form-number;
+                invoice-date:         root.invoice-form-date;
+                invoice-notes:        root.invoice-form-notes;
+                invoice-cp-index:     root.invoice-form-cp-index;
+                invoice-edit-id:      root.invoice-form-edit-id;
+                total-amount:         root.invoice-form-total;
+                is-edit-mode:         root.invoice-form-is-edit;
+                counterparty-names:   root.invoice-form-cp-names;
+                counterparty-ids:     root.invoice-form-cp-ids;
+                item-descriptions:    root.invoice-form-item-descriptions;
+                item-quantities:      root.invoice-form-item-quantities;
+                item-units:           root.invoice-form-item-units;
+                item-prices:          root.invoice-form-item-prices;
+                item-amounts:         root.invoice-form-item-amounts;
+
+                save(n, d, c, notes)        => { root.invoice-form-save(n, d, c, notes); }
+                update(n, d, c, notes)      => { root.invoice-form-update(n, d, c, notes); }
+                cancel                      => { root.invoice-form-cancel(); }
+                add-item                    => { root.invoice-form-add-item(); }
+                remove-item(i)              => { root.invoice-form-remove-item(i); }
+                item-changed(idx, fld, val) => { root.invoice-form-item-changed(idx, fld, val); }
             }
 
             if root.current-page == 3 : Rectangle {
