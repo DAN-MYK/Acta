@@ -1540,9 +1540,11 @@ async fn main() -> Result<()> {
     let pool_tasks_save = pool.clone();
     let ui_weak_tasks_save = ui.as_weak();
     let task_state_save = task_state.clone();
+    let active_company_id_tasks_save = active_company_id.clone();
 
     ui.on_task_form_save(
         move |title, description, priority_idx, due_str, reminder_str| {
+            let company_id = *active_company_id_tasks_save.lock().unwrap();
             let act_id = ui_weak_tasks_save
                 .upgrade()
                 .map(|ui| ui.get_task_form_act_id().to_string())
@@ -1551,6 +1553,7 @@ async fn main() -> Result<()> {
                 pool_tasks_save.clone(),
                 ui_weak_tasks_save.clone(),
                 task_state_save.clone(),
+                company_id,
                 None,
                 title.to_string(),
                 description.to_string(),
@@ -1565,9 +1568,11 @@ async fn main() -> Result<()> {
     let pool_tasks_update = pool.clone();
     let ui_weak_tasks_update = ui.as_weak();
     let task_state_update = task_state.clone();
+    let active_company_id_tasks_update = active_company_id.clone();
 
     ui.on_task_form_update(
         move |title, description, priority_idx, due_str, reminder_str| {
+            let company_id = *active_company_id_tasks_update.lock().unwrap();
             let edit_id = ui_weak_tasks_update
                 .upgrade()
                 .map(|ui| ui.get_task_form_edit_id().to_string())
@@ -1581,6 +1586,7 @@ async fn main() -> Result<()> {
                 pool_tasks_update.clone(),
                 ui_weak_tasks_update.clone(),
                 task_state_update.clone(),
+                company_id,
                 Some(edit_id),
                 title.to_string(),
                 description.to_string(),
@@ -3159,6 +3165,7 @@ fn spawn_save_task(
     pool: sqlx::PgPool,
     ui_weak: Weak<MainWindow>,
     task_state: Arc<Mutex<TaskListState>>,
+    company_id: uuid::Uuid,
     task_id: Option<String>,
     title: String,
     description: String,
@@ -3239,7 +3246,7 @@ fn spawn_save_task(
             };
             db::tasks::update(&pool, uuid, &task).await
         } else {
-            db::tasks::create(&pool, &task).await.map(Some)
+            db::tasks::create(&pool, company_id, &task).await.map(Some)
         };
 
         match result {

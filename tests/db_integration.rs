@@ -201,7 +201,7 @@ async fn tasks_create_update_and_delete_in_db() -> Result<()> {
         act_id: None,
     };
 
-    let created = db::tasks::create(&pool, &new_task).await?;
+    let created = db::tasks::create(&pool, DEFAULT_COMPANY_ID, &new_task).await?;
     assert_eq!(created.status, models::TaskStatus::Open);
 
     let open_tasks = db::tasks::list_open(&pool).await?;

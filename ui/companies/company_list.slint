@@ -1,47 +1,22 @@
-// Список компаній — управління, вибір активної та швидкий перехід.
+// Список компаній — управління (додавання, редагування, архівування).
+// Структура ідентична іншим спискам проєкту (counterparty_list, act_list, invoice_list):
+//   - Topbar 64px (заголовок + кнопка)
+//   - Таблиця 40px header + 52px рядки + hover
+//   - Пуста-стан по центру (тільки для порожнього списку)
 
-import { Button, ScrollView } from "std-widgets.slint";
+import { ListView, ProgressIndicator } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 
 export struct CompanyItem {
     id:           string,
     name:         string,
-    short_name:   string,
+    short-name:   string,
     edrpou:       string,
-    is_vat:       bool,
-    act_count:    int,
-    total_amount: string,
-    is_current:   bool,
+    is-vat:       bool,
+    act-count:    int,
+    total-amount: string,
+    is-current:   bool,
     initials:     string,
-}
-
-component MetricPill inherits Rectangle {
-    in property <string> label;
-    in property <string> value;
-
-    height: 54px;
-    border-radius: 12px;
-    background: Theme.hover-bg;
-    border-width: 1px;
-    border-color: #E5E9F2;
-
-    VerticalLayout {
-        padding: 10px;
-        spacing: 2px;
-
-        Text {
-            text: root.label;
-            font-size: 11px;
-            color: Theme.text-muted;
-        }
-
-        Text {
-            text: root.value;
-            font-size: 15px;
-            font-weight: 700;
-            color: Theme.text-main;
-        }
-    }
 }
 
 export component CompanyList {
@@ -53,250 +28,298 @@ export component CompanyList {
     callback archive(string /*id*/);
     callback select(string /*id*/);
 
+    min-width: 600px;
+    min-height: 400px;
+
     VerticalLayout {
-        padding: 32px;
-        spacing: 20px;
+        spacing: 0;
+        padding: 0;
 
-        HorizontalLayout {
-            spacing: 12px;
-
-            VerticalLayout {
-                horizontal-stretch: 1;
-                spacing: 6px;
-
-                Text {
-                    text: "Управління компаніями";
-                    font-size: 28px;
-                    font-weight: 700;
-                    color: Theme.text-main;
-                }
-
-                Text {
-                    text: "Оберіть активну компанію для роботи або відредагуйте дані в каталозі.";
-                    font-size: 14px;
-                    color: Theme.text-sub;
-                }
-            }
-
-            Button {
-                text: "+ Додати компанію";
-                primary: true;
-                clicked => { root.add(); }
-            }
-        }
-
+        // ── Topbar (64px, білий, з нижньою межею) ───────────────────────────
         Rectangle {
-            height: 48px;
-            border-radius: 14px;
+            height: 64px;
             background: Theme.surface;
-            border-width: 1px;
-            border-color: Theme.border;
 
             HorizontalLayout {
-                padding-left: 16px;
-                padding-right: 16px;
-                spacing: 10px;
-                alignment: center;
+                padding-left: 32px;
+                padding-right: 32px;
 
                 Text {
-                    text: "Пошук";
-                    font-size: 13px;
-                    color: Theme.text-muted;
-                }
-
-                Rectangle {
-                    horizontal-stretch: 1;
-                    background: transparent;
-                    Text {
-                        text: "Назва компанії або ЄДРПОУ";
-                        font-size: 14px;
-                        color: #A1A8B3;
-                        vertical-alignment: center;
-                    }
-                }
-            }
-        }
-
-        if root.companies.length == 0 && !root.loading : Rectangle {
-            vertical-stretch: 1;
-            border-radius: 20px;
-            background: Theme.surface;
-            border-width: 1px;
-            border-color: Theme.border;
-
-            VerticalLayout {
-                alignment: center;
-                spacing: 14px;
-
-                Rectangle {
-                    width: 72px;
-                    height: 72px;
-                    border-radius: 20px;
-                    background: Theme.primary-light;
-
-                    Text {
-                        text: "КО";
-                        font-size: 26px;
-                        font-weight: 700;
-                        color: Theme.primary;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                }
-
-                Text {
-                    text: "Ще немає жодної компанії";
+                    text: "Компанії";
                     font-size: 18px;
                     font-weight: 600;
                     color: Theme.text-main;
-                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
                 }
 
-                Text {
-                    text: "Створіть першу компанію, щоб почати вести управлінський облік.";
-                    font-size: 13px;
-                    color: Theme.text-sub;
-                    horizontal-alignment: center;
-                }
+                new-btn := Rectangle {
+                    background: Theme.primary;
+                    border-radius: 8px;
+                    height: 36px;
+                    width: 180px;
+                    y: (parent.height - self.height) / 2;
 
-                Button {
-                    text: "+ Додати першу компанію";
-                    primary: true;
-                    clicked => { root.add(); }
+                    Text {
+                        text: "+ Нова компанія";
+                        color: #ffffff;
+                        font-size: 13px;
+                        font-weight: 500;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+
+                    TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.add(); }
+                    }
                 }
+            }
+
+            Rectangle {
+                y: parent.height - 1px;
+                height: 1px;
+                background: Theme.border;
             }
         }
 
-        if root.companies.length > 0 : ScrollView {
+        // ── Основний контент ─────────────────────────────────────────────────
+        Rectangle {
+            background: Theme.bg;
             vertical-stretch: 1;
 
             VerticalLayout {
+                padding-top: 24px;
+                padding-left: 32px;
+                padding-right: 32px;
+                padding-bottom: 24px;
                 spacing: 16px;
 
-                for c in root.companies : Rectangle {
-                    height: 196px;
-                    border-radius: 24px;
+                if root.loading : ProgressIndicator {
+                    indeterminate: true;
+                    vertical-stretch: 0;
+                }
+
+                // ── Таблиця ──────────────────────────────────────────────────
+                Rectangle {
+                    vertical-stretch: 1;
+                    border-radius: 8px;
                     border-width: 1px;
-                    border-color: c.is_current ? Theme.primary : Theme.border;
-                    background: card-touch.has-hover ? Theme.hover-bg : Theme.surface;
+                    border-color: Theme.border;
+                    clip: true;
 
-                    animate background { duration: 120ms; }
+                    VerticalLayout {
+                        spacing: 0;
 
-                    card-touch := TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => { root.select(c.id); }
-
-                        VerticalLayout {
-                            padding: 20px;
-                            spacing: 16px;
+                        // Заголовок таблиці
+                        Rectangle {
+                            height: 40px;
+                            background: #F1F1F4;
 
                             HorizontalLayout {
-                                spacing: 14px;
-                                alignment: center;
-
-                                Rectangle {
-                                    width: 56px;
-                                    height: 56px;
-                                    border-radius: 18px;
-                                    background: c.is_current ? Theme.primary : Theme.primary-light;
-
-                                    Text {
-                                        text: c.initials;
-                                        font-size: 18px;
-                                        font-weight: 700;
-                                        color: c.is_current ? white : Theme.primary;
-                                        horizontal-alignment: center;
-                                        vertical-alignment: center;
-                                    }
-                                }
-
-                                VerticalLayout {
-                                    horizontal-stretch: 1;
-                                    spacing: 4px;
-
-                                    Text {
-                                        text: c.short_name != "" ? c.short_name : c.name;
-                                        font-size: 18px;
-                                        font-weight: 700;
-                                        color: Theme.text-main;
-                                    }
-
-                                    Text {
-                                        text: c.edrpou != "" ? "ЄДРПОУ: " + c.edrpou : "ЄДРПОУ не вказано";
-                                        font-size: 13px;
-                                        color: Theme.text-sub;
-                                    }
-                                }
-
-                                if c.is_current : Rectangle {
-                                    height: 28px;
-                                    border-radius: 14px;
-                                    background: Theme.primary-light;
-                                    border-width: 1px;
-                                    border-color: #C8D8FF;
-
-                                    Text {
-                                        text: "Поточна";
-                                        color: Theme.primary;
-                                        font-size: 12px;
-                                        font-weight: 700;
-                                        vertical-alignment: center;
-                                        horizontal-alignment: center;
-                                    }
-                                }
-
-                                if c.is_vat : Rectangle {
-                                    height: 28px;
-                                    border-radius: 14px;
-                                    background: #EAF7EE;
-                                    border-width: 1px;
-                                    border-color: #C6E7D1;
-
-                                    Text {
-                                        text: "ПДВ";
-                                        color: #1F7A42;
-                                        font-size: 12px;
-                                        font-weight: 700;
-                                        vertical-alignment: center;
-                                        horizontal-alignment: center;
-                                    }
-                                }
-                            }
-
-                            HorizontalLayout {
+                                padding-left: 16px;
+                                padding-right: 16px;
                                 spacing: 12px;
 
-                                MetricPill {
-                                    horizontal-stretch: 1;
-                                    label: "Актів";
-                                    value: c.act_count + "";
-                                }
+                                Text { text: "Компанія";   color: Theme.text-sub; font-size: 12px; font-weight: 500; horizontal-stretch: 3; vertical-alignment: center; }
+                                Text { text: "ЄДРПОУ";     color: Theme.text-sub; font-size: 12px; font-weight: 500; horizontal-stretch: 1; vertical-alignment: center; }
+                                Text { text: "Актів";      color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 60px;           vertical-alignment: center; }
+                                Text { text: "Оборот, ₴"; color: Theme.text-sub; font-size: 12px; font-weight: 500; horizontal-stretch: 2; vertical-alignment: center; }
+                                Text { text: "Дії";        color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 172px;          vertical-alignment: center; }
+                            }
+                        }
 
-                                MetricPill {
-                                    horizontal-stretch: 1;
-                                    label: "Сума актів";
-                                    value: c.total_amount;
+                        // Порожній стан
+                        if !root.loading && root.companies.length == 0 : Rectangle {
+                            vertical-stretch: 1;
+                            background: Theme.surface;
+
+                            VerticalLayout {
+                                alignment: center;
+                                spacing: 8px;
+
+                                Text {
+                                    text: "🏢";
+                                    font-size: 32px;
+                                    horizontal-alignment: center;
+                                }
+                                Text {
+                                    text: "Компаній ще немає";
+                                    font-size: 15px;
+                                    font-weight: 500;
+                                    color: Theme.text-sub;
+                                    horizontal-alignment: center;
+                                }
+                                Text {
+                                    text: "Натисніть «+ Нова компанія» щоб додати першу";
+                                    font-size: 13px;
+                                    color: Theme.text-muted;
+                                    horizontal-alignment: center;
                                 }
                             }
+                        }
 
-                            HorizontalLayout {
-                                spacing: 10px;
+                        // Рядки даних
+                        ListView {
+                            vertical-stretch: 1;
 
-                                Button {
-                                    text: c.is_current ? "Відкрита зараз" : "Перейти";
-                                    primary: !c.is_current;
-                                    enabled: true;
+                            for c[i] in root.companies : Rectangle {
+                                height: 52px;
+                                background: c.is-current
+                                    ? #EFF1FE
+                                    : (row-touch.has-hover
+                                        ? Theme.hover-bg
+                                        : (Math.mod(i, 2) == 0 ? Theme.surface : #FCFCFD));
+                                border-width: 1px;
+                                border-color: Theme.border;
+                                animate background { duration: 80ms; easing: ease; }
+
+                                HorizontalLayout {
+                                    padding-left: 16px;
+                                    padding-right: 16px;
+                                    spacing: 12px;
+
+                                    // Ініціали + назва
+                                    HorizontalLayout {
+                                        horizontal-stretch: 3;
+                                        spacing: 10px;
+
+                                        Rectangle {
+                                            width: 28px;
+                                            height: 28px;
+                                            border-radius: 14px;
+                                            background: c.is-current ? Theme.primary : #EEF2FF;
+                                            y: (parent.height - self.height) / 2;
+
+                                            Text {
+                                                text: c.initials;
+                                                color: c.is-current ? #ffffff : Theme.primary;
+                                                font-size: 10px;
+                                                font-weight: 600;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+
+                                        Text {
+                                            text: c.name;
+                                            color: Theme.text-main;
+                                            font-size: 13px;
+                                            font-weight: 500;
+                                            horizontal-stretch: 1;
+                                            vertical-alignment: center;
+                                            overflow: elide;
+                                        }
+                                    }
+
+                                    // ЄДРПОУ
+                                    Text {
+                                        text: c.edrpou;
+                                        color: Theme.text-sub;
+                                        font-size: 13px;
+                                        horizontal-stretch: 1;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                    }
+
+                                    // Кількість актів
+                                    Text {
+                                        text: c.act-count + "";
+                                        color: Theme.text-sub;
+                                        font-size: 13px;
+                                        width: 60px;
+                                        vertical-alignment: center;
+                                    }
+
+                                    // Оборот
+                                    Text {
+                                        text: c.total-amount;
+                                        color: Theme.text-main;
+                                        font-size: 13px;
+                                        font-weight: 600;
+                                        horizontal-stretch: 2;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                    }
+
+                                    // Дії
+                                    Rectangle {
+                                        width: 172px;
+
+                                        HorizontalLayout {
+                                            spacing: 6px;
+
+                                            // Обрати / Активна
+                                            Rectangle {
+                                                width: 80px;
+                                                height: 26px;
+                                                y: (parent.height - self.height) / 2;
+                                                border-radius: 6px;
+                                                background: c.is-current ? #EEF2FF : Theme.primary;
+
+                                                Text {
+                                                    text: c.is-current ? "✓ Активна" : "Обрати";
+                                                    color: c.is-current ? Theme.primary : #ffffff;
+                                                    font-size: 10px;
+                                                    font-weight: 500;
+                                                    horizontal-alignment: center;
+                                                    vertical-alignment: center;
+                                                }
+
+                                                TouchArea {
+                                                    enabled: !c.is-current;
+                                                    mouse-cursor: self.enabled ? pointer : default;
+                                                    clicked => { root.select(c.id); }
+                                                }
+                                            }
+
+                                            Rectangle {
+                                                width: 38px;
+                                                height: 26px;
+                                                y: (parent.height - self.height) / 2;
+                                                border-radius: 6px;
+                                                background: #EEF2FF;
+
+                                                Text {
+                                                    text: "✎";
+                                                    color: Theme.primary;
+                                                    font-size: 12px;
+                                                    horizontal-alignment: center;
+                                                    vertical-alignment: center;
+                                                }
+
+                                                TouchArea {
+                                                    mouse-cursor: pointer;
+                                                    clicked => { root.edit(c.id); }
+                                                }
+                                            }
+
+                                            Rectangle {
+                                                width: 38px;
+                                                height: 26px;
+                                                y: (parent.height - self.height) / 2;
+                                                border-radius: 6px;
+                                                background: #FEF2F2;
+
+                                                Text {
+                                                    text: "🗄";
+                                                    font-size: 12px;
+                                                    horizontal-alignment: center;
+                                                    vertical-alignment: center;
+                                                }
+
+                                                TouchArea {
+                                                    mouse-cursor: pointer;
+                                                    clicked => { root.archive(c.id); }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                row-touch := TouchArea {
+                                    mouse-cursor: pointer;
                                     clicked => { root.select(c.id); }
-                                }
-
-                                Button {
-                                    text: "Редагувати";
-                                    clicked => { root.edit(c.id); }
-                                }
-
-                                Button {
-                                    text: "Архівувати";
-                                    clicked => { root.archive(c.id); }
                                 }
                             }
                         }

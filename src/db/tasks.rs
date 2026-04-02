@@ -72,14 +72,14 @@ pub async fn list_by_act(pool: &PgPool, act_id: Uuid) -> Result<Vec<Task>> {
     Ok(rows)
 }
 
-pub async fn create(pool: &PgPool, task: &NewTask) -> Result<Task> {
+pub async fn create(pool: &PgPool, company_id: Uuid, task: &NewTask) -> Result<Task> {
     let row = sqlx::query_as::<_, Task>(
         r#"
         INSERT INTO tasks (
-            title, description, status, priority,
+            company_id, title, description, status, priority,
             due_date, reminder_at, counterparty_id, act_id
         )
-        VALUES ($1, $2, 'open', $3, $4, $5, $6, $7)
+        VALUES ($1, $2, $3, 'open', $4, $5, $6, $7, $8)
         RETURNING id, title, description,
                   status, priority,
                   due_date, reminder_at,
@@ -87,6 +87,7 @@ pub async fn create(pool: &PgPool, task: &NewTask) -> Result<Task> {
                   created_at, updated_at
         "#,
     )
+    .bind(company_id)
     .bind(&task.title)
     .bind(&task.description)
     .bind(task.priority.clone())
