@@ -32,6 +32,7 @@ mod tests {
         let cp = NewCounterparty {
             name: "ТОВ Реекспорт".to_string(),
             edrpou: None,
+            ipn: None,
             iban: None,
             address: None,
             phone: None,

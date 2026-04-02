@@ -36,7 +36,8 @@
       "Bash(SQLX_OFFLINE=true cargo test --lib pdf)",
       "Bash(SQLX_OFFLINE=true cargo test --lib)",
       "Bash(SQLX_OFFLINE=true cargo build)",
-      "Bash(cargo clean:*)"
+      "Bash(cargo clean:*)",
+      "Bash(scoop prefix:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

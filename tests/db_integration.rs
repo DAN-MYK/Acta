@@ -45,6 +45,7 @@ async fn counterparties_crud_in_db() -> Result<()> {
     let new_cp = models::NewCounterparty {
         name: format!("ІТ Контрагент {suffix}"),
         edrpou: Some(edrpou),
+        ipn: None,
         iban: Some("UA123456789012345678901234567".to_string()),
         address: Some("Київ".to_string()),
         phone: Some("+380500000000".to_string()),
@@ -94,6 +95,7 @@ async fn acts_create_and_status_flow_in_db() -> Result<()> {
         &models::NewCounterparty {
             name: format!("ІТ Акт Контрагент {suffix}"),
             edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
             iban: None,
             address: None,
             phone: None,
@@ -178,6 +180,7 @@ async fn tasks_create_update_and_delete_in_db() -> Result<()> {
         &models::NewCounterparty {
             name: format!("ІТ Task Контрагент {suffix}"),
             edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
             iban: None,
             address: None,
             phone: None,

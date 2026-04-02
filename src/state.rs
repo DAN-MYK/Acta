@@ -32,10 +32,11 @@ impl AppState {
 
     /// Повертає UUID активної компанії або помилку якщо компанія не обрана.
     ///
-    /// Використовується у всіх операціях що потребують company_id:
-    /// ```rust
-    /// let cid = state.company_id()?;
-    /// db::acts::list_filtered(&state.pool, cid, None, None).await?;
+    /// Використовується у всіх операціях що потребують `company_id`.
+    ///
+    /// ```ignore
+    /// let cid = app_state.company_id()?;
+    /// let acts = db::acts::list_filtered(&app_state.pool, cid, None, None).await?;
     /// ```
     pub fn company_id(&self) -> anyhow::Result<Uuid> {
         self.active_company

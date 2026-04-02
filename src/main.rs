@@ -3309,6 +3309,7 @@ mod tests {
             id: Uuid::new_v4(),
             name: "ТОВ Приклад".to_string(),
             edrpou: None,
+            ipn: None,
             iban: None,
             address: None,
             phone: None,
