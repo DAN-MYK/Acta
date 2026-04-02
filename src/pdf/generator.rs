@@ -284,6 +284,89 @@ fn ones_word(n: u64, gender: Gender) -> &'static str {
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// ── Видаткові накладні ───────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Одна позиція накладної — рядок таблиці у PDF.
+///
+/// Поле `price` (не `unit_price`) — відповідає схемі БД invoice_items.
+#[derive(Debug, Serialize)]
+pub struct PdfInvoiceItem {
+    pub num: u32,
+    pub name: String,
+    pub qty: String,
+    pub unit: String,
+    pub price: String,
+    pub amount: String,
+}
+
+/// Усі дані для Typst-шаблону накладної.
+///
+/// `vat_amount` — рядок "0.00" якщо ФОП без ПДВ; шаблон приховує блок ПДВ якщо "0.00".
+#[derive(Debug, Serialize)]
+pub struct PdfInvoiceData {
+    pub number: String,
+    pub date: String,
+    pub company: PdfCompany,
+    pub client: PdfCompany,
+    pub items: Vec<PdfInvoiceItem>,
+    pub total: String,
+    pub vat_amount: String,
+    pub total_words: String,
+    pub notes: String,
+}
+
+/// Генерує PDF видаткової накладної з переданих даних.
+///
+/// Шаблон: `templates/invoice.typ`.
+/// Алгоритм аналогічний `generate_act_pdf`.
+pub fn generate_invoice_pdf(data: &PdfInvoiceData, output_path: &Path) -> Result<()> {
+    let json = serde_json::to_string(data).context("Серіалізація PdfInvoiceData у JSON")?;
+    let input_arg = format!("data={json}");
+
+    let output = std::process::Command::new("typst")
+        .args([
+            "compile",
+            "templates/invoice.typ",
+            output_path
+                .to_str()
+                .context("Невалідний шлях до output PDF")?,
+            "--input",
+            &input_arg,
+        ])
+        .output()
+        .context("Не вдалось запустити typst. Перевір чи встановлено: scoop install typst")?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("typst завершився з помилкою:\n{stderr}");
+    }
+
+    tracing::info!(path = %output_path.display(), "PDF накладної згенеровано");
+    Ok(())
+}
+
+/// Створює `storage/documents/invoices/{рік}/` і повертає шлях до файлу.
+///
+/// Приклад: "НАК-2026-001" → `storage/documents/invoices/2026/НАК-2026-001.pdf`
+pub fn ensure_invoice_output_dir(invoice_number: &str) -> Result<PathBuf> {
+    let year = invoice_number
+        .split('-')
+        .nth(1)
+        .filter(|s| s.len() == 4 && s.chars().all(|c| c.is_ascii_digit()))
+        .unwrap_or("misc");
+
+    let dir = PathBuf::from("storage/documents/invoices").join(year);
+    std::fs::create_dir_all(&dir)
+        .with_context(|| format!("Не вдалось створити директорію {}", dir.display()))?;
+
+    let safe_name = invoice_number.replace(['/', '\\', ':'], "_");
+    let file_path = dir.join(format!("{safe_name}.pdf"));
+
+    Ok(file_path)
+}
+
 // ── Тести ─────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -335,5 +418,31 @@ mod tests {
         let path = ensure_output_dir("АКТ-2026-001").unwrap();
         assert!(path.to_str().unwrap().contains("2026"));
         assert!(path.to_str().unwrap().ends_with(".pdf"));
+    }
+
+    #[test]
+    fn test_ensure_invoice_output_dir() {
+        let path = ensure_invoice_output_dir("НАК-2026-001").unwrap();
+        assert!(path.to_str().unwrap().contains("invoices"));
+        assert!(path.to_str().unwrap().contains("2026"));
+        assert!(path.to_str().unwrap().ends_with(".pdf"));
+    }
+
+    #[test]
+    fn pdf_invoice_data_serializes_to_json() {
+        let data = PdfInvoiceData {
+            number: "НАК-2026-001".into(),
+            date: "01.04.2026".into(),
+            company: PdfCompany { name: "ФОП Тест".into(), edrpou: "1234567890".into(), iban: "UA123".into(), address: "Київ".into() },
+            client:  PdfCompany { name: "ТОВ Клієнт".into(), edrpou: "0987654321".into(), iban: "UA456".into(), address: String::new() },
+            items: vec![PdfInvoiceItem { num: 1, name: "Товар".into(), qty: "2.0000".into(), unit: "шт".into(), price: "500.00".into(), amount: "1000.00".into() }],
+            total: "1000.00".into(),
+            vat_amount: "0.00".into(),
+            total_words: "одна тисяча гривень 00 копійок".into(),
+            notes: String::new(),
+        };
+        let json = serde_json::to_string(&data).unwrap();
+        assert!(json.contains("НАК-2026-001"));
+        assert!(json.contains("vat_amount"));
     }
 }

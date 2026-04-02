@@ -8,7 +8,7 @@ pub mod tasks;
 
 #[cfg(test)]
 mod tests {
-    use super::{acts, companies, counterparties, tasks};
+    use super::{acts, companies, counterparties, invoices, tasks};
 
     #[test]
     fn db_submodules_are_available() {
