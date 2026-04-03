@@ -59,6 +59,12 @@ struct TaskListState {
     query: String,
 }
 
+#[derive(Clone, Default)]
+struct PaymentListState {
+    query: String,
+    direction_filter: Option<models::payment::PaymentDirection>,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
@@ -87,6 +93,7 @@ async fn main() -> Result<()> {
     let invoice_state = Arc::new(Mutex::new(InvoiceListState::default()));
     let task_state = Arc::new(Mutex::new(TaskListState::default()));
     let doc_state = Arc::new(Mutex::new(DocListState::default()));
+    let payment_state = Arc::new(Mutex::new(PaymentListState::default()));
     // UUID-и контрагентів для фільтру в списку документів.
     // Індекс 0 = "Всі контрагенти" (None), індекс n = cp_ids[n-1].
     let doc_cp_ids: Arc<Mutex<Vec<uuid::Uuid>>> = Arc::new(Mutex::new(vec![]));
@@ -176,11 +183,13 @@ async fn main() -> Result<()> {
     reload_tasks(&pool, ui.as_weak(), String::new(), false).await?;
 
     // ── Початкове завантаження платежів ──────────────────────────────────────
-    reload_payments(&pool, ui.as_weak(), cid, None).await?;
+    reload_payments(&pool, ui.as_weak(), cid, None, "").await?;
 
     // ── Початкове завантаження єдиного списку документів + фільтру контрагентів
     reload_doc_cp_filter(&pool, ui.as_weak(), cid, &doc_cp_ids).await?;
     reload_documents(&pool, ui.as_weak(), cid, 0, "", None, None, None).await?;
+    reload_settings(&pool, ui.as_weak(), cid).await?;
+    reload_payment_counterparty_options(&pool, ui.as_weak(), cid).await?;
 
     // ── Колбек: пошук ────────────────────────────────────────────────────────
     //
@@ -216,9 +225,26 @@ async fn main() -> Result<()> {
         });
     });
 
-    // ── Колбек: вибір контрагента — лише виділити рядок у UI ───────────────
-    ui.on_counterparty_selected(|id| {
-        tracing::debug!("Вибрано контрагента: {id}");
+    // ── Колбек: вибір контрагента — відкрити картку ─────────────────────────
+    let pool_cp_card = pool.clone();
+    let ui_weak_cp_card = ui.as_weak();
+    let active_company_id_cp_card = active_company_id.clone();
+    ui.on_counterparty_selected(move |id| {
+        let pool = pool_cp_card.clone();
+        let ui_weak = ui_weak_cp_card.clone();
+        let cid = *active_company_id_cp_card.lock().unwrap();
+        let id_str = id.to_string();
+
+        tokio::spawn(async move {
+            let Ok(counterparty_id) = id_str.parse::<uuid::Uuid>() else {
+                tracing::error!("Некоректний UUID контрагента: {id_str}");
+                return;
+            };
+
+            if let Err(e) = open_counterparty_card(&pool, ui_weak, cid, counterparty_id).await {
+                tracing::error!("Помилка відкриття картки контрагента: {e}");
+            }
+        });
     });
 
     // ── Колбек: відкрити контрагента для редагування ────────────────────────
@@ -270,6 +296,65 @@ async fn main() -> Result<()> {
                 }
                 Ok(None) => tracing::warn!("Контрагента {uuid} не знайдено."),
                 Err(e) => tracing::error!("Помилка завантаження контрагента: {e}"),
+            }
+        });
+    });
+
+    let ui_weak_cp_card_close = ui.as_weak();
+    ui.on_counterparty_card_close_clicked(move || {
+        if let Some(ui) = ui_weak_cp_card_close.upgrade() {
+            ui.set_show_counterparty_card(false);
+        }
+    });
+
+    let pool_cp_card_edit = pool.clone();
+    let ui_weak_cp_card_edit = ui.as_weak();
+    ui.on_counterparty_card_edit_clicked(move |id| {
+        let pool = pool_cp_card_edit.clone();
+        let ui_handle = ui_weak_cp_card_edit.clone();
+        let id_str = id.to_string();
+
+        tokio::spawn(async move {
+            let Ok(uuid) = id_str.parse::<uuid::Uuid>() else {
+                tracing::error!("Некоректний UUID контрагента для редагування: {id_str}");
+                return;
+            };
+
+            match db::counterparties::get_by_id(&pool, uuid).await {
+                Ok(Some(cp)) => {
+                    ui_handle
+                        .upgrade_in_event_loop(move |ui| {
+                            ui.set_cp_form_name(SharedString::from(cp.name.as_str()));
+                            ui.set_cp_form_edrpou(SharedString::from(
+                                cp.edrpou.as_deref().unwrap_or(""),
+                            ));
+                            ui.set_cp_form_ipn(SharedString::from(
+                                cp.ipn.as_deref().unwrap_or(""),
+                            ));
+                            ui.set_cp_form_iban(SharedString::from(
+                                cp.iban.as_deref().unwrap_or(""),
+                            ));
+                            ui.set_cp_form_phone(SharedString::from(
+                                cp.phone.as_deref().unwrap_or(""),
+                            ));
+                            ui.set_cp_form_email(SharedString::from(
+                                cp.email.as_deref().unwrap_or(""),
+                            ));
+                            ui.set_cp_form_address(SharedString::from(
+                                cp.address.as_deref().unwrap_or(""),
+                            ));
+                            ui.set_cp_form_notes(SharedString::from(
+                                cp.notes.as_deref().unwrap_or(""),
+                            ));
+                            ui.set_cp_form_edit_id(SharedString::from(cp.id.to_string().as_str()));
+                            ui.set_cp_form_is_edit(true);
+                            ui.set_show_counterparty_card(false);
+                            ui.set_show_cp_form(true);
+                        })
+                        .ok();
+                }
+                Ok(None) => tracing::warn!("Контрагента {uuid} не знайдено."),
+                Err(e) => tracing::error!("Помилка відкриття контрагента на редагування: {e}"),
             }
         });
     });
@@ -1051,11 +1136,14 @@ async fn main() -> Result<()> {
                         (state.query.clone(), state.include_archived, state.page)
                     };
                     if let Err(e) =
-                        reload_counterparties(&pool, ui_weak, cid, query, include_archived, page, true).await
+                        reload_counterparties(&pool, ui_weak.clone(), cid, query, include_archived, page, true).await
                     {
                         tracing::error!(
                             "Помилка оновлення списку контрагентів після створення: {e}"
                         );
+                    }
+                    if let Err(e) = reload_payment_counterparty_options(&pool, ui_weak.clone(), cid).await {
+                        tracing::error!("Помилка оновлення контрагентів для форми платежу після створення: {e}");
                     }
                 }
                 Err(e) => {
@@ -1154,11 +1242,14 @@ async fn main() -> Result<()> {
                         (state.query.clone(), state.include_archived, state.page)
                     };
                     if let Err(e) =
-                        reload_counterparties(&pool, ui_weak, cid, query, include_archived, page, true).await
+                        reload_counterparties(&pool, ui_weak.clone(), cid, query, include_archived, page, true).await
                     {
                         tracing::error!(
                             "Помилка оновлення списку контрагентів після редагування: {e}"
                         );
+                    }
+                    if let Err(e) = reload_payment_counterparty_options(&pool, ui_weak.clone(), cid).await {
+                        tracing::error!("Помилка оновлення контрагентів для форми платежу після редагування: {e}");
                     }
                 }
                 Ok(None) => tracing::warn!("Контрагента {uuid} не знайдено."),
@@ -1203,12 +1294,15 @@ async fn main() -> Result<()> {
                         (state.query.clone(), state.include_archived, state.page)
                     };
                     if let Err(e) =
-                        reload_counterparties(&pool, ui_handle, cid, query, include_archived, page, false)
+                        reload_counterparties(&pool, ui_handle.clone(), cid, query, include_archived, page, false)
                             .await
                     {
                         tracing::error!(
                             "Помилка оновлення списку контрагентів після архівування: {e}"
                         );
+                    }
+                    if let Err(e) = reload_payment_counterparty_options(&pool, ui_handle.clone(), cid).await {
+                        tracing::error!("Помилка оновлення контрагентів для форми платежу після архівування: {e}");
                     }
                 }
                 Ok(false) => tracing::warn!("Контрагента {uuid} не знайдено."),
@@ -2208,6 +2302,7 @@ async fn main() -> Result<()> {
     let pool_pay_filter = pool.clone();
     let ui_weak_pay_filter = ui.as_weak();
     let active_company_id_pay_filter = active_company_id.clone();
+    let payment_state_filter = payment_state.clone();
     ui.on_payment_direction_filter_changed(move |index| {
         use crate::models::payment::PaymentDirection;
         let pool = pool_pay_filter.clone();
@@ -2218,8 +2313,13 @@ async fn main() -> Result<()> {
             2 => Some(PaymentDirection::Expense),
             _ => None,
         };
+        let query = {
+            let mut state = payment_state_filter.lock().unwrap();
+            state.direction_filter = direction.clone();
+            state.query.clone()
+        };
         tokio::spawn(async move {
-            if let Err(e) = reload_payments(&pool, ui_weak, cid, direction).await {
+            if let Err(e) = reload_payments(&pool, ui_weak, cid, direction, &query).await {
                 tracing::error!("Помилка фільтрації платежів: {e}");
             }
         });
@@ -2228,12 +2328,18 @@ async fn main() -> Result<()> {
     let pool_pay_search = pool.clone();
     let ui_weak_pay_search = ui.as_weak();
     let active_company_id_pay_search = active_company_id.clone();
-    ui.on_payment_search_changed(move |_query| {
+    let payment_state_search = payment_state.clone();
+    ui.on_payment_search_changed(move |query| {
         let pool = pool_pay_search.clone();
         let ui_weak = ui_weak_pay_search.clone();
         let cid = *active_company_id_pay_search.lock().unwrap();
+        let (query, direction) = {
+            let mut state = payment_state_search.lock().unwrap();
+            state.query = query.to_string();
+            (state.query.clone(), state.direction_filter.clone())
+        };
         tokio::spawn(async move {
-            if let Err(e) = reload_payments(&pool, ui_weak, cid, None).await {
+            if let Err(e) = reload_payments(&pool, ui_weak, cid, direction, &query).await {
                 tracing::error!("Помилка пошуку платежів: {e}");
             }
         });
@@ -2242,10 +2348,15 @@ async fn main() -> Result<()> {
     let pool_pay_reconcile = pool.clone();
     let ui_weak_pay_reconcile = ui.as_weak();
     let active_company_id_pay_reconcile = active_company_id.clone();
+    let payment_state_reconcile = payment_state.clone();
     ui.on_payment_reconcile_clicked(move |id_str| {
         let pool = pool_pay_reconcile.clone();
         let ui_weak = ui_weak_pay_reconcile.clone();
         let cid = *active_company_id_pay_reconcile.lock().unwrap();
+        let (query, direction) = {
+            let state = payment_state_reconcile.lock().unwrap();
+            (state.query.clone(), state.direction_filter.clone())
+        };
         let id_s = id_str.to_string();
         tokio::spawn(async move {
             let Ok(uuid) = id_s.parse::<uuid::Uuid>() else {
@@ -2256,16 +2367,255 @@ async fn main() -> Result<()> {
                 tracing::error!("Помилка зведення платежу: {e}");
                 return;
             }
-            if let Err(e) = reload_payments(&pool, ui_weak, cid, None).await {
+            if let Err(e) = reload_payments(&pool, ui_weak, cid, direction, &query).await {
                 tracing::error!("Помилка оновлення платежів: {e}");
             }
         });
     });
 
-    // Stub callbacks (форма платежів — наступна ітерація)
-    ui.on_payment_create_clicked(|| {});
-    ui.on_payment_edit_clicked(|_| {});
-    ui.on_payment_delete_clicked(|_| {});
+    let ui_weak_payment_create = ui.as_weak();
+    ui.on_payment_create_clicked(move || {
+        if let Some(ui) = ui_weak_payment_create.upgrade() {
+            reset_payment_form(&ui);
+            ui.set_show_payment_form(true);
+        }
+    });
+
+    let pool_pay_edit = pool.clone();
+    let ui_weak_pay_edit = ui.as_weak();
+    let active_company_id_pay_edit = active_company_id.clone();
+    ui.on_payment_edit_clicked(move |id| {
+        let pool = pool_pay_edit.clone();
+        let ui_weak = ui_weak_pay_edit.clone();
+        let cid = *active_company_id_pay_edit.lock().unwrap();
+        let id_str = id.to_string();
+
+        tokio::spawn(async move {
+            let Ok(payment_id) = id_str.parse::<uuid::Uuid>() else {
+                tracing::error!("Некоректний UUID платежу: {id_str}");
+                return;
+            };
+
+            let counterparties = match db::counterparties::list(&pool, cid).await {
+                Ok(rows) => rows,
+                Err(e) => {
+                    tracing::error!("Помилка завантаження контрагентів для форми платежу: {e}");
+                    return;
+                }
+            };
+
+            match db::payments::get_by_id(&pool, payment_id).await {
+                Ok(Some(payment)) => {
+                    ui_weak
+                        .upgrade_in_event_loop(move |ui| {
+                            populate_payment_form(&ui, &counterparties, &payment);
+                            ui.set_show_payment_form(true);
+                        })
+                        .ok();
+                }
+                Ok(None) => tracing::warn!("Платіж {payment_id} не знайдено."),
+                Err(e) => tracing::error!("Помилка завантаження платежу для редагування: {e}"),
+            }
+        });
+    });
+
+    let pool_pay_delete = pool.clone();
+    let ui_weak_pay_delete = ui.as_weak();
+    let active_company_id_pay_delete = active_company_id.clone();
+    let payment_state_delete = payment_state.clone();
+    ui.on_payment_delete_clicked(move |id| {
+        let pool = pool_pay_delete.clone();
+        let ui_weak = ui_weak_pay_delete.clone();
+        let cid = *active_company_id_pay_delete.lock().unwrap();
+        let (query, direction) = {
+            let state = payment_state_delete.lock().unwrap();
+            (state.query.clone(), state.direction_filter.clone())
+        };
+        let id_str = id.to_string();
+
+        tokio::spawn(async move {
+            let Ok(payment_id) = id_str.parse::<uuid::Uuid>() else {
+                tracing::error!("Некоректний UUID платежу: {id_str}");
+                return;
+            };
+
+            match db::payments::delete(&pool, payment_id).await {
+                Ok(()) => {
+                    show_toast(ui_weak.clone(), "Платіж видалено".into(), false);
+                    if let Err(e) = reload_payments(&pool, ui_weak, cid, direction, &query).await {
+                        tracing::error!("Помилка оновлення списку платежів після видалення: {e}");
+                    }
+                }
+                Err(e) => tracing::error!("Помилка видалення платежу: {e}"),
+            }
+        });
+    });
+
+    let pool_pay_save = pool.clone();
+    let ui_weak_pay_save = ui.as_weak();
+    let active_company_id_pay_save = active_company_id.clone();
+    let payment_state_save = payment_state.clone();
+    ui.on_payment_form_save(move |date, amount, direction, counterparty_id, bank_name, bank_ref, description| {
+        let pool = pool_pay_save.clone();
+        let ui_weak = ui_weak_pay_save.clone();
+        let cid = *active_company_id_pay_save.lock().unwrap();
+        let (query, direction_filter) = {
+            let state = payment_state_save.lock().unwrap();
+            (state.query.clone(), state.direction_filter.clone())
+        };
+        let date = date.to_string();
+        let amount = amount.to_string();
+        let counterparty_id = counterparty_id.to_string();
+        let bank_name = bank_name.to_string();
+        let bank_ref = bank_ref.to_string();
+        let description = description.to_string();
+
+        tokio::spawn(async move {
+            let date = match NaiveDate::parse_from_str(&date, "%d.%m.%Y") {
+                Ok(value) => value,
+                Err(e) => {
+                    tracing::error!("Невірний формат дати платежу: {e}");
+                    show_toast(ui_weak, "Невірний формат дати".into(), true);
+                    return;
+                }
+            };
+            let amount = match amount.parse::<Decimal>() {
+                Ok(value) => value,
+                Err(e) => {
+                    tracing::error!("Невірний формат суми платежу: {e}");
+                    show_toast(ui_weak, "Невірний формат суми".into(), true);
+                    return;
+                }
+            };
+            let data = models::payment::NewPayment {
+                company_id: cid,
+                date,
+                amount,
+                direction: if direction == 0 {
+                    models::payment::PaymentDirection::Income
+                } else {
+                    models::payment::PaymentDirection::Expense
+                },
+                counterparty_id: parse_optional_uuid(&counterparty_id),
+                bank_name: optional_text(&bank_name),
+                bank_ref: optional_text(&bank_ref),
+                description: optional_text(&description),
+            };
+
+            match db::payments::create(&pool, data).await {
+                Ok(payment) => {
+                    show_toast(
+                        ui_weak.clone(),
+                        format!("Платіж на {:.2} збережено", payment.amount),
+                        false,
+                    );
+                    if let Err(e) =
+                        reload_payments(&pool, ui_weak, cid, direction_filter, &query).await
+                    {
+                        tracing::error!("Помилка оновлення платежів після створення: {e}");
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Помилка створення платежу: {e}");
+                    show_toast(ui_weak, format!("Помилка: {e}"), true);
+                }
+            }
+        });
+    });
+
+    let pool_pay_update = pool.clone();
+    let ui_weak_pay_update = ui.as_weak();
+    let active_company_id_pay_update = active_company_id.clone();
+    let payment_state_update = payment_state.clone();
+    ui.on_payment_form_update(move |date, amount, direction, counterparty_id, bank_name, bank_ref, description| {
+        let pool = pool_pay_update.clone();
+        let ui_weak = ui_weak_pay_update.clone();
+        let cid = *active_company_id_pay_update.lock().unwrap();
+        let edit_id = ui_weak_pay_update
+            .upgrade()
+            .map(|ui| ui.get_payment_form_edit_id().to_string())
+            .unwrap_or_default();
+        let (query, direction_filter) = {
+            let state = payment_state_update.lock().unwrap();
+            (state.query.clone(), state.direction_filter.clone())
+        };
+        let date = date.to_string();
+        let amount = amount.to_string();
+        let counterparty_id = counterparty_id.to_string();
+        let bank_name = bank_name.to_string();
+        let bank_ref = bank_ref.to_string();
+        let description = description.to_string();
+
+        tokio::spawn(async move {
+            let payment_id = match edit_id.parse::<uuid::Uuid>() {
+                Ok(value) => value,
+                Err(e) => {
+                    tracing::error!("Некоректний UUID платежу для оновлення: {e}");
+                    show_toast(ui_weak, "Не вдалося визначити платіж".into(), true);
+                    return;
+                }
+            };
+            let date = match NaiveDate::parse_from_str(&date, "%d.%m.%Y") {
+                Ok(value) => value,
+                Err(e) => {
+                    tracing::error!("Невірний формат дати платежу: {e}");
+                    show_toast(ui_weak, "Невірний формат дати".into(), true);
+                    return;
+                }
+            };
+            let amount = match amount.parse::<Decimal>() {
+                Ok(value) => value,
+                Err(e) => {
+                    tracing::error!("Невірний формат суми платежу: {e}");
+                    show_toast(ui_weak, "Невірний формат суми".into(), true);
+                    return;
+                }
+            };
+            let data = models::payment::UpdatePayment {
+                date,
+                amount,
+                direction: if direction == 0 {
+                    models::payment::PaymentDirection::Income
+                } else {
+                    models::payment::PaymentDirection::Expense
+                },
+                counterparty_id: parse_optional_uuid(&counterparty_id),
+                bank_name: optional_text(&bank_name),
+                bank_ref: optional_text(&bank_ref),
+                description: optional_text(&description),
+            };
+
+            match db::payments::update(&pool, payment_id, data).await {
+                Ok(Some(payment)) => {
+                    show_toast(
+                        ui_weak.clone(),
+                        format!("Платіж на {:.2} оновлено", payment.amount),
+                        false,
+                    );
+                    if let Err(e) =
+                        reload_payments(&pool, ui_weak, cid, direction_filter, &query).await
+                    {
+                        tracing::error!("Помилка оновлення платежів після редагування: {e}");
+                    }
+                }
+                Ok(None) => {
+                    tracing::warn!("Платіж {payment_id} не знайдено під час оновлення.");
+                    show_toast(ui_weak, "Платіж не знайдено".into(), true);
+                }
+                Err(e) => {
+                    tracing::error!("Помилка оновлення платежу: {e}");
+                    show_toast(ui_weak, format!("Помилка: {e}"), true);
+                }
+            }
+        });
+    });
+
+    let ui_weak_pay_cancel = ui.as_weak();
+    ui.on_payment_form_cancel(move || {
+        if let Some(ui) = ui_weak_pay_cancel.upgrade() {
+            ui.set_show_payment_form(false);
+        }
+    });
 
     // ── Документи — колбеки ───────────────────────────────────────────────────
 
@@ -2545,6 +2895,8 @@ async fn main() -> Result<()> {
                         ui.set_show_cp_form(false);
                         ui.set_show_act_form(false);
                         ui.set_show_task_form(false);
+                        ui.set_show_payment_form(false);
+                        ui.set_show_counterparty_card(false);
                     }).ok();
 
                     if let Err(e) = reload_counterparties(
@@ -2574,7 +2926,7 @@ async fn main() -> Result<()> {
                         tracing::error!("Помилка оновлення актів після вибору компанії: {e}");
                     }
 
-                    if let Err(e) = reload_payments(&pool, ui_handle.clone(), company_id, None).await {
+                    if let Err(e) = reload_payments(&pool, ui_handle.clone(), company_id, None, "").await {
                         tracing::error!("Помилка завантаження платежів після вибору компанії: {e}");
                     }
 
@@ -2583,6 +2935,12 @@ async fn main() -> Result<()> {
                     }
                     if let Err(e) = reload_documents(&pool, ui_handle.clone(), company_id, 0, "", None, None, None).await {
                         tracing::error!("Помилка завантаження документів після вибору компанії: {e}");
+                    }
+                    if let Err(e) = reload_settings(&pool, ui_handle.clone(), company_id).await {
+                        tracing::error!("Помилка завантаження налаштувань після вибору компанії: {e}");
+                    }
+                    if let Err(e) = reload_payment_counterparty_options(&pool, ui_handle.clone(), company_id).await {
+                        tracing::error!("Помилка оновлення контрагентів для форми платежу після вибору компанії: {e}");
                     }
                 }
                 Ok(None) => tracing::warn!("Компанію {uuid} не знайдено."),
@@ -2634,6 +2992,39 @@ async fn main() -> Result<()> {
                 }
                 Ok(None) => tracing::warn!("Компанію {uuid} не знайдено."),
                 Err(e) => tracing::error!("Помилка завантаження компанії: {e}"),
+            }
+        });
+    });
+
+    let pool_settings_edit_company = pool.clone();
+    let ui_weak_settings_edit_company = ui.as_weak();
+    let active_company_id_settings_edit_company = active_company_id.clone();
+    ui.on_settings_edit_company_clicked(move || {
+        let pool = pool_settings_edit_company.clone();
+        let ui_handle = ui_weak_settings_edit_company.clone();
+        let company_id = *active_company_id_settings_edit_company.lock().unwrap();
+
+        tokio::spawn(async move {
+            match db::companies::get_by_id(&pool, company_id).await {
+                Ok(Some(c)) => {
+                    ui_handle
+                        .upgrade_in_event_loop(move |ui| {
+                            ui.set_company_form_is_edit(true);
+                            ui.set_company_form_edit_id(SharedString::from(c.id.to_string().as_str()));
+                            ui.set_company_form_name(SharedString::from(c.name.as_str()));
+                            ui.set_company_form_edrpou(SharedString::from(c.edrpou.as_deref().unwrap_or("")));
+                            ui.set_company_form_iban(SharedString::from(c.iban.as_deref().unwrap_or("")));
+                            ui.set_company_form_legal_address(SharedString::from(c.legal_address.as_deref().unwrap_or("")));
+                            ui.set_company_form_director(SharedString::from(c.director_name.as_deref().unwrap_or("")));
+                            ui.set_company_form_accountant(SharedString::from(c.accountant_name.as_deref().unwrap_or("")));
+                            ui.set_company_form_is_vat(c.is_vat_payer);
+                            ui.set_current_page(6);
+                            ui.set_show_company_form(true);
+                        })
+                        .ok();
+                }
+                Ok(None) => tracing::warn!("Активну компанію {company_id} не знайдено."),
+                Err(e) => tracing::error!("Помилка відкриття компанії з налаштувань: {e}"),
             }
         });
     });
@@ -2767,6 +3158,12 @@ async fn main() -> Result<()> {
                     if let Err(e) = reload_companies(&pool, ui_weak.clone(), active_id).await {
                         tracing::error!("Помилка оновлення списку компаній: {e}");
                     }
+                    if let Err(e) = reload_settings(&pool, ui_weak.clone(), c.id).await {
+                        tracing::error!("Помилка оновлення налаштувань компанії після створення: {e}");
+                    }
+                    if let Err(e) = reload_payment_counterparty_options(&pool, ui_weak.clone(), c.id).await {
+                        tracing::error!("Помилка оновлення контрагентів для форми платежу після створення компанії: {e}");
+                    }
 
                     let (cp_query, include_archived, cp_page) = {
                         let state = counterparty_state.lock().unwrap();
@@ -2862,6 +3259,14 @@ async fn main() -> Result<()> {
                     let active_id = *active_company_id.lock().unwrap();
                     if let Err(e) = reload_companies(&pool, ui_weak.clone(), active_id).await {
                         tracing::error!("Помилка оновлення списку компаній: {e}");
+                    }
+                    if *active_company_id.lock().unwrap() == c.id {
+                        if let Err(e) = reload_settings(&pool, ui_weak.clone(), c.id).await {
+                            tracing::error!("Помилка оновлення налаштувань після редагування компанії: {e}");
+                        }
+                        if let Err(e) = reload_payment_counterparty_options(&pool, ui_weak.clone(), c.id).await {
+                            tracing::error!("Помилка оновлення контрагентів для форми платежу після редагування компанії: {e}");
+                        }
                     }
 
                     if *active_company_id.lock().unwrap() == c.id {
@@ -3410,9 +3815,28 @@ async fn reload_payments(
     ui_weak: Weak<MainWindow>,
     company_id: uuid::Uuid,
     direction: Option<crate::models::payment::PaymentDirection>,
+    query: &str,
 ) -> Result<()> {
     use rust_decimal::Decimal;
-    let rows = db::payments::list(pool, company_id, direction).await?;
+    let query_lower = query.trim().to_lowercase();
+    let rows = db::payments::list(pool, company_id, direction)
+        .await?
+        .into_iter()
+        .filter(|row| {
+            if query_lower.is_empty() {
+                return true;
+            }
+            let haystack = [
+                row.date.as_str(),
+                row.counterparty_name.as_deref().unwrap_or(""),
+                row.description.as_deref().unwrap_or(""),
+                row.bank_name.as_deref().unwrap_or(""),
+            ]
+            .join(" ")
+            .to_lowercase();
+            haystack.contains(query_lower.as_str())
+        })
+        .collect::<Vec<_>>();
 
     let mut total_income = Decimal::ZERO;
     let mut total_expense = Decimal::ZERO;
@@ -3431,7 +3855,7 @@ async fn reload_payments(
         let banks: Vec<SharedString> = rows.iter().map(|r| SharedString::from(r.bank_name.as_deref().unwrap_or(""))).collect();
         let amounts: Vec<SharedString> = rows.iter().map(|r| SharedString::from(format!("{:.2}", r.amount))).collect();
         let directions: Vec<SharedString> = rows.iter().map(|r| {
-            SharedString::from(r.direction.as_str())
+            SharedString::from(r.direction.label())
         }).collect();
         let reconciled: Vec<bool> = rows.iter().map(|r| r.is_reconciled).collect();
 
@@ -3446,7 +3870,199 @@ async fn reload_payments(
         ui.set_payment_total_income(SharedString::from(format!("{:.2}", total_income)));
         ui.set_payment_total_expense(SharedString::from(format!("{:.2}", total_expense)));
         ui.set_payments_loading(false);
+        ui.set_show_payment_form(false);
     }).map_err(anyhow::Error::from)?;
+    Ok(())
+}
+
+async fn reload_settings(
+    pool: &sqlx::PgPool,
+    ui_weak: Weak<MainWindow>,
+    company_id: uuid::Uuid,
+) -> Result<()> {
+    let company = db::companies::get_by_id(pool, company_id).await?;
+    let categories = db::categories::list(pool, company_id).await?;
+
+    ui_weak
+        .upgrade_in_event_loop(move |ui| {
+            if let Some(company) = company {
+                ui.set_settings_company_name(SharedString::from(company.name.as_str()));
+                ui.set_settings_company_edrpou(SharedString::from(
+                    company.edrpou.as_deref().unwrap_or(""),
+                ));
+                ui.set_settings_company_iban(SharedString::from(
+                    company.iban.as_deref().unwrap_or(""),
+                ));
+                ui.set_settings_company_director(SharedString::from(
+                    company.director_name.as_deref().unwrap_or(""),
+                ));
+                ui.set_settings_company_address(SharedString::from(
+                    company.legal_address.as_deref().unwrap_or(""),
+                ));
+            }
+
+            let rows = categories
+                .iter()
+                .map(|cat| SettingsCategoryRow {
+                    name: SharedString::from(cat.name.as_str()),
+                    kind: SharedString::from(cat.kind.as_str()),
+                    depth: if cat.parent_id.is_some() { 1 } else { 0 },
+                })
+                .collect::<Vec<_>>();
+            ui.set_settings_category_rows(ModelRc::new(VecModel::from(rows)));
+        })
+        .map_err(anyhow::Error::from)?;
+
+    Ok(())
+}
+
+async fn reload_payment_counterparty_options(
+    pool: &sqlx::PgPool,
+    ui_weak: Weak<MainWindow>,
+    company_id: uuid::Uuid,
+) -> Result<()> {
+    let counterparties = db::counterparties::list(pool, company_id).await?;
+    let mut names = vec![SharedString::from("Без контрагента")];
+    let mut ids = vec![SharedString::from("")];
+    for cp in counterparties {
+        names.push(SharedString::from(cp.name.as_str()));
+        ids.push(SharedString::from(cp.id.to_string().as_str()));
+    }
+    ui_weak
+        .upgrade_in_event_loop(move |ui| {
+            ui.set_payment_form_counterparty_names(ModelRc::new(VecModel::from(names)));
+            ui.set_payment_form_counterparty_ids(ModelRc::new(VecModel::from(ids)));
+            if !ui.get_payment_form_is_edit() {
+                ui.set_payment_form_counterparty_index(0);
+            }
+        })
+        .map_err(anyhow::Error::from)?;
+    Ok(())
+}
+
+async fn open_counterparty_card(
+    pool: &sqlx::PgPool,
+    ui_weak: Weak<MainWindow>,
+    company_id: uuid::Uuid,
+    counterparty_id: uuid::Uuid,
+) -> Result<()> {
+    let counterparty = db::counterparties::get_by_id(pool, counterparty_id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Контрагента не знайдено"))?;
+    let acts = db::acts::list_filtered(pool, company_id, None, None, Some(counterparty_id), None, None).await?;
+    let invoices =
+        db::invoices::list_filtered(pool, company_id, None, None, Some(counterparty_id), None, None).await?;
+    let payments = db::payments::list_by_counterparty(pool, company_id, counterparty_id).await?;
+    let contracts = db::contracts::list_by_counterparty(pool, company_id, counterparty_id).await?;
+    let tasks = db::tasks::list_by_counterparty(pool, counterparty_id).await?;
+
+    ui_weak
+        .upgrade_in_event_loop(move |ui| {
+            ui.set_counterparty_card_id(SharedString::from(counterparty.id.to_string().as_str()));
+            ui.set_counterparty_card_name(SharedString::from(counterparty.name.as_str()));
+            ui.set_counterparty_card_edrpou(SharedString::from(
+                counterparty.edrpou.as_deref().unwrap_or(""),
+            ));
+            ui.set_counterparty_card_ipn(SharedString::from(
+                counterparty.ipn.as_deref().unwrap_or(""),
+            ));
+            ui.set_counterparty_card_iban(SharedString::from(
+                counterparty.iban.as_deref().unwrap_or(""),
+            ));
+            ui.set_counterparty_card_phone(SharedString::from(
+                counterparty.phone.as_deref().unwrap_or(""),
+            ));
+            ui.set_counterparty_card_email(SharedString::from(
+                counterparty.email.as_deref().unwrap_or(""),
+            ));
+            ui.set_counterparty_card_address(SharedString::from(
+                counterparty.address.as_deref().unwrap_or(""),
+            ));
+            ui.set_counterparty_card_stat_acts(SharedString::from(acts.len().to_string().as_str()));
+            ui.set_counterparty_card_stat_invoices(SharedString::from(
+                invoices.len().to_string().as_str(),
+            ));
+            ui.set_counterparty_card_stat_payments(SharedString::from(
+                payments.len().to_string().as_str(),
+            ));
+            ui.set_counterparty_card_stat_contracts(SharedString::from(
+                contracts.len().to_string().as_str(),
+            ));
+
+            ui.set_counterparty_card_acts(ModelRc::new(VecModel::from(
+                acts.iter()
+                    .map(|row| CounterpartyDocSummary {
+                        number: SharedString::from(row.number.as_str()),
+                        date: SharedString::from(row.date.format("%d.%m.%Y").to_string()),
+                        amount: SharedString::from(format_amount_ua(row.total_amount)),
+                        status: SharedString::from(row.status.label()),
+                    })
+                    .collect::<Vec<_>>(),
+            )));
+
+            ui.set_counterparty_card_invoices(ModelRc::new(VecModel::from(
+                invoices
+                    .iter()
+                    .map(|row| CounterpartyDocSummary {
+                        number: SharedString::from(row.number.as_str()),
+                        date: SharedString::from(row.date.format("%d.%m.%Y").to_string()),
+                        amount: SharedString::from(format_amount_ua(row.total_amount)),
+                        status: SharedString::from(row.status.label()),
+                    })
+                    .collect::<Vec<_>>(),
+            )));
+
+            ui.set_counterparty_card_payments(ModelRc::new(VecModel::from(
+                payments
+                    .iter()
+                    .map(|row| CounterpartyPaymentSummary {
+                        date: SharedString::from(row.date.as_str()),
+                        amount: SharedString::from(format_amount_ua(row.amount)),
+                        direction: SharedString::from(row.direction.label()),
+                        description: SharedString::from(row.description.as_deref().unwrap_or("")),
+                    })
+                    .collect::<Vec<_>>(),
+            )));
+
+            ui.set_counterparty_card_contracts(ModelRc::new(VecModel::from(
+                contracts
+                    .iter()
+                    .map(|row| CounterpartyContractSummary {
+                        number: SharedString::from(row.number.as_str()),
+                        subject: SharedString::from(row.subject.as_deref().unwrap_or("")),
+                        date: SharedString::from(row.date.as_str()),
+                        amount: SharedString::from(
+                            row.amount
+                                .map(format_amount_ua)
+                                .unwrap_or_else(|| "—".to_string()),
+                        ),
+                        status: SharedString::from(match row.status {
+                            models::contract::ContractStatus::Active => "Активний",
+                            models::contract::ContractStatus::Expired => "Завершений",
+                            models::contract::ContractStatus::Terminated => "Розірваний",
+                        }),
+                    })
+                    .collect::<Vec<_>>(),
+            )));
+
+            ui.set_counterparty_card_tasks(ModelRc::new(VecModel::from(
+                tasks.iter()
+                    .map(|row| CounterpartyTaskSummary {
+                        title: SharedString::from(row.title.as_str()),
+                        due_date: SharedString::from(
+                            row.due_date
+                                .map(|date| date.format("%d.%m.%Y").to_string())
+                                .unwrap_or_else(|| "—".to_string()),
+                        ),
+                        status: SharedString::from(row.status.label()),
+                    })
+                    .collect::<Vec<_>>(),
+            )));
+
+            ui.set_show_counterparty_card(true);
+        })
+        .map_err(anyhow::Error::from)?;
+
     Ok(())
 }
 
@@ -3722,6 +4338,75 @@ fn reset_company_form(ui: &MainWindow) {
     ui.set_company_form_director(SharedString::from(""));
     ui.set_company_form_accountant(SharedString::from(""));
     ui.set_company_form_is_vat(false);
+}
+
+fn reset_payment_form(ui: &MainWindow) {
+    ui.set_payment_form_is_edit(false);
+    ui.set_payment_form_edit_id(SharedString::from(""));
+    ui.set_payment_form_date(SharedString::from(Local::now().format("%d.%m.%Y").to_string()));
+    ui.set_payment_form_amount(SharedString::from(""));
+    ui.set_payment_form_direction_index(0);
+    ui.set_payment_form_counterparty_index(0);
+    ui.set_payment_form_bank_name(SharedString::from(""));
+    ui.set_payment_form_bank_ref(SharedString::from(""));
+    ui.set_payment_form_description(SharedString::from(""));
+}
+
+fn optional_text(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn parse_optional_uuid(value: &str) -> Option<uuid::Uuid> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        uuid::Uuid::parse_str(trimmed).ok()
+    }
+}
+
+fn populate_payment_form(
+    ui: &MainWindow,
+    counterparties: &[models::counterparty::Counterparty],
+    payment: &models::payment::Payment,
+) {
+    let mut names = vec![SharedString::from("Без контрагента")];
+    let mut ids = vec![SharedString::from("")];
+    let mut selected_index = 0_i32;
+
+    for (index, cp) in counterparties.iter().enumerate() {
+        names.push(SharedString::from(cp.name.as_str()));
+        ids.push(SharedString::from(cp.id.to_string().as_str()));
+        if payment.counterparty_id == Some(cp.id) {
+            selected_index = index as i32 + 1;
+        }
+    }
+
+    ui.set_payment_form_counterparty_names(ModelRc::new(VecModel::from(names)));
+    ui.set_payment_form_counterparty_ids(ModelRc::new(VecModel::from(ids)));
+    ui.set_payment_form_is_edit(true);
+    ui.set_payment_form_edit_id(SharedString::from(payment.id.to_string().as_str()));
+    ui.set_payment_form_date(SharedString::from(payment.date.format("%d.%m.%Y").to_string()));
+    ui.set_payment_form_amount(SharedString::from(format!("{:.2}", payment.amount)));
+    ui.set_payment_form_direction_index(match payment.direction {
+        models::payment::PaymentDirection::Income => 0,
+        models::payment::PaymentDirection::Expense => 1,
+    });
+    ui.set_payment_form_counterparty_index(selected_index);
+    ui.set_payment_form_bank_name(SharedString::from(
+        payment.bank_name.as_deref().unwrap_or(""),
+    ));
+    ui.set_payment_form_bank_ref(SharedString::from(
+        payment.bank_ref.as_deref().unwrap_or(""),
+    ));
+    ui.set_payment_form_description(SharedString::from(
+        payment.description.as_deref().unwrap_or(""),
+    ));
 }
 
 fn normalized_query(query: &str) -> Option<&str> {

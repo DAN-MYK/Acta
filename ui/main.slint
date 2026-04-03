@@ -22,7 +22,10 @@ import { InvoiceForm }      from "invoices/invoice_form.slint";
 import { CompanyList, CompanyItem } from "companies/company_list.slint";
 import { CompanyForm }      from "companies/company_form.slint";
 import { PaymentList }      from "payments/payment_list.slint";
+import { PaymentForm }      from "payments/payment_form.slint";
 import { DocumentList, DocRow } from "documents/document_list.slint";
+import { CounterpartyCard, CounterpartyDocSummary, CounterpartyPaymentSummary, CounterpartyContractSummary, CounterpartyTaskSummary } from "counterparties/counterparty_card.slint";
+import { SettingsPage, SettingsCategoryRow } from "settings/settings.slint";
 
 global MenuIcons {
     out property <image> dashboard:      @image-url("assets/icons/Home.svg");
@@ -96,6 +99,7 @@ component NavItem {
                 color: root.active ? Theme.text-white
                     : (root.disabled ? Theme.sidebar-label : Theme.sidebar-text);
                 vertical-alignment: center;
+                horizontal-stretch: 1;
                 animate color { duration: 150ms; easing: ease; }
             }
         }
@@ -338,6 +342,18 @@ export component MainWindow inherits Window {
     in property <bool>     payments-loading: false;
     in property <string>   payment-total-income: "0.00";
     in property <string>   payment-total-expense: "0.00";
+    in property <bool>     show-payment-form: false;
+    in property <bool>     payment-form-is-edit: false;
+    in property <string>   payment-form-edit-id: "";
+    in property <string>   payment-form-date: "";
+    in property <string>   payment-form-amount: "";
+    in property <int>      payment-form-direction-index: 0;
+    in property <[string]> payment-form-counterparty-names;
+    in property <[string]> payment-form-counterparty-ids;
+    in property <int>      payment-form-counterparty-index: 0;
+    in property <string>   payment-form-bank-name: "";
+    in property <string>   payment-form-bank-ref: "";
+    in property <string>   payment-form-description: "";
 
     // ── Колбеки платежів ───────────────────────────────────────────────────
     callback payment-direction-filter-changed(int);
@@ -346,6 +362,38 @@ export component MainWindow inherits Window {
     callback payment-edit-clicked(string);
     callback payment-delete-clicked(string);
     callback payment-reconcile-clicked(string);
+    callback payment-form-save(string, string, int, string, string, string, string);
+    callback payment-form-update(string, string, int, string, string, string, string);
+    callback payment-form-cancel();
+
+    in property <string>                settings-company-name: "";
+    in property <string>                settings-company-edrpou: "";
+    in property <string>                settings-company-iban: "";
+    in property <string>                settings-company-director: "";
+    in property <string>                settings-company-address: "";
+    in property <[SettingsCategoryRow]> settings-category-rows;
+    callback settings-edit-company-clicked();
+
+    in property <bool>                           show-counterparty-card: false;
+    in property <string>                         counterparty-card-id: "";
+    in property <string>                         counterparty-card-name: "";
+    in property <string>                         counterparty-card-edrpou: "";
+    in property <string>                         counterparty-card-ipn: "";
+    in property <string>                         counterparty-card-iban: "";
+    in property <string>                         counterparty-card-phone: "";
+    in property <string>                         counterparty-card-email: "";
+    in property <string>                         counterparty-card-address: "";
+    in property <string>                         counterparty-card-stat-acts: "0";
+    in property <string>                         counterparty-card-stat-invoices: "0";
+    in property <string>                         counterparty-card-stat-payments: "0";
+    in property <string>                         counterparty-card-stat-contracts: "0";
+    in property <[CounterpartyDocSummary]>      counterparty-card-acts;
+    in property <[CounterpartyDocSummary]>      counterparty-card-invoices;
+    in property <[CounterpartyPaymentSummary]>  counterparty-card-payments;
+    in property <[CounterpartyContractSummary]> counterparty-card-contracts;
+    in property <[CounterpartyTaskSummary]>     counterparty-card-tasks;
+    callback counterparty-card-close-clicked();
+    callback counterparty-card-edit-clicked(string);
 
     // ── Дані документів (єдиний список актів + накладних) ──────────────────
     in property <[DocRow]> document-rows;
@@ -923,7 +971,39 @@ export component MainWindow inherits Window {
                 reconcile-clicked(id)       => { root.payment-reconcile-clicked(id); }
             }
 
-            if root.current-page == 4 : Rectangle {
+            if root.current-page == 3 && root.show-payment-form : PaymentForm {
+                is-edit-mode: root.payment-form-is-edit;
+                payment-edit-id: root.payment-form-edit-id;
+                payment-date: root.payment-form-date;
+                payment-amount: root.payment-form-amount;
+                payment-direction-index: root.payment-form-direction-index;
+                counterparty-names: root.payment-form-counterparty-names;
+                counterparty-ids: root.payment-form-counterparty-ids;
+                payment-counterparty-index: root.payment-form-counterparty-index;
+                payment-bank-name: root.payment-form-bank-name;
+                payment-bank-ref: root.payment-form-bank-ref;
+                payment-description: root.payment-form-description;
+
+                save(date, amount, direction, counterparty_id, bank_name, bank_ref, description) => {
+                    root.payment-form-save(date, amount, direction, counterparty_id, bank_name, bank_ref, description);
+                }
+                update(date, amount, direction, counterparty_id, bank_name, bank_ref, description) => {
+                    root.payment-form-update(date, amount, direction, counterparty_id, bank_name, bank_ref, description);
+                }
+                cancel => { root.payment-form-cancel(); }
+            }
+
+            if root.current-page == 4 : SettingsPage {
+                company-name: root.settings-company-name;
+                company-edrpou: root.settings-company-edrpou;
+                company-iban: root.settings-company-iban;
+                company-director: root.settings-company-director;
+                company-address: root.settings-company-address;
+                category-rows: root.settings-category-rows;
+                edit-company-clicked => { root.settings-edit-company-clicked(); }
+            }
+
+            if false && root.current-page == 4 : Rectangle {
                 Text {
                     text: "рџ“Љ  Р—РІС–С‚Рё\nР‘СѓРґРµ СЂРµР°Р»С–Р·РѕРІР°РЅРѕ Сѓ РЅР°СЃС‚СѓРїРЅС–Р№ РІРµСЂСЃС–С—";
                     color: Theme.text-muted;
@@ -934,7 +1014,17 @@ export component MainWindow inherits Window {
                 }
             }
 
-            if root.current-page == 7 : Rectangle {
+            if root.current-page == 7 : SettingsPage {
+                company-name: root.settings-company-name;
+                company-edrpou: root.settings-company-edrpou;
+                company-iban: root.settings-company-iban;
+                company-director: root.settings-company-director;
+                company-address: root.settings-company-address;
+                category-rows: root.settings-category-rows;
+                edit-company-clicked => { root.settings-edit-company-clicked(); }
+            }
+
+            if false && root.current-page == 7 : Rectangle {
                 Text {
                     text: "рџ“…  РљР°Р»РµРЅРґР°СЂ РїР»Р°С‚РµР¶С–РІ\nР‘СѓРґРµ СЂРµР°Р»С–Р·РѕРІР°РЅРѕ Сѓ РЅР°СЃС‚СѓРїРЅС–Р№ РІРµСЂСЃС–С—";
                     color: Theme.text-muted;
@@ -950,6 +1040,44 @@ export component MainWindow inherits Window {
     // в”Ђв”Ђ Company Picker overlay в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     // РџРѕРєР°Р·СѓС”С‚СЊСЃСЏ РїСЂРё СЃС‚Р°СЂС‚С– СЏРєС‰Рѕ РєРѕРјРїР°РЅС–Р№ > 1 С– РЅРµ РІС–РґРѕРјРѕ СЏРєСѓ РѕР±СЂР°С‚Рё.
     // Rust РІСЃС‚Р°РЅРѕРІР»СЋС” show-company-picker=true, user РѕР±РёСЂР°С” в†’ callback company-select-clicked.
+    if root.show-counterparty-card : Rectangle {
+        background: Theme.overlay;
+
+        Rectangle {
+            width: parent.width - 80px;
+            height: parent.height - 80px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            border-radius: 18px;
+            background: Theme.surface;
+            border-width: 1px;
+            border-color: Theme.border;
+            clip: true;
+
+            CounterpartyCard {
+                cp-name: root.counterparty-card-name;
+                cp-edrpou: root.counterparty-card-edrpou;
+                cp-ipn: root.counterparty-card-ipn;
+                cp-iban: root.counterparty-card-iban;
+                cp-phone: root.counterparty-card-phone;
+                cp-email: root.counterparty-card-email;
+                cp-address: root.counterparty-card-address;
+                stat-acts: root.counterparty-card-stat-acts;
+                stat-invoices: root.counterparty-card-stat-invoices;
+                stat-payments: root.counterparty-card-stat-payments;
+                stat-contracts: root.counterparty-card-stat-contracts;
+                acts: root.counterparty-card-acts;
+                invoices: root.counterparty-card-invoices;
+                payments: root.counterparty-card-payments;
+                contracts: root.counterparty-card-contracts;
+                tasks: root.counterparty-card-tasks;
+
+                close-clicked => { root.counterparty-card-close-clicked(); }
+                edit-clicked => { root.counterparty-card-edit-clicked(root.counterparty-card-id); }
+            }
+        }
+    }
+
     if root.show-company-picker : Rectangle {
         background: Theme.overlay;
 

@@ -1,0 +1,184 @@
+import { Button } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+export struct SettingsCategoryRow {
+    name: string,
+    kind: string,
+    depth: int,
+}
+
+export component SettingsPage {
+    in property <string> company-name: "";
+    in property <string> company-edrpou: "";
+    in property <string> company-iban: "";
+    in property <string> company-director: "";
+    in property <string> company-address: "";
+    in property <[SettingsCategoryRow]> category-rows: [];
+
+    callback edit-company-clicked();
+
+    private property <int> active-tab: 0;
+
+    Rectangle {
+        background: Theme.bg-page;
+
+        VerticalLayout {
+            padding: 24px;
+            spacing: 16px;
+
+            Text {
+                text: "Налаштування";
+                font-size: 24px;
+                font-weight: 700;
+                color: Theme.text-main;
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+                for label[i] in ["Компанія", "Категорії", "Шаблони"]: Rectangle {
+                    height: 34px;
+                    width: i == 0 ? 110px : 100px;
+                    border-radius: Theme.radius-md;
+                    background: root.active-tab == i ? Theme.primary : Theme.bg-gray;
+
+                    Text {
+                        text: label;
+                        color: root.active-tab == i ? Theme.text-white : Theme.text-sub;
+                        font-size: 13px;
+                        font-weight: root.active-tab == i ? 600 : 500;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+
+                    TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.active-tab = i; }
+                    }
+                }
+            }
+
+            if root.active-tab == 0 : Rectangle {
+                background: Theme.surface;
+                border-width: 1px;
+                border-color: Theme.border;
+                border-radius: 16px;
+                vertical-stretch: 1;
+
+                VerticalLayout {
+                    padding: 24px;
+                    spacing: 12px;
+
+                    HorizontalLayout {
+                        Text {
+                            text: "Реквізити активної компанії";
+                            font-size: 18px;
+                            font-weight: 700;
+                            color: Theme.text-main;
+                            horizontal-stretch: 1;
+                        }
+
+                        Button {
+                            text: "Редагувати";
+                            primary: true;
+                            clicked => { root.edit-company-clicked(); }
+                        }
+                    }
+
+                    for item in [
+                        { label: "Назва",     value: root.company-name     },
+                        { label: "ЄДРПОУ",    value: root.company-edrpou   },
+                        { label: "IBAN",      value: root.company-iban     },
+                        { label: "Директор",  value: root.company-director },
+                        { label: "Адреса",    value: root.company-address  }
+                    ]: Rectangle {
+                        height: 42px;
+                        border-radius: 10px;
+                        background: Theme.bg-gray;
+
+                        HorizontalLayout {
+                            padding-left: 14px;
+                            padding-right: 14px;
+                            Text {
+                                text: item.label;
+                                width: 120px;
+                                font-size: 12px;
+                                color: Theme.text-muted;
+                                vertical-alignment: center;
+                            }
+                            Text {
+                                text: item.value == "" ? "—" : item.value;
+                                font-size: 13px;
+                                color: Theme.text-main;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if root.active-tab == 1 : Rectangle {
+                background: Theme.surface;
+                border-width: 1px;
+                border-color: Theme.border;
+                border-radius: 16px;
+                vertical-stretch: 1;
+
+                VerticalLayout {
+                    padding: 24px;
+                    spacing: 10px;
+
+                    Text {
+                        text: "Категорії доходів і витрат";
+                        font-size: 18px;
+                        font-weight: 700;
+                        color: Theme.text-main;
+                    }
+
+                    for row in root.category-rows: Rectangle {
+                        height: 38px;
+                        border-radius: 10px;
+                        background: Theme.bg-gray;
+
+                        HorizontalLayout {
+                            padding-left: 14px + (row.depth * 18px);
+                            padding-right: 14px;
+                            spacing: 12px;
+
+                            Text {
+                                text: row.kind == "income" ? "Дохід" : "Витрата";
+                                width: 70px;
+                                font-size: 11px;
+                                color: row.kind == "income" ? Theme.success : Theme.danger;
+                                vertical-alignment: center;
+                            }
+
+                            Text {
+                                text: row.depth > 0 ? "↳ " + row.name : row.name;
+                                font-size: 13px;
+                                color: Theme.text-main;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if root.active-tab == 2 : Rectangle {
+                background: Theme.surface;
+                border-width: 1px;
+                border-color: Theme.border;
+                border-radius: 16px;
+                vertical-stretch: 1;
+
+                Text {
+                    text: "Шаблони документів заплановані для наступної ітерації MVP. Базова навігація і вкладка вже готові.";
+                    color: Theme.text-muted;
+                    font-size: 14px;
+                    wrap: word-wrap;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}

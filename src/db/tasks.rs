@@ -33,6 +33,26 @@ pub async fn list_open(pool: &PgPool) -> Result<Vec<Task>> {
     Ok(rows)
 }
 
+pub async fn list_by_counterparty(pool: &PgPool, counterparty_id: Uuid) -> Result<Vec<Task>> {
+    let rows = sqlx::query_as::<_, Task>(
+        r#"
+        SELECT id, title, description,
+               status, priority,
+               due_date, reminder_at,
+               counterparty_id, act_id,
+               created_at, updated_at
+        FROM tasks
+        WHERE counterparty_id = $1
+        ORDER BY due_date NULLS LAST, created_at DESC
+        "#,
+    )
+    .bind(counterparty_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows)
+}
+
 pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<Task>> {
     let row = sqlx::query_as::<_, Task>(
         r#"

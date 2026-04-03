@@ -1,0 +1,193 @@
+import { Button, ComboBox, LineEdit } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+export component PaymentForm {
+    in property <bool> is-edit-mode: false;
+    in property <string> payment-edit-id: "";
+    in property <string> payment-date: "";
+    in property <string> payment-amount: "";
+    in property <int> payment-direction-index: 0;
+    in property <[string]> counterparty-names: [];
+    in property <[string]> counterparty-ids: [];
+    in property <int> payment-counterparty-index: 0;
+    in property <string> payment-bank-name: "";
+    in property <string> payment-bank-ref: "";
+    in property <string> payment-description: "";
+
+    callback save(string, string, int, string, string, string, string);
+    callback update(string, string, int, string, string, string, string);
+    callback cancel();
+
+    private property <string> v-date: payment-date;
+    private property <string> v-amount: payment-amount;
+    private property <int> v-direction: payment-direction-index;
+    private property <int> v-counterparty: payment-counterparty-index;
+    private property <string> v-bank-name: payment-bank-name;
+    private property <string> v-bank-ref: payment-bank-ref;
+    private property <string> v-description: payment-description;
+
+    Rectangle {
+        background: Theme.bg-page;
+
+        VerticalLayout {
+            padding: 24px;
+            spacing: 18px;
+
+            HorizontalLayout {
+                spacing: 12px;
+
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: 4px;
+
+                    Text {
+                        text: root.is-edit-mode ? "Редагування платежу" : "Новий платіж";
+                        font-size: 24px;
+                        font-weight: 700;
+                        color: Theme.text-main;
+                    }
+
+                    Text {
+                        text: "Ручне внесення банківського платежу або коригування імпорту";
+                        font-size: 13px;
+                        color: Theme.text-sub;
+                    }
+                }
+
+                Button {
+                    text: "Скасувати";
+                    clicked => { root.cancel(); }
+                }
+
+                Button {
+                    text: root.is-edit-mode ? "Зберегти" : "Створити";
+                    primary: true;
+                    clicked => {
+                        if (root.is-edit-mode) {
+                            root.update(root.v-date, root.v-amount, root.v-direction, root.counterparty-ids[root.v-counterparty], root.v-bank-name, root.v-bank-ref, root.v-description);
+                        } else {
+                            root.save(root.v-date, root.v-amount, root.v-direction, root.counterparty-ids[root.v-counterparty], root.v-bank-name, root.v-bank-ref, root.v-description);
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                background: Theme.surface;
+                border-width: 1px;
+                border-color: Theme.border;
+                border-radius: 16px;
+                vertical-stretch: 1;
+
+                VerticalLayout {
+                    padding: 24px;
+                    spacing: 16px;
+
+                    HorizontalLayout {
+                        spacing: 16px;
+
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            spacing: 6px;
+                            Text { text: "Дата *"; font-size: 12px; color: Theme.text-sub; }
+                            LineEdit {
+                                text: root.v-date;
+                                placeholder-text: "03.04.2026";
+                                edited(t) => { root.v-date = t; }
+                            }
+                        }
+
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            spacing: 6px;
+                            Text { text: "Сума *"; font-size: 12px; color: Theme.text-sub; }
+                            LineEdit {
+                                text: root.v-amount;
+                                placeholder-text: "78000.00";
+                                edited(t) => { root.v-amount = t; }
+                            }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 16px;
+
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            spacing: 6px;
+                            Text { text: "Напрямок"; font-size: 12px; color: Theme.text-sub; }
+                            ComboBox {
+                                model: ["Надходження", "Витрата"];
+                                current-index: root.v-direction;
+                                selected(_) => { root.v-direction = self.current-index; }
+                            }
+                        }
+
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            spacing: 6px;
+                            Text { text: "Контрагент"; font-size: 12px; color: Theme.text-sub; }
+                            ComboBox {
+                                model: root.counterparty-names;
+                                current-index: root.v-counterparty;
+                                selected(_) => { root.v-counterparty = self.current-index; }
+                            }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 16px;
+
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            spacing: 6px;
+                            Text { text: "Банк"; font-size: 12px; color: Theme.text-sub; }
+                            LineEdit {
+                                text: root.v-bank-name;
+                                placeholder-text: "Sense Bank";
+                                edited(t) => { root.v-bank-name = t; }
+                            }
+                        }
+
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            spacing: 6px;
+                            Text { text: "Референс банку"; font-size: 12px; color: Theme.text-sub; }
+                            LineEdit {
+                                text: root.v-bank-ref;
+                                placeholder-text: "PAY-2026-0001";
+                                edited(t) => { root.v-bank-ref = t; }
+                            }
+                        }
+                    }
+
+                    VerticalLayout {
+                        spacing: 6px;
+                        Text { text: "Призначення"; font-size: 12px; color: Theme.text-sub; }
+                        LineEdit {
+                            text: root.v-description;
+                            placeholder-text: "Оплата за акт / рахунок / витрати";
+                            edited(t) => { root.v-description = t; }
+                        }
+                    }
+
+                    Rectangle {
+                        background: Theme.bg-gray;
+                        border-radius: 12px;
+                        min-height: 74px;
+
+                        Text {
+                            x: 16px;
+                            y: 14px;
+                            width: parent.width - 32px;
+                            text: "Порада: використовуйте формат дати дд.мм.рррр. Для витрат сума лишається додатною, напрямок визначає тип руху.";
+                            wrap: word-wrap;
+                            font-size: 12px;
+                            color: Theme.text-sub;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

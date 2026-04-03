@@ -129,6 +129,18 @@ pub async fn list(
 }
 
 /// Отримати платіж за ID.
+pub async fn list_by_counterparty(
+    pool: &PgPool,
+    company_id: Uuid,
+    counterparty_id: Uuid,
+) -> Result<Vec<PaymentListRow>> {
+    Ok(list(pool, company_id, None)
+        .await?
+        .into_iter()
+        .filter(|row| row.counterparty_id == Some(counterparty_id))
+        .collect())
+}
+
 pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<Payment>> {
     let row = sqlx::query_as::<_, Payment>(
         r#"
