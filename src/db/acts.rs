@@ -599,6 +599,15 @@ pub async fn advance_status(pool: &PgPool, id: Uuid) -> Result<Option<Act>> {
     change_status(pool, id, next).await
 }
 
+/// Видалити акт та всі його позиції (ON DELETE CASCADE у БД).
+pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
+    sqlx::query("DELETE FROM acts WHERE id = $1")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

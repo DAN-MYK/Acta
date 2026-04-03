@@ -455,6 +455,15 @@ fn parse_status(s: &str) -> Result<InvoiceStatus> {
     }
 }
 
+/// Видалити накладну та всі її позиції (ON DELETE CASCADE у БД).
+pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
+    sqlx::query("DELETE FROM invoices WHERE id = $1")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

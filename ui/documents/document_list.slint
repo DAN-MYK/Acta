@@ -1,0 +1,480 @@
+// Компонент: єдиний список документів (Акти + Рахунки + Накладні)
+//
+// Відображає всі документи компанії з типовим бейджем (АКТ/РАХ/НАК),
+// фільтром по типу (таби) і текстовим пошуком.
+//
+// Адаптовано з Figma: DocumentsListScreen (nodes 178:2)
+
+import { Theme } from "../theme.slint";
+import { ProgressIndicator } from "std-widgets.slint";
+import { DocTypeBadge, StatusBadge, ConfirmDeleteDialog } from "../components/shared.slint";
+
+// ── DocRow — рядок уніфікованого списку документів ───────────────────────────
+export struct DocRow {
+    id:           string,   // UUID (рядок, передається назад у колбеки)
+    doc-type:     string,   // "АКТ" | "РАХ" | "НАК"
+    number:       string,
+    counterparty: string,
+    amount:       string,   // відформатована сума, напр. "78 000,00 ₴"
+    date:         string,   // "ДД.ММ.РРРР"
+    status:       string,   // "Чернетка" | "Виставлений" | "Підписаний" | "Оплачений"
+}
+
+export component DocumentList {
+
+    // ── Вхідні дані ─────────────────────────────────────────────────────────
+    in property <[DocRow]> rows;
+    in property <bool>     loading: false;
+    in property <int>      active-tab: 0;   // 0=Всі, 1=Акти, 2=Рахунки
+
+    // ── Колбеки ─────────────────────────────────────────────────────────────
+    callback new-document();
+    callback open-document(string);     // передає DocRow.id
+    callback delete-document(string);   // передає DocRow.id
+    callback export-pdf(string);        // передає DocRow.id
+    callback tab-changed(int);
+    callback search-changed(string);
+
+    // ── Внутрішній стан ─────────────────────────────────────────────────────
+    private property <string> delete-target-id: "";
+    private property <bool>   show-delete-dialog: false;
+    private property <int>    hovered-row: -1;
+
+    min-width: 600px;
+    min-height: 400px;
+
+    VerticalLayout {
+        spacing: 0;
+        padding: 0;
+
+        // ── Topbar ───────────────────────────────────────────────────────────
+        Rectangle {
+            height: 64px;
+            background: Theme.bg-card;
+            drop-shadow-blur: 10px;
+            drop-shadow-color: rgba(0,0,0,5%);
+            drop-shadow-offset-y: 1px;
+
+            // Нижня межа
+            Rectangle {
+                x: 0; y: 63px; width: parent.width; height: 1px;
+                background: Theme.border;
+            }
+
+            HorizontalLayout {
+                padding-left: 32px;
+                padding-right: 24px;
+                spacing: 16px;
+
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 1;
+
+                    Text {
+                        text: "Документи";
+                        font-size: Theme.font-2xl;
+                        font-weight: 700;
+                        color: Theme.text-primary;
+                    }
+                    Text {
+                        text: "Акти, рахунки та видаткові — виставлені клієнтам";
+                        font-size: Theme.font-md;
+                        color: Theme.text-second;
+                    }
+                }
+
+                // Кнопка "+ Новий документ"
+                new-rect := Rectangle {
+                    width: 160px;
+                    height: Theme.btn-md-height;
+                    border-radius: Theme.radius-md;
+                    background: new-touch.has-hover ? #2D64E3 : Theme.primary;
+                    animate background { duration: 120ms; easing: ease; }
+                    drop-shadow-blur: 8px;
+                    drop-shadow-color: rgba(0,0,0,15%);
+                    drop-shadow-offset-y: 2px;
+
+                    Text {
+                        x: 0; y: 0;
+                        width: parent.width; height: parent.height;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        text: "+ Новий документ";
+                        font-size: Theme.font-md;
+                        font-weight: 600;
+                        color: Theme.text-white;
+                    }
+
+                    new-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.new-document(); }
+                    }
+                }
+            }
+        }
+
+        // ── Таби + пошук ─────────────────────────────────────────────────────
+        Rectangle {
+            height: 56px;
+            background: Theme.bg-card;
+            border-width: 1px;
+            border-color: Theme.border;
+
+            HorizontalLayout {
+                padding-left: 32px;
+                padding-right: 32px;
+                spacing: 8px;
+
+                // Таби типу документу
+                for lbl[i] in ["Всі", "Акти", "Рахунки"]: Rectangle {
+                    width: i == 0 ? 68px : 76px;
+                    height: 32px;
+                    border-radius: Theme.radius-md;
+                    background: root.active-tab == i
+                        ? Theme.primary
+                        : (tab-touch.has-hover ? Theme.bg-hover : Theme.bg-gray);
+                    border-width: root.active-tab == i ? 0 : 1px;
+                    border-color: Theme.border;
+                    animate background { duration: 100ms; easing: ease; }
+
+                    Text {
+                        text: lbl;
+                        font-size: Theme.font-md;
+                        font-weight: root.active-tab == i ? 600 : 400;
+                        color: root.active-tab == i ? Theme.text-white : Theme.text-second;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        animate color { duration: 100ms; easing: ease; }
+                    }
+
+                    tab-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            root.tab-changed(i);
+                        }
+                    }
+                }
+
+                Rectangle { horizontal-stretch: 1; }
+
+                // Пошук
+                search-box := Rectangle {
+                    width: 320px;
+                    height: 32px;
+                    border-radius: Theme.radius-md;
+                    background: Theme.bg-gray;
+                    border-width: 1px;
+                    border-color: Theme.border;
+
+                    HorizontalLayout {
+                        padding-left: 10px;
+                        padding-right: 8px;
+                        spacing: 6px;
+
+                        Text {
+                            text: "🔍";
+                            font-size: 12px;
+                            color: Theme.text-disabled;
+                            vertical-alignment: center;
+                        }
+
+                        TextInput {
+                            font-size: Theme.font-md;
+                            color: Theme.text-primary;
+                            horizontal-stretch: 1;
+                            vertical-alignment: center;
+                            edited => { root.search-changed(self.text); }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Заголовок таблиці ────────────────────────────────────────────────
+        Rectangle {
+            height: 40px;
+            background: Theme.bg-gray-soft;
+            border-width: 1px;
+            border-color: Theme.border;
+
+            HorizontalLayout {
+                padding-left: 32px;
+                padding-right: 32px;
+                spacing: 0;
+
+                Text {
+                    text: "Тип";
+                    font-size: Theme.font-base;
+                    font-weight: 600;
+                    color: Theme.text-second;
+                    vertical-alignment: center;
+                    width: 68px;
+                }
+                Text {
+                    text: "Номер";
+                    font-size: Theme.font-base;
+                    font-weight: 600;
+                    color: Theme.text-second;
+                    vertical-alignment: center;
+                    width: 160px;
+                }
+                Text {
+                    text: "Контрагент";
+                    font-size: Theme.font-base;
+                    font-weight: 600;
+                    color: Theme.text-second;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+                Text {
+                    text: "Сума ₴";
+                    font-size: Theme.font-base;
+                    font-weight: 600;
+                    color: Theme.text-second;
+                    vertical-alignment: center;
+                    width: 130px;
+                }
+                Text {
+                    text: "Дата";
+                    font-size: Theme.font-base;
+                    font-weight: 600;
+                    color: Theme.text-second;
+                    vertical-alignment: center;
+                    width: 100px;
+                }
+                Text {
+                    text: "Статус";
+                    font-size: Theme.font-base;
+                    font-weight: 600;
+                    color: Theme.text-second;
+                    vertical-alignment: center;
+                    width: 120px;
+                }
+                Text {
+                    text: "Дії";
+                    font-size: Theme.font-base;
+                    font-weight: 600;
+                    color: Theme.text-second;
+                    vertical-alignment: center;
+                    horizontal-alignment: center;
+                    width: 100px;
+                }
+            }
+        }
+
+        // ── Список рядків ────────────────────────────────────────────────────
+        if root.loading : ProgressIndicator {
+            indeterminate: true;
+            vertical-stretch: 1;
+        }
+
+        if !root.loading : Rectangle {
+            vertical-stretch: 1;
+            background: Theme.bg-page;
+
+            // Порожній стан
+            if root.rows.length == 0 : Rectangle {
+                background: Theme.bg-card;
+                border-radius: Theme.radius-lg;
+                height: 120px;
+
+                Text {
+                    text: "Документів не знайдено. Натисніть \"+ Новий документ\" щоб створити перший.";
+                    color: Theme.text-muted;
+                    font-size: Theme.font-md;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    wrap: word-wrap;
+                }
+            }
+
+            if root.rows.length > 0 : VerticalLayout {
+                for row[i] in root.rows: Rectangle {
+                    height: 52px;
+                    background: root.hovered-row == i
+                        ? Theme.bg-hover
+                        : (Math.mod(i, 2) == 0 ? Theme.bg-card : Theme.bg-alt);
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    animate background { duration: 80ms; easing: ease; }
+                    clip: true;
+
+                    // Ліва акцентна смужка при ховері або для першого рядка
+                    if root.hovered-row == i : Rectangle {
+                        x: 0; y: 0; width: 3px; height: 52px;
+                        background: Theme.primary;
+                        border-radius: 1px;
+                    }
+
+                    row-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        pointer-event(e) => {
+                            if e.kind == PointerEventKind.move {
+                                root.hovered-row = i;
+                            }
+                        }
+                        clicked => { root.open-document(row.id); }
+                    }
+
+                    HorizontalLayout {
+                        padding-left: 32px;
+                        padding-right: 32px;
+                        spacing: 0;
+
+                        // Тип (DocTypeBadge)
+                        Rectangle {
+                            width: 68px;
+                            DocTypeBadge {
+                                doc-type: row.doc-type;
+                                y: (52px - self.height) / 2;
+                            }
+                        }
+
+                        // Номер
+                        Text {
+                            text: row.number;
+                            font-size: Theme.font-md;
+                            font-weight: 600;
+                            color: Theme.primary;
+                            vertical-alignment: center;
+                            overflow: elide;
+                            width: 160px;
+                        }
+
+                        // Контрагент
+                        Text {
+                            text: row.counterparty;
+                            font-size: Theme.font-base;
+                            color: Theme.text-primary;
+                            vertical-alignment: center;
+                            overflow: elide;
+                            horizontal-stretch: 1;
+                        }
+
+                        // Сума
+                        Text {
+                            text: row.amount;
+                            font-size: Theme.font-md;
+                            font-weight: 600;
+                            color: Theme.text-primary;
+                            vertical-alignment: center;
+                            width: 130px;
+                        }
+
+                        // Дата
+                        Text {
+                            text: row.date;
+                            font-size: Theme.font-base;
+                            color: Theme.text-second;
+                            vertical-alignment: center;
+                            width: 100px;
+                        }
+
+                        // Статус
+                        Rectangle {
+                            width: 120px;
+                            StatusBadge {
+                                status: row.status;
+                                y: (52px - self.height) / 2;
+                            }
+                        }
+
+                        // Кнопки дій (показуються при ховері)
+                        HorizontalLayout {
+                            width: 100px;
+                            spacing: 4px;
+                            alignment: center;
+
+                            // PDF
+                            pdf-rect := Rectangle {
+                                width: 34px;
+                                height: 30px;
+                                border-radius: Theme.radius-sm;
+                                background: pdf-touch.has-hover ? Theme.bg-primary : transparent;
+                                animate background { duration: 100ms; easing: ease; }
+
+                                Text {
+                                    text: "PDF";
+                                    font-size: Theme.font-xs;
+                                    font-weight: 600;
+                                    color: pdf-touch.has-hover ? Theme.primary : Theme.text-muted;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                    animate color { duration: 100ms; easing: ease; }
+                                }
+
+                                pdf-touch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => { root.export-pdf(row.id); }
+                                }
+                            }
+
+                            // Редагувати
+                            edit-rect := Rectangle {
+                                width: 30px;
+                                height: 30px;
+                                border-radius: Theme.radius-sm;
+                                background: edit-touch.has-hover ? Theme.btn-action-bg : transparent;
+                                animate background { duration: 100ms; easing: ease; }
+
+                                Text {
+                                    text: "✎";
+                                    font-size: 14px;
+                                    color: edit-touch.has-hover ? Theme.primary : Theme.text-muted;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                    animate color { duration: 100ms; easing: ease; }
+                                }
+
+                                edit-touch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => { root.open-document(row.id); }
+                                }
+                            }
+
+                            // Видалити
+                            del-rect := Rectangle {
+                                width: 30px;
+                                height: 30px;
+                                border-radius: Theme.radius-sm;
+                                background: del-touch.has-hover ? Theme.bg-danger : transparent;
+                                animate background { duration: 100ms; easing: ease; }
+
+                                Text {
+                                    text: "🗑";
+                                    font-size: 13px;
+                                    color: del-touch.has-hover ? Theme.danger : Theme.text-muted;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                    animate color { duration: 100ms; easing: ease; }
+                                }
+
+                                del-touch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => {
+                                        root.delete-target-id = row.id;
+                                        root.show-delete-dialog = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Діалог підтвердження видалення ──────────────────────────────────────
+    if root.show-delete-dialog : ConfirmDeleteDialog {
+        x: 0; y: 0;
+        width: root.width; height: root.height;
+        title: "Видалити документ?";
+        message: "Документ буде видалено назавжди.\nЦю дію не можна скасувати.";
+        confirm-label: "Так, видалити";
+        confirmed => {
+            root.delete-document(root.delete-target-id);
+            root.show-delete-dialog = false;
+        }
+        cancelled => { root.show-delete-dialog = false; }
+    }
+}

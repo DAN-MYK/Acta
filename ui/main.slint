@@ -22,6 +22,7 @@ import { InvoiceForm }      from "invoices/invoice_form.slint";
 import { CompanyList, CompanyItem } from "companies/company_list.slint";
 import { CompanyForm }      from "companies/company_form.slint";
 import { PaymentList }      from "payments/payment_list.slint";
+import { DocumentList, DocRow } from "documents/document_list.slint";
 
 global MenuIcons {
     out property <image> dashboard:      @image-url("assets/icons/Home.svg");
@@ -346,6 +347,19 @@ export component MainWindow inherits Window {
     callback payment-delete-clicked(string);
     callback payment-reconcile-clicked(string);
 
+    // ── Дані документів (єдиний список актів + накладних) ──────────────────
+    in property <[DocRow]> document-rows;
+    in property <bool>     documents-loading: false;
+    in property <int>      doc-active-tab: 0;
+
+    // ── Колбеки документів ─────────────────────────────────────────────────
+    callback doc-new-clicked();
+    callback doc-open-clicked(string);
+    callback doc-delete-clicked(string);
+    callback doc-pdf-clicked(string);
+    callback doc-tab-changed(int);
+    callback doc-search-changed(string);
+
     // в”Ђв”Ђ РљРѕР»Р±РµРєРё Р·Р°РґР°С‡ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     callback task-search-changed(string);
     callback task-selected(string);
@@ -560,16 +574,10 @@ export component MainWindow inherits Window {
                         }
                     }
                     NavItem {
-                        label: "Акти";
+                        label: "Документи";
                         icon: MenuIcons.acts;
                         active: root.current-page == 1;
                         clicked => { root.current-page = 1; }
-                    }
-                    NavItem {
-                        label: "Накладні";
-                        icon: MenuIcons.invoices;
-                        active: root.current-page == 2;
-                        clicked => { root.current-page = 2; }
                     }
                     NavItem {
                         label: "Контрагенти";
@@ -708,25 +716,18 @@ export component MainWindow inherits Window {
                 cancel                              => { root.cp-form-cancel(); }
             }
 
-            // в”Ђв”Ђ РЎС‚РѕСЂС–РЅРєР° 1: РђРєС‚Рё вЂ” СЃРїРёСЃРѕРє в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-            if root.current-page == 1 && !root.show-act-form : ActList {
-                rows:             root.act-rows;
-                row-ids:          root.act-row-ids;
-                row-statuses:     root.act-row-statuses;
-                loading:          root.acts-loading;
-                status-counts:    root.act-status-counts;
-                kpi-acts-month:   root.act-kpi-acts-month;
-                kpi-revenue:      root.act-kpi-revenue;
-                kpi-unpaid:       root.act-kpi-unpaid;
-                kpi-overdue:      root.act-kpi-overdue;
+            // ── Сторінка 1: Документи — список ────────────────────────────────
+            if root.current-page == 1 && !root.show-act-form && !root.show-invoice-form : DocumentList {
+                rows:        root.document-rows;
+                loading:     root.documents-loading;
+                active-tab:  root.doc-active-tab;
 
-                status-filter-changed(i)    => { root.act-status-filter-changed(i); }
-                search-changed(q)           => { root.act-search-changed(q); }
-                row-selected(id)            => { root.act-selected(id); }
-                create-clicked              => { root.act-create-clicked(); }
-                advance-status-clicked(id)  => { root.act-advance-status-clicked(id); }
-                edit-clicked(id)            => { root.act-edit-clicked(id); }
-                pdf-clicked(id)             => { root.act-pdf-clicked(id); }
+                new-document        => { root.doc-new-clicked(); }
+                open-document(id)   => { root.doc-open-clicked(id); }
+                delete-document(id) => { root.doc-delete-clicked(id); }
+                export-pdf(id)      => { root.doc-pdf-clicked(id); }
+                tab-changed(i)      => { root.doc-tab-changed(i); }
+                search-changed(q)   => { root.doc-search-changed(q); }
             }
 
             // в”Ђв”Ђ РЎС‚РѕСЂС–РЅРєР° 1: РђРєС‚Рё вЂ” С„РѕСЂРјР° в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
@@ -831,25 +832,8 @@ export component MainWindow inherits Window {
                 cancel                              => { root.company-form-cancel(); }
             }
 
-            // в”Ђв”Ђ Р—Р°РіР»СѓС€РєРё РґР»СЏ РјР°Р№Р±СѓС‚РЅС–С… СЃС‚РѕСЂС–РЅРѕРє в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-
-            // в”Ђв”Ђ РЎС‚РѕСЂС–РЅРєР° 2: РќР°РєР»Р°РґРЅС– вЂ” СЃРїРёСЃРѕРє в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-            if root.current-page == 2 && !root.show-invoice-form : InvoiceList {
-                rows:             root.invoice-rows;
-                row-ids:          root.invoice-row-ids;
-                row-statuses:     root.invoice-row-statuses;
-                loading:          root.invoices-loading;
-
-                status-filter-changed(i)    => { root.invoice-status-filter-changed(i); }
-                search-changed(q)           => { root.invoice-search-changed(q); }
-                row-selected(id)            => { root.invoice-selected(id); }
-                create-clicked              => { root.invoice-create-clicked(); }
-                advance-status-clicked(id)  => { root.invoice-advance-status-clicked(id); }
-                edit-clicked(id)            => { root.invoice-edit-clicked(id); }
-            }
-
-            // в”Ђв”Ђ РЎС‚РѕСЂС–РЅРєР° 2: РќР°РєР»Р°РґРЅС– вЂ” С„РѕСЂРјР° в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-            if root.current-page == 2 && root.show-invoice-form : InvoiceForm {
+            // ── Сторінка 1: Документи — форма накладної ───────────────────────
+            if root.current-page == 1 && root.show-invoice-form : InvoiceForm {
                 invoice-number:       root.invoice-form-number;
                 invoice-date:         root.invoice-form-date;
                 invoice-notes:        root.invoice-form-notes;

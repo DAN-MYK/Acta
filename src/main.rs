@@ -46,6 +46,12 @@ struct InvoiceListState {
 }
 
 #[derive(Clone, Default)]
+struct DocListState {
+    tab:   i32,    // 0=Всі, 1=Акти, 2=Рахунки
+    query: String,
+}
+
+#[derive(Clone, Default)]
 struct TaskListState {
     query: String,
 }
@@ -77,6 +83,7 @@ async fn main() -> Result<()> {
     let act_state = Arc::new(Mutex::new(ActListState::default()));
     let invoice_state = Arc::new(Mutex::new(InvoiceListState::default()));
     let task_state = Arc::new(Mutex::new(TaskListState::default()));
+    let doc_state = Arc::new(Mutex::new(DocListState::default()));
 
     // ── Активна компанія — спільна між усіма callbacks ───────────────────────
     // Починаємо з DEFAULT_COMPANY_ID (дефолтна компанія з міграції).
@@ -164,6 +171,9 @@ async fn main() -> Result<()> {
 
     // ── Початкове завантаження платежів ──────────────────────────────────────
     reload_payments(&pool, ui.as_weak(), cid, None).await?;
+
+    // ── Початкове завантаження єдиного списку документів ─────────────────────
+    reload_documents(&pool, ui.as_weak(), cid, 0, "").await?;
 
     // ── Колбек: пошук ────────────────────────────────────────────────────────
     //
@@ -825,6 +835,7 @@ async fn main() -> Result<()> {
     let pool_update = pool.clone();
     let ui_weak_update = ui.as_weak();
     let act_state_update = act_state.clone();
+    let doc_state_update = doc_state.clone();
     let active_company_id_update = active_company_id.clone();
 
     ui.on_act_form_update(move |number, date_str, cp_id_str, notes, cat_id_str, con_id_str, exp_date_str| {
@@ -850,6 +861,7 @@ async fn main() -> Result<()> {
         let con_id_str = con_id_str.to_string();
         let exp_date_str = exp_date_str.to_string();
         let act_state = act_state_update.clone();
+        let doc_state_spawn = doc_state_update.clone();
 
         tokio::spawn(async move {
             let Ok(uuid) = edit_id.parse::<uuid::Uuid>() else {
@@ -930,6 +942,13 @@ async fn main() -> Result<()> {
                         reload_acts(&pool, ui_weak.clone(), cid, status_filter, query, true).await
                     {
                         tracing::error!("Помилка оновлення списку актів після редагування: {e}");
+                    }
+                    let (doc_tab, doc_query) = {
+                        let s = doc_state_spawn.lock().unwrap();
+                        (s.tab, s.query.clone())
+                    };
+                    if let Err(e) = reload_documents(&pool, ui_weak.clone(), cid, doc_tab, &doc_query).await {
+                        tracing::error!("Помилка оновлення документів після редагування акту: {e}");
                     }
                 }
                 Err(e) => tracing::error!("Помилка оновлення акту: {e}"),
@@ -1340,6 +1359,7 @@ async fn main() -> Result<()> {
     let pool_save = pool.clone();
     let ui_weak_save = ui.as_weak();
     let act_state_save = act_state.clone();
+    let doc_state_save = doc_state.clone();
     let active_company_id_save = active_company_id.clone();
 
     ui.on_act_form_save(move |number, date_str, cp_id_str, notes, cat_id_str, con_id_str, exp_date_str| {
@@ -1356,6 +1376,7 @@ async fn main() -> Result<()> {
             pool_save.clone(),
             ui_weak_save.clone(),
             act_state_save.clone(),
+            doc_state_save.clone(),
             cid,
             number.to_string(),
             date_str.to_string(),
@@ -1380,6 +1401,7 @@ async fn main() -> Result<()> {
     let pool_draft = pool.clone();
     let ui_weak_draft = ui.as_weak();
     let act_state_draft = act_state.clone();
+    let doc_state_draft = doc_state.clone();
     let active_company_id_draft = active_company_id.clone();
 
     ui.on_act_form_save_draft(move |number, date_str, cp_id_str, notes, cat_id_str, con_id_str, exp_date_str| {
@@ -1396,6 +1418,7 @@ async fn main() -> Result<()> {
             pool_draft.clone(),
             ui_weak_draft.clone(),
             act_state_draft.clone(),
+            doc_state_draft.clone(),
             cid,
             number.to_string(),
             date_str.to_string(),
@@ -2061,6 +2084,7 @@ async fn main() -> Result<()> {
     let pool_inv_save = pool.clone();
     let ui_weak_inv_save = ui.as_weak();
     let invoice_state_save = invoice_state.clone();
+    let doc_state_inv_save = doc_state.clone();
     let active_company_id_inv_save = active_company_id.clone();
     ui.on_invoice_form_save(move |number, date_str, cp_id_str, notes, cat_id_str, con_id_str, exp_date_str| {
         let cid = *active_company_id_inv_save.lock().unwrap();
@@ -2072,6 +2096,7 @@ async fn main() -> Result<()> {
             pool_inv_save.clone(),
             ui_weak_inv_save.clone(),
             invoice_state_save.clone(),
+            doc_state_inv_save.clone(),
             cid,
             number.to_string(),
             date_str.to_string(),
@@ -2087,6 +2112,7 @@ async fn main() -> Result<()> {
     let pool_inv_upd = pool.clone();
     let ui_weak_inv_upd = ui.as_weak();
     let invoice_state_upd = invoice_state.clone();
+    let doc_state_inv_upd = doc_state.clone();
     let active_company_id_inv_upd = active_company_id.clone();
     ui.on_invoice_form_update(move |number, date_str, cp_id_str, notes, cat_id_str, con_id_str, exp_date_str| {
         let cid = *active_company_id_inv_upd.lock().unwrap();
@@ -2098,6 +2124,7 @@ async fn main() -> Result<()> {
         let pool = pool_inv_upd.clone();
         let ui_weak = ui_weak_inv_upd.clone();
         let inv_state = invoice_state_upd.clone();
+        let doc_state_u = doc_state_inv_upd.clone();
         let number = number.to_string();
         let date_str = date_str.to_string();
         let cp_id_str = cp_id_str.to_string();
@@ -2150,8 +2177,15 @@ async fn main() -> Result<()> {
                         let state = inv_state.lock().unwrap();
                         (state.status_filter.clone(), state.query.clone())
                     };
-                    if let Err(e) = reload_invoices(&pool, ui_weak, cid, status_filter, query, true).await {
+                    if let Err(e) = reload_invoices(&pool, ui_weak.clone(), cid, status_filter, query, true).await {
                         tracing::error!("Помилка оновлення списку накладних: {e}");
+                    }
+                    let (doc_tab, doc_query) = {
+                        let s = doc_state_u.lock().unwrap();
+                        (s.tab, s.query.clone())
+                    };
+                    if let Err(e) = reload_documents(&pool, ui_weak.clone(), cid, doc_tab, &doc_query).await {
+                        tracing::error!("Помилка оновлення документів після редагування накладної: {e}");
                     }
                 }
                 Err(e) => {
@@ -2225,6 +2259,129 @@ async fn main() -> Result<()> {
     ui.on_payment_create_clicked(|| {});
     ui.on_payment_edit_clicked(|_| {});
     ui.on_payment_delete_clicked(|_| {});
+
+    // ── Документи — колбеки ───────────────────────────────────────────────────
+
+    // Зміна таба (Всі / Акти / Рахунки)
+    let pool_doc_tab = pool.clone();
+    let ui_weak_doc_tab = ui.as_weak();
+    let active_company_id_doc_tab = active_company_id.clone();
+    let doc_state_tab = doc_state.clone();
+    ui.on_doc_tab_changed(move |tab| {
+        let pool = pool_doc_tab.clone();
+        let ui_weak = ui_weak_doc_tab.clone();
+        let cid = *active_company_id_doc_tab.lock().unwrap();
+        let query = {
+            let mut s = doc_state_tab.lock().unwrap();
+            s.tab = tab;
+            s.query.clone()
+        };
+        tokio::spawn(async move {
+            if let Err(e) = reload_documents(&pool, ui_weak, cid, tab, &query).await {
+                tracing::error!("Помилка фільтру документів за табом: {e}");
+            }
+        });
+    });
+
+    // Текстовий пошук
+    let pool_doc_search = pool.clone();
+    let ui_weak_doc_search = ui.as_weak();
+    let active_company_id_doc_search = active_company_id.clone();
+    let doc_state_search = doc_state.clone();
+    ui.on_doc_search_changed(move |q| {
+        let pool = pool_doc_search.clone();
+        let ui_weak = ui_weak_doc_search.clone();
+        let cid = *active_company_id_doc_search.lock().unwrap();
+        let (tab, query) = {
+            let mut s = doc_state_search.lock().unwrap();
+            s.query = q.to_string();
+            (s.tab, s.query.clone())
+        };
+        tokio::spawn(async move {
+            if let Err(e) = reload_documents(&pool, ui_weak, cid, tab, &query).await {
+                tracing::error!("Помилка пошуку документів: {e}");
+            }
+        });
+    });
+
+    // Новий документ — відкриває форму нового акту (тимчасово)
+    let ui_weak_doc_new = ui.as_weak();
+    ui.on_doc_new_clicked(move || {
+        if let Some(ui) = ui_weak_doc_new.upgrade() {
+            ui.invoke_act_create_clicked();
+        }
+    });
+
+    // Відкрити документ для редагування
+    let ui_weak_doc_open = ui.as_weak();
+    ui.on_doc_open_clicked(move |id| {
+        let id_s = id.to_string();
+        if let Some(ui) = ui_weak_doc_open.upgrade() {
+            if let Some(act_uuid) = id_s.strip_prefix("act:") {
+                ui.invoke_act_edit_clicked(SharedString::from(act_uuid));
+            } else if let Some(inv_uuid) = id_s.strip_prefix("inv:") {
+                ui.invoke_invoice_edit_clicked(SharedString::from(inv_uuid));
+            } else {
+                tracing::warn!("doc-open-clicked: невідомий префікс id='{id_s}'");
+            }
+        }
+    });
+
+    // Генерація PDF документу
+    let ui_weak_doc_pdf = ui.as_weak();
+    ui.on_doc_pdf_clicked(move |id| {
+        let id_s = id.to_string();
+        if let Some(ui) = ui_weak_doc_pdf.upgrade() {
+            if let Some(act_uuid) = id_s.strip_prefix("act:") {
+                ui.invoke_act_pdf_clicked(SharedString::from(act_uuid));
+            } else {
+                tracing::info!("PDF для накладних ще не реалізовано (id='{id_s}')");
+            }
+        }
+    });
+
+    // Видалення документу
+    let pool_doc_del = pool.clone();
+    let ui_weak_doc_del = ui.as_weak();
+    let active_company_id_doc_del = active_company_id.clone();
+    let doc_state_del = doc_state.clone();
+    ui.on_doc_delete_clicked(move |id| {
+        let pool = pool_doc_del.clone();
+        let ui_weak = ui_weak_doc_del.clone();
+        let cid = *active_company_id_doc_del.lock().unwrap();
+        let id_s = id.to_string();
+        let (tab, query) = {
+            let s = doc_state_del.lock().unwrap();
+            (s.tab, s.query.clone())
+        };
+        tokio::spawn(async move {
+            let result = if let Some(act_uuid_s) = id_s.strip_prefix("act:") {
+                let Ok(uuid) = act_uuid_s.parse::<uuid::Uuid>() else {
+                    tracing::error!("Невалідний UUID акту: {act_uuid_s}");
+                    return;
+                };
+                db::acts::delete(&pool, uuid).await
+            } else if let Some(inv_uuid_s) = id_s.strip_prefix("inv:") {
+                let Ok(uuid) = inv_uuid_s.parse::<uuid::Uuid>() else {
+                    tracing::error!("Невалідний UUID накладної: {inv_uuid_s}");
+                    return;
+                };
+                db::invoices::delete(&pool, uuid).await
+            } else {
+                tracing::warn!("doc-delete-clicked: невідомий префікс id='{id_s}'");
+                return;
+            };
+            match result {
+                Ok(_) => {
+                    tracing::info!("Документ '{id_s}' видалено.");
+                    if let Err(e) = reload_documents(&pool, ui_weak, cid, tab, &query).await {
+                        tracing::error!("Помилка оновлення документів після видалення: {e}");
+                    }
+                }
+                Err(e) => tracing::error!("Помилка видалення документу '{id_s}': {e}"),
+            }
+        });
+    });
 
     // ── Колбек: переключити активну компанію ─────────────────────────────────
     let ui_weak_switch = ui.as_weak();
@@ -2317,6 +2474,10 @@ async fn main() -> Result<()> {
 
                     if let Err(e) = reload_payments(&pool, ui_handle.clone(), company_id, None).await {
                         tracing::error!("Помилка завантаження платежів після вибору компанії: {e}");
+                    }
+
+                    if let Err(e) = reload_documents(&pool, ui_handle.clone(), company_id, 0, "").await {
+                        tracing::error!("Помилка завантаження документів після вибору компанії: {e}");
                     }
                 }
                 Ok(None) => tracing::warn!("Компанію {uuid} не знайдено."),
@@ -3184,6 +3345,89 @@ async fn reload_payments(
     Ok(())
 }
 
+/// Завантажити єдиний список документів (акти + накладні) і оновити UI.
+///
+/// tab: 0=Всі, 1=Акти, 2=Рахунки
+async fn reload_documents(
+    pool: &sqlx::PgPool,
+    ui_weak: Weak<MainWindow>,
+    company_id: uuid::Uuid,
+    tab: i32,
+    query: &str,
+) -> Result<()> {
+    let search = if query.trim().is_empty() { None } else { Some(query) };
+
+    // Паралельне завантаження актів та накладних залежно від таба
+    let (acts_res, invs_res) = tokio::join!(
+        async {
+            if tab != 2 {
+                db::acts::list_filtered(pool, company_id, None, search).await
+            } else {
+                Ok(vec![])
+            }
+        },
+        async {
+            if tab != 1 {
+                db::invoices::list_filtered(pool, company_id, None, search).await
+            } else {
+                Ok(vec![])
+            }
+        }
+    );
+    let acts = acts_res?;
+    let invs = invs_res?;
+
+    // Об'єднуємо в один вектор (date, DocRow) і сортуємо за датою DESC
+    let mut combined: Vec<(chrono::NaiveDate, DocRow)> = Vec::with_capacity(acts.len() + invs.len());
+
+    for a in &acts {
+        combined.push((a.date, DocRow {
+            id:           SharedString::from(format!("act:{}", a.id)),
+            doc_type:     SharedString::from("АКТ"),
+            number:       SharedString::from(a.number.as_str()),
+            counterparty: SharedString::from(a.counterparty_name.as_str()),
+            amount:       SharedString::from(format!("{} ₴", format_amount_ua(a.total_amount))),
+            date:         SharedString::from(a.date.format("%d.%m.%Y").to_string()),
+            status:       SharedString::from(match a.status {
+                models::ActStatus::Draft  => "Чернетка",
+                models::ActStatus::Issued => "Виставлений",
+                models::ActStatus::Signed => "Підписаний",
+                models::ActStatus::Paid   => "Оплачений",
+            }),
+        }));
+    }
+
+    for i in &invs {
+        combined.push((i.date, DocRow {
+            id:           SharedString::from(format!("inv:{}", i.id)),
+            doc_type:     SharedString::from("РАХ"),
+            number:       SharedString::from(i.number.as_str()),
+            counterparty: SharedString::from(i.counterparty_name.as_str()),
+            amount:       SharedString::from(format!("{} ₴", format_amount_ua(i.total_amount))),
+            date:         SharedString::from(i.date.format("%d.%m.%Y").to_string()),
+            status:       SharedString::from(match i.status {
+                models::InvoiceStatus::Draft  => "Чернетка",
+                models::InvoiceStatus::Issued => "Виставлений",
+                models::InvoiceStatus::Signed => "Підписаний",
+                models::InvoiceStatus::Paid   => "Оплачений",
+            }),
+        }));
+    }
+
+    // Сортування за датою DESC
+    combined.sort_by(|(da, _), (db, _)| db.cmp(da));
+    let doc_rows: Vec<DocRow> = combined.into_iter().map(|(_, r)| r).collect();
+
+    ui_weak
+        .upgrade_in_event_loop(move |ui| {
+            ui.set_document_rows(ModelRc::new(VecModel::from(doc_rows)));
+            ui.set_documents_loading(false);
+        })
+        .map_err(anyhow::Error::from)?;
+
+    Ok(())
+}
+
 /// Зібрати позиції накладної з UI-полів у Vec<NewInvoiceItem>.
 fn collect_invoice_items_from_ui(ui_weak: &Weak<MainWindow>) -> Vec<NewInvoiceItem> {
     use slint::Model;
@@ -3368,6 +3612,7 @@ fn spawn_save_act(
     pool: sqlx::PgPool,
     ui_weak: Weak<MainWindow>,
     act_state: Arc<Mutex<ActListState>>,
+    doc_state: Arc<Mutex<DocListState>>,
     company_id: uuid::Uuid,
     number: String,
     date_str: String,
@@ -3458,6 +3703,13 @@ fn spawn_save_act(
                 {
                     tracing::error!("Помилка оновлення списку актів після збереження: {e}");
                 }
+                let (doc_tab, doc_query) = {
+                    let s = doc_state.lock().unwrap();
+                    (s.tab, s.query.clone())
+                };
+                if let Err(e) = reload_documents(&pool, ui_weak.clone(), company_id, doc_tab, &doc_query).await {
+                    tracing::error!("Помилка оновлення документів після збереження акту: {e}");
+                }
             }
             Err(e) => {
                 tracing::error!("Помилка збереження акту: {e}");
@@ -3472,6 +3724,7 @@ fn spawn_save_invoice(
     pool: sqlx::PgPool,
     ui_weak: Weak<MainWindow>,
     inv_state: Arc<Mutex<InvoiceListState>>,
+    doc_state: Arc<Mutex<DocListState>>,
     company_id: uuid::Uuid,
     number: String,
     date_str: String,
@@ -3537,8 +3790,15 @@ fn spawn_save_invoice(
                     let state = inv_state.lock().unwrap();
                     (state.status_filter.clone(), state.query.clone())
                 };
-                if let Err(e) = reload_invoices(&pool, ui_weak, company_id, status_filter, query, true).await {
+                if let Err(e) = reload_invoices(&pool, ui_weak.clone(), company_id, status_filter, query, true).await {
                     tracing::error!("Помилка оновлення списку накладних: {e}");
+                }
+                let (doc_tab, doc_query) = {
+                    let s = doc_state.lock().unwrap();
+                    (s.tab, s.query.clone())
+                };
+                if let Err(e) = reload_documents(&pool, ui_weak, company_id, doc_tab, &doc_query).await {
+                    tracing::error!("Помилка оновлення документів після збереження накладної: {e}");
                 }
             }
             Err(e) => {
