@@ -124,6 +124,7 @@ async fn acts_create_and_status_flow_in_db() -> Result<()> {
             number: format!("IT-ACT-{suffix}"),
             counterparty_id: cp.id,
             contract_id: None,
+            direction: "outgoing".to_string(),
             date: Utc::now().date_naive(),
             notes: Some("integration test".to_string()),
             bas_id: Some(format!("it-act-{suffix}")),
@@ -361,6 +362,7 @@ async fn tasks_list_by_act_returns_only_related_tasks() -> Result<()> {
             number: format!("TASK-ACT-{suffix}"),
             counterparty_id: cp.id,
             contract_id: None,
+            direction: "outgoing".to_string(),
             date: Utc::now().date_naive(),
             notes: None,
             bas_id: Some(format!("it-task-act-{suffix}")),
@@ -641,6 +643,7 @@ async fn invoices_create_update_and_status_flow_in_db() -> Result<()> {
             number: format!("IT-INV-{suffix}"),
             counterparty_id: cp.id,
             contract_id: None,
+            direction: "outgoing".to_string(),
             date: Utc::now().date_naive(),
             notes: Some("integration invoice".to_string()),
             bas_id: Some(format!("it-invoice-{suffix}")),
@@ -682,7 +685,11 @@ async fn invoices_create_update_and_status_flow_in_db() -> Result<()> {
         &pool,
         DEFAULT_COMPANY_ID,
         None,
+        None,
         Some("IT-INV-"),
+        None,
+        None,
+        None,
     )
     .await?;
     assert!(listed.iter().any(|row| row.id == invoice.id));
@@ -775,6 +782,7 @@ async fn invoices_generate_next_number_uses_numeric_suffix() -> Result<()> {
             number: format!("НАК-{year}-009"),
             counterparty_id: cp.id,
             contract_id: None,
+            direction: "outgoing".to_string(),
             date: Utc::now().date_naive(),
             notes: None,
             bas_id: Some(format!("it-invoice-seq-1-{suffix}")),
@@ -796,6 +804,7 @@ async fn invoices_generate_next_number_uses_numeric_suffix() -> Result<()> {
             number: format!("НАК-{year}-010"),
             counterparty_id: cp.id,
             contract_id: None,
+            direction: "outgoing".to_string(),
             date: Utc::now().date_naive(),
             notes: None,
             bas_id: Some(format!("it-invoice-seq-2-{suffix}")),
@@ -860,6 +869,7 @@ async fn invoices_list_filtered_respects_status_and_search() -> Result<()> {
             number: format!("FILTER-DRAFT-{suffix}"),
             counterparty_id: cp.id,
             contract_id: None,
+            direction: "outgoing".to_string(),
             date: Utc::now().date_naive(),
             notes: None,
             bas_id: Some(format!("it-filter-draft-{suffix}")),
@@ -881,6 +891,7 @@ async fn invoices_list_filtered_respects_status_and_search() -> Result<()> {
             number: format!("FILTER-ISSUED-{suffix}"),
             counterparty_id: cp.id,
             contract_id: None,
+            direction: "outgoing".to_string(),
             date: Utc::now().date_naive(),
             notes: None,
             bas_id: Some(format!("it-filter-issued-{suffix}")),
@@ -905,6 +916,10 @@ async fn invoices_list_filtered_respects_status_and_search() -> Result<()> {
         DEFAULT_COMPANY_ID,
         Some(models::InvoiceStatus::Issued),
         None,
+        None,
+        None,
+        None,
+        None,
     )
     .await?;
     assert!(issued_only.iter().any(|row| row.id == issued.id));
@@ -914,7 +929,11 @@ async fn invoices_list_filtered_respects_status_and_search() -> Result<()> {
         &pool,
         DEFAULT_COMPANY_ID,
         Some(models::InvoiceStatus::Issued),
+        None,
         Some("FILTER-ISSUED"),
+        None,
+        None,
+        None,
     )
     .await?;
     assert_eq!(by_search.len(), 1);
@@ -967,6 +986,7 @@ async fn invoices_advance_status_fails_for_final_status() -> Result<()> {
             number: format!("FINAL-{suffix}"),
             counterparty_id: cp.id,
             contract_id: None,
+            direction: "outgoing".to_string(),
             date: Utc::now().date_naive(),
             notes: None,
             bas_id: Some(format!("it-final-{suffix}")),

@@ -71,6 +71,7 @@ pub struct Act {
     pub counterparty_id: Uuid,
     pub contract_id: Option<Uuid>,
     pub category_id: Option<Uuid>,
+    pub direction: String,
     pub date: NaiveDate,
     pub expected_payment_date: Option<NaiveDate>,
     pub total_amount: Decimal,
@@ -106,6 +107,7 @@ pub struct ActItem {
 pub struct ActListRow {
     pub id: Uuid,
     pub number: String,
+    pub direction: String,
     pub date: NaiveDate,
     pub counterparty_name: String,
     pub total_amount: Decimal,
@@ -118,6 +120,7 @@ pub struct NewAct {
     pub counterparty_id: Uuid,
     pub contract_id: Option<Uuid>,
     pub category_id: Option<Uuid>,
+    pub direction: String,
     pub date: NaiveDate,
     pub expected_payment_date: Option<NaiveDate>,
     pub notes: Option<String>,

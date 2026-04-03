@@ -106,7 +106,7 @@ pub async fn counterparties_for_select(pool: &PgPool, company_id: Uuid) -> Resul
 /// `status_filter = None`  → усі акти.
 /// `status_filter = Some(s)` → лише акти з вказаним статусом.
 pub async fn list(pool: &PgPool, company_id: Uuid, status_filter: Option<ActStatus>) -> Result<Vec<ActListRow>> {
-    list_filtered(pool, company_id, status_filter, None, None, None, None).await
+    list_filtered(pool, company_id, status_filter, None, None, None, None, None).await
 }
 
 /// Отримати список актів компанії з фільтром за статусом, текстовим пошуком,
@@ -118,6 +118,7 @@ pub async fn list_filtered(
     pool: &PgPool,
     company_id: Uuid,
     status_filter: Option<ActStatus>,
+    direction: Option<&str>,
     search_query: Option<&str>,
     counterparty_id: Option<Uuid>,
     date_from: Option<chrono::NaiveDate>,
@@ -127,7 +128,7 @@ pub async fn list_filtered(
     let has_search = search_query.is_some();
 
     let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
-        r#"SELECT a.id, a.number, a.date,
+        r#"SELECT a.id, a.number, a.direction, a.date,
                c.name AS counterparty_name,
                a.total_amount, a.status
         FROM acts a
@@ -139,6 +140,10 @@ pub async fn list_filtered(
     if let Some(status) = status_filter {
         qb.push(" AND a.status = ");
         qb.push_bind(status);
+    }
+    if let Some(direction) = direction {
+        qb.push(" AND a.direction = ");
+        qb.push_bind(direction);
     }
     if let Some(q) = search_query {
         let pattern = format!("%{q}%");
@@ -240,7 +245,7 @@ pub async fn get_kpi(pool: &PgPool, company_id: Uuid) -> Result<ActKpi> {
 pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<(Act, Vec<ActItem>)>> {
     let act = sqlx::query_as::<_, Act>(
         r#"
-        SELECT id, number, counterparty_id, contract_id, category_id,
+        SELECT id, number, counterparty_id, contract_id, category_id, direction,
                date, expected_payment_date, total_amount,
                status, notes, bas_id, created_at, updated_at
         FROM acts
@@ -289,9 +294,9 @@ pub async fn create(pool: &PgPool, company_id: Uuid, data: &NewAct) -> Result<Ac
     // ActStatus має #[derive(sqlx::Type)] — тому sqlx декодує ENUM автоматично.
     let act = sqlx::query_as::<_, Act>(
         r#"INSERT INTO acts (company_id, number, counterparty_id, contract_id, category_id,
-                             date, expected_payment_date, notes, bas_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-           RETURNING id, number, counterparty_id, contract_id, category_id,
+                             direction, date, expected_payment_date, notes, bas_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           RETURNING id, number, counterparty_id, contract_id, category_id, direction,
                      date, expected_payment_date, total_amount,
                      status, notes, bas_id, created_at, updated_at"#
     )
@@ -300,6 +305,7 @@ pub async fn create(pool: &PgPool, company_id: Uuid, data: &NewAct) -> Result<Ac
     .bind(data.counterparty_id)
     .bind(data.contract_id)
     .bind(data.category_id)
+    .bind(&data.direction)
     .bind(data.date)
     .bind(data.expected_payment_date)
     .bind(&data.notes)
@@ -338,7 +344,7 @@ pub async fn create(pool: &PgPool, company_id: Uuid, data: &NewAct) -> Result<Ac
     let act = sqlx::query_as::<_, Act>(
         r#"UPDATE acts SET total_amount = $2, updated_at = NOW()
            WHERE id = $1
-           RETURNING id, number, counterparty_id, contract_id, category_id,
+           RETURNING id, number, counterparty_id, contract_id, category_id, direction,
                      date, expected_payment_date, total_amount,
                      status, notes, bas_id, created_at, updated_at"#
     )
@@ -366,7 +372,7 @@ pub async fn update(pool: &PgPool, id: Uuid, data: &UpdateAct) -> Result<Option<
             notes                 = $8,
             updated_at            = NOW()
         WHERE id = $1
-        RETURNING id, number, counterparty_id, contract_id, category_id,
+        RETURNING id, number, counterparty_id, contract_id, category_id, direction,
                   date, expected_payment_date, total_amount,
                   status, notes, bas_id, created_at, updated_at
         "#,
@@ -419,7 +425,7 @@ pub async fn change_status(pool: &PgPool, id: Uuid, new_status: ActStatus) -> Re
         r#"
         UPDATE acts SET status = $2, updated_at = NOW()
         WHERE id = $1
-        RETURNING id, number, counterparty_id, contract_id, category_id,
+        RETURNING id, number, counterparty_id, contract_id, category_id, direction,
                   date, expected_payment_date, total_amount,
                   status, notes, bas_id, created_at, updated_at
         "#,
@@ -467,7 +473,7 @@ pub async fn update_with_items(
             notes                  = $8,
             updated_at             = NOW()
         WHERE id = $1
-        RETURNING id, number, counterparty_id, contract_id, category_id,
+        RETURNING id, number, counterparty_id, contract_id, category_id, direction,
                   date, expected_payment_date, total_amount,
                   status, notes, bas_id, created_at, updated_at
         "#,
@@ -522,7 +528,7 @@ pub async fn update_with_items(
         r#"
         UPDATE acts SET total_amount = $2, updated_at = NOW()
         WHERE id = $1
-        RETURNING id, number, counterparty_id, contract_id, category_id,
+        RETURNING id, number, counterparty_id, contract_id, category_id, direction,
                   date, expected_payment_date, total_amount,
                   status, notes, bas_id, created_at, updated_at
         "#,

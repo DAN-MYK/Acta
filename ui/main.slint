@@ -398,6 +398,7 @@ export component MainWindow inherits Window {
     // ── Дані документів (єдиний список актів + накладних) ──────────────────
     in property <[DocRow]> document-rows;
     in property <bool>     documents-loading: false;
+    in property <int>      doc-direction-index: 0;
     in property <int>      doc-active-tab: 0;
     in property <[string]> doc-filter-cp-names;
     in property <int>      doc-filter-cp-index: 0;
@@ -408,6 +409,7 @@ export component MainWindow inherits Window {
     callback doc-open-clicked(string);
     callback doc-delete-clicked(string);
     callback doc-pdf-clicked(string);
+    callback doc-direction-changed(int);
     callback doc-tab-changed(int);
     callback doc-search-changed(string);
     callback doc-cp-filter-changed(int);
@@ -486,51 +488,43 @@ export component MainWindow inherits Window {
 
                 // в”Ђв”Ђ Р›РѕРіРѕС‚РёРї + switcher Р±Р»РѕРє в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
                 Rectangle {
-                    height: 76px;
+                    height: 56px;
 
                     // Логотип-марка (36×36 синій квадрат з «A»)
                     Rectangle {
-                        x: 12px; y: 16px;
-                        width: 36px; height: 36px;
+                        x: 14px; y: 12px;
+                        width: 32px; height: 32px;
                         border-radius: Theme.radius-md;
                         background: Theme.primary;
                         Text {
-                            x: 0; y: 7px; width: 36px;
+                            x: 0; y: 6px; width: 32px;
                             horizontal-alignment: center;
-                            text: "A"; font-size: 18px; font-weight: 700; color: #ffffff;
+                            text: "A"; font-size: 16px; font-weight: 700; color: #ffffff;
                         }
                     }
 
                     Text {
-                        x: 56px;
+                        x: 54px;
                         y: 18px;
                         text: "Acta";
                         font-size: Theme.font-xl;
                         font-weight: 700;
                         color: #ffffff;
                     }
-
-                    Text {
-                        x: 56px;
-                        y: 38px;
-                        text: "РЈРїСЂР°РІР»С–РЅСЃСЊРєРёР№ РѕР±Р»С–Рє";
-                        font-size: Theme.font-xs;
-                        color: Theme.sidebar-text;
-                    }
                 }
 
                 // в”Ђв”Ђ РџРµСЂРµРјРёРєР°С‡ Р°РєС‚РёРІРЅРѕС— РєРѕРјРїР°РЅС–С— в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
                 Rectangle {
-                    height: 64px;
+                    height: 52px;
                     vertical-stretch: 0;
 
                     HorizontalLayout {
-                        padding-left: 12px;
-                        padding-right: 12px;
+                        padding-left: 10px;
+                        padding-right: 10px;
                         alignment: center;
 
                         company-btn := Rectangle {
-                            height: 52px;
+                            height: 40px;
                             border-radius: 8px;
                             background: company-touch.has-hover ? Theme.sidebar-switcher-hover : Theme.sidebar-switcher-bg;
                             horizontal-stretch: 1;
@@ -547,15 +541,15 @@ export component MainWindow inherits Window {
                                     alignment: center;
 
                                     Rectangle {
-                                        width: 32px;
-                                        height: 32px;
-                                        border-radius: 16px;
+                                        width: 28px;
+                                        height: 28px;
+                                        border-radius: 14px;
                                         background: Theme.primary;
 
                                         Text {
                                             text: "Р¤Р†";
                                             color: #ffffff;
-                                            font-size: 11px;
+                                            font-size: 10px;
                                             font-weight: 600;
                                             horizontal-alignment: center;
                                             vertical-alignment: center;
@@ -604,7 +598,7 @@ export component MainWindow inherits Window {
                 // в”Ђв”Ђ РќР°РІС–РіР°С†С–Р№РЅС– РїСѓРЅРєС‚Рё (Р· РІС–РґСЃС‚СѓРїР°РјРё 12px Р· Р±РѕРєС–РІ, 8px РјС–Р¶) в”Ђв”Ђ
                 Text {
                     x: 20px;
-                    height: 28px;
+                    height: 22px;
                     text: "МЕНЮ";
                     font-size: Theme.font-xs;
                     font-weight: 600;
@@ -663,7 +657,7 @@ export component MainWindow inherits Window {
 
                 Text {
                     x: 20px;
-                    height: 28px;
+                    height: 22px;
                     text: "УТИЛІТИ";
                     font-size: Theme.font-xs;
                     font-weight: 600;
@@ -774,6 +768,7 @@ export component MainWindow inherits Window {
             if root.current-page == 1 && !root.show-act-form && !root.show-invoice-form : DocumentList {
                 rows:                   root.document-rows;
                 loading:                root.documents-loading;
+                direction-index:        root.doc-direction-index;
                 active-tab:             root.doc-active-tab;
                 filter-counterparty-names: root.doc-filter-cp-names;
                 filter-counterparty-index: root.doc-filter-cp-index;
@@ -783,6 +778,7 @@ export component MainWindow inherits Window {
                 open-document(id)       => { root.doc-open-clicked(id); }
                 delete-document(id)     => { root.doc-delete-clicked(id); }
                 export-pdf(id)          => { root.doc-pdf-clicked(id); }
+                direction-changed(i)    => { root.doc-direction-changed(i); }
                 tab-changed(i)          => { root.doc-tab-changed(i); }
                 search-changed(q)       => { root.doc-search-changed(q); }
                 counterparty-filter-changed(i) => { root.doc-cp-filter-changed(i); }

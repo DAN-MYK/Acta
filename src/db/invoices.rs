@@ -65,7 +65,7 @@ pub async fn list(
     company_id: Uuid,
     status_filter: Option<InvoiceStatus>,
 ) -> Result<Vec<InvoiceListRow>> {
-    list_filtered(pool, company_id, status_filter, None, None, None, None).await
+    list_filtered(pool, company_id, status_filter, None, None, None, None, None).await
 }
 
 /// Список накладних з фільтром за статусом, текстовим пошуком,
@@ -77,6 +77,7 @@ pub async fn list_filtered(
     pool: &PgPool,
     company_id: Uuid,
     status_filter: Option<InvoiceStatus>,
+    direction: Option<&str>,
     search_query: Option<&str>,
     counterparty_id: Option<Uuid>,
     date_from: Option<chrono::NaiveDate>,
@@ -86,7 +87,7 @@ pub async fn list_filtered(
     let has_search = search_query.is_some();
 
     let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
-        r#"SELECT i.id, i.number, i.date,
+        r#"SELECT i.id, i.number, i.direction, i.date,
                c.name AS counterparty_name,
                i.total_amount, i.status
         FROM invoices i
@@ -98,6 +99,10 @@ pub async fn list_filtered(
     if let Some(status) = status_filter {
         qb.push(" AND i.status = ");
         qb.push_bind(status);
+    }
+    if let Some(direction) = direction {
+        qb.push(" AND i.direction = ");
+        qb.push_bind(direction);
     }
     if let Some(q) = search_query {
         let pattern = format!("%{q}%");
@@ -133,8 +138,8 @@ pub async fn list_filtered(
 pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<(Invoice, Vec<InvoiceItem>)>> {
     let invoice = sqlx::query_as::<_, Invoice>(
         r#"
-        SELECT id, company_id, number, counterparty_id, contract_id, date,
-               total_amount, vat_amount, status, notes, pdf_path, bas_id,
+        SELECT id, company_id, number, counterparty_id, contract_id, category_id, direction,
+               date, expected_payment_date, total_amount, vat_amount, status, notes, pdf_path, bas_id,
                created_at, updated_at
         FROM invoices WHERE id = $1
         "#,
@@ -179,9 +184,9 @@ pub async fn create(pool: &PgPool, company_id: Uuid, data: &NewInvoice) -> Resul
     let invoice = sqlx::query_as::<_, Invoice>(
         r#"
         INSERT INTO invoices (company_id, number, counterparty_id, contract_id, category_id,
-                              date, expected_payment_date, notes, bas_id)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        RETURNING id, company_id, number, counterparty_id, contract_id, category_id,
+                              direction, date, expected_payment_date, notes, bas_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        RETURNING id, company_id, number, counterparty_id, contract_id, category_id, direction,
                   date, expected_payment_date, total_amount, vat_amount,
                   status, notes, pdf_path, bas_id, created_at, updated_at
         "#,
@@ -191,6 +196,7 @@ pub async fn create(pool: &PgPool, company_id: Uuid, data: &NewInvoice) -> Resul
     .bind(data.counterparty_id)
     .bind(data.contract_id)
     .bind(data.category_id)
+    .bind(&data.direction)
     .bind(data.date)
     .bind(data.expected_payment_date)
     .bind(&data.notes)
@@ -227,7 +233,7 @@ pub async fn create(pool: &PgPool, company_id: Uuid, data: &NewInvoice) -> Resul
         r#"
         UPDATE invoices SET total_amount = $2, updated_at = NOW()
         WHERE id = $1
-        RETURNING id, company_id, number, counterparty_id, contract_id, category_id,
+        RETURNING id, company_id, number, counterparty_id, contract_id, category_id, direction,
                   date, expected_payment_date, total_amount, vat_amount,
                   status, notes, pdf_path, bas_id, created_at, updated_at
         "#,
@@ -266,7 +272,7 @@ pub async fn update_with_items(
             notes                 = $8,
             updated_at            = NOW()
         WHERE id = $1
-        RETURNING id, company_id, number, counterparty_id, contract_id, category_id,
+        RETURNING id, company_id, number, counterparty_id, contract_id, category_id, direction,
                   date, expected_payment_date, total_amount, vat_amount,
                   status, notes, pdf_path, bas_id, created_at, updated_at
         "#,
@@ -322,7 +328,7 @@ pub async fn update_with_items(
         r#"
         UPDATE invoices SET total_amount = $2, updated_at = NOW()
         WHERE id = $1
-        RETURNING id, company_id, number, counterparty_id, contract_id, category_id,
+        RETURNING id, company_id, number, counterparty_id, contract_id, category_id, direction,
                   date, expected_payment_date, total_amount, vat_amount,
                   status, notes, pdf_path, bas_id, created_at, updated_at
         "#,
@@ -375,7 +381,7 @@ pub async fn change_status(
         r#"
         UPDATE invoices SET status = $2, updated_at = NOW()
         WHERE id = $1
-        RETURNING id, company_id, number, counterparty_id, contract_id, category_id,
+        RETURNING id, company_id, number, counterparty_id, contract_id, category_id, direction,
                   date, expected_payment_date, total_amount, vat_amount,
                   status, notes, pdf_path, bas_id, created_at, updated_at
         "#,

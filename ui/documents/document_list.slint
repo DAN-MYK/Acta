@@ -25,6 +25,7 @@ export component DocumentList {
     // ── Вхідні дані ─────────────────────────────────────────────────────────
     in property <[DocRow]> rows;
     in property <bool>     loading: false;
+    in property <int>      direction-index: 0; // 0=Вихідні, 1=Вхідні
     in property <int>      active-tab: 0;   // 0=Всі, 1=Акти, 2=Рахунки
 
     // ── Фільтри ─────────────────────────────────────────────────────────────
@@ -37,6 +38,7 @@ export component DocumentList {
     callback open-document(string);     // передає DocRow.id
     callback delete-document(string);   // передає DocRow.id
     callback export-pdf(string);        // передає DocRow.id
+    callback direction-changed(int);
     callback tab-changed(int);
     callback search-changed(string);
     callback counterparty-filter-changed(int);
@@ -86,14 +88,16 @@ export component DocumentList {
                         color: Theme.text-primary;
                     }
                     Text {
-                        text: "Акти, рахунки та видаткові — виставлені клієнтам";
+                        text: root.direction-index == 1
+                            ? "Акти та накладні, отримані від контрагентів"
+                            : "Акти та накладні, виставлені клієнтам";
                         font-size: Theme.font-md;
                         color: Theme.text-second;
                     }
                 }
 
                 // Кнопка "+ Новий документ"
-                new-rect := Rectangle {
+                if root.direction-index == 0 : new-rect := Rectangle {
                     width: 160px;
                     height: Theme.btn-md-height;
                     border-radius: Theme.radius-md;
@@ -134,9 +138,41 @@ export component DocumentList {
                 padding-right: 32px;
                 spacing: 8px;
 
+                // Таби напрямку документів
+                for dir-label[i] in ["Вихідні", "Вхідні"]: Rectangle {
+                    width: 92px;
+                    height: 32px;
+                    border-radius: Theme.radius-md;
+                    background: root.direction-index == i
+                        ? Theme.primary
+                        : (dir-touch.has-hover ? Theme.bg-hover : Theme.bg-gray);
+                    border-width: root.direction-index == i ? 0 : 1px;
+                    border-color: Theme.border;
+                    animate background { duration: 100ms; easing: ease; }
+
+                    Text {
+                        text: dir-label;
+                        font-size: Theme.font-md;
+                        font-weight: root.direction-index == i ? 600 : 400;
+                        color: root.direction-index == i ? Theme.text-white : Theme.text-second;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        animate color { duration: 100ms; easing: ease; }
+                    }
+
+                    dir-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            root.direction-changed(i);
+                        }
+                    }
+                }
+
+                Rectangle { width: 8px; }
+
                 // Таби типу документу
-                for lbl[i] in ["Всі", "Акти", "Рахунки"]: Rectangle {
-                    width: i == 0 ? 68px : 76px;
+                for lbl[i] in ["Всі", "Акти", "Накладні"]: Rectangle {
+                    width: i == 0 ? 68px : (i == 1 ? 76px : 98px);
                     height: 32px;
                     border-radius: Theme.radius-md;
                     background: root.active-tab == i
@@ -395,7 +431,9 @@ export component DocumentList {
                 height: 120px;
 
                 Text {
-                    text: "Документів не знайдено. Натисніть \"+ Новий документ\" щоб створити перший.";
+                    text: root.direction-index == 1
+                        ? "Вхідних документів не знайдено."
+                        : "Документів не знайдено. Натисніть \"+ Новий документ\" щоб створити перший.";
                     color: Theme.text-muted;
                     font-size: Theme.font-md;
                     horizontal-alignment: center;
@@ -664,7 +702,7 @@ export component DocumentList {
                 }
             }
 
-            // Тайл РАХ
+            // Тайл НАК
             inv-tile := Rectangle {
                 x: 210px; y: 88px;
                 width: 170px; height: 76px;
@@ -677,7 +715,7 @@ export component DocumentList {
                 Text {
                     x: 0; y: 12px; width: 170px;
                     horizontal-alignment: center;
-                    text: "РАХ";
+                    text: "НАК";
                     font-size: Theme.font-xl;
                     font-weight: 700;
                     color: inv-tile-touch.has-hover ? Theme.purple : Theme.text-second;
