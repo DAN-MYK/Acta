@@ -43,7 +43,8 @@
       "mcp__plugin_figma_figma__get_code_connect_suggestions",
       "mcp__obsidian__read_file",
       "Bash(kill %1)",
-      "Bash(wait)"
+      "Bash(wait)",
+      "Bash(grep \" --> src\\\\\\\\\\\\\\\\main.rs\")"
     ]
   },
   "enableAllProjectMcpServers": true,
