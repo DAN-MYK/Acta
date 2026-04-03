@@ -25,6 +25,7 @@ import { PaymentList }      from "payments/payment_list.slint";
 import { PaymentForm }      from "payments/payment_form.slint";
 import { DocumentList, DocRow } from "documents/document_list.slint";
 import { CounterpartyCard, CounterpartyDocSummary, CounterpartyPaymentSummary, CounterpartyContractSummary, CounterpartyTaskSummary } from "counterparties/counterparty_card.slint";
+import { ActCard, ActCardItemRow, ActCardTaskRow } from "acts/act_card.slint";
 import { SettingsPage, SettingsCategoryRow } from "settings/settings.slint";
 
 global MenuIcons {
@@ -394,6 +395,24 @@ export component MainWindow inherits Window {
     in property <[CounterpartyTaskSummary]>     counterparty-card-tasks;
     callback counterparty-card-close-clicked();
     callback counterparty-card-edit-clicked(string);
+
+    // ── Картка акту ───────────────────────────────────────────────────────────
+    in property <bool>              show-act-card: false;
+    in property <string>            act-card-id: "";
+    in property <string>            act-card-number: "";
+    in property <string>            act-card-date: "";
+    in property <string>            act-card-status: "draft";
+    in property <string>            act-card-status-label: "Чернетка";
+    in property <string>            act-card-counterparty: "";
+    in property <string>            act-card-total: "0,00 ₴";
+    in property <string>            act-card-expected-payment: "";
+    in property <string>            act-card-notes: "";
+    in property <[ActCardItemRow]>  act-card-items;
+    in property <[ActCardTaskRow]>  act-card-tasks;
+    callback act-card-close-clicked();
+    callback act-card-edit-clicked(string);
+    callback act-card-pdf-clicked(string);
+    callback act-card-advance-status-clicked(string);
 
     // ── Дані документів (єдиний список актів + накладних) ──────────────────
     in property <[DocRow]> document-rows;
@@ -1070,6 +1089,41 @@ export component MainWindow inherits Window {
 
                 close-clicked => { root.counterparty-card-close-clicked(); }
                 edit-clicked => { root.counterparty-card-edit-clicked(root.counterparty-card-id); }
+            }
+        }
+    }
+
+    // ── Overlay: картка акту ──────────────────────────────────────────────────
+    if root.show-act-card : Rectangle {
+        background: Theme.overlay;
+
+        Rectangle {
+            width: parent.width - 80px;
+            height: parent.height - 80px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            border-radius: 18px;
+            background: Theme.surface;
+            border-width: 1px;
+            border-color: Theme.border;
+            clip: true;
+
+            ActCard {
+                act-number:           root.act-card-number;
+                act-date:             root.act-card-date;
+                act-status:           root.act-card-status;
+                act-status-label:     root.act-card-status-label;
+                act-counterparty:     root.act-card-counterparty;
+                act-total:            root.act-card-total;
+                act-expected-payment: root.act-card-expected-payment;
+                act-notes:            root.act-card-notes;
+                act-items:            root.act-card-items;
+                act-tasks:            root.act-card-tasks;
+
+                close-clicked           => { root.act-card-close-clicked(); }
+                edit-clicked            => { root.act-card-edit-clicked(root.act-card-id); }
+                pdf-clicked             => { root.act-card-pdf-clicked(root.act-card-id); }
+                advance-status-clicked  => { root.act-card-advance-status-clicked(root.act-card-id); }
             }
         }
     }

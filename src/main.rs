@@ -528,10 +528,257 @@ async fn main() -> Result<()> {
         });
     });
 
-    // ── Колбек: вибір акту ───────────────────────────────────────────────────
-    ui.on_act_selected(|id| {
-        tracing::debug!("Вибрано акт: {id}");
-        // TODO: відкрити картку акту
+    // ── Колбек: вибір акту — відкрити картку ────────────────────────────────
+    let pool_act_card = pool.clone();
+    let ui_weak_act_card = ui.as_weak();
+    ui.on_act_selected(move |id| {
+        let pool = pool_act_card.clone();
+        let ui_weak = ui_weak_act_card.clone();
+        let id_str = id.to_string();
+
+        tokio::spawn(async move {
+            let Ok(act_id) = id_str.parse::<uuid::Uuid>() else {
+                tracing::error!("Картка акту: некоректний UUID: {id_str}");
+                return;
+            };
+            if let Err(e) = open_act_card(&pool, ui_weak, act_id).await {
+                tracing::error!("Помилка відкриття картки акту: {e}");
+            }
+        });
+    });
+
+    // ── Колбек: закрити картку акту ──────────────────────────────────────────
+    let ui_weak_act_card_close = ui.as_weak();
+    ui.on_act_card_close_clicked(move || {
+        if let Some(ui) = ui_weak_act_card_close.upgrade() {
+            ui.set_show_act_card(false);
+        }
+    });
+
+    // ── Колбек: редагувати з картки акту ─────────────────────────────────────
+    let pool_act_card_edit = pool.clone();
+    let ui_weak_act_card_edit = ui.as_weak();
+    let active_company_id_act_card_edit = active_company_id.clone();
+    ui.on_act_card_edit_clicked(move |id| {
+        let pool = pool_act_card_edit.clone();
+        let ui_handle = ui_weak_act_card_edit.clone();
+        let id_str = id.to_string();
+        let cid = *active_company_id_act_card_edit.lock().unwrap();
+
+        tokio::spawn(async move {
+            let Ok(uuid) = id_str.parse::<uuid::Uuid>() else {
+                tracing::error!("Редагувати акт з картки: некоректний UUID: {id_str}");
+                return;
+            };
+
+            // Закриваємо картку і відкриваємо форму редагування через ту ж логіку
+            let (act_result, cp_result, tasks_result, cat_result) = tokio::join!(
+                db::acts::get_for_edit(&pool, uuid),
+                db::acts::counterparties_for_select(&pool, cid),
+                db::tasks::list_by_act(&pool, uuid),
+                db::categories::list_all_for_select(&pool, cid),
+            );
+
+            let act_opt = match act_result {
+                Ok(v) => v,
+                Err(e) => { tracing::error!("Помилка завантаження акту: {e}"); return; }
+            };
+            let counterparties: Vec<(uuid::Uuid, String)> = match cp_result {
+                Ok(v) => v,
+                Err(e) => { tracing::error!("Помилка завантаження контрагентів: {e}"); return; }
+            };
+            let tasks = tasks_result.unwrap_or_default();
+            let categories = cat_result.unwrap_or_default();
+
+            let Some((act, items)) = act_opt else {
+                tracing::warn!("Акт {uuid} не знайдено.");
+                return;
+            };
+
+            let cp_names: Vec<SharedString> = counterparties.iter()
+                .map(|(_, n)| SharedString::from(n.as_str())).collect();
+            let cp_ids: Vec<SharedString> = counterparties.iter()
+                .map(|(id, _)| SharedString::from(id.to_string().as_str())).collect();
+            let cp_index = counterparties.iter()
+                .position(|(id, _)| *id == act.counterparty_id)
+                .unwrap_or(0) as i32;
+
+            let mut cat_names: Vec<SharedString> = vec![SharedString::from("— без категорії —")];
+            let mut cat_ids: Vec<SharedString> = vec![SharedString::from("")];
+            for c in &categories {
+                let prefix = if c.depth > 0 { "  └─ " } else { "" };
+                cat_names.push(SharedString::from(format!("{}{}", prefix, c.name)));
+                cat_ids.push(SharedString::from(c.id.to_string()));
+            }
+            let cat_id_str = act.category_id.map(|id| id.to_string()).unwrap_or_default();
+            let cat_index = cat_ids.iter().position(|id| id.as_str() == cat_id_str).unwrap_or(0) as i32;
+
+            let item_descs: Vec<SharedString> = items.iter()
+                .map(|it| SharedString::from(it.description.as_str())).collect();
+            let item_qtys: Vec<SharedString> = items.iter()
+                .map(|it| SharedString::from(format!("{}", it.quantity).as_str())).collect();
+            let item_units: Vec<SharedString> = items.iter()
+                .map(|it| SharedString::from(it.unit.as_str())).collect();
+            let item_prices: Vec<SharedString> = items.iter()
+                .map(|it| SharedString::from(format!("{}", it.unit_price).as_str())).collect();
+            let item_amounts: Vec<SharedString> = items.iter()
+                .map(|it| SharedString::from(format!("{:.2}", it.amount).as_str())).collect();
+            let task_data = to_tasks_table_data(&tasks);
+
+            let act_number = act.number.clone();
+            let act_date = act.date.format("%d.%m.%Y").to_string();
+            let act_notes = act.notes.clone().unwrap_or_default();
+            let act_id_str = act.id.to_string();
+            let total_str = format!("{:.2}", act.total_amount);
+            let exp_date_str = act.expected_payment_date
+                .map(|d| d.format("%d.%m.%Y").to_string())
+                .unwrap_or_default();
+
+            ui_handle.upgrade_in_event_loop(move |ui| {
+                let (task_rows, task_ids, task_statuses, task_priorities) =
+                    build_task_models(task_data);
+                ui.set_show_act_card(false);
+                ui.set_act_form_number(SharedString::from(act_number.as_str()));
+                ui.set_act_form_date(SharedString::from(act_date.as_str()));
+                ui.set_act_form_notes(SharedString::from(act_notes.as_str()));
+                ui.set_act_form_cp_index(cp_index);
+                ui.set_act_form_edit_id(SharedString::from(act_id_str.as_str()));
+                ui.set_act_form_total(SharedString::from(total_str.as_str()));
+                ui.set_act_form_is_edit(true);
+                ui.set_act_form_cp_names(ModelRc::new(VecModel::from(cp_names)));
+                ui.set_act_form_cp_ids(ModelRc::new(VecModel::from(cp_ids)));
+                ui.set_act_form_category_names(ModelRc::new(VecModel::from(cat_names)));
+                ui.set_act_form_category_ids(ModelRc::new(VecModel::from(cat_ids)));
+                ui.set_act_form_category_index(cat_index);
+                ui.set_act_form_expected_payment_date(SharedString::from(exp_date_str.as_str()));
+                ui.set_act_form_item_descriptions(ModelRc::new(VecModel::from(item_descs)));
+                ui.set_act_form_item_quantities(ModelRc::new(VecModel::from(item_qtys)));
+                ui.set_act_form_item_units(ModelRc::new(VecModel::from(item_units)));
+                ui.set_act_form_item_prices(ModelRc::new(VecModel::from(item_prices)));
+                ui.set_act_form_item_amounts(ModelRc::new(VecModel::from(item_amounts)));
+                ui.set_act_task_rows(task_rows);
+                ui.set_act_task_row_ids(task_ids);
+                ui.set_act_task_row_statuses(task_statuses);
+                ui.set_act_task_row_priorities(task_priorities);
+                ui.set_act_tasks_loading(false);
+                ui.set_show_act_form(true);
+            }).ok();
+        });
+    });
+
+    // ── Колбек: PDF з картки акту ─────────────────────────────────────────────
+    let pool_act_card_pdf = pool.clone();
+    let ui_weak_act_card_pdf = ui.as_weak();
+    let active_company_id_act_card_pdf = active_company_id.clone();
+    ui.on_act_card_pdf_clicked(move |id| {
+        let pool = pool_act_card_pdf.clone();
+        let ui_weak = ui_weak_act_card_pdf.clone();
+        let id_str = id.to_string();
+        let cid = *active_company_id_act_card_pdf.lock().unwrap();
+
+        // Делегуємо в існуючий handler через on_act_pdf_clicked-логіку
+        tokio::spawn(async move {
+            let Ok(uuid) = id_str.parse::<uuid::Uuid>() else { return; };
+
+            let (act_result, company_result) = tokio::join!(
+                db::acts::get_by_id(&pool, uuid),
+                db::companies::get_by_id(&pool, cid)
+            );
+
+            let Some((act, items)) = (match act_result {
+                Ok(v) => v,
+                Err(e) => { tracing::error!("PDF (картка): {e}"); return; }
+            }) else { return; };
+
+            let company = match company_result {
+                Ok(Some(v)) => v,
+                _ => { tracing::warn!("PDF (картка): компанія не знайдена."); return; }
+            };
+
+            let cp = match db::counterparties::get_by_id(&pool, act.counterparty_id).await {
+                Ok(Some(v)) => v,
+                _ => { tracing::warn!("PDF (картка): контрагент не знайдено."); return; }
+            };
+
+            let pdf_items: Vec<pdf::generator::PdfActItem> = items.iter().enumerate()
+                .map(|(i, item)| pdf::generator::PdfActItem {
+                    num: (i + 1) as u32,
+                    name: item.description.clone(),
+                    qty: item.quantity.to_string(),
+                    unit: item.unit.clone(),
+                    price: item.unit_price.to_string(),
+                    amount: item.amount.to_string(),
+                }).collect();
+
+            let data = pdf::generator::PdfActData {
+                number: act.number.clone(),
+                date: act.date.format("%d.%m.%Y").to_string(),
+                company: pdf::generator::PdfCompany {
+                    name: company.name.clone(),
+                    edrpou: company.edrpou.unwrap_or_default(),
+                    iban: company.iban.unwrap_or_default(),
+                    address: company.legal_address.unwrap_or_default(),
+                },
+                client: pdf::generator::PdfCompany {
+                    name: cp.name.clone(),
+                    edrpou: cp.edrpou.unwrap_or_default(),
+                    iban: cp.iban.unwrap_or_default(),
+                    address: cp.address.unwrap_or_default(),
+                },
+                items: pdf_items,
+                total: format!("{:.2}", act.total_amount),
+                total_words: pdf::generator::amount_to_words(&act.total_amount),
+                notes: act.notes.unwrap_or_default(),
+            };
+
+            let output_path = match pdf::generator::ensure_output_dir(&act.number) {
+                Ok(p) => p,
+                Err(e) => { tracing::error!("PDF (картка): директорія: {e}"); return; }
+            };
+
+            if let Err(e) = pdf::generator::generate_act_pdf(&data, &output_path) {
+                tracing::error!("PDF (картка): генерація: {e}"); return;
+            }
+            tracing::info!("PDF '{}' → {}", act.number, output_path.display());
+            if let Err(e) = std::process::Command::new("cmd")
+                .args(["/C", "start", "", &output_path.to_string_lossy()])
+                .spawn()
+            {
+                tracing::error!("PDF (картка): відкриття: {e}");
+            }
+
+            // Перечитуємо картку щоб оновити статус (якщо він змінився)
+            if let Err(e) = open_act_card(&pool, ui_weak, uuid).await {
+                tracing::error!("Оновлення картки після PDF: {e}");
+            }
+        });
+    });
+
+    // ── Колбек: наступний статус з картки акту ───────────────────────────────
+    let pool_act_card_adv = pool.clone();
+    let ui_weak_act_card_adv = ui.as_weak();
+    let active_company_id_act_card_adv = active_company_id.clone();
+    let act_state_for_card = act_state.clone();
+    ui.on_act_card_advance_status_clicked(move |id| {
+        let pool = pool_act_card_adv.clone();
+        let ui_weak = ui_weak_act_card_adv.clone();
+        let id_str = id.to_string();
+        let cid = *active_company_id_act_card_adv.lock().unwrap();
+        let act_state_clone = act_state_for_card.clone();
+
+        tokio::spawn(async move {
+            let Ok(uuid) = id_str.parse::<uuid::Uuid>() else { return; };
+            if let Err(e) = db::acts::advance_status(&pool, uuid).await {
+                tracing::error!("Advance status (картка): {e}");
+                return;
+            }
+            // Оновити картку і список паралельно
+            let state = act_state_clone.lock().unwrap().clone();
+            let _ = tokio::join!(
+                open_act_card(&pool, ui_weak.clone(), uuid),
+                reload_acts(&pool, ui_weak.clone(), cid, state.status_filter, state.query, false),
+            );
+        });
     });
 
     // ── Колбек: новий акт — відкрити форму ──────────────────────────────────
@@ -4008,6 +4255,82 @@ async fn reload_payment_counterparty_options(
     Ok(())
 }
 
+/// Завантажити дані акту та відкрити картку-overlay в UI.
+///
+/// Паралельно отримуємо акт+позиції та задачі (обидва залежать лише від act_id).
+/// Після цього послідовно — контрагент (потребує act.counterparty_id).
+async fn open_act_card(
+    pool: &sqlx::PgPool,
+    ui_weak: Weak<MainWindow>,
+    act_id: uuid::Uuid,
+) -> Result<()> {
+    // Акт+позиції та задачі — незалежні, беремо паралельно
+    let (act_result, tasks_result) = tokio::join!(
+        db::acts::get_by_id(pool, act_id),
+        db::tasks::list_by_act(pool, act_id),
+    );
+
+    let (act, items) = act_result?
+        .ok_or_else(|| anyhow::anyhow!("Акт {act_id} не знайдено"))?;
+    let tasks = tasks_result?;
+
+    // Контрагент — після отримання act.counterparty_id
+    let counterparty = db::counterparties::get_by_id(pool, act.counterparty_id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Контрагент акту не знайдено"))?;
+
+    ui_weak
+        .upgrade_in_event_loop(move |ui| {
+            ui.set_act_card_id(SharedString::from(act.id.to_string()));
+            ui.set_act_card_number(SharedString::from(act.number.as_str()));
+            ui.set_act_card_date(SharedString::from(act.date.format("%d.%m.%Y").to_string()));
+            ui.set_act_card_status(SharedString::from(act.status.as_str()));
+            ui.set_act_card_status_label(SharedString::from(act.status.label()));
+            ui.set_act_card_counterparty(SharedString::from(counterparty.name.as_str()));
+            ui.set_act_card_total(SharedString::from(format_amount_ua(act.total_amount)));
+            ui.set_act_card_expected_payment(SharedString::from(
+                act.expected_payment_date
+                    .map(|d| d.format("%d.%m.%Y").to_string())
+                    .unwrap_or_default(),
+            ));
+            ui.set_act_card_notes(SharedString::from(act.notes.as_deref().unwrap_or("")));
+
+            ui.set_act_card_items(ModelRc::new(VecModel::from(
+                items
+                    .iter()
+                    .map(|i| ActCardItemRow {
+                        description: SharedString::from(i.description.as_str()),
+                        quantity: SharedString::from(i.quantity.to_string()),
+                        unit: SharedString::from(i.unit.as_str()),
+                        unit_price: SharedString::from(format_amount_ua(i.unit_price)),
+                        amount: SharedString::from(format_amount_ua(i.amount)),
+                    })
+                    .collect::<Vec<_>>(),
+            )));
+
+            ui.set_act_card_tasks(ModelRc::new(VecModel::from(
+                tasks
+                    .iter()
+                    .map(|t| ActCardTaskRow {
+                        title: SharedString::from(t.title.as_str()),
+                        status: SharedString::from(t.status.label()),
+                        priority: SharedString::from(t.priority.as_str()),
+                        due_date: SharedString::from(
+                            t.due_date
+                                .map(|d| d.format("%d.%m.%Y").to_string())
+                                .unwrap_or_else(|| "—".to_string()),
+                        ),
+                    })
+                    .collect::<Vec<_>>(),
+            )));
+
+            ui.set_show_act_card(true);
+        })
+        .map_err(anyhow::Error::from)?;
+
+    Ok(())
+}
+
 async fn open_counterparty_card(
     pool: &sqlx::PgPool,
     ui_weak: Weak<MainWindow>,
@@ -5145,6 +5468,7 @@ mod tests {
         let act = ActListRow {
             id: Uuid::new_v4(),
             number: "АКТ-2026-007".to_string(),
+            direction: "outgoing".to_string(),
             date: chrono::NaiveDate::from_ymd_opt(2026, 4, 1).expect("valid date"),
             counterparty_name: "ФОП Іваненко".to_string(),
             total_amount: Decimal::new(12345, 2),
@@ -5230,6 +5554,7 @@ mod tests {
         let act_data = to_acts_table_data(&[ActListRow {
             id: Uuid::new_v4(),
             number: "АКТ-1".to_string(),
+            direction: "outgoing".to_string(),
             date: chrono::NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
             counterparty_name: "ФОП".to_string(),
             total_amount: Decimal::new(1000, 2),
