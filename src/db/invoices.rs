@@ -211,18 +211,21 @@ pub async fn create(pool: &PgPool, company_id: Uuid, data: &NewInvoice) -> Resul
     // 1. Вставляємо заголовок (total_amount = 0, оновимо після позицій)
     let invoice = sqlx::query_as::<_, Invoice>(
         r#"
-        INSERT INTO invoices (company_id, number, counterparty_id, contract_id, date, notes, bas_id)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        RETURNING id, company_id, number, counterparty_id, contract_id, date,
-                  total_amount, vat_amount, status, notes, pdf_path, bas_id,
-                  created_at, updated_at
+        INSERT INTO invoices (company_id, number, counterparty_id, contract_id, category_id,
+                              date, expected_payment_date, notes, bas_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        RETURNING id, company_id, number, counterparty_id, contract_id, category_id,
+                  date, expected_payment_date, total_amount, vat_amount,
+                  status, notes, pdf_path, bas_id, created_at, updated_at
         "#,
     )
     .bind(company_id)
     .bind(&data.number)
     .bind(data.counterparty_id)
     .bind(data.contract_id)
+    .bind(data.category_id)
     .bind(data.date)
+    .bind(data.expected_payment_date)
     .bind(&data.notes)
     .bind(&data.bas_id)
     .fetch_one(&mut *tx)
@@ -257,9 +260,9 @@ pub async fn create(pool: &PgPool, company_id: Uuid, data: &NewInvoice) -> Resul
         r#"
         UPDATE invoices SET total_amount = $2, updated_at = NOW()
         WHERE id = $1
-        RETURNING id, company_id, number, counterparty_id, contract_id, date,
-                  total_amount, vat_amount, status, notes, pdf_path, bas_id,
-                  created_at, updated_at
+        RETURNING id, company_id, number, counterparty_id, contract_id, category_id,
+                  date, expected_payment_date, total_amount, vat_amount,
+                  status, notes, pdf_path, bas_id, created_at, updated_at
         "#,
     )
     .bind(invoice.id)
@@ -287,23 +290,27 @@ pub async fn update_with_items(
     let invoice = sqlx::query_as::<_, Invoice>(
         r#"
         UPDATE invoices
-        SET number          = $2,
-            counterparty_id = $3,
-            contract_id     = $4,
-            date            = $5,
-            notes           = $6,
-            updated_at      = NOW()
+        SET number                = $2,
+            counterparty_id       = $3,
+            contract_id           = $4,
+            category_id           = $5,
+            date                  = $6,
+            expected_payment_date = $7,
+            notes                 = $8,
+            updated_at            = NOW()
         WHERE id = $1
-        RETURNING id, company_id, number, counterparty_id, contract_id, date,
-                  total_amount, vat_amount, status, notes, pdf_path, bas_id,
-                  created_at, updated_at
+        RETURNING id, company_id, number, counterparty_id, contract_id, category_id,
+                  date, expected_payment_date, total_amount, vat_amount,
+                  status, notes, pdf_path, bas_id, created_at, updated_at
         "#,
     )
     .bind(id)
     .bind(&data.number)
     .bind(data.counterparty_id)
     .bind(data.contract_id)
+    .bind(data.category_id)
     .bind(data.date)
+    .bind(data.expected_payment_date)
     .bind(&data.notes)
     .fetch_optional(&mut *tx)
     .await?;
@@ -348,9 +355,9 @@ pub async fn update_with_items(
         r#"
         UPDATE invoices SET total_amount = $2, updated_at = NOW()
         WHERE id = $1
-        RETURNING id, company_id, number, counterparty_id, contract_id, date,
-                  total_amount, vat_amount, status, notes, pdf_path, bas_id,
-                  created_at, updated_at
+        RETURNING id, company_id, number, counterparty_id, contract_id, category_id,
+                  date, expected_payment_date, total_amount, vat_amount,
+                  status, notes, pdf_path, bas_id, created_at, updated_at
         "#,
     )
     .bind(invoice.id)
@@ -401,9 +408,9 @@ pub async fn change_status(
         r#"
         UPDATE invoices SET status = $2, updated_at = NOW()
         WHERE id = $1
-        RETURNING id, company_id, number, counterparty_id, contract_id, date,
-                  total_amount, vat_amount, status, notes, pdf_path, bas_id,
-                  created_at, updated_at
+        RETURNING id, company_id, number, counterparty_id, contract_id, category_id,
+                  date, expected_payment_date, total_amount, vat_amount,
+                  status, notes, pdf_path, bas_id, created_at, updated_at
         "#,
     )
     .bind(id)

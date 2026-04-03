@@ -280,16 +280,16 @@ pub async fn get_kpi(pool: &PgPool, company_id: Uuid) -> Result<ActKpi> {
 /// Отримати один акт разом з усіма його позиціями.
 /// Повертає `None` якщо акт не знайдено.
 pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<(Act, Vec<ActItem>)>> {
-    let act = sqlx::query_as!(
-        Act,
+    let act = sqlx::query_as::<_, Act>(
         r#"
-        SELECT id, number, counterparty_id, contract_id, date, total_amount,
-               status AS "status: ActStatus", notes, bas_id, created_at, updated_at
+        SELECT id, number, counterparty_id, contract_id, category_id,
+               date, expected_payment_date, total_amount,
+               status, notes, bas_id, created_at, updated_at
         FROM acts
         WHERE id = $1
         "#,
-        id
     )
+    .bind(id)
     .fetch_optional(pool)
     .await?;
 
@@ -298,8 +298,7 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<(Act, Vec<ActIt
     };
 
     // Окремий запит на позиції — sqlx не підтримує JOIN з масивом у query_as!
-    let items = sqlx::query_as!(
-        ActItem,
+    let items = sqlx::query_as::<_, ActItem>(
         r#"
         SELECT id, act_id, description, quantity, unit, unit_price, amount,
                created_at, updated_at
@@ -307,8 +306,8 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<(Act, Vec<ActIt
         WHERE act_id = $1
         ORDER BY created_at
         "#,
-        id
     )
+    .bind(id)
     .fetch_all(pool)
     .await?;
 
@@ -331,16 +330,20 @@ pub async fn create(pool: &PgPool, company_id: Uuid, data: &NewAct) -> Result<Ac
     // Runtime-style query щоб включити company_id без перегенерації sqlx cache.
     // ActStatus має #[derive(sqlx::Type)] — тому sqlx декодує ENUM автоматично.
     let act = sqlx::query_as::<_, Act>(
-        r#"INSERT INTO acts (company_id, number, counterparty_id, contract_id, date, notes, bas_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
-           RETURNING id, number, counterparty_id, contract_id, date, total_amount,
+        r#"INSERT INTO acts (company_id, number, counterparty_id, contract_id, category_id,
+                             date, expected_payment_date, notes, bas_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           RETURNING id, number, counterparty_id, contract_id, category_id,
+                     date, expected_payment_date, total_amount,
                      status, notes, bas_id, created_at, updated_at"#
     )
     .bind(company_id)
     .bind(&data.number)
     .bind(data.counterparty_id)
     .bind(data.contract_id)
+    .bind(data.category_id)
     .bind(data.date)
+    .bind(data.expected_payment_date)
     .bind(&data.notes)
     .bind(&data.bas_id)
     .fetch_one(&mut *tx)
@@ -377,7 +380,8 @@ pub async fn create(pool: &PgPool, company_id: Uuid, data: &NewAct) -> Result<Ac
     let act = sqlx::query_as::<_, Act>(
         r#"UPDATE acts SET total_amount = $2, updated_at = NOW()
            WHERE id = $1
-           RETURNING id, number, counterparty_id, contract_id, date, total_amount,
+           RETURNING id, number, counterparty_id, contract_id, category_id,
+                     date, expected_payment_date, total_amount,
                      status, notes, bas_id, created_at, updated_at"#
     )
     .bind(act.id)
@@ -392,27 +396,31 @@ pub async fn create(pool: &PgPool, company_id: Uuid, data: &NewAct) -> Result<Ac
 /// Оновити заголовок акту (без позицій — MVP).
 /// Повертає `None` якщо акт не знайдено.
 pub async fn update(pool: &PgPool, id: Uuid, data: &UpdateAct) -> Result<Option<Act>> {
-    let row = sqlx::query_as!(
-        Act,
+    let row = sqlx::query_as::<_, Act>(
         r#"
         UPDATE acts
-        SET number          = $2,
-            counterparty_id = $3,
-            contract_id     = $4,
-            date            = $5,
-            notes           = $6,
-            updated_at      = NOW()
+        SET number                = $2,
+            counterparty_id       = $3,
+            contract_id           = $4,
+            category_id           = $5,
+            date                  = $6,
+            expected_payment_date = $7,
+            notes                 = $8,
+            updated_at            = NOW()
         WHERE id = $1
-        RETURNING id, number, counterparty_id, contract_id, date, total_amount,
-                  status AS "status: ActStatus", notes, bas_id, created_at, updated_at
+        RETURNING id, number, counterparty_id, contract_id, category_id,
+                  date, expected_payment_date, total_amount,
+                  status, notes, bas_id, created_at, updated_at
         "#,
-        id,
-        data.number,
-        data.counterparty_id,
-        data.contract_id,
-        data.date,
-        data.notes,
     )
+    .bind(id)
+    .bind(&data.number)
+    .bind(data.counterparty_id)
+    .bind(data.contract_id)
+    .bind(data.category_id)
+    .bind(data.date)
+    .bind(data.expected_payment_date)
+    .bind(&data.notes)
     .fetch_optional(pool)
     .await?;
 
@@ -449,17 +457,17 @@ pub async fn change_status(pool: &PgPool, id: Uuid, new_status: ActStatus) -> Re
         );
     }
 
-    let act = sqlx::query_as!(
-        Act,
+    let act = sqlx::query_as::<_, Act>(
         r#"
         UPDATE acts SET status = $2, updated_at = NOW()
         WHERE id = $1
-        RETURNING id, number, counterparty_id, contract_id, date, total_amount,
-                  status AS "status: ActStatus", notes, bas_id, created_at, updated_at
+        RETURNING id, number, counterparty_id, contract_id, category_id,
+                  date, expected_payment_date, total_amount,
+                  status, notes, bas_id, created_at, updated_at
         "#,
-        id,
-        new_status as ActStatus,
     )
+    .bind(id)
+    .bind(new_status)
     .fetch_optional(pool)
     .await?;
 
@@ -489,27 +497,31 @@ pub async fn update_with_items(
     let mut tx = pool.begin().await?;
 
     // 1. Оновлюємо заголовок акту
-    let act = sqlx::query_as!(
-        Act,
+    let act = sqlx::query_as::<_, Act>(
         r#"
         UPDATE acts
-        SET number          = $2,
-            counterparty_id = $3,
-            contract_id     = $4,
-            date            = $5,
-            notes           = $6,
-            updated_at      = NOW()
+        SET number                 = $2,
+            counterparty_id        = $3,
+            contract_id            = $4,
+            category_id            = $5,
+            date                   = $6,
+            expected_payment_date  = $7,
+            notes                  = $8,
+            updated_at             = NOW()
         WHERE id = $1
-        RETURNING id, number, counterparty_id, contract_id, date, total_amount,
-                  status AS "status: ActStatus", notes, bas_id, created_at, updated_at
+        RETURNING id, number, counterparty_id, contract_id, category_id,
+                  date, expected_payment_date, total_amount,
+                  status, notes, bas_id, created_at, updated_at
         "#,
-        id,
-        data.number,
-        data.counterparty_id,
-        data.contract_id,
-        data.date,
-        data.notes,
     )
+    .bind(id)
+    .bind(&data.number)
+    .bind(data.counterparty_id)
+    .bind(data.contract_id)
+    .bind(data.category_id)
+    .bind(data.date)
+    .bind(data.expected_payment_date)
+    .bind(&data.notes)
     .fetch_optional(&mut *tx)
     .await?;
 
@@ -548,17 +560,17 @@ pub async fn update_with_items(
     }
 
     // 4. Оновлюємо total_amount
-    let act = sqlx::query_as!(
-        Act,
+    let act = sqlx::query_as::<_, Act>(
         r#"
         UPDATE acts SET total_amount = $2, updated_at = NOW()
         WHERE id = $1
-        RETURNING id, number, counterparty_id, contract_id, date, total_amount,
-                  status AS "status: ActStatus", notes, bas_id, created_at, updated_at
+        RETURNING id, number, counterparty_id, contract_id, category_id,
+                  date, expected_payment_date, total_amount,
+                  status, notes, bas_id, created_at, updated_at
         "#,
-        act.id,
-        total,
     )
+    .bind(act.id)
+    .bind(total)
     .fetch_one(&mut *tx)
     .await?;
 

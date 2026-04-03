@@ -21,17 +21,18 @@ import { InvoiceList }      from "invoices/invoice_list.slint";
 import { InvoiceForm }      from "invoices/invoice_form.slint";
 import { CompanyList, CompanyItem } from "companies/company_list.slint";
 import { CompanyForm }      from "companies/company_form.slint";
+import { PaymentList }      from "payments/payment_list.slint";
 
 global MenuIcons {
-    out property <image> dashboard: @image-url("assets/menu/dashboard.svg");
-    out property <image> acts: @image-url("assets/menu/acts.svg");
-    out property <image> invoices: @image-url("assets/menu/invoices.svg");
-    out property <image> counterparties: @image-url("assets/menu/counterparties.svg");
-    out property <image> payments: @image-url("assets/menu/payments.svg");
-    out property <image> reports: @image-url("assets/menu/reports.svg");
-    out property <image> todo: @image-url("assets/menu/todo.svg");
-    out property <image> calendar: @image-url("assets/menu/calendar.svg");
-    out property <image> settings: @image-url("assets/menu/settings.svg");
+    out property <image> dashboard:      @image-url("assets/icons/Home.svg");
+    out property <image> acts:           @image-url("assets/icons/Documents.svg");
+    out property <image> invoices:       @image-url("assets/icons/Outgoing.svg");
+    out property <image> counterparties: @image-url("assets/icons/Counterparties.svg");
+    out property <image> payments:       @image-url("assets/icons/Payments.svg");
+    out property <image> reports:        @image-url("assets/icons/Chart-Bar.svg");
+    out property <image> todo:           @image-url("assets/icons/To-Do.svg");
+    out property <image> calendar:       @image-url("assets/icons/Calendar.svg");
+    out property <image> settings:       @image-url("assets/icons/Settings.svg");
 }
 
 // в”Ђв”Ђ NavItem вЂ” РµР»РµРјРµРЅС‚ Р±С–С‡РЅРѕС— РЅР°РІС–РіР°С†С–С— в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
@@ -49,9 +50,9 @@ component NavItem {
     min-width: 0;
 
     rect := Rectangle {
-        border-radius: 8px;
+        border-radius: Theme.radius-md;
         background: root.active
-            ? Theme.primary.with-alpha(0.18)
+            ? Theme.sidebar-active
             : ((nav-touch.has-hover && !root.disabled) ? Theme.sidebar-hover : transparent);
         animate background { duration: 120ms; easing: ease; }
 
@@ -63,7 +64,7 @@ component NavItem {
             width: 3px;
             height: 22px;
             border-radius: 2px;
-            background: Theme.primary;
+            background: Theme.sidebar-active-bar;
         }
 
         HorizontalLayout {
@@ -83,14 +84,16 @@ component NavItem {
                     height: parent.height;
                     source: root.icon;
                     image-fit: contain;
+                    colorize: root.active ? Theme.sidebar-active-icon : Theme.sidebar-icon;
                 }
             }
 
             Text {
                 text: root.label;
-                font-size: 13px;
+                font-size: Theme.font-md;
                 font-weight: root.active ? 600 : 400;
-                color: root.active ? #ffffff : (root.disabled ? Theme.sidebar-label.with-alpha(0.55) : Theme.sidebar-text);
+                color: root.active ? Theme.text-white
+                    : (root.disabled ? Theme.sidebar-label : Theme.sidebar-text);
                 vertical-alignment: center;
                 animate color { duration: 150ms; easing: ease; }
             }
@@ -207,6 +210,14 @@ export component MainWindow inherits Window {
     in property <[string]>                 act-task-row-statuses;
     in property <[string]>                 act-task-row-priorities;
     in property <bool>                     act-tasks-loading: false;
+    // Категорія/Договір/Дата оплати для форми акту
+    in property <[string]> act-form-category-names;
+    in property <[string]> act-form-category-ids;
+    in property <int>      act-form-category-index: 0;
+    in property <[string]> act-form-contract-names;
+    in property <[string]> act-form-contract-ids;
+    in property <int>      act-form-contract-index: 0;
+    in property <string>   act-form-expected-payment-date: "";
 
     // в”Ђв”Ђ Р”Р°РЅС– РЅР°РєР»Р°РґРЅРёС… в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     in property <[[StandardListViewItem]]> invoice-rows;
@@ -230,6 +241,14 @@ export component MainWindow inherits Window {
     in property <[string]> invoice-form-item-units;
     in property <[string]> invoice-form-item-prices;
     in property <[string]> invoice-form-item-amounts;
+    // Категорія/Договір/Дата оплати для форми накладної
+    in property <[string]> invoice-form-category-names;
+    in property <[string]> invoice-form-category-ids;
+    in property <int>      invoice-form-category-index: 0;
+    in property <[string]> invoice-form-contract-names;
+    in property <[string]> invoice-form-contract-ids;
+    in property <int>      invoice-form-contract-index: 0;
+    in property <string>   invoice-form-expected-payment-date: "";
 
     // в”Ђв”Ђ Р”Р°РЅС– Р·Р°РґР°С‡ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     in property <[[StandardListViewItem]]> task-rows;
@@ -276,9 +295,10 @@ export component MainWindow inherits Window {
     callback act-pdf-clicked(string);
 
     // в”Ђв”Ђ РљРѕР»Р±РµРєРё С„РѕСЂРјРё Р°РєС‚Сѓ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-    callback act-form-save(string, string, string, string);
-    callback act-form-save-draft(string, string, string, string);
-    callback act-form-update(string, string, string, string);
+    // number, date, cp_id, notes, category_id, contract_id, expected_payment_date
+    callback act-form-save(string, string, string, string, string, string, string);
+    callback act-form-save-draft(string, string, string, string, string, string, string);
+    callback act-form-update(string, string, string, string, string, string, string);
     callback act-form-cancel();
     callback act-form-add-item();
     callback act-form-remove-item(int);
@@ -297,12 +317,34 @@ export component MainWindow inherits Window {
     callback invoice-edit-clicked(string);
 
     // в”Ђв”Ђ РљРѕР»Р±РµРєРё С„РѕСЂРјРё РЅР°РєР»Р°РґРЅРѕС— в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-    callback invoice-form-save(string, string, string, string);
-    callback invoice-form-update(string, string, string, string);
+    // number, date, cp_id, notes, category_id, contract_id, expected_payment_date
+    callback invoice-form-save(string, string, string, string, string, string, string);
+    callback invoice-form-update(string, string, string, string, string, string, string);
     callback invoice-form-cancel();
     callback invoice-form-add-item();
     callback invoice-form-remove-item(int);
     callback invoice-form-item-changed(int, string, string);
+
+    // ── Дані платежів ──────────────────────────────────────────────────────
+    in property <[string]> payment-row-ids;
+    in property <[string]> payment-row-dates;
+    in property <[string]> payment-row-counterparties;
+    in property <[string]> payment-row-descriptions;
+    in property <[string]> payment-row-banks;
+    in property <[string]> payment-row-amounts;
+    in property <[string]> payment-row-directions;
+    in property <[bool]>   payment-row-reconciled;
+    in property <bool>     payments-loading: false;
+    in property <string>   payment-total-income: "0.00";
+    in property <string>   payment-total-expense: "0.00";
+
+    // ── Колбеки платежів ───────────────────────────────────────────────────
+    callback payment-direction-filter-changed(int);
+    callback payment-search-changed(string);
+    callback payment-create-clicked();
+    callback payment-edit-clicked(string);
+    callback payment-delete-clicked(string);
+    callback payment-reconcile-clicked(string);
 
     // в”Ђв”Ђ РљРѕР»Р±РµРєРё Р·Р°РґР°С‡ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     callback task-search-changed(string);
@@ -378,21 +420,34 @@ export component MainWindow inherits Window {
                 Rectangle {
                     height: 76px;
 
+                    // Логотип-марка (36×36 синій квадрат з «A»)
+                    Rectangle {
+                        x: 12px; y: 16px;
+                        width: 36px; height: 36px;
+                        border-radius: Theme.radius-md;
+                        background: Theme.primary;
+                        Text {
+                            x: 0; y: 7px; width: 36px;
+                            horizontal-alignment: center;
+                            text: "A"; font-size: 18px; font-weight: 700; color: #ffffff;
+                        }
+                    }
+
                     Text {
-                        x: 20px;
-                        y: 16px;
+                        x: 56px;
+                        y: 18px;
                         text: "Acta";
-                        font-size: 20px;
-                        font-weight: 600;
+                        font-size: Theme.font-xl;
+                        font-weight: 700;
                         color: #ffffff;
                     }
 
                     Text {
-                        x: 20px;
-                        y: 40px;
+                        x: 56px;
+                        y: 38px;
                         text: "РЈРїСЂР°РІР»С–РЅСЃСЊРєРёР№ РѕР±Р»С–Рє";
-                        font-size: 11px;
-                        color: Theme.sidebar-text-muted;
+                        font-size: Theme.font-xs;
+                        color: Theme.sidebar-text;
                     }
                 }
 
@@ -474,7 +529,7 @@ export component MainWindow inherits Window {
                     height: 1px;
                     x: 20px;
                     width: 180px;
-                    background: Theme.sidebar-border;
+                    background: Theme.sidebar-divider;
                     vertical-stretch: 0;
                 }
 
@@ -483,7 +538,7 @@ export component MainWindow inherits Window {
                     x: 20px;
                     height: 28px;
                     text: "МЕНЮ";
-                    font-size: 9px;
+                    font-size: Theme.font-xs;
                     font-weight: 600;
                     color: Theme.sidebar-label;
                     vertical-alignment: center;
@@ -540,7 +595,7 @@ export component MainWindow inherits Window {
                     height: 1px;
                     x: 20px;
                     width: 180px;
-                    background: Theme.sidebar-border;
+                    background: Theme.sidebar-divider;
                     vertical-stretch: 0;
                 }
 
@@ -548,7 +603,7 @@ export component MainWindow inherits Window {
                     x: 20px;
                     height: 28px;
                     text: "УТИЛІТИ";
-                    font-size: 9px;
+                    font-size: Theme.font-xs;
                     font-weight: 600;
                     color: Theme.sidebar-label;
                     vertical-alignment: center;
@@ -585,7 +640,7 @@ export component MainWindow inherits Window {
                     vertical-stretch: 0;
 
                     Rectangle {
-                        background: Theme.sidebar-border;
+                        background: Theme.sidebar-divider;
                     }
                 }
 
@@ -609,7 +664,7 @@ export component MainWindow inherits Window {
 
         // в•ђв•ђ РћР±Р»Р°СЃС‚СЊ РєРѕРЅС‚РµРЅС‚Сѓ в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
         Rectangle {
-            background: Theme.bg;
+            background: Theme.bg-page;
 
             // в”Ђв”Ђ РЎС‚РѕСЂС–РЅРєР° 0: РљРѕРЅС‚СЂР°РіРµРЅС‚Рё вЂ” СЃРїРёСЃРѕРє в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
             if root.current-page == 0 && !root.show-cp-form : CounterpartyList {
@@ -695,10 +750,17 @@ export component MainWindow inherits Window {
                 act-task-row-statuses: root.act-task-row-statuses;
                 act-task-row-priorities: root.act-task-row-priorities;
                 act-tasks-loading:    root.act-tasks-loading;
+                category-names:       root.act-form-category-names;
+                category-ids:         root.act-form-category-ids;
+                act-category-index:   root.act-form-category-index;
+                contract-names:       root.act-form-contract-names;
+                contract-ids:         root.act-form-contract-ids;
+                act-contract-index:   root.act-form-contract-index;
+                act-expected-payment-date: root.act-form-expected-payment-date;
 
-                save(n, d, c, notes)       => { root.act-form-save(n, d, c, notes); }
-                save-draft(n, d, c, notes) => { root.act-form-save-draft(n, d, c, notes); }
-                update(n, d, c, notes)     => { root.act-form-update(n, d, c, notes); }
+                save(n, d, c, notes, cat, con, exp)       => { root.act-form-save(n, d, c, notes, cat, con, exp); }
+                save-draft(n, d, c, notes, cat, con, exp) => { root.act-form-save-draft(n, d, c, notes, cat, con, exp); }
+                update(n, d, c, notes, cat, con, exp)     => { root.act-form-update(n, d, c, notes, cat, con, exp); }
                 cancel                     => { root.act-form-cancel(); }
                 add-item                   => { root.act-form-add-item(); }
                 remove-item(i)             => { root.act-form-remove-item(i); }
@@ -802,9 +864,16 @@ export component MainWindow inherits Window {
                 item-units:           root.invoice-form-item-units;
                 item-prices:          root.invoice-form-item-prices;
                 item-amounts:         root.invoice-form-item-amounts;
+                category-names:       root.invoice-form-category-names;
+                category-ids:         root.invoice-form-category-ids;
+                invoice-category-index: root.invoice-form-category-index;
+                contract-names:       root.invoice-form-contract-names;
+                contract-ids:         root.invoice-form-contract-ids;
+                invoice-contract-index: root.invoice-form-contract-index;
+                invoice-expected-payment-date: root.invoice-form-expected-payment-date;
 
-                save(n, d, c, notes)        => { root.invoice-form-save(n, d, c, notes); }
-                update(n, d, c, notes)      => { root.invoice-form-update(n, d, c, notes); }
+                save(n, d, c, notes, cat, con, exp)   => { root.invoice-form-save(n, d, c, notes, cat, con, exp); }
+                update(n, d, c, notes, cat, con, exp) => { root.invoice-form-update(n, d, c, notes, cat, con, exp); }
                 cancel                      => { root.invoice-form-cancel(); }
                 add-item                    => { root.invoice-form-add-item(); }
                 remove-item(i)              => { root.invoice-form-remove-item(i); }
@@ -837,15 +906,25 @@ export component MainWindow inherits Window {
                 add-todo-clicked => { root.dashboard-add-todo-clicked(); }
             }
 
-            if root.current-page == 3 : Rectangle {
-                Text {
-                    text: "рџ’°  РџР»Р°С‚РµР¶С–\nР‘СѓРґРµ СЂРµР°Р»С–Р·РѕРІР°РЅРѕ Сѓ РЅР°СЃС‚СѓРїРЅС–Р№ РІРµСЂСЃС–С—";
-                    color: Theme.text-muted;
-                    font-size: 16px;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    wrap: word-wrap;
-                }
+            if root.current-page == 3 : PaymentList {
+                row-ids:             root.payment-row-ids;
+                row-dates:           root.payment-row-dates;
+                row-counterparties:  root.payment-row-counterparties;
+                row-descriptions:    root.payment-row-descriptions;
+                row-banks:           root.payment-row-banks;
+                row-amounts:         root.payment-row-amounts;
+                row-directions:      root.payment-row-directions;
+                row-reconciled:      root.payment-row-reconciled;
+                loading:             root.payments-loading;
+                total-income:        root.payment-total-income;
+                total-expense:       root.payment-total-expense;
+
+                direction-filter-changed(i) => { root.payment-direction-filter-changed(i); }
+                search-changed(q)           => { root.payment-search-changed(q); }
+                create-clicked              => { root.payment-create-clicked(); }
+                edit-clicked(id)            => { root.payment-edit-clicked(id); }
+                delete-clicked(id)          => { root.payment-delete-clicked(id); }
+                reconcile-clicked(id)       => { root.payment-reconcile-clicked(id); }
             }
 
             if root.current-page == 4 : Rectangle {

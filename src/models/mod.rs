@@ -1,15 +1,24 @@
 // Моделі даних — Rust структури, що відповідають таблицям БД
 pub mod act;
+pub mod category;
 pub mod company;
+pub mod contract;
 pub mod counterparty;
 pub mod dashboard;
 pub mod invoice;
+pub mod payment;
 pub mod task;
 
 #[allow(unused_imports)]
 pub use act::{Act, ActItem, ActListRow, ActStatus, NewAct, NewActItem, UpdateAct};
 #[allow(unused_imports)]
+pub use category::{Category, CategorySelectItem, NewCategory, UpdateCategory};
+#[allow(unused_imports)]
 pub use company::{Company, CompanySummary, NewCompany, UpdateCompany};
+#[allow(unused_imports)]
+pub use contract::{
+    Contract, ContractListRow, ContractSelectItem, ContractStatus, NewContract, UpdateContract,
+};
 #[allow(unused_imports)]
 pub use invoice::{
     Invoice, InvoiceItem, InvoiceListRow, InvoiceStatus, NewInvoice, NewInvoiceItem, UpdateInvoice,

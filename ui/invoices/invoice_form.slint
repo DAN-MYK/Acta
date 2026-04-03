@@ -32,11 +32,28 @@ export component InvoiceForm {
     in property <[string]> item-prices;    // "price" (не "unit-price")
     in property <[string]> item-amounts;   // quantity × price, рахує Rust
 
+    // ── Категорії та договори (необов'язково) ─────────────────────────────
+    // category-names/ids[0] = "" (без категорії), [1..] = реальні значення
+    in property <[string]> category-names: [];
+    in property <[string]> category-ids:   [];
+    in property <int>      invoice-category-index: 0;
+
+    in property <[string]> contract-names: [];
+    in property <[string]> contract-ids:   [];
+    in property <int>      invoice-contract-index: 0;
+
+    in property <string>   invoice-expected-payment-date: "";
+
     // ── Колбеки ─────────────────────────────────────────────────────────────
+    // Параметри: number, date, cp_id, notes, cat_id, con_id, exp_dt
     callback save(   /* number */ string, /* date */ string,
-                     /* counterparty_id */ string, /* notes */ string);
+                     /* cp_id  */ string, /* notes */ string,
+                     /* cat_id */ string, /* con_id */ string,
+                     /* exp_dt */ string);
     callback update( /* number */ string, /* date */ string,
-                     /* counterparty_id */ string, /* notes */ string);
+                     /* cp_id  */ string, /* notes */ string,
+                     /* cat_id */ string, /* con_id */ string,
+                     /* exp_dt */ string);
     callback cancel();
 
     callback add-item();
@@ -166,6 +183,75 @@ export component InvoiceForm {
                         notes-field := TextEdit {
                             text: root.invoice-notes;
                             wrap: word-wrap;
+                        }
+                    }
+                }
+
+                Row {
+                    Text {
+                        text: "Категорія";
+                        font-size: 13px;
+                        color: Theme.text-sub;
+                        vertical-alignment: center;
+                        vertical-stretch: 0;
+                        horizontal-stretch: 0;
+                        min-width: 120px;
+                    }
+                    Rectangle {
+                        height: 40px;
+                        background: Theme.surface;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        border-radius: 8px;
+                        inv-cat-combo := ComboBox {
+                            model: root.category-names;
+                            current-index: root.invoice-category-index;
+                        }
+                    }
+                }
+
+                Row {
+                    Text {
+                        text: "Договір";
+                        font-size: 13px;
+                        color: Theme.text-sub;
+                        vertical-alignment: center;
+                        vertical-stretch: 0;
+                        horizontal-stretch: 0;
+                        min-width: 120px;
+                    }
+                    Rectangle {
+                        height: 40px;
+                        background: Theme.surface;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        border-radius: 8px;
+                        inv-con-combo := ComboBox {
+                            model: root.contract-names;
+                            current-index: root.invoice-contract-index;
+                        }
+                    }
+                }
+
+                Row {
+                    Text {
+                        text: "Дата оплати";
+                        font-size: 13px;
+                        color: Theme.text-sub;
+                        vertical-alignment: center;
+                        vertical-stretch: 0;
+                        horizontal-stretch: 0;
+                        min-width: 120px;
+                    }
+                    Rectangle {
+                        height: 40px;
+                        background: Theme.surface;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        border-radius: 8px;
+                        inv-exp-date-field := LineEdit {
+                            text: root.invoice-expected-payment-date;
+                            placeholder-text: "ДД.ММ.РРРР (необов'язково)";
                         }
                     }
                 }
@@ -387,14 +473,20 @@ export component InvoiceForm {
                                 number-field.text,
                                 date-field.text,
                                 root.counterparty-ids[cp-combo.current-index],
-                                notes-field.text
+                                notes-field.text,
+                                root.category-ids[inv-cat-combo.current-index],
+                                root.contract-ids[inv-con-combo.current-index],
+                                inv-exp-date-field.text
                             );
                         } else {
                             root.save(
                                 number-field.text,
                                 date-field.text,
                                 root.counterparty-ids[cp-combo.current-index],
-                                notes-field.text
+                                notes-field.text,
+                                root.category-ids[inv-cat-combo.current-index],
+                                root.contract-ids[inv-con-combo.current-index],
+                                inv-exp-date-field.text
                             );
                         }
                     }

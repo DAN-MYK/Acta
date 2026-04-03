@@ -1,0 +1,94 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id, number, counterparty_id, contract_id, date, total_amount,\n               status AS \"status: ActStatus\", notes, bas_id, created_at, updated_at\n        FROM acts\n        WHERE id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "number",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "counterparty_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "contract_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 5,
+        "name": "total_amount",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 6,
+        "name": "status: ActStatus",
+        "type_info": {
+          "Custom": {
+            "name": "act_status",
+            "kind": {
+              "Enum": [
+                "draft",
+                "issued",
+                "signed",
+                "paid"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "notes",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "bas_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 10,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "b21a27d0f22d4f88c7a6a59895b3ba55fa972d1d7256e348845a2ef59e566bbd"
+}

@@ -162,6 +162,9 @@ async fn main() -> Result<()> {
     ui.set_tasks_loading(true);
     reload_tasks(&pool, ui.as_weak(), String::new(), false).await?;
 
+    // ── Початкове завантаження платежів ──────────────────────────────────────
+    reload_payments(&pool, ui.as_weak(), cid, None).await?;
+
     // ── Колбек: пошук ────────────────────────────────────────────────────────
     //
     // Ключова проблема async + Slint:
@@ -429,10 +432,11 @@ async fn main() -> Result<()> {
         let cid = *active_company_id_create.lock().unwrap();
 
         tokio::spawn(async move {
-            // tokio::join! — запускає обидва futures паралельно (не послідовно)
-            let (cp_result, num_result) = tokio::join!(
+            // tokio::join! — запускає три futures паралельно
+            let (cp_result, num_result, cat_result) = tokio::join!(
                 db::acts::counterparties_for_select(&pool, cid),
                 db::acts::generate_next_number(&pool, cid),
+                db::categories::list_all_for_select(&pool, cid),
             );
 
             let counterparties = match cp_result {
@@ -449,6 +453,7 @@ async fn main() -> Result<()> {
                     return;
                 }
             };
+            let categories = cat_result.unwrap_or_default();
 
             // Розбиваємо Vec<(Uuid, String)> на два паралельних Vec<SharedString>
             let cp_names: Vec<SharedString> = counterparties
@@ -459,6 +464,16 @@ async fn main() -> Result<()> {
                 .iter()
                 .map(|(id, _)| SharedString::from(id.to_string().as_str()))
                 .collect();
+
+            // Категорії: перший елемент = "— без категорії —" (порожній id)
+            let mut cat_names: Vec<SharedString> =
+                vec![SharedString::from("— без категорії —")];
+            let mut cat_ids: Vec<SharedString> = vec![SharedString::from("")];
+            for c in &categories {
+                let prefix = if c.depth > 0 { "  └─ " } else { "" };
+                cat_names.push(SharedString::from(format!("{}{}", prefix, c.name)));
+                cat_ids.push(SharedString::from(c.id.to_string()));
+            }
 
             // Сьогоднішня дата у форматі ДД.ММ.РРРР — обчислюємо до closure (sync)
             let today = chrono::Local::now()
@@ -476,6 +491,10 @@ async fn main() -> Result<()> {
                     ui.set_act_form_is_edit(false);
                     ui.set_act_form_cp_names(ModelRc::new(VecModel::from(cp_names)));
                     ui.set_act_form_cp_ids(ModelRc::new(VecModel::from(cp_ids)));
+                    ui.set_act_form_category_names(ModelRc::new(VecModel::from(cat_names)));
+                    ui.set_act_form_category_ids(ModelRc::new(VecModel::from(cat_ids)));
+                    ui.set_act_form_category_index(0);
+                    ui.set_act_form_expected_payment_date(SharedString::from(""));
                     // Очищаємо позиції з попереднього відкриття форми
                     let empty: Vec<SharedString> = vec![];
                     ui.set_act_form_item_descriptions(ModelRc::new(VecModel::from(empty.clone())));
@@ -673,11 +692,12 @@ async fn main() -> Result<()> {
                 return;
             };
 
-            // tokio::join! — два незалежних запити паралельно (урок 2026-04-01)
-            let (act_result, cp_result, tasks_result) = tokio::join!(
+            // tokio::join! — незалежні запити паралельно (урок 2026-04-01)
+            let (act_result, cp_result, tasks_result, cat_result) = tokio::join!(
                 db::acts::get_for_edit(&pool, uuid),
                 db::acts::counterparties_for_select(&pool, cid),
                 db::tasks::list_by_act(&pool, uuid),
+                db::categories::list_all_for_select(&pool, cid),
             );
 
             let act_opt = match act_result {
@@ -701,6 +721,7 @@ async fn main() -> Result<()> {
                     return;
                 }
             };
+            let categories = cat_result.unwrap_or_default();
 
             let Some((act, items)) = act_opt else {
                 tracing::warn!("Акт {uuid} не знайдено.");
@@ -751,6 +772,19 @@ async fn main() -> Result<()> {
             let act_id_str = act.id.to_string();
             let total_str = format!("{:.2}", act.total_amount);
 
+            let mut cat_names: Vec<SharedString> = vec![SharedString::from("— без категорії —")];
+            let mut cat_ids: Vec<SharedString> = vec![SharedString::from("")];
+            for c in &categories {
+                let prefix = if c.depth > 0 { "  └─ " } else { "" };
+                cat_names.push(SharedString::from(format!("{}{}", prefix, c.name)));
+                cat_ids.push(SharedString::from(c.id.to_string()));
+            }
+            let cat_id_str = act.category_id.map(|id| id.to_string()).unwrap_or_default();
+            let cat_index = cat_ids.iter().position(|id| id.as_str() == cat_id_str).unwrap_or(0);
+            let exp_date_str = act.expected_payment_date
+                .map(|d| d.format("%d.%m.%Y").to_string())
+                .unwrap_or_default();
+
             ui_handle
                 .upgrade_in_event_loop(move |ui| {
                     let (task_rows, task_ids, task_statuses, task_priorities) =
@@ -764,6 +798,10 @@ async fn main() -> Result<()> {
                     ui.set_act_form_is_edit(true);
                     ui.set_act_form_cp_names(ModelRc::new(VecModel::from(cp_names)));
                     ui.set_act_form_cp_ids(ModelRc::new(VecModel::from(cp_ids)));
+                    ui.set_act_form_category_names(ModelRc::new(VecModel::from(cat_names)));
+                    ui.set_act_form_category_ids(ModelRc::new(VecModel::from(cat_ids)));
+                    ui.set_act_form_category_index(cat_index as i32);
+                    ui.set_act_form_expected_payment_date(SharedString::from(exp_date_str.as_str()));
                     ui.set_act_form_item_descriptions(ModelRc::new(VecModel::from(item_descs)));
                     ui.set_act_form_item_quantities(ModelRc::new(VecModel::from(item_qtys)));
                     ui.set_act_form_item_units(ModelRc::new(VecModel::from(item_units)));
@@ -789,7 +827,7 @@ async fn main() -> Result<()> {
     let act_state_update = act_state.clone();
     let active_company_id_update = active_company_id.clone();
 
-    ui.on_act_form_update(move |number, date_str, cp_id_str, notes| {
+    ui.on_act_form_update(move |number, date_str, cp_id_str, notes, cat_id_str, con_id_str, exp_date_str| {
         let Some(ui_ref) = ui_weak_update.upgrade() else {
             return;
         };
@@ -808,6 +846,9 @@ async fn main() -> Result<()> {
         } else {
             Some(notes.to_string())
         };
+        let cat_id_str = cat_id_str.to_string();
+        let con_id_str = con_id_str.to_string();
+        let exp_date_str = exp_date_str.to_string();
         let act_state = act_state_update.clone();
 
         tokio::spawn(async move {
@@ -847,11 +888,29 @@ async fn main() -> Result<()> {
                 }
             };
 
+            let cat_id_opt: Option<uuid::Uuid> = if cat_id_str.trim().is_empty() {
+                None
+            } else {
+                uuid::Uuid::parse_str(cat_id_str.as_str()).ok()
+            };
+            let con_id_opt: Option<uuid::Uuid> = if con_id_str.trim().is_empty() {
+                None
+            } else {
+                uuid::Uuid::parse_str(con_id_str.as_str()).ok()
+            };
+            let exp_date_opt: Option<chrono::NaiveDate> = if exp_date_str.trim().is_empty() {
+                None
+            } else {
+                NaiveDate::parse_from_str(exp_date_str.as_str(), "%d.%m.%Y").ok()
+            };
+
             let update_data = UpdateAct {
                 number: number.clone(),
                 counterparty_id: cp_uuid,
-                contract_id: None,
+                contract_id: con_id_opt,
+                category_id: cat_id_opt,
                 date,
+                expected_payment_date: exp_date_opt,
                 notes: notes_opt,
             };
 
@@ -1283,12 +1342,15 @@ async fn main() -> Result<()> {
     let act_state_save = act_state.clone();
     let active_company_id_save = active_company_id.clone();
 
-    ui.on_act_form_save(move |number, date_str, cp_id_str, notes| {
+    ui.on_act_form_save(move |number, date_str, cp_id_str, notes, cat_id_str, con_id_str, exp_date_str| {
         let Some(ui_ref) = ui_weak_save.upgrade() else {
             return;
         };
         let items = collect_form_items(&ui_ref);
         let cid = *active_company_id_save.lock().unwrap();
+        let cat_id_str = cat_id_str.to_string();
+        let con_id_str = con_id_str.to_string();
+        let exp_date_str = exp_date_str.to_string();
 
         spawn_save_act(
             pool_save.clone(),
@@ -1303,6 +1365,9 @@ async fn main() -> Result<()> {
             } else {
                 Some(notes.to_string())
             },
+            cat_id_str,
+            con_id_str,
+            exp_date_str,
             items,
         );
     });
@@ -1317,12 +1382,15 @@ async fn main() -> Result<()> {
     let act_state_draft = act_state.clone();
     let active_company_id_draft = active_company_id.clone();
 
-    ui.on_act_form_save_draft(move |number, date_str, cp_id_str, notes| {
+    ui.on_act_form_save_draft(move |number, date_str, cp_id_str, notes, cat_id_str, con_id_str, exp_date_str| {
         let Some(ui_ref) = ui_weak_draft.upgrade() else {
             return;
         };
         let items = collect_form_items(&ui_ref);
         let cid = *active_company_id_draft.lock().unwrap();
+        let cat_id_str = cat_id_str.to_string();
+        let con_id_str = con_id_str.to_string();
+        let exp_date_str = exp_date_str.to_string();
 
         spawn_save_act(
             pool_draft.clone(),
@@ -1337,6 +1405,9 @@ async fn main() -> Result<()> {
             } else {
                 Some(notes.to_string())
             },
+            cat_id_str,
+            con_id_str,
+            exp_date_str,
             items,
         );
     });
@@ -1773,13 +1844,24 @@ async fn main() -> Result<()> {
         let ui_weak = ui_weak_inv_create.clone();
         let cid = *active_company_id_inv_create.lock().unwrap();
         tokio::spawn(async move {
-            let (cps, next_number) = tokio::join!(
+            let (cps, next_number, categories) = tokio::join!(
                 db::invoices::counterparties_for_select(&pool, cid),
                 db::invoices::generate_next_number(&pool, cid),
+                db::categories::list_all_for_select(&pool, cid),
             );
             let cps = cps.unwrap_or_default();
             let next_number = next_number.unwrap_or_else(|_| "НАК-001".into());
+            let categories = categories.unwrap_or_default();
             let today = chrono::Local::now().format("%d.%m.%Y").to_string();
+
+            let mut cat_names: Vec<SharedString> = vec![SharedString::from("— без категорії —")];
+            let mut cat_ids: Vec<SharedString> = vec![SharedString::from("")];
+            for c in &categories {
+                let prefix = if c.depth > 0 { "  └─ " } else { "" };
+                cat_names.push(SharedString::from(format!("{}{}", prefix, c.name)));
+                cat_ids.push(SharedString::from(c.id.to_string()));
+            }
+
             ui_weak.upgrade_in_event_loop(move |ui| {
                 let (names, ids): (Vec<SharedString>, Vec<SharedString>) = cps.iter()
                     .map(|(id, name)| (SharedString::from(name.as_str()), SharedString::from(id.to_string().as_str())))
@@ -1793,6 +1875,10 @@ async fn main() -> Result<()> {
                 ui.set_invoice_form_is_edit(false);
                 ui.set_invoice_form_edit_id(SharedString::from(""));
                 ui.set_invoice_form_total(SharedString::from("0.00"));
+                ui.set_invoice_form_category_names(ModelRc::new(VecModel::from(cat_names)));
+                ui.set_invoice_form_category_ids(ModelRc::new(VecModel::from(cat_ids)));
+                ui.set_invoice_form_category_index(0);
+                ui.set_invoice_form_expected_payment_date(SharedString::from(""));
                 let empty: Vec<SharedString> = vec![];
                 ui.set_invoice_form_item_descriptions(ModelRc::new(VecModel::from(empty.clone())));
                 ui.set_invoice_form_item_quantities(ModelRc::new(VecModel::from(empty.clone())));
@@ -1849,9 +1935,10 @@ async fn main() -> Result<()> {
                 Ok(id) => id,
                 Err(_) => { tracing::error!("Невалідний UUID накладної: {id_str}"); return; }
             };
-            let (result, cps) = tokio::join!(
+            let (result, cps, categories) = tokio::join!(
                 db::invoices::get_for_edit(&pool, invoice_uuid),
                 db::invoices::counterparties_for_select(&pool, cid),
+                db::categories::list_all_for_select(&pool, cid),
             );
             let (invoice, items) = match result {
                 Ok(Some(data)) => data,
@@ -1859,8 +1946,23 @@ async fn main() -> Result<()> {
                 Err(e) => { tracing::error!("Помилка завантаження накладної: {e}"); return; }
             };
             let cps = cps.unwrap_or_default();
+            let categories = categories.unwrap_or_default();
             let cp_id_str = invoice.counterparty_id.to_string();
             let cp_index = cps.iter().position(|(id, _)| id.to_string() == cp_id_str).unwrap_or(0);
+
+            let mut cat_names: Vec<SharedString> = vec![SharedString::from("— без категорії —")];
+            let mut cat_ids: Vec<SharedString> = vec![SharedString::from("")];
+            for c in &categories {
+                let prefix = if c.depth > 0 { "  └─ " } else { "" };
+                cat_names.push(SharedString::from(format!("{}{}", prefix, c.name)));
+                cat_ids.push(SharedString::from(c.id.to_string()));
+            }
+            let cat_id_str = invoice.category_id.map(|id| id.to_string()).unwrap_or_default();
+            let cat_index = cat_ids.iter().position(|id| id.as_str() == cat_id_str).unwrap_or(0);
+            let exp_date_str = invoice.expected_payment_date
+                .map(|d| d.format("%d.%m.%Y").to_string())
+                .unwrap_or_default();
+
             ui_weak.upgrade_in_event_loop(move |ui| {
                 let (names, ids): (Vec<SharedString>, Vec<SharedString>) = cps.iter()
                     .map(|(id, name)| (SharedString::from(name.as_str()), SharedString::from(id.to_string().as_str())))
@@ -1874,6 +1976,10 @@ async fn main() -> Result<()> {
                 ui.set_invoice_form_is_edit(true);
                 ui.set_invoice_form_edit_id(SharedString::from(invoice.id.to_string().as_str()));
                 ui.set_invoice_form_total(SharedString::from(invoice.total_amount.to_string().as_str()));
+                ui.set_invoice_form_category_names(ModelRc::new(VecModel::from(cat_names)));
+                ui.set_invoice_form_category_ids(ModelRc::new(VecModel::from(cat_ids)));
+                ui.set_invoice_form_category_index(cat_index as i32);
+                ui.set_invoice_form_expected_payment_date(SharedString::from(exp_date_str.as_str()));
                 let descs: Vec<SharedString> = items.iter().map(|it| SharedString::from(it.description.as_str())).collect();
                 let qtys: Vec<SharedString> = items.iter().map(|it| SharedString::from(it.quantity.to_string().as_str())).collect();
                 let units_v: Vec<SharedString> = items.iter().map(|it| SharedString::from(it.unit.as_deref().unwrap_or(""))).collect();
@@ -1956,9 +2062,12 @@ async fn main() -> Result<()> {
     let ui_weak_inv_save = ui.as_weak();
     let invoice_state_save = invoice_state.clone();
     let active_company_id_inv_save = active_company_id.clone();
-    ui.on_invoice_form_save(move |number, date_str, cp_id_str, notes| {
+    ui.on_invoice_form_save(move |number, date_str, cp_id_str, notes, cat_id_str, con_id_str, exp_date_str| {
         let cid = *active_company_id_inv_save.lock().unwrap();
         let items = collect_invoice_items_from_ui(&ui_weak_inv_save);
+        let cat_id_str = cat_id_str.to_string();
+        let con_id_str = con_id_str.to_string();
+        let exp_date_str = exp_date_str.to_string();
         spawn_save_invoice(
             pool_inv_save.clone(),
             ui_weak_inv_save.clone(),
@@ -1968,6 +2077,9 @@ async fn main() -> Result<()> {
             date_str.to_string(),
             cp_id_str.to_string(),
             if notes.is_empty() { None } else { Some(notes.to_string()) },
+            cat_id_str,
+            con_id_str,
+            exp_date_str,
             items,
         );
     });
@@ -1976,7 +2088,7 @@ async fn main() -> Result<()> {
     let ui_weak_inv_upd = ui.as_weak();
     let invoice_state_upd = invoice_state.clone();
     let active_company_id_inv_upd = active_company_id.clone();
-    ui.on_invoice_form_update(move |number, date_str, cp_id_str, notes| {
+    ui.on_invoice_form_update(move |number, date_str, cp_id_str, notes, cat_id_str, con_id_str, exp_date_str| {
         let cid = *active_company_id_inv_upd.lock().unwrap();
         let edit_id = ui_weak_inv_upd
             .upgrade()
@@ -1990,6 +2102,9 @@ async fn main() -> Result<()> {
         let date_str = date_str.to_string();
         let cp_id_str = cp_id_str.to_string();
         let notes = notes.to_string();
+        let cat_id_str = cat_id_str.to_string();
+        let con_id_str = con_id_str.to_string();
+        let exp_date_str = exp_date_str.to_string();
         tokio::spawn(async move {
             let invoice_uuid = match uuid::Uuid::parse_str(&edit_id) {
                 Ok(id) => id,
@@ -2003,11 +2118,28 @@ async fn main() -> Result<()> {
                 Ok(id) => id,
                 Err(_) => { tracing::error!("Невалідний UUID контрагента: '{cp_id_str}'"); return; }
             };
+            let cat_id_opt: Option<uuid::Uuid> = if cat_id_str.trim().is_empty() {
+                None
+            } else {
+                uuid::Uuid::parse_str(cat_id_str.as_str()).ok()
+            };
+            let con_id_opt: Option<uuid::Uuid> = if con_id_str.trim().is_empty() {
+                None
+            } else {
+                uuid::Uuid::parse_str(con_id_str.as_str()).ok()
+            };
+            let exp_date_opt: Option<chrono::NaiveDate> = if exp_date_str.trim().is_empty() {
+                None
+            } else {
+                NaiveDate::parse_from_str(exp_date_str.as_str(), "%d.%m.%Y").ok()
+            };
             let update_data = UpdateInvoice {
                 number: number.clone(),
                 counterparty_id: cp_uuid,
-                contract_id: None,
+                contract_id: con_id_opt,
+                category_id: cat_id_opt,
                 date,
+                expected_payment_date: exp_date_opt,
                 notes: if notes.is_empty() { None } else { Some(notes) },
             };
             match db::invoices::update_with_items(&pool, invoice_uuid, update_data, items).await {
@@ -2029,6 +2161,70 @@ async fn main() -> Result<()> {
             }
         });
     });
+
+    // ── Платежі ──────────────────────────────────────────────────────────────
+
+    let pool_pay_filter = pool.clone();
+    let ui_weak_pay_filter = ui.as_weak();
+    let active_company_id_pay_filter = active_company_id.clone();
+    ui.on_payment_direction_filter_changed(move |index| {
+        use crate::models::payment::PaymentDirection;
+        let pool = pool_pay_filter.clone();
+        let ui_weak = ui_weak_pay_filter.clone();
+        let cid = *active_company_id_pay_filter.lock().unwrap();
+        let direction: Option<PaymentDirection> = match index {
+            1 => Some(PaymentDirection::Income),
+            2 => Some(PaymentDirection::Expense),
+            _ => None,
+        };
+        tokio::spawn(async move {
+            if let Err(e) = reload_payments(&pool, ui_weak, cid, direction).await {
+                tracing::error!("Помилка фільтрації платежів: {e}");
+            }
+        });
+    });
+
+    let pool_pay_search = pool.clone();
+    let ui_weak_pay_search = ui.as_weak();
+    let active_company_id_pay_search = active_company_id.clone();
+    ui.on_payment_search_changed(move |_query| {
+        let pool = pool_pay_search.clone();
+        let ui_weak = ui_weak_pay_search.clone();
+        let cid = *active_company_id_pay_search.lock().unwrap();
+        tokio::spawn(async move {
+            if let Err(e) = reload_payments(&pool, ui_weak, cid, None).await {
+                tracing::error!("Помилка пошуку платежів: {e}");
+            }
+        });
+    });
+
+    let pool_pay_reconcile = pool.clone();
+    let ui_weak_pay_reconcile = ui.as_weak();
+    let active_company_id_pay_reconcile = active_company_id.clone();
+    ui.on_payment_reconcile_clicked(move |id_str| {
+        let pool = pool_pay_reconcile.clone();
+        let ui_weak = ui_weak_pay_reconcile.clone();
+        let cid = *active_company_id_pay_reconcile.lock().unwrap();
+        let id_s = id_str.to_string();
+        tokio::spawn(async move {
+            let Ok(uuid) = id_s.parse::<uuid::Uuid>() else {
+                tracing::error!("Невалідний UUID платежу: {id_s}");
+                return;
+            };
+            if let Err(e) = db::payments::mark_reconciled(&pool, uuid).await {
+                tracing::error!("Помилка зведення платежу: {e}");
+                return;
+            }
+            if let Err(e) = reload_payments(&pool, ui_weak, cid, None).await {
+                tracing::error!("Помилка оновлення платежів: {e}");
+            }
+        });
+    });
+
+    // Stub callbacks (форма платежів — наступна ітерація)
+    ui.on_payment_create_clicked(|| {});
+    ui.on_payment_edit_clicked(|_| {});
+    ui.on_payment_delete_clicked(|_| {});
 
     // ── Колбек: переключити активну компанію ─────────────────────────────────
     let ui_weak_switch = ui.as_weak();
@@ -2117,6 +2313,10 @@ async fn main() -> Result<()> {
                     .await
                     {
                         tracing::error!("Помилка оновлення актів після вибору компанії: {e}");
+                    }
+
+                    if let Err(e) = reload_payments(&pool, ui_handle.clone(), company_id, None).await {
+                        tracing::error!("Помилка завантаження платежів після вибору компанії: {e}");
                     }
                 }
                 Ok(None) => tracing::warn!("Компанію {uuid} не знайдено."),
@@ -2287,6 +2487,11 @@ async fn main() -> Result<()> {
                     tracing::info!("Компанію '{}' створено (id={}).", c.name, c.id);
                     show_toast(ui_weak.clone(), format!("Компанію '{}' створено", c.name), false);
                     *active_company_id.lock().unwrap() = c.id;
+
+                    // Заповнюємо стандартні категорії доходів/витрат
+                    if let Err(e) = db::categories::seed_defaults(&pool, c.id).await {
+                        tracing::warn!("Не вдалось заповнити категорії для нової компанії: {e}");
+                    }
 
                     let mut cfg = AppConfig::load();
                     cfg.last_company_id = Some(c.id);
@@ -2933,6 +3138,52 @@ async fn reload_invoices(
     Ok(())
 }
 
+/// Завантажити список платежів та агрегати доходів/витрат.
+async fn reload_payments(
+    pool: &sqlx::PgPool,
+    ui_weak: Weak<MainWindow>,
+    company_id: uuid::Uuid,
+    direction: Option<crate::models::payment::PaymentDirection>,
+) -> Result<()> {
+    use rust_decimal::Decimal;
+    let rows = db::payments::list(pool, company_id, direction).await?;
+
+    let mut total_income = Decimal::ZERO;
+    let mut total_expense = Decimal::ZERO;
+    for r in &rows {
+        match r.direction {
+            crate::models::payment::PaymentDirection::Income => total_income += r.amount,
+            crate::models::payment::PaymentDirection::Expense => total_expense += r.amount,
+        }
+    }
+
+    ui_weak.upgrade_in_event_loop(move |ui| {
+        let ids: Vec<SharedString> = rows.iter().map(|r| SharedString::from(r.id.to_string())).collect();
+        let dates: Vec<SharedString> = rows.iter().map(|r| SharedString::from(r.date.as_str())).collect();
+        let cps: Vec<SharedString> = rows.iter().map(|r| SharedString::from(r.counterparty_name.as_deref().unwrap_or(""))).collect();
+        let descs: Vec<SharedString> = rows.iter().map(|r| SharedString::from(r.description.as_deref().unwrap_or(""))).collect();
+        let banks: Vec<SharedString> = rows.iter().map(|r| SharedString::from(r.bank_name.as_deref().unwrap_or(""))).collect();
+        let amounts: Vec<SharedString> = rows.iter().map(|r| SharedString::from(format!("{:.2}", r.amount))).collect();
+        let directions: Vec<SharedString> = rows.iter().map(|r| {
+            SharedString::from(r.direction.as_str())
+        }).collect();
+        let reconciled: Vec<bool> = rows.iter().map(|r| r.is_reconciled).collect();
+
+        ui.set_payment_row_ids(ModelRc::new(VecModel::from(ids)));
+        ui.set_payment_row_dates(ModelRc::new(VecModel::from(dates)));
+        ui.set_payment_row_counterparties(ModelRc::new(VecModel::from(cps)));
+        ui.set_payment_row_descriptions(ModelRc::new(VecModel::from(descs)));
+        ui.set_payment_row_banks(ModelRc::new(VecModel::from(banks)));
+        ui.set_payment_row_amounts(ModelRc::new(VecModel::from(amounts)));
+        ui.set_payment_row_directions(ModelRc::new(VecModel::from(directions)));
+        ui.set_payment_row_reconciled(ModelRc::new(VecModel::from(reconciled)));
+        ui.set_payment_total_income(SharedString::from(format!("{:.2}", total_income)));
+        ui.set_payment_total_expense(SharedString::from(format!("{:.2}", total_expense)));
+        ui.set_payments_loading(false);
+    }).map_err(anyhow::Error::from)?;
+    Ok(())
+}
+
 /// Зібрати позиції накладної з UI-полів у Vec<NewInvoiceItem>.
 fn collect_invoice_items_from_ui(ui_weak: &Weak<MainWindow>) -> Vec<NewInvoiceItem> {
     use slint::Model;
@@ -3122,6 +3373,9 @@ fn spawn_save_act(
     date_str: String,
     cp_id_str: String,
     notes: Option<String>,
+    cat_id_str: String,
+    con_id_str: String,
+    exp_date_str: String,
     items: Vec<NewActItem>,
 ) {
     tokio::spawn(async move {
@@ -3157,11 +3411,29 @@ fn spawn_save_act(
             }
         };
 
+        let cat_id_opt: Option<uuid::Uuid> = if cat_id_str.trim().is_empty() {
+            None
+        } else {
+            uuid::Uuid::parse_str(cat_id_str.as_str()).ok()
+        };
+        let con_id_opt: Option<uuid::Uuid> = if con_id_str.trim().is_empty() {
+            None
+        } else {
+            uuid::Uuid::parse_str(con_id_str.as_str()).ok()
+        };
+        let exp_date_opt: Option<chrono::NaiveDate> = if exp_date_str.trim().is_empty() {
+            None
+        } else {
+            NaiveDate::parse_from_str(exp_date_str.as_str(), "%d.%m.%Y").ok()
+        };
+
         let new_act = NewAct {
             number: number.clone(),
             counterparty_id: cp_uuid,
-            contract_id: None, // договір — майбутня функція
+            contract_id: con_id_opt,
+            category_id: cat_id_opt,
             date,
+            expected_payment_date: exp_date_opt,
             notes,
             bas_id: None,
             items,
@@ -3205,6 +3477,9 @@ fn spawn_save_invoice(
     date_str: String,
     cp_id_str: String,
     notes: Option<String>,
+    cat_id_str: String,
+    con_id_str: String,
+    exp_date_str: String,
     items: Vec<NewInvoiceItem>,
 ) {
     tokio::spawn(async move {
@@ -3228,11 +3503,28 @@ fn spawn_save_invoice(
             Ok(id) => id,
             Err(_) => { tracing::error!("Невалідний UUID контрагента: '{cp_id_str}'"); return; }
         };
+        let cat_id_opt: Option<uuid::Uuid> = if cat_id_str.trim().is_empty() {
+            None
+        } else {
+            uuid::Uuid::parse_str(cat_id_str.as_str()).ok()
+        };
+        let con_id_opt: Option<uuid::Uuid> = if con_id_str.trim().is_empty() {
+            None
+        } else {
+            uuid::Uuid::parse_str(con_id_str.as_str()).ok()
+        };
+        let exp_date_opt: Option<chrono::NaiveDate> = if exp_date_str.trim().is_empty() {
+            None
+        } else {
+            NaiveDate::parse_from_str(exp_date_str.as_str(), "%d.%m.%Y").ok()
+        };
         let new_invoice = NewInvoice {
             number: number.clone(),
             counterparty_id: cp_uuid,
-            contract_id: None,
+            contract_id: con_id_opt,
+            category_id: cat_id_opt,
             date,
+            expected_payment_date: exp_date_opt,
             notes,
             bas_id: None,
             items,

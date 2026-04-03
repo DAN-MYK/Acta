@@ -1,37 +1,114 @@
 export global Theme {
-    out property <color> bg: #F3F4F6;
-    out property <color> surface: #FFFFFF;
-    out property <color> border: #E0E4EA;
-    out property <color> sidebar-bg: #2C3140;
-    out property <color> sidebar-border: rgba(255, 255, 255, 0.08);
-    out property <color> sidebar-hover: #353C4D;
-    out property <color> sidebar-text: #B1B9C4;
-    out property <color> sidebar-text-muted: #738094;
-    out property <color> sidebar-switcher-bg: transparent;
-    out property <color> sidebar-switcher-hover: #343B4B;
-    out property <color> primary: #3D75F4;
-    out property <color> primary-light: #E0E8FD;
-    out property <color> text-main: #1A1E28;
-    out property <color> text-sub: #475368;
-    out property <color> text-muted: #738094;
-    out property <color> success: #1EB16E;
-    out property <color> warning: #F4A31E;
-    out property <color> row-alt: #F8F9FC;
-    out property <color> hover-bg: #EEF2F8;
-    out property <color> overlay: #10141C73;
-    out property <color> sidebar-label: #738094;
+    // ── Бренд ────────────────────────────────────────────
+    out property <color> primary:       #3D75F4;
+    out property <color> navy:          #12193f;
+    out property <color> success:       #14AD69;
+    out property <color> warning:       #F4A31E;
+    out property <color> danger:        #E83A3A;
+    out property <color> purple:        #7e4af0;
 
-    out property <color> table-header: #F4F6FA;
-    out property <color> row-stripe: #FCFCFD;
-    out property <color> row-hover: #EEF2F8;
-    out property <color> row-selected: #E8EEFF;
+    // ── Фони ─────────────────────────────────────────────
+    out property <color> bg-page:       #F3F4F8;
+    out property <color> bg-card:       #FFFFFF;
+    out property <color> bg-hover:      #EFF1FA;
+    out property <color> bg-alt:        #F9FAFC;
+    out property <color> bg-gray:       #F0F2F5;
+    out property <color> bg-gray-soft:  #F4F5F8;
 
+    // ── Статусні фони ────────────────────────────────────
+    out property <color> bg-success:    #DDF7EA;
+    out property <color> bg-warning:    #FEF3DD;
+    out property <color> bg-danger:     #FEE8E8;
+    out property <color> bg-primary:    #E1EAFE;
+    out property <color> bg-purple:     #EFE6FD;
+
+    // ── Текст ────────────────────────────────────────────
+    out property <color> text-primary:  #141721;
+    out property <color> text-second:   #475569;
+    out property <color> text-muted:    #879198;
+    out property <color> text-disabled: #B1B9C4;
+    out property <color> text-white:    #FFFFFF;
+
+    // ── Рамки ────────────────────────────────────────────
+    out property <color> border:        #E0E4EB;
+    out property <color> border-focus:  #3D75F4;
+    out property <color> border-error:  #E83A3A;
+
+    // ── Сайдбар ──────────────────────────────────────────
+    out property <color> sidebar-bg:          #12192f;
+    out property <color> sidebar-active:      #263560;
+    out property <color> sidebar-divider:     #1E2A4A;
+    out property <color> sidebar-label:       #4C6490;
+    out property <color> sidebar-text:        #9EB4D7;
+    out property <color> sidebar-icon:        #7A96C3;
+    out property <color> sidebar-active-icon: #7ABBFD;
+    out property <color> sidebar-active-bar:  #72A3FD;
+
+    // ── Таблиці ──────────────────────────────────────────
+    out property <color> table-header:  #F4F6FA;
+    out property <color> row-alt:       #F9FAFC;
+    out property <color> row-hover:     #EEF2F8;
+    out property <color> row-selected:  #E8EEFF;
+    out property <color> row-stripe:    #FCFCFD;
+
+    // ── Кнопки/дії ───────────────────────────────────────
     out property <color> btn-action-bg: #EAF0FF;
 
-    out property <color> danger: #DC2626;
-    out property <color> danger-light: #FEF2F2;
-    out property <color> danger-border: #FECACA;
-
-    out property <color> priority-high: #F97316;
+    // ── Пріоритети задач ─────────────────────────────────
+    out property <color> priority-high:     #F97316;
     out property <color> priority-critical: #DC2626;
+
+    // ── Алiaси (зворотна сумісність) ─────────────────────
+    out property <color> bg:           #F3F4F8;    // = bg-page
+    out property <color> surface:      #FFFFFF;    // = bg-card
+    out property <color> hover-bg:     #EFF1FA;    // = bg-hover
+    out property <color> text-main:    #141721;    // = text-primary
+    out property <color> text-sub:     #475569;    // = text-second
+    out property <color> primary-light: #E1EAFE;   // = bg-primary
+    out property <color> danger-light:  #FEE8E8;   // = bg-danger
+    out property <color> danger-border: #FECACA;
+    out property <color> overlay:       #10141C73;
+    out property <color> sidebar-hover: #2C3555;
+    out property <color> sidebar-border: rgba(255,255,255, 8%);
+    out property <color> sidebar-switcher-bg: transparent;
+    out property <color> sidebar-switcher-hover: #343B4B;
+    out property <color> sidebar-text-muted:    #738094;
+
+    // ── Типографіка ──────────────────────────────────────
+    out property <length> font-xs:      10px;
+    out property <length> font-sm:      11px;
+    out property <length> font-base:    12px;
+    out property <length> font-md:      13px;
+    out property <length> font-lg:      14px;
+    out property <length> font-xl:      16px;
+    out property <length> font-2xl:     18px;
+    out property <length> font-3xl:     22px;
+    out property <length> font-display: 24px;
+
+    // ── Відступи ─────────────────────────────────────────
+    out property <length> space-1:  4px;
+    out property <length> space-2:  8px;
+    out property <length> space-3:  12px;
+    out property <length> space-4:  16px;
+    out property <length> space-5:  20px;
+    out property <length> space-6:  24px;
+    out property <length> space-8:  32px;
+    out property <length> space-10: 40px;
+    out property <length> space-12: 48px;
+
+    // ── Радіуси ──────────────────────────────────────────
+    out property <length> radius-sm:   6px;
+    out property <length> radius-md:   8px;
+    out property <length> radius-lg:   12px;
+    out property <length> radius-xl:   16px;
+    out property <length> radius-full: 999px;
+
+    // ── Layout ───────────────────────────────────────────
+    out property <length> sidebar-width:  220px;
+    out property <length> topbar-height:  64px;
+    out property <length> row-height:     52px;
+    out property <length> badge-height:   24px;
+    out property <length> btn-sm-height:  32px;
+    out property <length> btn-md-height:  36px;
+    out property <length> btn-lg-height:  44px;
 }

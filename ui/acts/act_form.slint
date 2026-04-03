@@ -111,20 +111,42 @@ export component ActForm inherits Rectangle {
     in property <[string]>                 act-task-row-priorities;
     in property <bool>                     act-tasks-loading: false;
 
+    // ── Категорії та договори (необов'язково) ─────────────────────────────
+    in property <[string]> category-names: [];
+    in property <[string]> category-ids:   [];
+    in property <int>      act-category-index: 0;   // 0 = "— без категорії —"
+
+    in property <[string]> contract-names: [];
+    in property <[string]> contract-ids:   [];
+    in property <int>      act-contract-index: 0;   // 0 = "— без договору —"
+
+    // ── Очікувана дата оплати (необов'язково) ─────────────────────────────
+    in property <string>   act-expected-payment-date: "";
+
     // ── Колбеки (Slint → Rust) ────────────────────────────────────────────
     // Зберегти / Чернетка / Оновити — передають текстові значення полів
+    // Параметри: number, date, cp_id, notes, category_id, contract_id, expected_payment_date
     callback save(      /* number */ string,
                         /* date   */ string,
                         /* cp_id  */ string,
-                        /* notes  */ string);
+                        /* notes  */ string,
+                        /* cat_id */ string,
+                        /* con_id */ string,
+                        /* exp_dt */ string);
     callback save-draft(/* number */ string,
                         /* date   */ string,
                         /* cp_id  */ string,
-                        /* notes  */ string);
+                        /* notes  */ string,
+                        /* cat_id */ string,
+                        /* con_id */ string,
+                        /* exp_dt */ string);
     callback update(    /* number */ string,
                         /* date   */ string,
                         /* cp_id  */ string,
-                        /* notes  */ string);
+                        /* notes  */ string,
+                        /* cat_id */ string,
+                        /* con_id */ string,
+                        /* exp_dt */ string);
     callback cancel();
     callback add-item();
     callback remove-item(/* index */ int);
@@ -249,26 +271,36 @@ export component ActForm inherits Rectangle {
                         save-touch := TouchArea {
                             mouse-cursor: pointer;
                             clicked => {
+                                // category-ids[0] = "" (без категорії), [1..] = реальні ID
                                 if (root.is-edit-mode) {
                                     root.update(
                                         number-field.text,
                                         date-field.text,
                                         root.counterparty-ids[cp-combo.current-index],
-                                        notes-field.text
+                                        notes-field.text,
+                                        root.category-ids[cat-combo.current-index],
+                                        root.contract-ids[con-combo.current-index],
+                                        exp-date-field.text
                                     );
                                 } else if (root.act-status == 0) {
                                     root.save-draft(
                                         number-field.text,
                                         date-field.text,
                                         root.counterparty-ids[cp-combo.current-index],
-                                        notes-field.text
+                                        notes-field.text,
+                                        root.category-ids[cat-combo.current-index],
+                                        root.contract-ids[con-combo.current-index],
+                                        exp-date-field.text
                                     );
                                 } else {
                                     root.save(
                                         number-field.text,
                                         date-field.text,
                                         root.counterparty-ids[cp-combo.current-index],
-                                        notes-field.text
+                                        notes-field.text,
+                                        root.category-ids[cat-combo.current-index],
+                                        root.contract-ids[con-combo.current-index],
+                                        exp-date-field.text
                                     );
                                 }
                             }
@@ -395,6 +427,79 @@ export component ActForm inherits Rectangle {
                                                 text: root.act-number;
                                                 placeholder-text: "АКТ-001";
                                             }
+                                        }
+                                    }
+                                }
+
+                                // «Категорія» + «Договір» поряд у два стовпці
+                                HorizontalLayout {
+                                    spacing: 16px;
+
+                                    // Категорія (ліво)
+                                    VerticalLayout {
+                                        spacing: 4px;
+                                        horizontal-stretch: 1;
+                                        Text {
+                                            text: "Категорія";
+                                            font-size: 12px;
+                                            font-weight: 600;
+                                            color: Theme.text-sub;
+                                        }
+                                        Rectangle {
+                                            height: 40px;
+                                            background: Theme.surface;
+                                            border-width: 1px;
+                                            border-color: Theme.border;
+                                            border-radius: 8px;
+                                            cat-combo := ComboBox {
+                                                model: root.category-names;
+                                                current-index: root.act-category-index;
+                                            }
+                                        }
+                                    }
+
+                                    // Договір (право)
+                                    VerticalLayout {
+                                        spacing: 4px;
+                                        horizontal-stretch: 1;
+                                        Text {
+                                            text: "Договір";
+                                            font-size: 12px;
+                                            font-weight: 600;
+                                            color: Theme.text-sub;
+                                        }
+                                        Rectangle {
+                                            height: 40px;
+                                            background: Theme.surface;
+                                            border-width: 1px;
+                                            border-color: Theme.border;
+                                            border-radius: 8px;
+                                            con-combo := ComboBox {
+                                                model: root.contract-names;
+                                                current-index: root.act-contract-index;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // «Очікувана дата оплати» (необов'язкове)
+                                VerticalLayout {
+                                    spacing: 4px;
+                                    Text {
+                                        text: "Очікувана дата оплати";
+                                        font-size: 12px;
+                                        font-weight: 600;
+                                        color: Theme.text-sub;
+                                    }
+                                    Rectangle {
+                                        height: 40px;
+                                        background: Theme.surface;
+                                        border-width: 1px;
+                                        border-color: Theme.border;
+                                        border-radius: 8px;
+                                        exp-date-field := LineEdit {
+                                            text: root.act-expected-payment-date;
+                                            placeholder-text: "ДД.ММ.РРРР (необов'язково)";
                                         }
                                     }
                                 }

@@ -1,0 +1,52 @@
+// PillFilter — горизонтальний ряд pill-фільтрів.
+//
+// Використовується у списках актів, накладних, платежів.
+// Активний pill: #3d75f4 фон + white text.
+// Неактивний: #f3f4f6 фон + #475569 text.
+//
+// Приклад використання:
+//   PillFilter {
+//       items: ["Всі", "Чернетка", "Виставлений", "Підписаний", "Оплачений"];
+//       active-index: 0;
+//       filter-changed(idx) => { ... }
+//   }
+
+import { Theme } from "../theme.slint";
+
+export component PillFilter inherits HorizontalLayout {
+    in property <[string]> items: [];
+    in-out property <int>  active-index: 0;
+    callback filter-changed(int);
+
+    spacing: 6px;
+    alignment: start;
+    padding: 0;
+
+    for label[i] in root.items: Rectangle {
+        private property <bool> is-active: i == root.active-index;
+
+        height: 32px;
+        width: pill-text.preferred-width + 24px;
+        border-radius: 6px;
+        background: is-active ? Theme.primary : Theme.bg-gray;
+        animate background { duration: 120ms; easing: ease; }
+
+        pill-text := Text {
+            x: 12px;
+            y: (parent.height - self.height) / 2;
+            text: label;
+            font-size: Theme.font-md;
+            font-weight: is-active ? 600 : 400;
+            color: is-active ? Theme.text-white : Theme.text-second;
+            animate color { duration: 120ms; easing: ease; }
+        }
+
+        pill-touch := TouchArea {
+            mouse-cursor: pointer;
+            clicked => {
+                root.active-index = i;
+                root.filter-changed(i);
+            }
+        }
+    }
+}
