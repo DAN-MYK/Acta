@@ -6,7 +6,7 @@
 // Адаптовано з Figma: DocumentsListScreen (nodes 178:2)
 
 import { Theme } from "../theme.slint";
-import { ProgressIndicator } from "std-widgets.slint";
+import { ProgressIndicator, ComboBox } from "std-widgets.slint";
 import { DocTypeBadge, StatusBadge, ConfirmDeleteDialog } from "../components/shared.slint";
 
 // ── DocRow — рядок уніфікованого списку документів ───────────────────────────
@@ -27,17 +27,26 @@ export component DocumentList {
     in property <bool>     loading: false;
     in property <int>      active-tab: 0;   // 0=Всі, 1=Акти, 2=Рахунки
 
+    // ── Фільтри ─────────────────────────────────────────────────────────────
+    in property <[string]> filter-counterparty-names: [];
+    in property <int>      filter-counterparty-index: 0;
+
     // ── Колбеки ─────────────────────────────────────────────────────────────
-    callback new-document();
+    callback new-document-act();
+    callback new-document-invoice();
     callback open-document(string);     // передає DocRow.id
     callback delete-document(string);   // передає DocRow.id
     callback export-pdf(string);        // передає DocRow.id
     callback tab-changed(int);
     callback search-changed(string);
+    callback counterparty-filter-changed(int);
+    callback date-from-changed(string);
+    callback date-to-changed(string);
 
     // ── Внутрішній стан ─────────────────────────────────────────────────────
     private property <string> delete-target-id: "";
     private property <bool>   show-delete-dialog: false;
+    private property <bool>   show-type-picker: false;
     private property <int>    hovered-row: -1;
 
     min-width: 600px;
@@ -107,7 +116,7 @@ export component DocumentList {
 
                     new-touch := TouchArea {
                         mouse-cursor: pointer;
-                        clicked => { root.new-document(); }
+                        clicked => { root.show-type-picker = true; }
                     }
                 }
             }
@@ -187,6 +196,113 @@ export component DocumentList {
                         }
                     }
                 }
+            }
+        }
+
+        // ── Рядок фільтрів ───────────────────────────────────────────────────
+        Rectangle {
+            height: 44px;
+            background: Theme.bg-card;
+            border-width: 1px;
+            border-color: Theme.border;
+
+            HorizontalLayout {
+                padding-left: 32px;
+                padding-right: 32px;
+                spacing: 8px;
+                alignment: center;
+
+                Text {
+                    text: "Контрагент:";
+                    font-size: Theme.font-base;
+                    color: Theme.text-second;
+                    vertical-alignment: center;
+                    width: 82px;
+                }
+
+                ComboBox {
+                    width: 200px;
+                    height: 28px;
+                    model: root.filter-counterparty-names;
+                    current-index: root.filter-counterparty-index;
+                    selected(val) => { root.counterparty-filter-changed(self.current-index); }
+                }
+
+                Rectangle { width: 16px; }
+
+                Text {
+                    text: "Дата від:";
+                    font-size: Theme.font-base;
+                    color: Theme.text-second;
+                    vertical-alignment: center;
+                    width: 56px;
+                }
+
+                // Дата від
+                date-from-box := Rectangle {
+                    width: 110px; height: 28px;
+                    border-radius: Theme.radius-md;
+                    background: Theme.bg-gray;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    clip: true;
+
+                    if date-from-input.text == "" : Text {
+                        x: 8px; y: 0;
+                        width: parent.width - 8px; height: parent.height;
+                        text: "дд.мм.рррр";
+                        font-size: Theme.font-base;
+                        color: Theme.text-disabled;
+                        vertical-alignment: center;
+                    }
+
+                    date-from-input := TextInput {
+                        x: 8px; y: 0;
+                        width: parent.width - 16px; height: parent.height;
+                        font-size: Theme.font-base;
+                        color: Theme.text-primary;
+                        vertical-alignment: center;
+                        edited => { root.date-from-changed(self.text); }
+                    }
+                }
+
+                Text {
+                    text: "—";
+                    font-size: Theme.font-base;
+                    color: Theme.text-muted;
+                    vertical-alignment: center;
+                    width: 10px;
+                }
+
+                // Дата до
+                date-to-box := Rectangle {
+                    width: 110px; height: 28px;
+                    border-radius: Theme.radius-md;
+                    background: Theme.bg-gray;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    clip: true;
+
+                    if date-to-input.text == "" : Text {
+                        x: 8px; y: 0;
+                        width: parent.width - 8px; height: parent.height;
+                        text: "дд.мм.рррр";
+                        font-size: Theme.font-base;
+                        color: Theme.text-disabled;
+                        vertical-alignment: center;
+                    }
+
+                    date-to-input := TextInput {
+                        x: 8px; y: 0;
+                        width: parent.width - 16px; height: parent.height;
+                        font-size: Theme.font-base;
+                        color: Theme.text-primary;
+                        vertical-alignment: center;
+                        edited => { root.date-to-changed(self.text); }
+                    }
+                }
+
+                Rectangle { horizontal-stretch: 1; }
             }
         }
 
@@ -458,6 +574,128 @@ export component DocumentList {
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Тайп-пікер: вибір типу нового документу ────────────────────────────
+    if root.show-type-picker : Rectangle {
+        x: 0; y: 0;
+        width: root.width; height: root.height;
+        background: Theme.overlay;
+
+        backdrop-touch := TouchArea {
+            clicked => { root.show-type-picker = false; }
+        }
+
+        // Картка вибору типу
+        picker-card := Rectangle {
+            x: (parent.width - 400px) / 2;
+            y: (parent.height - 220px) / 2;
+            width: 400px; height: 220px;
+            border-radius: Theme.radius-xl;
+            background: Theme.bg-card;
+            drop-shadow-blur: 40px;
+            drop-shadow-color: rgba(0, 0, 0, 18%);
+            drop-shadow-offset-y: 12px;
+
+            // Поглинаємо кліки щоб не закривати через backdrop
+            TouchArea { }
+
+            // Акцентна смужка зверху
+            Rectangle {
+                x: 0; y: 0; width: 400px; height: 4px;
+                border-top-left-radius: Theme.radius-xl;
+                border-top-right-radius: Theme.radius-xl;
+                background: Theme.primary;
+            }
+
+            Text {
+                x: 0; y: 22px; width: 400px;
+                horizontal-alignment: center;
+                text: "Новий документ";
+                font-size: Theme.font-2xl;
+                font-weight: 700;
+                color: Theme.text-primary;
+            }
+            Text {
+                x: 0; y: 52px; width: 400px;
+                horizontal-alignment: center;
+                text: "Оберіть тип документу";
+                font-size: Theme.font-md;
+                color: Theme.text-second;
+            }
+
+            // Тайл АКТ
+            act-tile := Rectangle {
+                x: 20px; y: 88px;
+                width: 170px; height: 76px;
+                border-radius: Theme.radius-lg;
+                background: act-tile-touch.has-hover ? Theme.bg-primary : Theme.bg-gray;
+                border-width: 1px;
+                border-color: act-tile-touch.has-hover ? Theme.primary : Theme.border;
+                animate background { duration: 100ms; easing: ease; }
+
+                Text {
+                    x: 0; y: 12px; width: 170px;
+                    horizontal-alignment: center;
+                    text: "АКТ";
+                    font-size: Theme.font-xl;
+                    font-weight: 700;
+                    color: act-tile-touch.has-hover ? Theme.primary : Theme.text-second;
+                    animate color { duration: 100ms; easing: ease; }
+                }
+                Text {
+                    x: 0; y: 40px; width: 170px;
+                    horizontal-alignment: center;
+                    text: "Акт виконаних робіт";
+                    font-size: Theme.font-base;
+                    color: Theme.text-muted;
+                }
+
+                act-tile-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.show-type-picker = false;
+                        root.new-document-act();
+                    }
+                }
+            }
+
+            // Тайл РАХ
+            inv-tile := Rectangle {
+                x: 210px; y: 88px;
+                width: 170px; height: 76px;
+                border-radius: Theme.radius-lg;
+                background: inv-tile-touch.has-hover ? Theme.bg-purple : Theme.bg-gray;
+                border-width: 1px;
+                border-color: inv-tile-touch.has-hover ? Theme.purple : Theme.border;
+                animate background { duration: 100ms; easing: ease; }
+
+                Text {
+                    x: 0; y: 12px; width: 170px;
+                    horizontal-alignment: center;
+                    text: "РАХ";
+                    font-size: Theme.font-xl;
+                    font-weight: 700;
+                    color: inv-tile-touch.has-hover ? Theme.purple : Theme.text-second;
+                    animate color { duration: 100ms; easing: ease; }
+                }
+                Text {
+                    x: 0; y: 40px; width: 170px;
+                    horizontal-alignment: center;
+                    text: "Видаткова накладна";
+                    font-size: Theme.font-base;
+                    color: Theme.text-muted;
+                }
+
+                inv-tile-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.show-type-picker = false;
+                        root.new-document-invoice();
                     }
                 }
             }

@@ -47,8 +47,11 @@ struct InvoiceListState {
 
 #[derive(Clone, Default)]
 struct DocListState {
-    tab:   i32,    // 0=Всі, 1=Акти, 2=Рахунки
-    query: String,
+    tab:             i32,                           // 0=Всі, 1=Акти, 2=Рахунки
+    query:           String,
+    counterparty_id: Option<uuid::Uuid>,            // None = всі контрагенти
+    date_from:       Option<chrono::NaiveDate>,
+    date_to:         Option<chrono::NaiveDate>,
 }
 
 #[derive(Clone, Default)]
@@ -84,6 +87,9 @@ async fn main() -> Result<()> {
     let invoice_state = Arc::new(Mutex::new(InvoiceListState::default()));
     let task_state = Arc::new(Mutex::new(TaskListState::default()));
     let doc_state = Arc::new(Mutex::new(DocListState::default()));
+    // UUID-и контрагентів для фільтру в списку документів.
+    // Індекс 0 = "Всі контрагенти" (None), індекс n = cp_ids[n-1].
+    let doc_cp_ids: Arc<Mutex<Vec<uuid::Uuid>>> = Arc::new(Mutex::new(vec![]));
 
     // ── Активна компанія — спільна між усіма callbacks ───────────────────────
     // Починаємо з DEFAULT_COMPANY_ID (дефолтна компанія з міграції).
@@ -172,8 +178,9 @@ async fn main() -> Result<()> {
     // ── Початкове завантаження платежів ──────────────────────────────────────
     reload_payments(&pool, ui.as_weak(), cid, None).await?;
 
-    // ── Початкове завантаження єдиного списку документів ─────────────────────
-    reload_documents(&pool, ui.as_weak(), cid, 0, "").await?;
+    // ── Початкове завантаження єдиного списку документів + фільтру контрагентів
+    reload_doc_cp_filter(&pool, ui.as_weak(), cid, &doc_cp_ids).await?;
+    reload_documents(&pool, ui.as_weak(), cid, 0, "", None, None, None).await?;
 
     // ── Колбек: пошук ────────────────────────────────────────────────────────
     //
@@ -943,11 +950,11 @@ async fn main() -> Result<()> {
                     {
                         tracing::error!("Помилка оновлення списку актів після редагування: {e}");
                     }
-                    let (doc_tab, doc_query) = {
+                    let (doc_tab, doc_query, doc_cp, doc_df, doc_dt) = {
                         let s = doc_state_spawn.lock().unwrap();
-                        (s.tab, s.query.clone())
+                        (s.tab, s.query.clone(), s.counterparty_id, s.date_from, s.date_to)
                     };
-                    if let Err(e) = reload_documents(&pool, ui_weak.clone(), cid, doc_tab, &doc_query).await {
+                    if let Err(e) = reload_documents(&pool, ui_weak.clone(), cid, doc_tab, &doc_query, doc_cp, doc_df, doc_dt).await {
                         tracing::error!("Помилка оновлення документів після редагування акту: {e}");
                     }
                 }
@@ -2180,11 +2187,11 @@ async fn main() -> Result<()> {
                     if let Err(e) = reload_invoices(&pool, ui_weak.clone(), cid, status_filter, query, true).await {
                         tracing::error!("Помилка оновлення списку накладних: {e}");
                     }
-                    let (doc_tab, doc_query) = {
+                    let (doc_tab, doc_query, doc_cp, doc_df, doc_dt) = {
                         let s = doc_state_u.lock().unwrap();
-                        (s.tab, s.query.clone())
+                        (s.tab, s.query.clone(), s.counterparty_id, s.date_from, s.date_to)
                     };
-                    if let Err(e) = reload_documents(&pool, ui_weak.clone(), cid, doc_tab, &doc_query).await {
+                    if let Err(e) = reload_documents(&pool, ui_weak.clone(), cid, doc_tab, &doc_query, doc_cp, doc_df, doc_dt).await {
                         tracing::error!("Помилка оновлення документів після редагування накладної: {e}");
                     }
                 }
@@ -2271,13 +2278,13 @@ async fn main() -> Result<()> {
         let pool = pool_doc_tab.clone();
         let ui_weak = ui_weak_doc_tab.clone();
         let cid = *active_company_id_doc_tab.lock().unwrap();
-        let query = {
+        let (query, cp_id, df, dt) = {
             let mut s = doc_state_tab.lock().unwrap();
             s.tab = tab;
-            s.query.clone()
+            (s.query.clone(), s.counterparty_id, s.date_from, s.date_to)
         };
         tokio::spawn(async move {
-            if let Err(e) = reload_documents(&pool, ui_weak, cid, tab, &query).await {
+            if let Err(e) = reload_documents(&pool, ui_weak, cid, tab, &query, cp_id, df, dt).await {
                 tracing::error!("Помилка фільтру документів за табом: {e}");
             }
         });
@@ -2292,24 +2299,117 @@ async fn main() -> Result<()> {
         let pool = pool_doc_search.clone();
         let ui_weak = ui_weak_doc_search.clone();
         let cid = *active_company_id_doc_search.lock().unwrap();
-        let (tab, query) = {
+        let (tab, query, cp_id, df, dt) = {
             let mut s = doc_state_search.lock().unwrap();
             s.query = q.to_string();
-            (s.tab, s.query.clone())
+            (s.tab, s.query.clone(), s.counterparty_id, s.date_from, s.date_to)
         };
         tokio::spawn(async move {
-            if let Err(e) = reload_documents(&pool, ui_weak, cid, tab, &query).await {
+            if let Err(e) = reload_documents(&pool, ui_weak, cid, tab, &query, cp_id, df, dt).await {
                 tracing::error!("Помилка пошуку документів: {e}");
             }
         });
     });
 
-    // Новий документ — відкриває форму нового акту (тимчасово)
-    let ui_weak_doc_new = ui.as_weak();
-    ui.on_doc_new_clicked(move || {
-        if let Some(ui) = ui_weak_doc_new.upgrade() {
+    // Новий акт
+    let ui_weak_doc_new_act = ui.as_weak();
+    ui.on_doc_new_act_clicked(move || {
+        if let Some(ui) = ui_weak_doc_new_act.upgrade() {
             ui.invoke_act_create_clicked();
         }
+    });
+
+    // Нова накладна
+    let ui_weak_doc_new_inv = ui.as_weak();
+    ui.on_doc_new_invoice_clicked(move || {
+        if let Some(ui) = ui_weak_doc_new_inv.upgrade() {
+            ui.invoke_invoice_create_clicked();
+        }
+    });
+
+    // Фільтр за контрагентом
+    let pool_doc_cp = pool.clone();
+    let ui_weak_doc_cp = ui.as_weak();
+    let active_company_id_doc_cp = active_company_id.clone();
+    let doc_state_cp = doc_state.clone();
+    let doc_cp_ids_cp = doc_cp_ids.clone();
+    ui.on_doc_cp_filter_changed(move |idx| {
+        let pool = pool_doc_cp.clone();
+        let ui_weak = ui_weak_doc_cp.clone();
+        let cid = *active_company_id_doc_cp.lock().unwrap();
+        let cp_id = if idx <= 0 {
+            None
+        } else {
+            let ids = doc_cp_ids_cp.lock().unwrap();
+            ids.get(idx as usize - 1).copied()
+        };
+        let (tab, query, df, dt) = {
+            let mut s = doc_state_cp.lock().unwrap();
+            s.counterparty_id = cp_id;
+            (s.tab, s.query.clone(), s.date_from, s.date_to)
+        };
+        tokio::spawn(async move {
+            if let Err(e) = reload_documents(&pool, ui_weak, cid, tab, &query, cp_id, df, dt).await {
+                tracing::error!("Помилка фільтру документів за контрагентом: {e}");
+            }
+        });
+    });
+
+    // Фільтр за датою від
+    let pool_doc_df = pool.clone();
+    let ui_weak_doc_df = ui.as_weak();
+    let active_company_id_doc_df = active_company_id.clone();
+    let doc_state_df = doc_state.clone();
+    ui.on_doc_date_from_changed(move |text| {
+        // Парсимо лише якщо введено повну дату (10 символів)
+        let df = if text.len() == 10 {
+            chrono::NaiveDate::parse_from_str(text.as_str(), "%d.%m.%Y").ok()
+        } else if text.is_empty() {
+            None
+        } else {
+            return; // неповна дата — не реагуємо
+        };
+        let pool = pool_doc_df.clone();
+        let ui_weak = ui_weak_doc_df.clone();
+        let cid = *active_company_id_doc_df.lock().unwrap();
+        let (tab, query, cp_id, dt) = {
+            let mut s = doc_state_df.lock().unwrap();
+            s.date_from = df;
+            (s.tab, s.query.clone(), s.counterparty_id, s.date_to)
+        };
+        tokio::spawn(async move {
+            if let Err(e) = reload_documents(&pool, ui_weak, cid, tab, &query, cp_id, df, dt).await {
+                tracing::error!("Помилка фільтру документів за датою від: {e}");
+            }
+        });
+    });
+
+    // Фільтр за датою до
+    let pool_doc_dt = pool.clone();
+    let ui_weak_doc_dt = ui.as_weak();
+    let active_company_id_doc_dt = active_company_id.clone();
+    let doc_state_dt = doc_state.clone();
+    ui.on_doc_date_to_changed(move |text| {
+        let dt = if text.len() == 10 {
+            chrono::NaiveDate::parse_from_str(text.as_str(), "%d.%m.%Y").ok()
+        } else if text.is_empty() {
+            None
+        } else {
+            return;
+        };
+        let pool = pool_doc_dt.clone();
+        let ui_weak = ui_weak_doc_dt.clone();
+        let cid = *active_company_id_doc_dt.lock().unwrap();
+        let (tab, query, cp_id, df) = {
+            let mut s = doc_state_dt.lock().unwrap();
+            s.date_to = dt;
+            (s.tab, s.query.clone(), s.counterparty_id, s.date_from)
+        };
+        tokio::spawn(async move {
+            if let Err(e) = reload_documents(&pool, ui_weak, cid, tab, &query, cp_id, df, dt).await {
+                tracing::error!("Помилка фільтру документів за датою до: {e}");
+            }
+        });
     });
 
     // Відкрити документ для редагування
@@ -2350,9 +2450,9 @@ async fn main() -> Result<()> {
         let ui_weak = ui_weak_doc_del.clone();
         let cid = *active_company_id_doc_del.lock().unwrap();
         let id_s = id.to_string();
-        let (tab, query) = {
+        let (tab, query, cp_id, df, dt) = {
             let s = doc_state_del.lock().unwrap();
-            (s.tab, s.query.clone())
+            (s.tab, s.query.clone(), s.counterparty_id, s.date_from, s.date_to)
         };
         tokio::spawn(async move {
             let result = if let Some(act_uuid_s) = id_s.strip_prefix("act:") {
@@ -2374,7 +2474,7 @@ async fn main() -> Result<()> {
             match result {
                 Ok(_) => {
                     tracing::info!("Документ '{id_s}' видалено.");
-                    if let Err(e) = reload_documents(&pool, ui_weak, cid, tab, &query).await {
+                    if let Err(e) = reload_documents(&pool, ui_weak, cid, tab, &query, cp_id, df, dt).await {
                         tracing::error!("Помилка оновлення документів після видалення: {e}");
                     }
                 }
@@ -2397,6 +2497,7 @@ async fn main() -> Result<()> {
     let active_company_id_select = active_company_id.clone();
     let counterparty_state_company_select = counterparty_state.clone();
     let act_state_company_select = act_state.clone();
+    let doc_cp_ids_company_select = doc_cp_ids.clone();
 
     ui.on_company_select_clicked(move |id_str| {
         let pool = pool_company_select.clone();
@@ -2404,6 +2505,7 @@ async fn main() -> Result<()> {
         let active_company_id = active_company_id_select.clone();
         let counterparty_state = counterparty_state_company_select.clone();
         let act_state = act_state_company_select.clone();
+        let doc_cp_ids = doc_cp_ids_company_select.clone();
         let id_s = id_str.to_string();
 
         tokio::spawn(async move {
@@ -2476,7 +2578,10 @@ async fn main() -> Result<()> {
                         tracing::error!("Помилка завантаження платежів після вибору компанії: {e}");
                     }
 
-                    if let Err(e) = reload_documents(&pool, ui_handle.clone(), company_id, 0, "").await {
+                    if let Err(e) = reload_doc_cp_filter(&pool, ui_handle.clone(), company_id, &doc_cp_ids).await {
+                        tracing::error!("Помилка оновлення фільтру контрагентів після вибору компанії: {e}");
+                    }
+                    if let Err(e) = reload_documents(&pool, ui_handle.clone(), company_id, 0, "", None, None, None).await {
                         tracing::error!("Помилка завантаження документів після вибору компанії: {e}");
                     }
                 }
@@ -3111,7 +3216,7 @@ async fn reload_acts(
 ) -> Result<()> {
     // Три незалежних запити паралельно (урок: tokio::join!)
     let (acts_result, counts_result, kpi_result) = tokio::join!(
-        db::acts::list_filtered(pool, company_id, status_filter, normalized_query(&query)),
+        db::acts::list_filtered(pool, company_id, status_filter, normalized_query(&query), None, None, None),
         db::acts::count_by_status(pool, company_id),
         db::acts::get_kpi(pool, company_id)
     );
@@ -3253,7 +3358,7 @@ async fn reload_invoices(
     query: String,
     close_form: bool,
 ) -> Result<()> {
-    let invoices = db::invoices::list_filtered(pool, company_id, status_filter, normalized_query(&query)).await?;
+    let invoices = db::invoices::list_filtered(pool, company_id, status_filter, normalized_query(&query), None, None, None).await?;
     let rows: Vec<Vec<SharedString>> = invoices
         .iter()
         .map(|inv| {
@@ -3354,6 +3459,9 @@ async fn reload_documents(
     company_id: uuid::Uuid,
     tab: i32,
     query: &str,
+    counterparty_id: Option<uuid::Uuid>,
+    date_from: Option<chrono::NaiveDate>,
+    date_to: Option<chrono::NaiveDate>,
 ) -> Result<()> {
     let search = if query.trim().is_empty() { None } else { Some(query) };
 
@@ -3361,14 +3469,14 @@ async fn reload_documents(
     let (acts_res, invs_res) = tokio::join!(
         async {
             if tab != 2 {
-                db::acts::list_filtered(pool, company_id, None, search).await
+                db::acts::list_filtered(pool, company_id, None, search, counterparty_id, date_from, date_to).await
             } else {
                 Ok(vec![])
             }
         },
         async {
             if tab != 1 {
-                db::invoices::list_filtered(pool, company_id, None, search).await
+                db::invoices::list_filtered(pool, company_id, None, search, counterparty_id, date_from, date_to).await
             } else {
                 Ok(vec![])
             }
@@ -3425,6 +3533,31 @@ async fn reload_documents(
         })
         .map_err(anyhow::Error::from)?;
 
+    Ok(())
+}
+
+/// Завантажити список контрагентів для фільтру в списку документів.
+///
+/// Оновлює `doc_cp_ids` (UUID-и без "Всі контрагенти") і встановлює
+/// `doc-filter-cp-names` на UI (з "Всі контрагенти" на позиції 0).
+async fn reload_doc_cp_filter(
+    pool: &sqlx::PgPool,
+    ui_weak: Weak<MainWindow>,
+    company_id: uuid::Uuid,
+    doc_cp_ids: &Mutex<Vec<uuid::Uuid>>,
+) -> Result<()> {
+    let cps = db::acts::counterparties_for_select(pool, company_id).await?;
+    {
+        let mut ids = doc_cp_ids.lock().unwrap();
+        *ids = cps.iter().map(|(id, _)| *id).collect();
+    }
+    let mut names: Vec<slint::SharedString> = vec![slint::SharedString::from("Всі контрагенти")];
+    names.extend(cps.iter().map(|(_, n)| slint::SharedString::from(n.as_str())));
+    ui_weak
+        .upgrade_in_event_loop(move |ui| {
+            ui.set_doc_filter_cp_names(ModelRc::new(VecModel::from(names)));
+        })
+        .map_err(anyhow::Error::from)?;
     Ok(())
 }
 
@@ -3703,11 +3836,11 @@ fn spawn_save_act(
                 {
                     tracing::error!("Помилка оновлення списку актів після збереження: {e}");
                 }
-                let (doc_tab, doc_query) = {
+                let (doc_tab, doc_query, doc_cp, doc_df, doc_dt) = {
                     let s = doc_state.lock().unwrap();
-                    (s.tab, s.query.clone())
+                    (s.tab, s.query.clone(), s.counterparty_id, s.date_from, s.date_to)
                 };
-                if let Err(e) = reload_documents(&pool, ui_weak.clone(), company_id, doc_tab, &doc_query).await {
+                if let Err(e) = reload_documents(&pool, ui_weak.clone(), company_id, doc_tab, &doc_query, doc_cp, doc_df, doc_dt).await {
                     tracing::error!("Помилка оновлення документів після збереження акту: {e}");
                 }
             }
@@ -3793,11 +3926,11 @@ fn spawn_save_invoice(
                 if let Err(e) = reload_invoices(&pool, ui_weak.clone(), company_id, status_filter, query, true).await {
                     tracing::error!("Помилка оновлення списку накладних: {e}");
                 }
-                let (doc_tab, doc_query) = {
+                let (doc_tab, doc_query, doc_cp, doc_df, doc_dt) = {
                     let s = doc_state.lock().unwrap();
-                    (s.tab, s.query.clone())
+                    (s.tab, s.query.clone(), s.counterparty_id, s.date_from, s.date_to)
                 };
-                if let Err(e) = reload_documents(&pool, ui_weak, company_id, doc_tab, &doc_query).await {
+                if let Err(e) = reload_documents(&pool, ui_weak, company_id, doc_tab, &doc_query, doc_cp, doc_df, doc_dt).await {
                     tracing::error!("Помилка оновлення документів після збереження накладної: {e}");
                 }
             }

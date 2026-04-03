@@ -351,14 +351,20 @@ export component MainWindow inherits Window {
     in property <[DocRow]> document-rows;
     in property <bool>     documents-loading: false;
     in property <int>      doc-active-tab: 0;
+    in property <[string]> doc-filter-cp-names;
+    in property <int>      doc-filter-cp-index: 0;
 
     // ── Колбеки документів ─────────────────────────────────────────────────
-    callback doc-new-clicked();
+    callback doc-new-act-clicked();
+    callback doc-new-invoice-clicked();
     callback doc-open-clicked(string);
     callback doc-delete-clicked(string);
     callback doc-pdf-clicked(string);
     callback doc-tab-changed(int);
     callback doc-search-changed(string);
+    callback doc-cp-filter-changed(int);
+    callback doc-date-from-changed(string);
+    callback doc-date-to-changed(string);
 
     // в”Ђв”Ђ РљРѕР»Р±РµРєРё Р·Р°РґР°С‡ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
     callback task-search-changed(string);
@@ -718,16 +724,22 @@ export component MainWindow inherits Window {
 
             // ── Сторінка 1: Документи — список ────────────────────────────────
             if root.current-page == 1 && !root.show-act-form && !root.show-invoice-form : DocumentList {
-                rows:        root.document-rows;
-                loading:     root.documents-loading;
-                active-tab:  root.doc-active-tab;
+                rows:                   root.document-rows;
+                loading:                root.documents-loading;
+                active-tab:             root.doc-active-tab;
+                filter-counterparty-names: root.doc-filter-cp-names;
+                filter-counterparty-index: root.doc-filter-cp-index;
 
-                new-document        => { root.doc-new-clicked(); }
-                open-document(id)   => { root.doc-open-clicked(id); }
-                delete-document(id) => { root.doc-delete-clicked(id); }
-                export-pdf(id)      => { root.doc-pdf-clicked(id); }
-                tab-changed(i)      => { root.doc-tab-changed(i); }
-                search-changed(q)   => { root.doc-search-changed(q); }
+                new-document-act        => { root.doc-new-act-clicked(); }
+                new-document-invoice    => { root.doc-new-invoice-clicked(); }
+                open-document(id)       => { root.doc-open-clicked(id); }
+                delete-document(id)     => { root.doc-delete-clicked(id); }
+                export-pdf(id)          => { root.doc-pdf-clicked(id); }
+                tab-changed(i)          => { root.doc-tab-changed(i); }
+                search-changed(q)       => { root.doc-search-changed(q); }
+                counterparty-filter-changed(i) => { root.doc-cp-filter-changed(i); }
+                date-from-changed(s)    => { root.doc-date-from-changed(s); }
+                date-to-changed(s)      => { root.doc-date-to-changed(s); }
             }
 
             // в”Ђв”Ђ РЎС‚РѕСЂС–РЅРєР° 1: РђРєС‚Рё вЂ” С„РѕСЂРјР° в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ

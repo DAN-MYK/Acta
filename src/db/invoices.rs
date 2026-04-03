@@ -65,99 +65,66 @@ pub async fn list(
     company_id: Uuid,
     status_filter: Option<InvoiceStatus>,
 ) -> Result<Vec<InvoiceListRow>> {
-    list_filtered(pool, company_id, status_filter, None).await
+    list_filtered(pool, company_id, status_filter, None, None, None, None).await
 }
 
-/// Список накладних з фільтром за статусом і текстовим пошуком.
+/// Список накладних з фільтром за статусом, текстовим пошуком,
+/// контрагентом і діапазоном дат.
 ///
-/// 4 гілки match — аналогічно acts::list_filtered.
-/// Всі runtime-style для уникнення залежності від sqlx кешу.
+/// Використовує `QueryBuilder` для динамічної побудови WHERE-умов
+/// аналогічно acts::list_filtered.
 pub async fn list_filtered(
     pool: &PgPool,
     company_id: Uuid,
     status_filter: Option<InvoiceStatus>,
     search_query: Option<&str>,
+    counterparty_id: Option<Uuid>,
+    date_from: Option<chrono::NaiveDate>,
+    date_to: Option<chrono::NaiveDate>,
 ) -> Result<Vec<InvoiceListRow>> {
     let search_query = search_query.map(str::trim).filter(|q| !q.is_empty());
+    let has_search = search_query.is_some();
 
-    let rows = match (status_filter, search_query) {
-        (None, None) => {
-            sqlx::query_as::<_, InvoiceListRow>(
-                r#"
-                SELECT i.id, i.number, i.date,
-                       c.name AS counterparty_name,
-                       i.total_amount, i.status
-                FROM invoices i
-                JOIN counterparties c ON c.id = i.counterparty_id
-                WHERE i.company_id = $1
-                ORDER BY i.date DESC, i.number
-                "#,
-            )
-            .bind(company_id)
-            .fetch_all(pool)
-            .await?
-        }
-        (Some(status), None) => {
-            sqlx::query_as::<_, InvoiceListRow>(
-                r#"
-                SELECT i.id, i.number, i.date,
-                       c.name AS counterparty_name,
-                       i.total_amount, i.status
-                FROM invoices i
-                JOIN counterparties c ON c.id = i.counterparty_id
-                WHERE i.status = $1 AND i.company_id = $2
-                ORDER BY i.date DESC, i.number
-                "#,
-            )
-            .bind(status)
-            .bind(company_id)
-            .fetch_all(pool)
-            .await?
-        }
-        (None, Some(q)) => {
-            let pattern = format!("%{q}%");
-            sqlx::query_as::<_, InvoiceListRow>(
-                r#"
-                SELECT i.id, i.number, i.date,
-                       c.name AS counterparty_name,
-                       i.total_amount, i.status
-                FROM invoices i
-                JOIN counterparties c ON c.id = i.counterparty_id
-                WHERE (i.number ILIKE $1 OR c.name ILIKE $1)
-                  AND i.company_id = $2
-                ORDER BY i.date DESC, i.number
-                LIMIT 100
-                "#,
-            )
-            .bind(pattern)
-            .bind(company_id)
-            .fetch_all(pool)
-            .await?
-        }
-        (Some(status), Some(q)) => {
-            let pattern = format!("%{q}%");
-            sqlx::query_as::<_, InvoiceListRow>(
-                r#"
-                SELECT i.id, i.number, i.date,
-                       c.name AS counterparty_name,
-                       i.total_amount, i.status
-                FROM invoices i
-                JOIN counterparties c ON c.id = i.counterparty_id
-                WHERE i.status = $1
-                  AND (i.number ILIKE $2 OR c.name ILIKE $2)
-                  AND i.company_id = $3
-                ORDER BY i.date DESC, i.number
-                LIMIT 100
-                "#,
-            )
-            .bind(status)
-            .bind(pattern)
-            .bind(company_id)
-            .fetch_all(pool)
-            .await?
-        }
-    };
+    let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
+        r#"SELECT i.id, i.number, i.date,
+               c.name AS counterparty_name,
+               i.total_amount, i.status
+        FROM invoices i
+        JOIN counterparties c ON c.id = i.counterparty_id
+        WHERE i.company_id = "#,
+    );
+    qb.push_bind(company_id);
 
+    if let Some(status) = status_filter {
+        qb.push(" AND i.status = ");
+        qb.push_bind(status);
+    }
+    if let Some(q) = search_query {
+        let pattern = format!("%{q}%");
+        qb.push(" AND (i.number ILIKE ");
+        qb.push_bind(pattern.clone());
+        qb.push(" OR c.name ILIKE ");
+        qb.push_bind(pattern);
+        qb.push(")");
+    }
+    if let Some(cp_id) = counterparty_id {
+        qb.push(" AND i.counterparty_id = ");
+        qb.push_bind(cp_id);
+    }
+    if let Some(df) = date_from {
+        qb.push(" AND i.date >= ");
+        qb.push_bind(df);
+    }
+    if let Some(dt) = date_to {
+        qb.push(" AND i.date <= ");
+        qb.push_bind(dt);
+    }
+    qb.push(" ORDER BY i.date DESC, i.number");
+    if has_search {
+        qb.push(" LIMIT 100");
+    }
+
+    let rows = qb.build_query_as::<InvoiceListRow>().fetch_all(pool).await?;
     Ok(rows)
 }
 
