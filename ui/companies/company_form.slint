@@ -3,10 +3,12 @@
 // is-edit = false → "Нова компанія"
 // is-edit = true  → "Редагувати компанію" (edit-id заповнено)
 
-import { Button, LineEdit, CheckBox, ScrollView } from "std-widgets.slint";
+import { LineEdit, CheckBox, ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 
-export component CompanyForm {
+export component CompanyForm inherits Rectangle {
+    background: Theme.bg;
+
     in property <bool>   is-edit: false;
     in property <string> edit-id: "";
     in property <string> form-name: "";
@@ -32,21 +34,121 @@ export component CompanyForm {
     private property <bool>   v-vat:         root.form-is-vat-payer;
 
     VerticalLayout {
-        padding: 24px;
-        spacing: 16px;
+        spacing: 0;
 
-        // Заголовок
-        Text {
-            text: root.is-edit ? "✏️  Редагувати компанію" : "🏢  Нова компанія";
-            font-size: 20px;
-            font-weight: 700;
-            color: Theme.text-main;
+        // ── Topbar ─────────────────────────────────────────────────────────
+        Rectangle {
+            height: 64px;
+            background: Theme.surface;
+
+            Rectangle {
+                y: 63px;
+                height: 1px;
+                background: Theme.border;
+            }
+
+            HorizontalLayout {
+                padding-left: 32px;
+                padding-right: 32px;
+                spacing: 8px;
+
+                HorizontalLayout {
+                    spacing: 6px;
+                    horizontal-stretch: 1;
+                    alignment: start;
+
+                    Text {
+                        text: "← Компанії";
+                        font-size: 14px;
+                        color: Theme.primary;
+                        vertical-alignment: center;
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.cancel(); }
+                        }
+                    }
+                    Text {
+                        text: "/";
+                        font-size: 14px;
+                        color: Theme.text-muted;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: root.is-edit ? "Редагувати компанію" : "Нова компанія";
+                        font-size: 14px;
+                        font-weight: 600;
+                        color: Theme.text-main;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 120px;
+                    height: 36px;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: 8px;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    background: co-cancel-touch.has-hover ? Theme.hover-bg : Theme.bg;
+                    animate background { duration: 80ms; }
+
+                    Text {
+                        text: "Скасувати";
+                        font-size: 14px;
+                        color: Theme.text-sub;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    co-cancel-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.cancel(); }
+                    }
+                }
+
+                Rectangle {
+                    width: 112px;
+                    height: 36px;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: 8px;
+                    background: co-save-touch.has-hover ? #2D64E3 : Theme.primary;
+                    animate background { duration: 80ms; }
+
+                    Text {
+                        text: root.is-edit ? "Зберегти" : "Створити";
+                        font-size: 14px;
+                        font-weight: 600;
+                        color: #ffffff;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    co-save-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            if root.is-edit {
+                                root.update(
+                                    root.v-name, root.v-edrpou, root.v-iban,
+                                    root.v-address, root.v-director, root.v-accountant,
+                                    root.v-vat
+                                );
+                            } else {
+                                root.save(
+                                    root.v-name, root.v-edrpou, root.v-iban,
+                                    root.v-address, root.v-director, root.v-accountant,
+                                    root.v-vat
+                                );
+                            }
+                        }
+                    }
+                }
+            }
         }
 
+        // ── Контент ────────────────────────────────────────────────────────
         ScrollView {
             vertical-stretch: 1;
 
             VerticalLayout {
+                padding: 32px;
                 spacing: 12px;
 
                 // Назва (обов'язково)
@@ -123,37 +225,6 @@ export component CompanyForm {
                         text: "Платник ПДВ";
                         checked: root.v-vat;
                         toggled => { root.v-vat = self.checked; }
-                    }
-                }
-            }
-        }
-
-        // Кнопки
-        HorizontalLayout {
-            spacing: 8px;
-            alignment: end;
-
-            Button {
-                text: "Скасувати";
-                clicked => { root.cancel(); }
-            }
-
-            Button {
-                text: root.is-edit ? "Зберегти зміни" : "Створити";
-                primary: true;
-                clicked => {
-                    if root.is-edit {
-                        root.update(
-                            root.v-name, root.v-edrpou, root.v-iban,
-                            root.v-address, root.v-director, root.v-accountant,
-                            root.v-vat
-                        );
-                    } else {
-                        root.save(
-                            root.v-name, root.v-edrpou, root.v-iban,
-                            root.v-address, root.v-director, root.v-accountant,
-                            root.v-vat
-                        );
                     }
                 }
             }

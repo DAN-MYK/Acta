@@ -3,9 +3,10 @@
 // UI-логіка тут, бізнес-логіка та валідація дат — у Rust.
 
 import { Theme } from "../theme.slint";
-import { Button, LineEdit, TextEdit, ComboBox } from "std-widgets.slint";
+import { LineEdit, TextEdit, ComboBox } from "std-widgets.slint";
 
-export component TaskForm {
+export component TaskForm inherits Rectangle {
+    background: Theme.bg;
 
     in property <bool>   is-edit-mode: false;
     in property <string> task-edit-id: "";
@@ -42,24 +43,109 @@ export component TaskForm {
                 height: 64px;
                 background: Theme.surface;
 
+                Rectangle {
+                    y: 63px;
+                    height: 1px;
+                    background: Theme.border;
+                }
+
                 HorizontalLayout {
                     padding-left: 32px;
                     padding-right: 32px;
+                    spacing: 8px;
 
-                    Text {
-                        text: root.is-edit-mode ? "Редагування задачі" : "Нова задача";
-                        font-size: 18px;
-                        font-weight: 600;
-                        color: Theme.text-main;
-                        vertical-alignment: center;
+                    HorizontalLayout {
+                        spacing: 6px;
                         horizontal-stretch: 1;
-                    }
-                }
+                        alignment: start;
 
-                Rectangle {
-                    y: parent.height - 1px;
-                    height: 1px;
-                    background: Theme.border;
+                        Text {
+                            text: "← To-Do";
+                            font-size: 14px;
+                            color: Theme.primary;
+                            vertical-alignment: center;
+                            TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { root.cancel(); }
+                            }
+                        }
+                        Text {
+                            text: "/";
+                            font-size: 14px;
+                            color: Theme.text-muted;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: root.is-edit-mode ? "Редагування задачі" : "Нова задача";
+                            font-size: 14px;
+                            font-weight: 600;
+                            color: Theme.text-main;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    Rectangle {
+                        width: 120px;
+                        height: 36px;
+                        y: (parent.height - self.height) / 2;
+                        border-radius: 8px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        background: task-cancel-touch.has-hover ? Theme.hover-bg : Theme.bg;
+                        animate background { duration: 80ms; }
+
+                        Text {
+                            text: "Скасувати";
+                            font-size: 14px;
+                            color: Theme.text-sub;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        task-cancel-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.cancel(); }
+                        }
+                    }
+
+                    Rectangle {
+                        width: 112px;
+                        height: 36px;
+                        y: (parent.height - self.height) / 2;
+                        border-radius: 8px;
+                        background: task-save-touch.has-hover ? #2D64E3 : Theme.primary;
+                        animate background { duration: 80ms; }
+
+                        Text {
+                            text: "Зберегти";
+                            font-size: 14px;
+                            font-weight: 600;
+                            color: #ffffff;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        task-save-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                if root.is-edit-mode {
+                                    root.update(
+                                        title-field.text,
+                                        description-field.text,
+                                        priority-combo.current-index,
+                                        due-field.text,
+                                        reminder-field.text
+                                    );
+                                } else {
+                                    root.save(
+                                        title-field.text,
+                                        description-field.text,
+                                        priority-combo.current-index,
+                                        due-field.text,
+                                        reminder-field.text
+                                    );
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -185,40 +271,6 @@ export component TaskForm {
                     }
 
                     Rectangle { vertical-stretch: 1; }
-
-                    HorizontalLayout {
-                        alignment: space-between;
-                        vertical-stretch: 0;
-
-                        Button {
-                            text: "← Назад";
-                            clicked => { root.cancel(); }
-                        }
-
-                        Button {
-                            text: "Зберегти";
-                            primary: true;
-                            clicked => {
-                                if root.is-edit-mode {
-                                    root.update(
-                                        title-field.text,
-                                        description-field.text,
-                                        priority-combo.current-index,
-                                        due-field.text,
-                                        reminder-field.text
-                                    );
-                                } else {
-                                    root.save(
-                                        title-field.text,
-                                        description-field.text,
-                                        priority-combo.current-index,
-                                        due-field.text,
-                                        reminder-field.text
-                                    );
-                                }
-                            }
-                        }
-                    }
                 }
             }
         }

@@ -20,63 +20,7 @@
 
 import { Theme } from "../theme.slint";
 import { LineEdit, TextEdit, ComboBox, ScrollView, ProgressIndicator, ListView } from "std-widgets.slint";
-
-// ── Компонент вибору статусу (radio-style картка) ──────────────────────────
-component StatusOption inherits Rectangle {
-    in property <string> title;
-    in property <string> subtitle;
-    in property <bool>   selected: false;
-    in property <color>  accent: Theme.warning;
-    callback clicked();
-
-    height: 48px;
-    border-radius: 8px;
-    border-width: root.selected ? 2px : 1px;
-    border-color: root.selected ? root.accent : Theme.border;
-    background: root.selected
-        ? root.accent.with-alpha(0.08)
-        : (opt-touch.has-hover ? Theme.hover-bg : Theme.surface);
-    animate background { duration: 80ms; }
-
-    // Коло радіо-кнопки
-    Rectangle {
-        x: 12px;
-        y: (parent.height - self.height) / 2;
-        width: 16px;
-        height: 16px;
-        border-radius: 8px;
-        border-width: 2px;
-        border-color: root.selected ? root.accent : Theme.border;
-        background: root.selected ? root.accent : transparent;
-
-        if root.selected : Rectangle {
-            x: 5px; y: 5px;
-            width: 6px; height: 6px;
-            border-radius: 3px;
-            background: #ffffff;
-        }
-    }
-
-    Text {
-        x: 36px; y: 9px;
-        text: root.title;
-        font-size: 13px;
-        font-weight: 600;
-        color: root.selected ? root.accent : Theme.text-main;
-    }
-
-    Text {
-        x: 36px; y: 28px;
-        text: root.subtitle;
-        font-size: 11px;
-        color: Theme.text-sub;
-    }
-
-    opt-touch := TouchArea {
-        mouse-cursor: pointer;
-        clicked => { root.clicked(); }
-    }
-}
+import { StatusOption } from "../components/status_option.slint";
 
 // ── Головний компонент форми ───────────────────────────────────────────────
 export component ActForm inherits Rectangle {
@@ -264,7 +208,7 @@ export component ActForm inherits Rectangle {
                             text: "Зберегти";
                             font-size: 14px;
                             font-weight: 600;
-                            color: #ffffff;
+                            color: Theme.text-white;
                             horizontal-alignment: center;
                             vertical-alignment: center;
                         }
@@ -272,14 +216,18 @@ export component ActForm inherits Rectangle {
                             mouse-cursor: pointer;
                             clicked => {
                                 // category-ids[0] = "" (без категорії), [1..] = реальні ID
+                                // Захист від порожніх масивів: ComboBox завжди має валідний
+                                // current-index, але масиви IDs мають рівну довжину з names.
+                                // Rust гарантує це, але додаємо guard на випадок race condition.
+                                if root.counterparty-ids.length == 0 { return; }
                                 if (root.is-edit-mode) {
                                     root.update(
                                         number-field.text,
                                         date-field.text,
                                         root.counterparty-ids[cp-combo.current-index],
                                         notes-field.text,
-                                        root.category-ids[cat-combo.current-index],
-                                        root.contract-ids[con-combo.current-index],
+                                        cat-combo.current-index < root.category-ids.length ? root.category-ids[cat-combo.current-index] : "",
+                                        con-combo.current-index < root.contract-ids.length ? root.contract-ids[con-combo.current-index] : "",
                                         exp-date-field.text
                                     );
                                 } else if (root.act-status == 0) {
@@ -288,8 +236,8 @@ export component ActForm inherits Rectangle {
                                         date-field.text,
                                         root.counterparty-ids[cp-combo.current-index],
                                         notes-field.text,
-                                        root.category-ids[cat-combo.current-index],
-                                        root.contract-ids[con-combo.current-index],
+                                        cat-combo.current-index < root.category-ids.length ? root.category-ids[cat-combo.current-index] : "",
+                                        con-combo.current-index < root.contract-ids.length ? root.contract-ids[con-combo.current-index] : "",
                                         exp-date-field.text
                                     );
                                 } else {
@@ -298,8 +246,8 @@ export component ActForm inherits Rectangle {
                                         date-field.text,
                                         root.counterparty-ids[cp-combo.current-index],
                                         notes-field.text,
-                                        root.category-ids[cat-combo.current-index],
-                                        root.contract-ids[con-combo.current-index],
+                                        cat-combo.current-index < root.category-ids.length ? root.category-ids[cat-combo.current-index] : "",
+                                        con-combo.current-index < root.contract-ids.length ? root.contract-ids[con-combo.current-index] : "",
                                         exp-date-field.text
                                     );
                                 }
@@ -594,27 +542,29 @@ export component ActForm inherits Rectangle {
                                                     horizontal-stretch: 3;
                                                     edited(v) => { root.item-changed(i, "desc", v); }
                                                 }
+                                                // Паралельні масиви: Rust оновлює всі разом, але
+                                                // додаємо bounds-check на випадок тимчасового розсинхрону.
                                                 LineEdit {
-                                                    text: root.item-quantities[i];
+                                                    text: i < root.item-quantities.length ? root.item-quantities[i] : "";
                                                     font-size: 13px;
                                                     width: 72px;
                                                     edited(v) => { root.item-changed(i, "qty", v); }
                                                 }
                                                 LineEdit {
-                                                    text: root.item-units[i];
+                                                    text: i < root.item-units.length ? root.item-units[i] : "";
                                                     font-size: 13px;
                                                     width: 70px;
                                                     edited(v) => { root.item-changed(i, "unit", v); }
                                                 }
                                                 LineEdit {
-                                                    text: root.item-prices[i];
+                                                    text: i < root.item-prices.length ? root.item-prices[i] : "";
                                                     font-size: 13px;
                                                     width: 100px;
                                                     edited(v) => { root.item-changed(i, "price", v); }
                                                 }
                                                 // amount — read-only, обчислюється в Rust
                                                 Text {
-                                                    text: root.item-amounts[i];
+                                                    text: i < root.item-amounts.length ? root.item-amounts[i] : "";
                                                     font-size: 13px;
                                                     font-weight: 600;
                                                     color: Theme.text-main;
@@ -820,20 +770,20 @@ export component ActForm inherits Rectangle {
                                                 raw-status == "cancelled"   ? Theme.text-muted :
                                                 Theme.warning;
                                             property <color> status-bg:
-                                                raw-status == "done"        ? #1EB16E1F :
-                                                raw-status == "in_progress" ? #3D75F41A :
-                                                raw-status == "cancelled"   ? #ABABB71F :
-                                                #F4A31E1F;
+                                                raw-status == "done"        ? Theme.success.with-alpha(0.12) :
+                                                raw-status == "in_progress" ? Theme.primary.with-alpha(0.10) :
+                                                raw-status == "cancelled"   ? Theme.text-muted.with-alpha(0.12) :
+                                                Theme.warning.with-alpha(0.12);
                                             property <color> priority-color:
                                                 raw-priority == "critical" ? Theme.priority-critical :
                                                 raw-priority == "high"     ? Theme.priority-high :
                                                 raw-priority == "normal"   ? Theme.primary :
                                                 Theme.text-muted;
                                             property <color> priority-bg:
-                                                raw-priority == "critical" ? #DC26261A :
-                                                raw-priority == "high"     ? #F973161A :
-                                                raw-priority == "normal"   ? #3D75F41A :
-                                                #ABABB71A;
+                                                raw-priority == "critical" ? Theme.priority-critical.with-alpha(0.10) :
+                                                raw-priority == "high"     ? Theme.priority-high.with-alpha(0.10) :
+                                                raw-priority == "normal"   ? Theme.primary.with-alpha(0.10) :
+                                                Theme.text-muted.with-alpha(0.10);
 
                                             height: 48px;
                                             background: row-touch.has-hover ? Theme.row-hover : Theme.surface;
@@ -920,7 +870,7 @@ export component ActForm inherits Rectangle {
                                                         border-radius: 6px;
                                                         height: 28px;
                                                         width: 56px;
-                                                        Text { text: "✓"; color: #ffffff; font-size: 12px; horizontal-alignment: center; vertical-alignment: center; }
+                                                        Text { text: "✓"; color: Theme.text-white; font-size: 12px; horizontal-alignment: center; vertical-alignment: center; }
                                                         TouchArea {
                                                             mouse-cursor: pointer;
                                                             clicked => {
@@ -951,9 +901,7 @@ export component ActForm inherits Rectangle {
                                                 }
                                             }
 
-                                            row-touch := TouchArea {
-                                                mouse-cursor: pointer;
-                                            }
+                                            row-touch := TouchArea { }
                                         }
                                     }
 

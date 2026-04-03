@@ -1,0 +1,72 @@
+// components/status_option.slint — Радіо-стиль вибору статусу
+//
+// Використовується у: ActForm, InvoiceForm (та інших формах документів)
+//
+// Приклад використання:
+//   import { StatusOption } from "../components/status_option.slint";
+//
+//   StatusOption {
+//       title: "Виставлений";
+//       subtitle: "Очікує підпису";
+//       selected: root.status == 1;
+//       accent: Theme.warning;
+//       clicked => { root.status = 1; }
+//   }
+
+import { Theme } from "../theme.slint";
+
+export component StatusOption inherits Rectangle {
+    in property <string> title;
+    in property <string> subtitle;
+    in property <bool>   selected: false;
+    in property <color>  accent: Theme.warning;
+    callback clicked();
+
+    height: 48px;
+    border-radius: 8px;
+    border-width: root.selected ? 2px : 1px;
+    border-color: root.selected ? root.accent : Theme.border;
+    background: root.selected
+        ? root.accent.with-alpha(0.08)
+        : (opt-touch.has-hover ? Theme.hover-bg : Theme.surface);
+    animate background { duration: 80ms; }
+
+    // Коло радіо-кнопки
+    Rectangle {
+        x: 12px;
+        y: (parent.height - self.height) / 2;
+        width: 16px;
+        height: 16px;
+        border-radius: 8px;
+        border-width: 2px;
+        border-color: root.selected ? root.accent : Theme.border;
+        background: root.selected ? root.accent : transparent;
+
+        if root.selected : Rectangle {
+            x: 5px; y: 5px;
+            width: 6px; height: 6px;
+            border-radius: 3px;
+            background: #ffffff;
+        }
+    }
+
+    Text {
+        x: 36px; y: 9px;
+        text: root.title;
+        font-size: 13px;
+        font-weight: 600;
+        color: root.selected ? root.accent : Theme.text-main;
+    }
+
+    Text {
+        x: 36px; y: 28px;
+        text: root.subtitle;
+        font-size: 11px;
+        color: Theme.text-sub;
+    }
+
+    opt-touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}

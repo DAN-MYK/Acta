@@ -8,7 +8,8 @@
 import { Theme } from "../theme.slint";
 import { Button, LineEdit, TextEdit, ComboBox, ScrollView } from "std-widgets.slint";
 
-export component InvoiceForm {
+export component InvoiceForm inherits Rectangle {
+    background: Theme.bg;
 
     // ── Вхідні дані ────────────────────────────────────────────────────────
     in property <[string]> counterparty-names;
@@ -76,21 +77,128 @@ export component InvoiceForm {
         }
 
         VerticalLayout {
-            padding: 24px;
-            spacing: 16px;
+            spacing: 0;
 
-            // ── Заголовок ──────────────────────────────────────────────────
-            HorizontalLayout {
-                vertical-stretch: 0;
+            // ── Topbar ─────────────────────────────────────────────────────
+            Rectangle {
+                height: 64px;
+                background: Theme.surface;
 
-                Text {
-                    text: root.is-edit-mode ? "Редагування накладної" : "Нова накладна";
-                    font-size: 22px;
-                    font-weight: 700;
-                    color: Theme.text-main;
-                    vertical-alignment: center;
+                Rectangle {
+                    y: 63px;
+                    height: 1px;
+                    background: Theme.border;
+                }
+
+                HorizontalLayout {
+                    padding-left: 32px;
+                    padding-right: 32px;
+                    spacing: 8px;
+
+                    HorizontalLayout {
+                        spacing: 6px;
+                        horizontal-stretch: 1;
+                        alignment: start;
+
+                        Text {
+                            text: "← Документи";
+                            font-size: 14px;
+                            color: Theme.primary;
+                            vertical-alignment: center;
+                            TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { root.cancel(); }
+                            }
+                        }
+                        Text {
+                            text: "/";
+                            font-size: 14px;
+                            color: Theme.text-muted;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: root.is-edit-mode ? "Редагування накладної" : "Нова накладна";
+                            font-size: 14px;
+                            font-weight: 600;
+                            color: Theme.text-main;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    Rectangle {
+                        width: 120px;
+                        height: 36px;
+                        y: (parent.height - self.height) / 2;
+                        border-radius: 8px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        background: inv-cancel-touch.has-hover ? Theme.hover-bg : Theme.bg;
+                        animate background { duration: 80ms; }
+
+                        Text {
+                            text: "Скасувати";
+                            font-size: 14px;
+                            color: Theme.text-sub;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        inv-cancel-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.cancel(); }
+                        }
+                    }
+
+                    Rectangle {
+                        width: 112px;
+                        height: 36px;
+                        y: (parent.height - self.height) / 2;
+                        border-radius: 8px;
+                        background: inv-save-touch.has-hover ? #2D64E3 : Theme.primary;
+                        animate background { duration: 80ms; }
+
+                        Text {
+                            text: "Зберегти";
+                            font-size: 14px;
+                            font-weight: 600;
+                            color: #ffffff;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        inv-save-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                if (root.is-edit-mode) {
+                                    root.update(
+                                        number-field.text,
+                                        date-field.text,
+                                        root.counterparty-ids[cp-combo.current-index],
+                                        notes-field.text,
+                                        root.category-ids[inv-cat-combo.current-index],
+                                        root.contract-ids[inv-con-combo.current-index],
+                                        inv-exp-date-field.text
+                                    );
+                                } else {
+                                    root.save(
+                                        number-field.text,
+                                        date-field.text,
+                                        root.counterparty-ids[cp-combo.current-index],
+                                        notes-field.text,
+                                        root.category-ids[inv-cat-combo.current-index],
+                                        root.contract-ids[inv-con-combo.current-index],
+                                        inv-exp-date-field.text
+                                    );
+                                }
+                            }
+                        }
+                    }
                 }
             }
+
+            // ── Контент форми ──────────────────────────────────────────────
+            VerticalLayout {
+                padding: 24px;
+                spacing: 16px;
+                vertical-stretch: 1;
 
             // ── Поля форми ─────────────────────────────────────────────────
             GridLayout {
@@ -454,44 +562,7 @@ export component InvoiceForm {
                 }
             }
 
-            // ── Кнопки дій ────────────────────────────────────────────────
-            HorizontalLayout {
-                alignment: space-between;
-                vertical-stretch: 0;
-
-                Button {
-                    text: "← Назад";
-                    clicked => { root.cancel(); }
-                }
-
-                Button {
-                    text: "Зберегти";
-                    primary: true;
-                    clicked => {
-                        if (root.is-edit-mode) {
-                            root.update(
-                                number-field.text,
-                                date-field.text,
-                                root.counterparty-ids[cp-combo.current-index],
-                                notes-field.text,
-                                root.category-ids[inv-cat-combo.current-index],
-                                root.contract-ids[inv-con-combo.current-index],
-                                inv-exp-date-field.text
-                            );
-                        } else {
-                            root.save(
-                                number-field.text,
-                                date-field.text,
-                                root.counterparty-ids[cp-combo.current-index],
-                                notes-field.text,
-                                root.category-ids[inv-cat-combo.current-index],
-                                root.contract-ids[inv-con-combo.current-index],
-                                inv-exp-date-field.text
-                            );
-                        }
-                    }
-                }
-            }
+            } // ── Кінець контенту форми ──────────────────────────────────
         }
     }
 }

@@ -393,7 +393,7 @@ export component ActCard {
                                             Theme.text-muted;
                                     }
 
-                                    Text { width: 8px; } // spacer
+                                    Rectangle { width: 8px; } // spacer
 
                                     Text {
                                         text: task.title;
@@ -429,16 +429,28 @@ export component ActCard {
                         vertical-stretch: 1;
                         background: Theme.bg-gray;
                         border-radius: 10px;
+                        clip: true;
 
-                        Text {
-                            x: 16px;
-                            y: 14px;
-                            width: parent.width - 32px;
-                            height: parent.height - 28px;
-                            text: root.act-notes == "" ? "Нотаток немає" : root.act-notes;
-                            color: root.act-notes == "" ? Theme.text-muted : Theme.text-main;
+                        if root.act-notes == "" : Text {
+                            width: parent.width;
+                            height: parent.height;
+                            text: "Нотаток немає";
+                            color: Theme.text-muted;
                             font-size: 13px;
-                            wrap: word-wrap;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+
+                        if root.act-notes != "" : ScrollView {
+                            padding: 16px;
+
+                            Text {
+                                width: parent.visible-width - 32px;
+                                text: root.act-notes;
+                                color: Theme.text-main;
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
                         }
                     }
                 }

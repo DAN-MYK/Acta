@@ -35,7 +35,9 @@ component FormField inherits Rectangle {
     }
 }
 
-export component CounterpartyForm {
+export component CounterpartyForm inherits Rectangle {
+    background: Theme.bg;
+
     in property <bool>   is-edit-mode: false;
     in property <string> cp-edit-id: "";
     in property <string> cp-name: "";
@@ -77,73 +79,90 @@ export component CounterpartyForm {
             padding: 0;
 
             Rectangle {
-                height: 56px;
+                height: 64px;
                 background: Theme.surface;
+
+                Rectangle {
+                    y: 63px;
+                    height: 1px;
+                    background: Theme.border;
+                }
 
                 HorizontalLayout {
                     padding-left: 32px;
                     padding-right: 32px;
-                    spacing: 12px;
-                    alignment: center;
+                    spacing: 8px;
 
-                    Text {
-                        text: "← Контрагенти";
-                        font-size: 12px;
-                        color: Theme.text-sub;
-                    }
-
-                    Text {
-                        text: "/";
-                        font-size: 12px;
-                        color: Theme.text-muted;
-                    }
-
-                    Text {
-                        text: root.is-edit-mode ? "Редагування контрагента" : "Новий контрагент";
-                        font-size: 12px;
-                        color: Theme.text-muted;
+                    HorizontalLayout {
+                        spacing: 6px;
                         horizontal-stretch: 1;
+                        alignment: start;
+
+                        Text {
+                            text: "← Контрагенти";
+                            font-size: 14px;
+                            color: Theme.primary;
+                            vertical-alignment: center;
+                            TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { root.cancel(); }
+                            }
+                        }
+                        Text {
+                            text: "/";
+                            font-size: 14px;
+                            color: Theme.text-muted;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: root.is-edit-mode ? "Редагування контрагента" : "Новий контрагент";
+                            font-size: 14px;
+                            font-weight: 600;
+                            color: Theme.text-main;
+                            vertical-alignment: center;
+                        }
                     }
 
                     Rectangle {
-                        width: 102px;
-                        height: 32px;
+                        width: 120px;
+                        height: 36px;
+                        y: (parent.height - self.height) / 2;
                         border-radius: 8px;
                         border-width: 1px;
                         border-color: Theme.border;
-                        background: Theme.surface;
+                        background: cp-cancel-touch.has-hover ? Theme.hover-bg : Theme.bg;
+                        animate background { duration: 80ms; }
 
                         Text {
                             text: "Скасувати";
+                            font-size: 14px;
                             color: Theme.text-sub;
-                            font-size: 12px;
-                            font-weight: 500;
                             horizontal-alignment: center;
                             vertical-alignment: center;
                         }
-
-                        TouchArea {
+                        cp-cancel-touch := TouchArea {
                             mouse-cursor: pointer;
                             clicked => { root.cancel(); }
                         }
                     }
 
                     Rectangle {
-                        width: 96px;
-                        height: 32px;
+                        width: 112px;
+                        height: 36px;
+                        y: (parent.height - self.height) / 2;
                         border-radius: 8px;
-                        background: Theme.primary;
+                        background: cp-save-touch.has-hover ? #2D64E3 : Theme.primary;
+                        animate background { duration: 80ms; }
 
                         Text {
                             text: "Зберегти";
-                            color: #ffffff;
-                            font-size: 12px;
+                            font-size: 14px;
                             font-weight: 600;
+                            color: #ffffff;
                             horizontal-alignment: center;
                             vertical-alignment: center;
                         }
-
-                        TouchArea {
+                        cp-save-touch := TouchArea {
                             mouse-cursor: pointer;
                             clicked => {
                                 if (root.is-edit-mode) {
@@ -172,12 +191,6 @@ export component CounterpartyForm {
                             }
                         }
                     }
-                }
-
-                Rectangle {
-                    y: parent.height - 1px;
-                    height: 1px;
-                    background: Theme.border;
                 }
             }
 

@@ -20,6 +20,13 @@ export component ActList {
     // "draft" | "issued" | "signed" | "paid" — для badge-кольорів
     in property <[string]>                 row-statuses;
     in property <bool>                     loading: false;
+    in property <[int]>                    status-counts: [0, 0, 0, 0, 0];
+
+    // ── KPI дані (Rust → Slint) ──────────────────────────────────────────────
+    in property <int>    kpi-acts-month: 0;
+    in property <string> kpi-revenue: "0 ₴";
+    in property <string> kpi-unpaid: "0 ₴";
+    in property <int>    kpi-overdue: 0;
 
     // ── Колбеки (Slint → Rust) ──────────────────────────────────────────────
     // 0=Усі, 1=Чернетка, 2=Виставлено, 3=Підписано, 4=Оплачено
@@ -36,14 +43,7 @@ export component ActList {
     private property <string> selected-id: "";
     private property <string> selected-status: "";
     private property <string> selected-number: "";
-    in property <[int]>    status-counts: [0, 0, 0, 0, 0];
-    private property <int> active-tab: 0;
-
-    // ── KPI дані (Rust → Slint) ──────────────────────────────────────────────
-    in property <int>    kpi-acts-month: 0;
-    in property <string> kpi-revenue: "0 ₴";
-    in property <string> kpi-unpaid: "0 ₴";
-    in property <int>    kpi-overdue: 0;
+    private property <int>    active-tab: 0;
 
     min-width: 600px;
     min-height: 400px;
@@ -80,7 +80,7 @@ export component ActList {
 
                     Text {
                         text: "+ Новий акт";
-                        color: #ffffff;
+                        color: Theme.text-white;
                         font-size: 13px;
                         font-weight: 500;
                         horizontal-alignment: center;
@@ -322,10 +322,10 @@ export component ActList {
                                     Theme.text-muted;
                                 // Фон badge (12% прозорість відповідного кольору)
                                 property <color> badge-bg:
-                                    raw-status == "paid"   ? #1EB16E1F :
-                                    raw-status == "signed" ? #3D75F41A :
-                                    raw-status == "issued" ? #F4A31E1F :
-                                    #ABABB71F;
+                                    raw-status == "paid"   ? Theme.success.with-alpha(0.12) :
+                                    raw-status == "signed" ? Theme.primary.with-alpha(0.10) :
+                                    raw-status == "issued" ? Theme.warning.with-alpha(0.12) :
+                                    Theme.text-muted.with-alpha(0.12);
 
                                 height: 52px;
                                 background: root.selected-row == i
@@ -504,7 +504,7 @@ export component ActList {
 
                         Text {
                             text: "Наступний статус ▶";
-                            color: root.selected-status != "paid" ? #ffffff : Theme.text-muted;
+                            color: root.selected-status != "paid" ? Theme.text-white : Theme.text-muted;
                             font-size: 13px;
                             font-weight: 500;
                             horizontal-alignment: center;
