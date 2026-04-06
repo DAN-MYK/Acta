@@ -120,9 +120,9 @@ export component PaymentForm inherits Rectangle {
                         mouse-cursor: pointer;
                         clicked => {
                             if (root.is-edit-mode) {
-                                root.update(root.v-date, root.v-amount, root.v-direction, root.counterparty-ids[root.v-counterparty], root.v-bank-name, root.v-bank-ref, root.v-description);
+                                root.update(root.v-date, root.v-amount, root.v-direction, root.v-counterparty < root.counterparty-ids.length ? root.counterparty-ids[root.v-counterparty] : "", root.v-bank-name, root.v-bank-ref, root.v-description);
                             } else {
-                                root.save(root.v-date, root.v-amount, root.v-direction, root.counterparty-ids[root.v-counterparty], root.v-bank-name, root.v-bank-ref, root.v-description);
+                                root.save(root.v-date, root.v-amount, root.v-direction, root.v-counterparty < root.counterparty-ids.length ? root.counterparty-ids[root.v-counterparty] : "", root.v-bank-name, root.v-bank-ref, root.v-description);
                             }
                         }
                     }

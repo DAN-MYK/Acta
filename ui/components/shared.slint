@@ -154,7 +154,7 @@ export component DangerButton inherits Rectangle {
     callback clicked;
 
     height: Theme.btn-lg-height;
-    border-radius: 10px;
+    border-radius: 10px; // навмисно між radius-md(8) і radius-lg(12) — не замінювати
     background: Theme.danger;
     drop-shadow-blur: 12px;
     drop-shadow-color: rgba(233, 58, 58, 25%);
@@ -284,7 +284,7 @@ export component Topbar inherits Rectangle {
 
     // Breadcrumb режим
     if breadcrumb != "": Text {
-        x: 32px; y: 22px;
+        x: Theme.space-8; y: 22px;
         text: breadcrumb;
         font-size: Theme.font-lg;
         color: Theme.primary;
@@ -292,14 +292,14 @@ export component Topbar inherits Rectangle {
 
     // Заголовок (без breadcrumb)
     if breadcrumb == "": Text {
-        x: 32px; y: 14px;
+        x: Theme.space-8; y: 14px;
         text: title;
         font-size: Theme.font-3xl;
         font-weight: 700;
         color: Theme.text-primary;
     }
     if breadcrumb == "" && subtitle != "": Text {
-        x: 32px; y: 40px;
+        x: Theme.space-8; y: 40px;
         text: subtitle;
         font-size: Theme.font-md;
         color: Theme.text-second;
@@ -307,7 +307,7 @@ export component Topbar inherits Rectangle {
 
     // CTA кнопка
     if btn-label != "": PrimaryButton {
-        x: parent.width - self.width - 24px;
+        x: parent.width - self.width - Theme.space-6;
         y: (parent.height - self.height) / 2;
         width: btn-label.character-count * 8px + 48px;
         label: btn-label;
@@ -341,7 +341,7 @@ export component KpiCard inherits Rectangle {
 
     // Іконний круг
     Rectangle {
-        x: 16px; y: 20px; width: 40px; height: 40px;
+        x: Theme.space-4; y: 20px; width: 40px; height: 40px;
         border-radius: 20px;
         background: accent.with-alpha(15%);
     }
@@ -390,7 +390,7 @@ export component ConfirmDeleteDialog inherits Rectangle {
             Text {
                 x: 0; y: 12px; width: 56px;
                 horizontal-alignment: center;
-                text: "!"; font-size: 24px; font-weight: 700; color: Theme.danger;
+                text: "!"; font-size: Theme.font-display; font-weight: 700; color: Theme.danger;
             }
         }
 
@@ -398,7 +398,7 @@ export component ConfirmDeleteDialog inherits Rectangle {
             x: 0; y: 96px; width: 440px;
             horizontal-alignment: center;
             text: title;
-            font-size: 18px; font-weight: 700;
+            font-size: Theme.font-2xl; font-weight: 700;
             color: Theme.text-primary;
         }
 

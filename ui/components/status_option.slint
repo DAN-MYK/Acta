@@ -23,15 +23,16 @@ export component StatusOption inherits Rectangle {
     callback clicked();
 
     height: 48px;
-    border-radius: 8px;
-    border-width: root.selected ? 2px : 1px;
-    border-color: root.selected ? root.accent : Theme.border;
-    background: root.selected
-        ? root.accent.with-alpha(0.08)
-        : (opt-touch.has-hover ? Theme.hover-bg : Theme.surface);
-    animate background { duration: 80ms; }
+    border-radius: Theme.radius-md;
+    border-width: selected ? 2px : 1px;
+    border-color: selected ? accent : Theme.border;
+    background: selected
+        ? accent.with-alpha(0.08)
+        : (opt-touch.has-hover ? Theme.bg-hover : Theme.bg-card);
+    animate background   { duration: 80ms; easing: ease; }
+    animate border-color { duration: 80ms; easing: ease; }
 
-    // Коло радіо-кнопки
+    // Коло радіо-кнопки (геометрія: width=16, тому radius=8 — не токен)
     Rectangle {
         x: 12px;
         y: (parent.height - self.height) / 2;
@@ -46,23 +47,23 @@ export component StatusOption inherits Rectangle {
             x: 5px; y: 5px;
             width: 6px; height: 6px;
             border-radius: 3px;
-            background: #ffffff;
+            background: white;
         }
     }
 
     Text {
         x: 36px; y: 9px;
         text: root.title;
-        font-size: 13px;
+        font-size: Theme.font-md;
         font-weight: 600;
-        color: root.selected ? root.accent : Theme.text-main;
+        color: root.selected ? root.accent : Theme.text-primary;
     }
 
     Text {
         x: 36px; y: 28px;
         text: root.subtitle;
-        font-size: 11px;
-        color: Theme.text-sub;
+        font-size: Theme.font-sm;
+        color: Theme.text-second;
     }
 
     opt-touch := TouchArea {

@@ -4,7 +4,7 @@
 // Кожен рядок: дата | контрагент | призначення | банк | сума | зведено?
 
 import { Theme } from "../theme.slint";
-import { ProgressIndicator, Button } from "std-widgets.slint";
+import { ProgressIndicator, Button, ListView } from "std-widgets.slint";
 import { PaymentRow } from "../structs.slint";
 
 export component PaymentList {
@@ -290,7 +290,8 @@ export component PaymentList {
                 }
             }
 
-            if root.rows.length > 0 : VerticalLayout {
+            if root.rows.length > 0 : ListView {
+                vertical-stretch: 1;
                 for row[i] in root.rows: Rectangle {
                     height: 48px;
                     background: root.selected-row == i

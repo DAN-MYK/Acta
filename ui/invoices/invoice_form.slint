@@ -168,7 +168,8 @@ export component InvoiceForm inherits Rectangle {
                                     root.update(
                                         number-field.text,
                                         date-field.text,
-                                        root.counterparty-ids[cp-combo.current-index],
+                                        cp-combo.current-index < root.counterparty-ids.length
+                                            ? root.counterparty-ids[cp-combo.current-index] : "",
                                         notes-field.text,
                                         inv-cat-combo.current-index < root.category-ids.length
                                             ? root.category-ids[inv-cat-combo.current-index] : "",
@@ -180,7 +181,8 @@ export component InvoiceForm inherits Rectangle {
                                     root.save(
                                         number-field.text,
                                         date-field.text,
-                                        root.counterparty-ids[cp-combo.current-index],
+                                        cp-combo.current-index < root.counterparty-ids.length
+                                            ? root.counterparty-ids[cp-combo.current-index] : "",
                                         notes-field.text,
                                         inv-cat-combo.current-index < root.category-ids.length
                                             ? root.category-ids[inv-cat-combo.current-index] : "",
