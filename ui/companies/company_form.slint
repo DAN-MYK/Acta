@@ -9,7 +9,7 @@ import { Theme } from "../theme.slint";
 export component CompanyForm inherits Rectangle {
     min-width: 400px;
     min-height: 300px;
-    background: Theme.bg;
+    background: Theme.bg-page;
 
     in property <bool>   is-edit: false;
     in property <string> edit-id: "";
@@ -40,8 +40,8 @@ export component CompanyForm inherits Rectangle {
 
         // ── Topbar ─────────────────────────────────────────────────────────
         Rectangle {
-            height: 64px;
-            background: Theme.surface;
+            height: Theme.topbar-height;
+            background: Theme.bg-card;
 
             Rectangle {
                 y: 63px;
@@ -51,7 +51,7 @@ export component CompanyForm inherits Rectangle {
 
             HorizontalLayout {
                 padding-left: 32px;
-                padding-right: 32px;
+                padding-right: Theme.space-8;
                 spacing: 8px;
                 alignment: center;
 
@@ -79,26 +79,26 @@ export component CompanyForm inherits Rectangle {
                     }
                     Text {
                         text: root.is-edit ? "Редагувати компанію" : "Нова компанія";
-                        font-size: 14px;
+                        font-size: Theme.font-lg;
                         font-weight: 600;
-                        color: Theme.text-main;
+                        color: Theme.text-primary;
                         vertical-alignment: center;
                     }
                 }
 
                 Rectangle {
                     width: 120px;
-                    height: 36px;
-                    border-radius: 8px;
+                    height: Theme.btn-md-height;
+                    border-radius: Theme.radius-md;
                     border-width: 1px;
                     border-color: Theme.border;
-                    background: co-cancel-touch.has-hover ? Theme.hover-bg : Theme.bg;
+                    background: co-cancel-touch.has-hover ? Theme.bg-hover : Theme.bg-page;
                     animate background { duration: 80ms; }
 
                     Text {
                         text: "Скасувати";
-                        font-size: 14px;
-                        color: Theme.text-sub;
+                        font-size: Theme.font-lg;
+                        color: Theme.text-second;
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
@@ -110,16 +110,16 @@ export component CompanyForm inherits Rectangle {
 
                 Rectangle {
                     width: 112px;
-                    height: 36px;
-                    border-radius: 8px;
+                    height: Theme.btn-md-height;
+                    border-radius: Theme.radius-md;
                     background: co-save-touch.has-hover ? #2D64E3 : Theme.primary;
                     animate background { duration: 80ms; }
 
                     Text {
                         text: root.is-edit ? "Зберегти" : "Створити";
-                        font-size: 14px;
+                        font-size: Theme.font-lg;
                         font-weight: 600;
-                        color: #ffffff;
+                        color: Theme.text-white;
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
@@ -151,13 +151,13 @@ export component CompanyForm inherits Rectangle {
             vertical-stretch: 1;
 
             VerticalLayout {
-                padding: 32px;
+                padding: Theme.space-8;
                 spacing: 12px;
 
                 // Назва (обов'язково)
                 VerticalLayout {
                     spacing: 4px;
-                    Text { text: "Назва *"; font-size: 12px; color: Theme.text-sub; }
+                    Text { text: "Назва *"; font-size: Theme.font-base; color: Theme.text-second; }
                     name-edit := LineEdit {
                         text: root.form-name;
                         placeholder-text: "ТОВ «Назва компанії»";
@@ -167,7 +167,7 @@ export component CompanyForm inherits Rectangle {
                 // ЄДРПОУ
                 VerticalLayout {
                     spacing: 4px;
-                    Text { text: "ЄДРПОУ"; font-size: 12px; color: Theme.text-sub; }
+                    Text { text: "ЄДРПОУ"; font-size: Theme.font-base; color: Theme.text-second; }
                     edrpou-edit := LineEdit {
                         text: root.form-edrpou;
                         placeholder-text: "12345678";
@@ -177,7 +177,7 @@ export component CompanyForm inherits Rectangle {
                 // IBAN
                 VerticalLayout {
                     spacing: 4px;
-                    Text { text: "IBAN"; font-size: 12px; color: Theme.text-sub; }
+                    Text { text: "IBAN"; font-size: Theme.font-base; color: Theme.text-second; }
                     iban-edit := LineEdit {
                         text: root.form-iban;
                         placeholder-text: "UA123456789012345678901234567";
@@ -187,7 +187,7 @@ export component CompanyForm inherits Rectangle {
                 // Юридична адреса
                 VerticalLayout {
                     spacing: 4px;
-                    Text { text: "Юридична адреса"; font-size: 12px; color: Theme.text-sub; }
+                    Text { text: "Юридична адреса"; font-size: Theme.font-base; color: Theme.text-second; }
                     address-edit := LineEdit {
                         text: root.form-legal-address;
                         placeholder-text: "м. Київ, вул. Хрещатик, 1";
@@ -197,7 +197,7 @@ export component CompanyForm inherits Rectangle {
                 // Директор
                 VerticalLayout {
                     spacing: 4px;
-                    Text { text: "Директор (ПІБ)"; font-size: 12px; color: Theme.text-sub; }
+                    Text { text: "Директор (ПІБ)"; font-size: Theme.font-base; color: Theme.text-second; }
                     director-edit := LineEdit {
                         text: root.form-director-name;
                         placeholder-text: "Іванов Іван Іванович";
@@ -207,7 +207,7 @@ export component CompanyForm inherits Rectangle {
                 // Бухгалтер
                 VerticalLayout {
                     spacing: 4px;
-                    Text { text: "Бухгалтер (ПІБ)"; font-size: 12px; color: Theme.text-sub; }
+                    Text { text: "Бухгалтер (ПІБ)"; font-size: Theme.font-base; color: Theme.text-second; }
                     accountant-edit := LineEdit {
                         text: root.form-accountant-name;
                         placeholder-text: "Петренко Петро Петрович";

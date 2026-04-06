@@ -15,8 +15,8 @@ export component StatCard inherits Rectangle {
     /// Дрібний підпис під label. Якщо порожній — не відображається.
     in property <string> secondary: "";
 
-    background: Theme.surface;
-    border-radius: 10px;
+    background: Theme.bg-card;
+    border-radius: 10px; // навмисно між radius-md(8) і radius-lg(12) — не замінювати
     border-width: 1px;
     border-color: Theme.border;
     height: 84px;
@@ -32,30 +32,30 @@ export component StatCard inherits Rectangle {
     }
 
     VerticalLayout {
-        padding-top: 12px;
-        padding-left: 16px;
-        padding-right: 16px;
-        padding-bottom: 8px;
+        padding-top: Theme.space-3;
+        padding-left: Theme.space-4;
+        padding-right: Theme.space-4;
+        padding-bottom: Theme.space-2;
         spacing: 2px;
 
         Text {
             text: root.value;
-            font-size: 20px;
+            font-size: 20px; // навмисно між font-xl(16) і font-2xl(18) — не замінювати
             font-weight: 700;
-            color: Theme.text-main;
+            color: Theme.text-primary;
             overflow: elide;
         }
 
         Text {
             text: root.label;
-            font-size: 11px;
+            font-size: Theme.font-sm;
             font-weight: 500;
-            color: Theme.text-sub;
+            color: Theme.text-second;
         }
 
         if root.secondary != "" : Text {
             text: root.secondary;
-            font-size: 10px;
+            font-size: Theme.font-xs;
             color: Theme.text-muted;
         }
     }

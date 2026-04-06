@@ -41,7 +41,7 @@ export component TaskList {
 
         Rectangle {
             height: 64px;
-            background: Theme.surface;
+            background: Theme.bg-card;
 
             HorizontalLayout {
                 padding-left: 32px;
@@ -52,7 +52,7 @@ export component TaskList {
                     text: "Завдання";
                     font-size: 18px;
                     font-weight: 600;
-                    color: Theme.text-main;
+                    color: Theme.text-primary;
                     vertical-alignment: center;
                     horizontal-stretch: 1;
                 }
@@ -73,7 +73,7 @@ export component TaskList {
 
                     Text {
                         text: "+ Нова задача";
-                        color: #ffffff;
+                        color: Theme.text-white;
                         font-size: 13px;
                         font-weight: 500;
                         horizontal-alignment: center;
@@ -95,7 +95,7 @@ export component TaskList {
         }
 
         Rectangle {
-            background: Theme.bg;
+            background: Theme.bg-page;
             vertical-stretch: 1;
 
             VerticalLayout {
@@ -111,7 +111,7 @@ export component TaskList {
                     vertical-stretch: 0;
 
                     search-rect := Rectangle {
-                        background: Theme.surface;
+                        background: Theme.bg-card;
                         border-radius: 8px;
                         border-width: 1px;
                         border-color: Theme.border;
@@ -125,7 +125,7 @@ export component TaskList {
                             search-input := TextInput {
                                 vertical-alignment: center;
                                 font-size: 13px;
-                                color: Theme.text-main;
+                                color: Theme.text-primary;
                                 edited => { root.search-changed(search-input.text); }
                             }
                         }
@@ -165,17 +165,17 @@ export component TaskList {
                                 padding-left: 16px;
                                 padding-right: 16px;
 
-                                Text { text: "Задача";      color: Theme.text-sub; font-size: 12px; font-weight: 500; horizontal-stretch: 3; vertical-alignment: center; }
-                                Text { text: "Пріоритет";   color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 110px; vertical-alignment: center; }
-                                Text { text: "Дедлайн";     color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 160px; vertical-alignment: center; }
-                                Text { text: "Нагадування"; color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 160px; vertical-alignment: center; }
-                                Text { text: "Статус";      color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 100px; vertical-alignment: center; }
+                                Text { text: "Задача";      color: Theme.text-second; font-size: 12px; font-weight: 500; horizontal-stretch: 3; vertical-alignment: center; }
+                                Text { text: "Пріоритет";   color: Theme.text-second; font-size: 12px; font-weight: 500; width: 110px; vertical-alignment: center; }
+                                Text { text: "Дедлайн";     color: Theme.text-second; font-size: 12px; font-weight: 500; width: 160px; vertical-alignment: center; }
+                                Text { text: "Нагадування"; color: Theme.text-second; font-size: 12px; font-weight: 500; width: 160px; vertical-alignment: center; }
+                                Text { text: "Статус";      color: Theme.text-second; font-size: 12px; font-weight: 500; width: 100px; vertical-alignment: center; }
                             }
                         }
 
                         if !root.loading && root.rows.length == 0 : Rectangle {
                             vertical-stretch: 1;
-                            background: Theme.surface;
+                            background: Theme.bg-card;
 
                             VerticalLayout {
                                 alignment: center;
@@ -190,7 +190,7 @@ export component TaskList {
                                     text: "Завдань ще немає";
                                     font-size: 15px;
                                     font-weight: 500;
-                                    color: Theme.text-sub;
+                                    color: Theme.text-second;
                                     horizontal-alignment: center;
                                 }
                                 Text {
@@ -234,7 +234,7 @@ export component TaskList {
                                     ? Theme.row-selected
                                     : (row-touch.has-hover
                                         ? Theme.row-hover
-                                        : (Math.mod(i, 2) == 0 ? Theme.surface : Theme.row-stripe));
+                                        : (Math.mod(i, 2) == 0 ? Theme.bg-card : Theme.row-stripe));
                                 border-width: 1px;
                                 border-color: Theme.border;
                                 animate background { duration: 80ms; easing: ease; }
@@ -245,7 +245,7 @@ export component TaskList {
 
                                     Text {
                                         text: row.title;
-                                        color: Theme.text-main;
+                                        color: Theme.text-primary;
                                         font-size: 13px;
                                         font-weight: 500;
                                         horizontal-stretch: 3;
@@ -274,7 +274,7 @@ export component TaskList {
 
                                     Text {
                                         text: row.due-date;
-                                        color: Theme.text-sub;
+                                        color: Theme.text-second;
                                         font-size: 13px;
                                         width: 160px;
                                         vertical-alignment: center;
@@ -283,7 +283,7 @@ export component TaskList {
 
                                     Text {
                                         text: row.reminder;
-                                        color: Theme.text-sub;
+                                        color: Theme.text-second;
                                         font-size: 13px;
                                         width: 160px;
                                         vertical-alignment: center;
@@ -334,7 +334,7 @@ export component TaskList {
 
                     Text {
                         text: root.selected-title + " • " + root.selected-priority;
-                        color: Theme.text-sub;
+                        color: Theme.text-second;
                         font-size: 13px;
                         font-weight: 500;
                         vertical-alignment: center;
@@ -343,7 +343,7 @@ export component TaskList {
                     }
 
                     Rectangle {
-                        background: Theme.surface;
+                        background: Theme.bg-card;
                         border-radius: 8px;
                         border-width: 1px;
                         border-color: Theme.border;
@@ -353,7 +353,7 @@ export component TaskList {
 
                         Text {
                             text: "✎  Редагувати";
-                            color: Theme.text-main;
+                            color: Theme.text-primary;
                             font-size: 13px;
                             font-weight: 500;
                             horizontal-alignment: center;
@@ -379,7 +379,7 @@ export component TaskList {
 
                         Text {
                             text: root.selected-status == "done" ? "✓  Завершено" : "✓  Завершити";
-                            color: #ffffff;
+                                                    color: Theme.text-white;
                             font-size: 13px;
                             font-weight: 500;
                             horizontal-alignment: center;
@@ -398,7 +398,7 @@ export component TaskList {
                     }
 
                     Rectangle {
-                        background: Theme.danger-light;
+                        background: Theme.bg-danger;
                         border-radius: 8px;
                         border-width: 1px;
                         border-color: Theme.danger-border;

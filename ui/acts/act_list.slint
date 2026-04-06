@@ -23,13 +23,13 @@ component ActionButton inherits Rectangle {
     border-radius: 8px;
     background: disabled
         ? Theme.border
-        : (primary ? Theme.primary : Theme.surface);
+        : (primary ? Theme.primary : Theme.bg-card);
     border-width: primary ? 0px : 1px;
     border-color: Theme.border;
 
     Text {
         text: root.text;
-        color: disabled ? Theme.text-muted : (primary ? Theme.text-white : Theme.text-main);
+        color: disabled ? Theme.text-muted : (primary ? Theme.text-white : Theme.text-primary);
         font-size: 13px;
         font-weight: 500;
         horizontal-alignment: center;
@@ -82,7 +82,7 @@ export component ActList {
         // ── Topbar (64px, білий, з нижньою межею) ───────────────────────────
         Rectangle {
             height: 64px;
-            background: Theme.surface;
+            background: Theme.bg-card;
 
             HorizontalLayout {
                 padding-left: 32px;
@@ -94,7 +94,7 @@ export component ActList {
                     text: "Акти";
                     font-size: 18px;
                     font-weight: 600;
-                    color: Theme.text-main;
+                    color: Theme.text-primary;
                     vertical-alignment: center;
                     horizontal-stretch: 1;
                 }
@@ -131,7 +131,7 @@ export component ActList {
         // ── Вкладки статусів (44px) ──────────────────────────────────────────
         Rectangle {
             height: 44px;
-            background: Theme.surface;
+            background: Theme.bg-card;
 
             private property <[string]> tab-names: ["Всі", "Чернетка", "Виставлені", "Підписані", "Оплачені"];
 
@@ -163,7 +163,7 @@ export component ActList {
                                 : tab-name;
                             font-size: 13px;
                             font-weight: is-active ? 600 : 400;
-                            color: is-active ? Theme.primary : Theme.text-sub;
+                            color: is-active ? Theme.primary : Theme.text-second;
                             vertical-alignment: center;
                         }
                     }
@@ -187,7 +187,7 @@ export component ActList {
 
         // ── Основний контент ─────────────────────────────────────────────────
         Rectangle {
-            background: Theme.bg;
+            background: Theme.bg-page;
             vertical-stretch: 1;
 
             VerticalLayout {
@@ -238,7 +238,7 @@ export component ActList {
                     vertical-stretch: 0;
 
                     search-rect := Rectangle {
-                        background: Theme.surface;
+                        background: Theme.bg-card;
                         border-radius: 8px;
                         border-width: 1px;
                         border-color: Theme.border;
@@ -254,7 +254,7 @@ export component ActList {
                             search-input := TextInput {
                                 vertical-alignment: center;
                                 font-size: 13px;
-                                color: Theme.text-main;
+                                color: Theme.text-primary;
                                 edited => { root.search-changed(search-input.text); }
                             }
                         }
@@ -296,19 +296,19 @@ export component ActList {
                                 padding-left: 16px;
                                 padding-right: 16px;
 
-                                Text { text: "Номер";      color: Theme.text-sub; font-size: 12px; font-weight: 500; horizontal-stretch: 2; vertical-alignment: center; }
-                                Text { text: "Дата";       color: Theme.text-sub; font-size: 12px; font-weight: 500; horizontal-stretch: 1; vertical-alignment: center; }
-                                Text { text: "Контрагент"; color: Theme.text-sub; font-size: 12px; font-weight: 500; horizontal-stretch: 3; vertical-alignment: center; }
-                                Text { text: "Сума, ₴";    color: Theme.text-sub; font-size: 12px; font-weight: 500; horizontal-stretch: 1; vertical-alignment: center; }
-                                Text { text: "Статус";     color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 100px; vertical-alignment: center; }
-                                Text { text: "Дії";        color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 120px; vertical-alignment: center; }
+                                Text { text: "Номер";      color: Theme.text-second; font-size: 12px; font-weight: 500; horizontal-stretch: 2; vertical-alignment: center; }
+                                Text { text: "Дата";       color: Theme.text-second; font-size: 12px; font-weight: 500; horizontal-stretch: 1; vertical-alignment: center; }
+                                Text { text: "Контрагент"; color: Theme.text-second; font-size: 12px; font-weight: 500; horizontal-stretch: 3; vertical-alignment: center; }
+                                Text { text: "Сума, ₴";    color: Theme.text-second; font-size: 12px; font-weight: 500; horizontal-stretch: 1; vertical-alignment: center; }
+                                Text { text: "Статус";     color: Theme.text-second; font-size: 12px; font-weight: 500; width: 100px; vertical-alignment: center; }
+                                Text { text: "Дії";        color: Theme.text-second; font-size: 12px; font-weight: 500; width: 120px; vertical-alignment: center; }
                             }
                         }
 
                         // Порожній стан — коли немає актів і не завантажується
                         if !root.loading && root.rows.length == 0 : Rectangle {
                             vertical-stretch: 1;
-                            background: Theme.surface;
+                            background: Theme.bg-card;
 
                             VerticalLayout {
                                 alignment: center;
@@ -323,7 +323,7 @@ export component ActList {
                                     text: "Актів ще немає";
                                     font-size: 15px;
                                     font-weight: 500;
-                                    color: Theme.text-sub;
+                                    color: Theme.text-second;
                                     horizontal-alignment: center;
                                 }
                                 Text {
@@ -362,7 +362,7 @@ export component ActList {
                                     ? Theme.row-selected
                                     : (row-touch.has-hover
                                         ? Theme.row-hover
-                                        : (Math.mod(i, 2) == 0 ? Theme.surface : Theme.row-stripe));
+                                        : (Math.mod(i, 2) == 0 ? Theme.bg-card : Theme.row-stripe));
                                 border-width: 1px;
                                 border-color: Theme.border;
                                 animate background { duration: 80ms; easing: ease; }
@@ -375,7 +375,7 @@ export component ActList {
                                     // Номер акту
                                     Text {
                                         text: row.num;
-                                        color: Theme.text-main;
+                                        color: Theme.text-primary;
                                         font-size: 13px;
                                         font-weight: 500;
                                         horizontal-stretch: 2;
@@ -385,7 +385,7 @@ export component ActList {
                                     // Дата
                                     Text {
                                         text: row.date;
-                                        color: Theme.text-sub;
+                                        color: Theme.text-second;
                                         font-size: 13px;
                                         horizontal-stretch: 1;
                                         vertical-alignment: center;
@@ -394,7 +394,7 @@ export component ActList {
                                     // Контрагент
                                     Text {
                                         text: row.counterparty;
-                                        color: Theme.text-sub;
+                                        color: Theme.text-second;
                                         font-size: 13px;
                                         horizontal-stretch: 3;
                                         vertical-alignment: center;
@@ -403,7 +403,7 @@ export component ActList {
                                     // Сума — виділена жирним
                                     Text {
                                         text: row.amount;
-                                        color: Theme.text-main;
+                                        color: Theme.text-primary;
                                         font-size: 13px;
                                         font-weight: 600;
                                         horizontal-stretch: 1;
@@ -434,7 +434,7 @@ export component ActList {
                                                 height: 26px;
                                                 border-radius: 6px;
                                                 background: pdf-btn-touch.has-hover
-                                                    ? Theme.primary-light : Theme.btn-action-bg;
+                                                    ? Theme.bg-primary : Theme.btn-action-bg;
                                                 animate background { duration: 80ms; }
 
                                                 Text {
@@ -482,7 +482,7 @@ export component ActList {
                     // Назва вибраного акту
                     Text {
                         text: root.selected-number;
-                        color: Theme.text-sub;
+                        color: Theme.text-second;
                         font-size: 13px;
                         font-weight: 500;
                         vertical-alignment: center;

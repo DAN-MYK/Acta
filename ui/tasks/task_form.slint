@@ -6,7 +6,7 @@ import { Theme } from "../theme.slint";
 import { LineEdit, TextEdit, ComboBox } from "std-widgets.slint";
 
 export component TaskForm inherits Rectangle {
-    background: Theme.bg;
+    background: Theme.bg-page;
 
     in property <bool>   is-edit-mode: false;
     in property <string> task-edit-id: "";
@@ -41,7 +41,7 @@ export component TaskForm inherits Rectangle {
 
             Rectangle {
                 height: 64px;
-                background: Theme.surface;
+                background: Theme.bg-card;
 
                 Rectangle {
                     y: 63px;
@@ -79,7 +79,7 @@ export component TaskForm inherits Rectangle {
                             text: root.is-edit-mode ? "Редагування задачі" : "Нова задача";
                             font-size: 14px;
                             font-weight: 600;
-                            color: Theme.text-main;
+                            color: Theme.text-primary;
                             vertical-alignment: center;
                         }
                     }
@@ -91,13 +91,13 @@ export component TaskForm inherits Rectangle {
                         border-radius: 8px;
                         border-width: 1px;
                         border-color: Theme.border;
-                        background: task-cancel-touch.has-hover ? Theme.hover-bg : Theme.bg;
+                        background: task-cancel-touch.has-hover ? Theme.bg-hover : Theme.bg-page;
                         animate background { duration: 80ms; }
 
                         Text {
                             text: "Скасувати";
                             font-size: 14px;
-                            color: Theme.text-sub;
+                            color: Theme.text-second;
                             horizontal-alignment: center;
                             vertical-alignment: center;
                         }
@@ -119,7 +119,7 @@ export component TaskForm inherits Rectangle {
                             text: "Зберегти";
                             font-size: 14px;
                             font-weight: 600;
-                            color: #ffffff;
+                        color: Theme.text-white;
                             horizontal-alignment: center;
                             vertical-alignment: center;
                         }
@@ -150,7 +150,7 @@ export component TaskForm inherits Rectangle {
             }
 
             Rectangle {
-                background: Theme.bg;
+                background: Theme.bg-page;
                 vertical-stretch: 1;
 
                 VerticalLayout {
@@ -168,12 +168,12 @@ export component TaskForm inherits Rectangle {
                             Text {
                                 text: "Назва *";
                                 font-size: 13px;
-                                color: Theme.text-sub;
+                                color: Theme.text-second;
                                 vertical-alignment: center;
                                 min-width: 130px;
                             }
                             Rectangle {
-                                background: Theme.surface;
+                                background: Theme.bg-card;
                                 border-width: 1px;
                                 border-color: Theme.border;
                                 border-radius: 8px;
@@ -189,12 +189,12 @@ export component TaskForm inherits Rectangle {
                             Text {
                                 text: "Опис";
                                 font-size: 13px;
-                                color: Theme.text-sub;
+                                color: Theme.text-second;
                                 vertical-alignment: center;
                                 min-width: 130px;
                             }
                             Rectangle {
-                                background: Theme.surface;
+                                background: Theme.bg-card;
                                 border-width: 1px;
                                 border-color: Theme.border;
                                 border-radius: 8px;
@@ -210,12 +210,12 @@ export component TaskForm inherits Rectangle {
                             Text {
                                 text: "Пріоритет";
                                 font-size: 13px;
-                                color: Theme.text-sub;
+                                color: Theme.text-second;
                                 vertical-alignment: center;
                                 min-width: 130px;
                             }
                             Rectangle {
-                                background: Theme.surface;
+                                background: Theme.bg-card;
                                 border-width: 1px;
                                 border-color: Theme.border;
                                 border-radius: 8px;
@@ -231,12 +231,12 @@ export component TaskForm inherits Rectangle {
                             Text {
                                 text: "Дедлайн";
                                 font-size: 13px;
-                                color: Theme.text-sub;
+                                color: Theme.text-second;
                                 vertical-alignment: center;
                                 min-width: 130px;
                             }
                             Rectangle {
-                                background: Theme.surface;
+                                background: Theme.bg-card;
                                 border-width: 1px;
                                 border-color: Theme.border;
                                 border-radius: 8px;
@@ -252,12 +252,12 @@ export component TaskForm inherits Rectangle {
                             Text {
                                 text: "Нагадування";
                                 font-size: 13px;
-                                color: Theme.text-sub;
+                                color: Theme.text-second;
                                 vertical-alignment: center;
                                 min-width: 130px;
                             }
                             Rectangle {
-                                background: Theme.surface;
+                                background: Theme.bg-card;
                                 border-width: 1px;
                                 border-color: Theme.border;
                                 border-radius: 8px;

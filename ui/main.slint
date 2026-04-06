@@ -452,9 +452,10 @@ export component MainWindow inherits Window {
     callback company-edit-clicked(string);
     callback company-archive-clicked(string);
     callback company-select-clicked(string);
-    // Параметри: назва, ЄДРПОУ, IBAN, адреса, директор, бухгалтер, ПДВ
+    // Параметри save: назва, ЄДРПОУ, IBAN, адреса, директор, бухгалтер, ПДВ
+    // Параметри update: id, назва, ЄДРПОУ, IBAN, адреса, директор, бухгалтер, ПДВ
     callback company-form-save(string, string, string, string, string, string, bool);
-    callback company-form-update(string, string, string, string, string, string, bool);
+    callback company-form-update(string /*id*/, string, string, string, string, string, string, bool);
     callback company-form-cancel();
 
     // ── Toast-сповіщення ─────────────────────────────────────────────────────
@@ -496,7 +497,7 @@ export component MainWindow inherits Window {
                         Text {
                             x: 0; y: 6px; width: 32px;
                             horizontal-alignment: center;
-                            text: "A"; font-size: 16px; font-weight: 700; color: #ffffff;
+                            text: "A"; font-size: 16px; font-weight: 700; color: Theme.text-white;
                         }
                     }
 
@@ -506,7 +507,7 @@ export component MainWindow inherits Window {
                         text: "Acta";
                         font-size: Theme.font-xl;
                         font-weight: 700;
-                        color: #ffffff;
+                        color: Theme.text-white;
                     }
                 }
 
@@ -862,7 +863,7 @@ export component MainWindow inherits Window {
                 form-is-vat-payer: root.company-form-is-vat;
 
                 save(nm, ed, ib, ad, dr, ac, vt)   => { root.company-form-save(nm, ed, ib, ad, dr, ac, vt); }
-                update(nm, ed, ib, ad, dr, ac, vt) => { root.company-form-update(nm, ed, ib, ad, dr, ac, vt); }
+                update(id, nm, ed, ib, ad, dr, ac, vt) => { root.company-form-update(id, nm, ed, ib, ad, dr, ac, vt); }
                 cancel                              => { root.company-form-cancel(); }
             }
 
@@ -992,7 +993,7 @@ export component MainWindow inherits Window {
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
             border-radius: 18px;
-            background: Theme.surface;
+            background: Theme.bg-card;
             border-width: 1px;
             border-color: Theme.border;
             clip: true;
@@ -1031,7 +1032,7 @@ export component MainWindow inherits Window {
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
             border-radius: 18px;
-            background: Theme.surface;
+            background: Theme.bg-card;
             border-width: 1px;
             border-color: Theme.border;
             clip: true;
@@ -1065,7 +1066,7 @@ export component MainWindow inherits Window {
             x: (parent.width  - self.width)  / 2;
             y: 100px;
             border-radius: 16px;
-            background: Theme.surface;
+            background: Theme.bg-card;
             border-width: 1px;
             border-color: Theme.border;
             drop-shadow-blur: 32px;
@@ -1081,7 +1082,7 @@ export component MainWindow inherits Window {
                         text: "Acta";
                         font-size: 32px;
                         font-weight: 700;
-                        color: Theme.text-main;
+                        color: Theme.text-primary;
                         horizontal-alignment: center;
                     }
                     Text {
@@ -1098,20 +1099,20 @@ export component MainWindow inherits Window {
                         text: "Оберіть компанію";
                         font-size: 24px;
                         font-weight: 700;
-                        color: Theme.text-main;
+                        color: Theme.text-primary;
                         horizontal-alignment: center;
                     }
                     Text {
                         text: "для продовження роботи";
                         font-size: 14px;
-                        color: Theme.text-sub;
+                        color: Theme.text-second;
                         horizontal-alignment: center;
                     }
                 }
 
                 Rectangle {
                     height: 44px;
-                    background: Theme.surface;
+                    background: Theme.bg-card;
                     border-width: 1px;
                     border-color: Theme.border;
                     border-radius: 10px;
@@ -1132,7 +1133,7 @@ export component MainWindow inherits Window {
                     for c in root.company-rows : Rectangle {
                         height: 60px;
                         border-radius: 10px;
-                        background: pick-touch.has-hover ? Theme.hover-bg : Theme.surface;
+                        background: pick-touch.has-hover ? Theme.bg-hover : Theme.bg-card;
                         border-width: 1px;
                         border-color: Theme.border;
 
@@ -1155,7 +1156,7 @@ export component MainWindow inherits Window {
                                     width: 36px;
                                     height: 36px;
                                     border-radius: 18px;
-                                    background: Theme.primary-light;
+                                    background: Theme.bg-primary;
 
                                     Text {
                                         text: c.initials;
@@ -1175,12 +1176,12 @@ export component MainWindow inherits Window {
                                         text: c.name;
                                         font-size: 14px;
                                         font-weight: 600;
-                                        color: Theme.text-main;
+                                        color: Theme.text-primary;
                                     }
                                     Text {
                                         text: c.edrpou != "" ? "ЄДРПОУ: " + c.edrpou : "";
                                         font-size: 12px;
-                                        color: Theme.text-sub;
+                                        color: Theme.text-second;
                                     }
                                 }
 
@@ -1205,7 +1206,7 @@ export component MainWindow inherits Window {
 
                 Rectangle {
                     height: 44px;
-                    background: Theme.primary-light;
+                    background: Theme.bg-primary;
                     border-radius: 10px;
 
                     TouchArea {

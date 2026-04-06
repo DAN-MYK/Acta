@@ -10,7 +10,7 @@ import { Button, LineEdit, TextEdit, ComboBox, ScrollView } from "std-widgets.sl
 import { FormItemRow } from "../structs.slint";
 
 export component InvoiceForm inherits Rectangle {
-    background: Theme.bg;
+    background: Theme.bg-page;
 
     // ── Вхідні дані ────────────────────────────────────────────────────────
     in property <[string]> counterparty-names;
@@ -79,7 +79,7 @@ export component InvoiceForm inherits Rectangle {
             // ── Topbar ─────────────────────────────────────────────────────
             Rectangle {
                 height: 64px;
-                background: Theme.surface;
+                background: Theme.bg-card;
 
                 Rectangle {
                     y: 63px;
@@ -117,7 +117,7 @@ export component InvoiceForm inherits Rectangle {
                             text: root.is-edit-mode ? "Редагування накладної" : "Нова накладна";
                             font-size: 14px;
                             font-weight: 600;
-                            color: Theme.text-main;
+                            color: Theme.text-primary;
                             vertical-alignment: center;
                         }
                     }
@@ -129,13 +129,13 @@ export component InvoiceForm inherits Rectangle {
                         border-radius: 8px;
                         border-width: 1px;
                         border-color: Theme.border;
-                        background: inv-cancel-touch.has-hover ? Theme.hover-bg : Theme.bg;
+                        background: inv-cancel-touch.has-hover ? Theme.bg-hover : Theme.bg-page;
                         animate background { duration: 80ms; }
 
                         Text {
                             text: "Скасувати";
                             font-size: 14px;
-                            color: Theme.text-sub;
+                            color: Theme.text-second;
                             horizontal-alignment: center;
                             vertical-alignment: center;
                         }
@@ -157,7 +157,7 @@ export component InvoiceForm inherits Rectangle {
                             text: "Зберегти";
                             font-size: 14px;
                             font-weight: 600;
-                            color: #ffffff;
+                        color: Theme.text-white;
                             horizontal-alignment: center;
                             vertical-alignment: center;
                         }
@@ -212,13 +212,13 @@ export component InvoiceForm inherits Rectangle {
                     Text {
                         text: "Номер";
                         font-size: 13px;
-                        color: Theme.text-sub;
+                        color: Theme.text-second;
                         vertical-alignment: center;
                         horizontal-stretch: 0;
                         min-width: 120px;
                     }
                     Rectangle {
-                        background: Theme.surface;
+                        background: Theme.bg-card;
                         border-width: 1px;
                         border-color: Theme.border;
                         border-radius: 8px;
@@ -234,13 +234,13 @@ export component InvoiceForm inherits Rectangle {
                     Text {
                         text: "Дата";
                         font-size: 13px;
-                        color: Theme.text-sub;
+                        color: Theme.text-second;
                         vertical-alignment: center;
                         horizontal-stretch: 0;
                         min-width: 120px;
                     }
                     Rectangle {
-                        background: Theme.surface;
+                        background: Theme.bg-card;
                         border-width: 1px;
                         border-color: Theme.border;
                         border-radius: 8px;
@@ -256,14 +256,14 @@ export component InvoiceForm inherits Rectangle {
                     Text {
                         text: "Контрагент";
                         font-size: 13px;
-                        color: Theme.text-sub;
+                        color: Theme.text-second;
                         vertical-alignment: center;
                         horizontal-stretch: 0;
                         min-width: 120px;
                     }
                     Rectangle {
                         height: 40px;
-                        background: Theme.surface;
+                        background: Theme.bg-card;
                         border-width: 1px;
                         border-color: Theme.border;
                         border-radius: 8px;
@@ -279,14 +279,14 @@ export component InvoiceForm inherits Rectangle {
                     Text {
                         text: "Примітки";
                         font-size: 13px;
-                        color: Theme.text-sub;
+                        color: Theme.text-second;
                         vertical-alignment: center;
                         vertical-stretch: 0;
                         horizontal-stretch: 0;
                         min-width: 120px;
                     }
                     Rectangle {
-                        background: Theme.surface;
+                        background: Theme.bg-card;
                         border-width: 1px;
                         border-color: Theme.border;
                         border-radius: 8px;
@@ -302,7 +302,7 @@ export component InvoiceForm inherits Rectangle {
                     Text {
                         text: "Категорія";
                         font-size: 13px;
-                        color: Theme.text-sub;
+                        color: Theme.text-second;
                         vertical-alignment: center;
                         vertical-stretch: 0;
                         horizontal-stretch: 0;
@@ -310,7 +310,7 @@ export component InvoiceForm inherits Rectangle {
                     }
                     Rectangle {
                         height: 40px;
-                        background: Theme.surface;
+                        background: Theme.bg-card;
                         border-width: 1px;
                         border-color: Theme.border;
                         border-radius: 8px;
@@ -325,7 +325,7 @@ export component InvoiceForm inherits Rectangle {
                     Text {
                         text: "Договір";
                         font-size: 13px;
-                        color: Theme.text-sub;
+                        color: Theme.text-second;
                         vertical-alignment: center;
                         vertical-stretch: 0;
                         horizontal-stretch: 0;
@@ -333,7 +333,7 @@ export component InvoiceForm inherits Rectangle {
                     }
                     Rectangle {
                         height: 40px;
-                        background: Theme.surface;
+                        background: Theme.bg-card;
                         border-width: 1px;
                         border-color: Theme.border;
                         border-radius: 8px;
@@ -348,7 +348,7 @@ export component InvoiceForm inherits Rectangle {
                     Text {
                         text: "Дата оплати";
                         font-size: 13px;
-                        color: Theme.text-sub;
+                        color: Theme.text-second;
                         vertical-alignment: center;
                         vertical-stretch: 0;
                         horizontal-stretch: 0;
@@ -356,7 +356,7 @@ export component InvoiceForm inherits Rectangle {
                     }
                     Rectangle {
                         height: 40px;
-                        background: Theme.surface;
+                        background: Theme.bg-card;
                         border-width: 1px;
                         border-color: Theme.border;
                         border-radius: 8px;
@@ -377,7 +377,7 @@ export component InvoiceForm inherits Rectangle {
                     text: "Позиції";
                     font-size: 16px;
                     font-weight: 600;
-                    color: Theme.text-main;
+                    color: Theme.text-primary;
                     vertical-alignment: center;
                 }
 
@@ -403,7 +403,7 @@ export component InvoiceForm inherits Rectangle {
                         text: "Найменування";
                         font-size: 12px;
                         font-weight: 600;
-                        color: Theme.text-sub;
+                        color: Theme.text-second;
                         vertical-alignment: center;
                         horizontal-stretch: 3;
                     }
@@ -411,7 +411,7 @@ export component InvoiceForm inherits Rectangle {
                         text: "К-сть";
                         font-size: 12px;
                         font-weight: 600;
-                        color: Theme.text-sub;
+                        color: Theme.text-second;
                         vertical-alignment: center;
                         horizontal-alignment: right;
                         width: 80px;
@@ -420,7 +420,7 @@ export component InvoiceForm inherits Rectangle {
                         text: "Од.вим.";
                         font-size: 12px;
                         font-weight: 600;
-                        color: Theme.text-sub;
+                        color: Theme.text-second;
                         vertical-alignment: center;
                         horizontal-alignment: center;
                         width: 70px;
@@ -429,7 +429,7 @@ export component InvoiceForm inherits Rectangle {
                         text: "Ціна";
                         font-size: 12px;
                         font-weight: 600;
-                        color: Theme.text-sub;
+                        color: Theme.text-second;
                         vertical-alignment: center;
                         horizontal-alignment: right;
                         width: 100px;
@@ -438,7 +438,7 @@ export component InvoiceForm inherits Rectangle {
                         text: "Сума";
                         font-size: 12px;
                         font-weight: 600;
-                        color: Theme.text-sub;
+                        color: Theme.text-second;
                         vertical-alignment: center;
                         horizontal-alignment: right;
                         width: 100px;
@@ -459,7 +459,7 @@ export component InvoiceForm inherits Rectangle {
 
                         Rectangle {
                             height: 44px;
-                            background: Theme.surface;
+                            background: Theme.bg-card;
 
                             HorizontalLayout {
                                 padding-left: 12px;
@@ -496,7 +496,7 @@ export component InvoiceForm inherits Rectangle {
                                     text: item.amount;
                                     font-size: 13px;
                                     font-weight: 600;
-                                    color: Theme.text-main;
+                                    color: Theme.text-primary;
                                     vertical-alignment: center;
                                     horizontal-alignment: right;
                                     width: 100px;
@@ -561,7 +561,7 @@ export component InvoiceForm inherits Rectangle {
                     text: "Разом: " + root.total-amount + " ₴";
                     font-size: 18px;
                     font-weight: 700;
-                    color: Theme.text-main;
+                    color: Theme.text-primary;
                 }
             }
 

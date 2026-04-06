@@ -32,13 +32,13 @@ component FieldLabel {
         text: root.required ? root.text + " *" : root.text;
         font-size: 12px;
         font-weight: 600;
-        color: Theme.text-sub;
+        color: Theme.text-second;
     }
 }
 
 component FieldBox inherits Rectangle {
     height: 40px;
-    background: Theme.surface;
+    background: Theme.bg-card;
     border-width: 1px;
     border-color: Theme.border;
     border-radius: 8px;
@@ -62,14 +62,14 @@ component TopbarButton inherits Rectangle {
     border-color: Theme.border;
     background: primary
         ? Theme.primary
-        : (btn-touch.has-hover ? Theme.hover-bg : Theme.bg);
+        : (btn-touch.has-hover ? Theme.bg-hover : Theme.bg-page);
     animate background { duration: 80ms; }
 
     Text {
         text: root.text;
         font-size: 14px;
         font-weight: primary ? 600 : 400;
-        color: primary ? Theme.text-white : Theme.text-sub;
+        color: primary ? Theme.text-white : Theme.text-second;
         horizontal-alignment: center;
         vertical-alignment: center;
     }
@@ -155,7 +155,7 @@ export component ActForm inherits Rectangle {
 
     min-width: 900px;
     min-height: 600px;
-    background: Theme.bg;
+    background: Theme.bg-page;
 
     focus-scope := FocusScope {
         forward-focus: number-field;
@@ -175,7 +175,7 @@ export component ActForm inherits Rectangle {
             // ══════════════════════════════════════════════════════════════
             Rectangle {
                 height: 64px;
-                background: Theme.surface;
+                background: Theme.bg-card;
 
                 Rectangle {
                     y: 63px;
@@ -216,7 +216,7 @@ export component ActForm inherits Rectangle {
                             text: root.is-edit-mode ? "Редагування акту" : "Новий акт";
                             font-size: 14px;
                             font-weight: 600;
-                            color: Theme.text-main;
+                            color: Theme.text-primary;
                             vertical-alignment: center;
                         }
                     }
@@ -296,7 +296,7 @@ export component ActForm inherits Rectangle {
                             border-radius: 12px;
                             border-width: 1px;
                             border-color: Theme.border;
-                            background: Theme.surface;
+                            background: Theme.bg-card;
                             drop-shadow-color: #0000000D;
                             drop-shadow-blur: 8px;
                             drop-shadow-offset-y: 2px;
@@ -312,7 +312,7 @@ export component ActForm inherits Rectangle {
                                         text: "Основна інформація";
                                         font-size: 16px;
                                         font-weight: 600;
-                                        color: Theme.text-main;
+                                        color: Theme.text-primary;
                                     }
                                     Text {
                                         text: "* — обов'язкові поля";
@@ -434,7 +434,7 @@ export component ActForm inherits Rectangle {
                                         text: "Послуги / Роботи";
                                         font-size: 14px;
                                         font-weight: 600;
-                                        color: Theme.text-main;
+                                        color: Theme.text-primary;
                                         vertical-alignment: center;
                                     }
 
@@ -442,7 +442,7 @@ export component ActForm inherits Rectangle {
                                         width: 160px;
                                         height: 32px;
                                         border-radius: 8px;
-                                        background: Theme.primary-light;
+                                        background: Theme.bg-primary;
 
                                         Text {
                                             text: "+ Додати позицію";
@@ -477,11 +477,11 @@ export component ActForm inherits Rectangle {
                                         padding-left: 12px;
                                         padding-right: 8px;
                                         spacing: 8px;
-                                        Text { text: "Найменування"; font-size: 11px; font-weight: 600; color: Theme.text-sub; vertical-alignment: center; horizontal-stretch: 3; }
-                                        Text { text: "К-сть";   font-size: 11px; font-weight: 600; color: Theme.text-sub; vertical-alignment: center; horizontal-alignment: right;  width: 72px;  }
-                                        Text { text: "Од.вим."; font-size: 11px; font-weight: 600; color: Theme.text-sub; vertical-alignment: center; horizontal-alignment: center; width: 70px;  }
-                                        Text { text: "Ціна";    font-size: 11px; font-weight: 600; color: Theme.text-sub; vertical-alignment: center; horizontal-alignment: right;  width: 100px; }
-                                        Text { text: "Сума";    font-size: 11px; font-weight: 600; color: Theme.text-sub; vertical-alignment: center; horizontal-alignment: right;  width: 100px; }
+                                        Text { text: "Найменування"; font-size: 11px; font-weight: 600; color: Theme.text-second; vertical-alignment: center; horizontal-stretch: 3; }
+                                        Text { text: "К-сть";   font-size: 11px; font-weight: 600; color: Theme.text-second; vertical-alignment: center; horizontal-alignment: right;  width: 72px;  }
+                                        Text { text: "Од.вим."; font-size: 11px; font-weight: 600; color: Theme.text-second; vertical-alignment: center; horizontal-alignment: center; width: 70px;  }
+                                        Text { text: "Ціна";    font-size: 11px; font-weight: 600; color: Theme.text-second; vertical-alignment: center; horizontal-alignment: right;  width: 100px; }
+                                        Text { text: "Сума";    font-size: 11px; font-weight: 600; color: Theme.text-second; vertical-alignment: center; horizontal-alignment: right;  width: 100px; }
                                         Rectangle { width: 36px; }
                                     }
                                 }
@@ -504,7 +504,7 @@ export component ActForm inherits Rectangle {
 
                                         Rectangle {
                                             height: 44px;
-                                            background: Math.mod(i, 2) == 0 ? Theme.surface : Theme.row-alt;
+                                            background: Math.mod(i, 2) == 0 ? Theme.bg-card : Theme.row-alt;
 
                                             HorizontalLayout {
                                                 padding-left: 12px;
@@ -543,7 +543,7 @@ export component ActForm inherits Rectangle {
                                                     text: item.amount;
                                                     font-size: 13px;
                                                     font-weight: 600;
-                                                    color: Theme.text-main;
+                                                    color: Theme.text-primary;
                                                     vertical-alignment: center;
                                                     horizontal-alignment: right;
                                                     width: 100px;
@@ -602,14 +602,14 @@ export component ActForm inherits Rectangle {
                                         Text {
                                             text: "Разом:";
                                             font-size: 13px;
-                                            color: Theme.text-sub;
+                                            color: Theme.text-second;
                                             vertical-alignment: center;
                                         }
                                         Text {
                                             text: root.total-amount + " ₴";
                                             font-size: 15px;
                                             font-weight: 600;
-                                            color: Theme.text-main;
+                                            color: Theme.text-primary;
                                             vertical-alignment: center;
                                             min-width: 140px;
                                             horizontal-alignment: right;
@@ -625,7 +625,7 @@ export component ActForm inherits Rectangle {
                                             text: "До сплати:";
                                             font-size: 15px;
                                             font-weight: 600;
-                                            color: Theme.text-main;
+                                            color: Theme.text-primary;
                                             vertical-alignment: center;
                                         }
                                         Text {
@@ -650,7 +650,7 @@ export component ActForm inherits Rectangle {
                                     }
                                     Rectangle {
                                         height: 80px;
-                                        background: Theme.surface;
+                                        background: Theme.bg-card;
                                         border-width: 1px;
                                         border-color: Theme.border;
                                         border-radius: 8px;
@@ -674,7 +674,7 @@ export component ActForm inherits Rectangle {
                                     text: "Задачі по акту";
                                     font-size: 16px;
                                     font-weight: 600;
-                                    color: Theme.text-main;
+                                    color: Theme.text-primary;
                                     vertical-alignment: center;
                                 }
 
@@ -682,7 +682,7 @@ export component ActForm inherits Rectangle {
                                     width: 140px;
                                     height: 32px;
                                     border-radius: 8px;
-                                    background: Theme.primary-light;
+                                    background: Theme.bg-primary;
 
                                     Text {
                                         text: "+ Додати задачу";
@@ -708,7 +708,7 @@ export component ActForm inherits Rectangle {
                                 border-radius: 8px;
                                 border-width: 1px;
                                 border-color: Theme.border;
-                                background: Theme.surface;
+                                background: Theme.bg-card;
                                 clip: true;
 
                                 VerticalLayout {
@@ -721,12 +721,12 @@ export component ActForm inherits Rectangle {
                                         HorizontalLayout {
                                             padding-left: 12px;
                                             padding-right: 12px;
-                                            Text { text: "Назва";      color: Theme.text-sub; font-size: 12px; font-weight: 500; horizontal-stretch: 3; vertical-alignment: center; }
-                                            Text { text: "Пріоритет";  color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 110px; vertical-alignment: center; }
-                                            Text { text: "Дедлайн";    color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 120px; vertical-alignment: center; }
-                                            Text { text: "Нагад.";     color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 120px; vertical-alignment: center; }
-                                            Text { text: "Статус";     color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 100px; vertical-alignment: center; }
-                                            Text { text: "Дії";        color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 180px; vertical-alignment: center; }
+                                            Text { text: "Назва";      color: Theme.text-second; font-size: 12px; font-weight: 500; horizontal-stretch: 3; vertical-alignment: center; }
+                                            Text { text: "Пріоритет";  color: Theme.text-second; font-size: 12px; font-weight: 500; width: 110px; vertical-alignment: center; }
+                                            Text { text: "Дедлайн";    color: Theme.text-second; font-size: 12px; font-weight: 500; width: 120px; vertical-alignment: center; }
+                                            Text { text: "Нагад.";     color: Theme.text-second; font-size: 12px; font-weight: 500; width: 120px; vertical-alignment: center; }
+                                            Text { text: "Статус";     color: Theme.text-second; font-size: 12px; font-weight: 500; width: 100px; vertical-alignment: center; }
+                                            Text { text: "Дії";        color: Theme.text-second; font-size: 12px; font-weight: 500; width: 180px; vertical-alignment: center; }
                                         }
                                     }
 
@@ -758,7 +758,7 @@ export component ActForm inherits Rectangle {
                                                 Theme.text-muted.with-alpha(0.10);
 
                                             height: 48px;
-                                            background: row-touch.has-hover ? Theme.row-hover : Theme.surface;
+                                            background: row-touch.has-hover ? Theme.row-hover : Theme.bg-card;
 
                                             HorizontalLayout {
                                                 padding-left: 12px;
@@ -766,7 +766,7 @@ export component ActForm inherits Rectangle {
 
                                                 Text {
                                                     text: row.title;
-                                                    color: Theme.text-main;
+                                                    color: Theme.text-primary;
                                                     font-size: 13px;
                                                     font-weight: 500;
                                                     horizontal-stretch: 3;
@@ -793,8 +793,8 @@ export component ActForm inherits Rectangle {
                                                     }
                                                 }
 
-                                                Text { text: row.due-date; color: Theme.text-sub; font-size: 13px; width: 120px; vertical-alignment: center; overflow: elide; }
-                                                Text { text: row.reminder; color: Theme.text-sub; font-size: 13px; width: 120px; vertical-alignment: center; overflow: elide; }
+                                                Text { text: row.due-date; color: Theme.text-second; font-size: 13px; width: 120px; vertical-alignment: center; overflow: elide; }
+                                                Text { text: row.reminder; color: Theme.text-second; font-size: 13px; width: 120px; vertical-alignment: center; overflow: elide; }
 
                                                 Rectangle {
                                                     width: 100px;
@@ -820,13 +820,13 @@ export component ActForm inherits Rectangle {
                                                     spacing: 8px;
 
                                                     Rectangle {
-                                                        background: Theme.surface;
+                                                        background: Theme.bg-card;
                                                         border-width: 1px;
                                                         border-color: Theme.border;
                                                         border-radius: 6px;
                                                         height: 28px;
                                                         width: 60px;
-                                                        Text { text: "✎"; color: Theme.text-main; font-size: 12px; horizontal-alignment: center; vertical-alignment: center; }
+                                                        Text { text: "✎"; color: Theme.text-primary; font-size: 12px; horizontal-alignment: center; vertical-alignment: center; }
                                                         TouchArea {
                                                             mouse-cursor: pointer;
                                                             clicked => {
@@ -850,7 +850,7 @@ export component ActForm inherits Rectangle {
                                                     }
 
                                                     Rectangle {
-                                                        background: Theme.danger-light;
+                                                        background: Theme.bg-danger;
                                                         border-radius: 6px;
                                                         border-width: 1px;
                                                         border-color: Theme.danger-border;
@@ -873,7 +873,7 @@ export component ActForm inherits Rectangle {
 
                                     if !root.act-tasks-loading && root.act-task-rows.length == 0 : Rectangle {
                                         height: 72px;
-                                        background: Theme.surface;
+                                        background: Theme.bg-card;
                                         Text {
                                             text: "У цьому акті ще немає задач";
                                             color: Theme.text-muted;
@@ -893,7 +893,7 @@ export component ActForm inherits Rectangle {
                 // ──────────────────────────────────────────────────────────
                 Rectangle {
                     width: 392px;
-                    background: Theme.bg;
+                    background: Theme.bg-page;
 
                     VerticalLayout {
                         padding-top: 32px;
@@ -912,7 +912,7 @@ export component ActForm inherits Rectangle {
                             border-radius: 12px;
                             border-width: 1px;
                             border-color: Theme.border;
-                            background: Theme.surface;
+                            background: Theme.bg-card;
                             drop-shadow-color: #0000000D;
                             drop-shadow-blur: 8px;
                             drop-shadow-offset-y: 2px;
@@ -925,14 +925,14 @@ export component ActForm inherits Rectangle {
                                     text: "Статус акту";
                                     font-size: 15px;
                                     font-weight: 600;
-                                    color: Theme.text-main;
+                                    color: Theme.text-primary;
                                 }
 
                                 StatusOption {
                                     title: "Чернетка";
                                     subtitle: "Не відправлений";
                                     selected: root.act-status == ActStatus.draft;
-                                    accent: Theme.text-sub;
+                                    accent: Theme.text-second;
                                     clicked => { root.act-status = ActStatus.draft; }
                                 }
                                 StatusOption {
@@ -964,7 +964,7 @@ export component ActForm inherits Rectangle {
                             border-radius: 12px;
                             border-width: 1px;
                             border-color: Theme.border;
-                            background: Theme.surface;
+                            background: Theme.bg-card;
                             drop-shadow-color: #0000000D;
                             drop-shadow-blur: 8px;
                             drop-shadow-offset-y: 2px;
@@ -976,7 +976,7 @@ export component ActForm inherits Rectangle {
                                 Rectangle {
                                     height: 44px;
                                     border-radius: 12px;
-                                    background: Theme.primary-light;
+                                    background: Theme.bg-primary;
 
                                     Text {
                                         x: 20px;
@@ -997,25 +997,25 @@ export component ActForm inherits Rectangle {
                                         spacing: 10px;
                                         alignment: start;
                                         Rectangle { width: 6px; height: 6px; y: 4px; border-radius: 3px; background: Theme.primary; }
-                                        Text { text: "Контрагент та сума є обов'язковими"; font-size: 12px; color: Theme.text-main; wrap: word-wrap; horizontal-stretch: 1; }
+                                        Text { text: "Контрагент та сума є обов'язковими"; font-size: 12px; color: Theme.text-primary; wrap: word-wrap; horizontal-stretch: 1; }
                                     }
                                     HorizontalLayout {
                                         spacing: 10px;
                                         alignment: start;
                                         Rectangle { width: 6px; height: 6px; y: 4px; border-radius: 3px; background: Theme.primary; }
-                                        Text { text: "«Виставлений» — надішліть PDF клієнту"; font-size: 12px; color: Theme.text-main; wrap: word-wrap; horizontal-stretch: 1; }
+                                        Text { text: "«Виставлений» — надішліть PDF клієнту"; font-size: 12px; color: Theme.text-primary; wrap: word-wrap; horizontal-stretch: 1; }
                                     }
                                     HorizontalLayout {
                                         spacing: 10px;
                                         alignment: start;
                                         Rectangle { width: 6px; height: 6px; y: 4px; border-radius: 3px; background: Theme.primary; }
-                                        Text { text: "«Підписаний» — документ підтверджено"; font-size: 12px; color: Theme.text-main; wrap: word-wrap; horizontal-stretch: 1; }
+                                        Text { text: "«Підписаний» — документ підтверджено"; font-size: 12px; color: Theme.text-primary; wrap: word-wrap; horizontal-stretch: 1; }
                                     }
                                     HorizontalLayout {
                                         spacing: 10px;
                                         alignment: start;
                                         Rectangle { width: 6px; height: 6px; y: 4px; border-radius: 3px; background: Theme.primary; }
-                                        Text { text: "«Оплачений» — кошти отримано"; font-size: 12px; color: Theme.text-main; wrap: word-wrap; horizontal-stretch: 1; }
+                                        Text { text: "«Оплачений» — кошти отримано"; font-size: 12px; color: Theme.text-primary; wrap: word-wrap; horizontal-stretch: 1; }
                                     }
                                 }
                             }

@@ -40,7 +40,7 @@ export component PaymentList {
         // ── Topbar ─────────────────────────────────────────────────────────
         Rectangle {
             height: 64px;
-            background: Theme.surface;
+            background: Theme.bg-card;
 
             HorizontalLayout {
                 padding-left: 32px;
@@ -51,7 +51,7 @@ export component PaymentList {
                     text: "Платежі";
                     font-size: Theme.font-2xl;
                     font-weight: 600;
-                    color: Theme.text-main;
+                    color: Theme.text-primary;
                     vertical-alignment: center;
                     horizontal-stretch: 1;
                 }
@@ -88,7 +88,7 @@ export component PaymentList {
                     Text {
                         text: "Надходження:";
                         font-size: Theme.font-md;
-                        color: Theme.text-sub;
+                        color: Theme.text-second;
                         vertical-alignment: center;
                     }
                     Text {
@@ -113,7 +113,7 @@ export component PaymentList {
                     Text {
                         text: "Витрати:";
                         font-size: Theme.font-md;
-                        color: Theme.text-sub;
+                        color: Theme.text-second;
                         vertical-alignment: center;
                     }
                     Text {
@@ -132,7 +132,7 @@ export component PaymentList {
         // ── Панель пошуку та фільтру ────────────────────────────────────────
         Rectangle {
             height: 56px;
-            background: Theme.surface;
+            background: Theme.bg-card;
             border-width: 1px;
             border-color: Theme.border;
 
@@ -161,7 +161,7 @@ export component PaymentList {
                         }
                         search-edit := TextInput {
                             font-size: Theme.font-md;
-                            color: Theme.text-main;
+                            color: Theme.text-primary;
                             horizontal-stretch: 1;
                             vertical-alignment: center;
                             edited => { root.search-changed(self.text); }
@@ -183,7 +183,7 @@ export component PaymentList {
                         Text {
                             text: lbl;
                             font-size: Theme.font-base;
-                            color: root.active-filter == i ? Theme.text-white : Theme.text-sub;
+                            color: root.active-filter == i ? Theme.text-white : Theme.text-second;
                             horizontal-alignment: center;
                             vertical-alignment: center;
                             animate color { duration: 100ms; easing: ease; }
@@ -216,7 +216,7 @@ export component PaymentList {
                     text: "Дата";
                     font-size: Theme.font-sm;
                     font-weight: 600;
-                    color: Theme.text-sub;
+                    color: Theme.text-second;
                     vertical-alignment: center;
                     width: 100px;
                 }
@@ -224,7 +224,7 @@ export component PaymentList {
                     text: "Контрагент";
                     font-size: Theme.font-sm;
                     font-weight: 600;
-                    color: Theme.text-sub;
+                    color: Theme.text-second;
                     vertical-alignment: center;
                     horizontal-stretch: 1;
                 }
@@ -232,7 +232,7 @@ export component PaymentList {
                     text: "Призначення";
                     font-size: Theme.font-sm;
                     font-weight: 600;
-                    color: Theme.text-sub;
+                    color: Theme.text-second;
                     vertical-alignment: center;
                     horizontal-stretch: 2;
                 }
@@ -240,7 +240,7 @@ export component PaymentList {
                     text: "Банк";
                     font-size: Theme.font-sm;
                     font-weight: 600;
-                    color: Theme.text-sub;
+                    color: Theme.text-second;
                     vertical-alignment: center;
                     width: 100px;
                 }
@@ -248,7 +248,7 @@ export component PaymentList {
                     text: "Сума";
                     font-size: Theme.font-sm;
                     font-weight: 600;
-                    color: Theme.text-sub;
+                    color: Theme.text-second;
                     horizontal-alignment: right;
                     vertical-alignment: center;
                     width: 110px;
@@ -257,7 +257,7 @@ export component PaymentList {
                     text: "Зведено";
                     font-size: Theme.font-sm;
                     font-weight: 600;
-                    color: Theme.text-sub;
+                    color: Theme.text-second;
                     horizontal-alignment: center;
                     vertical-alignment: center;
                     width: 64px;
@@ -277,7 +277,7 @@ export component PaymentList {
             background: Theme.bg-page;
 
             if root.rows.length == 0 : Rectangle {
-                background: Theme.surface;
+                background: Theme.bg-card;
                 border-radius: Theme.radius-lg;
                 height: 120px;
 
@@ -296,7 +296,7 @@ export component PaymentList {
                     height: 48px;
                     background: root.selected-row == i
                         ? Theme.row-selected
-                        : (Math.mod(i, 2) == 0 ? Theme.surface : Theme.row-stripe);
+                        : (Math.mod(i, 2) == 0 ? Theme.bg-card : Theme.row-stripe);
                     border-width: 1px;
                     border-color: Theme.border;
                     animate background { duration: 80ms; easing: ease; }
@@ -326,14 +326,14 @@ export component PaymentList {
                         Text {
                             text: row.date;
                             font-size: Theme.font-md;
-                            color: Theme.text-sub;
+                            color: Theme.text-second;
                             vertical-alignment: center;
                             width: 97px;
                         }
                         Text {
                             text: row.counterparty == "" ? "—" : row.counterparty;
                             font-size: Theme.font-md;
-                            color: Theme.text-main;
+                            color: Theme.text-primary;
                             vertical-alignment: center;
                             overflow: elide;
                             horizontal-stretch: 1;
@@ -341,7 +341,7 @@ export component PaymentList {
                         Text {
                             text: row.description == "" ? "—" : row.description;
                             font-size: Theme.font-md;
-                            color: Theme.text-sub;
+                            color: Theme.text-second;
                             vertical-alignment: center;
                             overflow: elide;
                             horizontal-stretch: 2;

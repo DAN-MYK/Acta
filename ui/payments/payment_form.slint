@@ -2,7 +2,7 @@ import { ComboBox, LineEdit } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 
 export component PaymentForm inherits Rectangle {
-    background: Theme.bg;
+    background: Theme.bg-page;
 
     in property <bool> is-edit-mode: false;
     in property <string> payment-edit-id: "";
@@ -34,7 +34,7 @@ export component PaymentForm inherits Rectangle {
         // ── Topbar ─────────────────────────────────────────────────────────
         Rectangle {
             height: 64px;
-            background: Theme.surface;
+            background: Theme.bg-card;
 
             Rectangle {
                 y: 63px;
@@ -72,7 +72,7 @@ export component PaymentForm inherits Rectangle {
                         text: root.is-edit-mode ? "Редагування платежу" : "Новий платіж";
                         font-size: 14px;
                         font-weight: 600;
-                        color: Theme.text-main;
+                        color: Theme.text-primary;
                         vertical-alignment: center;
                     }
                 }
@@ -84,13 +84,13 @@ export component PaymentForm inherits Rectangle {
                     border-radius: 8px;
                     border-width: 1px;
                     border-color: Theme.border;
-                    background: pay-cancel-touch.has-hover ? Theme.hover-bg : Theme.bg;
+                    background: pay-cancel-touch.has-hover ? Theme.bg-hover : Theme.bg-page;
                     animate background { duration: 80ms; }
 
                     Text {
                         text: "Скасувати";
                         font-size: 14px;
-                        color: Theme.text-sub;
+                        color: Theme.text-second;
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
@@ -112,7 +112,7 @@ export component PaymentForm inherits Rectangle {
                         text: root.is-edit-mode ? "Зберегти" : "Створити";
                         font-size: 14px;
                         font-weight: 600;
-                        color: #ffffff;
+                        color: Theme.text-white;
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
@@ -139,7 +139,7 @@ export component PaymentForm inherits Rectangle {
                 spacing: 16px;
 
                 Rectangle {
-                    background: Theme.surface;
+                    background: Theme.bg-card;
                     border-width: 1px;
                     border-color: Theme.border;
                     border-radius: 16px;
@@ -155,7 +155,7 @@ export component PaymentForm inherits Rectangle {
                             VerticalLayout {
                                 horizontal-stretch: 1;
                                 spacing: 6px;
-                                Text { text: "Дата *"; font-size: 12px; color: Theme.text-sub; }
+                                Text { text: "Дата *"; font-size: 12px; color: Theme.text-second; }
                                 LineEdit {
                                     text: root.v-date;
                                     placeholder-text: "03.04.2026";
@@ -166,7 +166,7 @@ export component PaymentForm inherits Rectangle {
                             VerticalLayout {
                                 horizontal-stretch: 1;
                                 spacing: 6px;
-                                Text { text: "Сума *"; font-size: 12px; color: Theme.text-sub; }
+                                Text { text: "Сума *"; font-size: 12px; color: Theme.text-second; }
                                 LineEdit {
                                     text: root.v-amount;
                                     placeholder-text: "78000.00";
@@ -181,7 +181,7 @@ export component PaymentForm inherits Rectangle {
                             VerticalLayout {
                                 horizontal-stretch: 1;
                                 spacing: 6px;
-                                Text { text: "Напрямок"; font-size: 12px; color: Theme.text-sub; }
+                                Text { text: "Напрямок"; font-size: 12px; color: Theme.text-second; }
                                 ComboBox {
                                     model: ["Надходження", "Витрата"];
                                     current-index: root.v-direction;
@@ -192,7 +192,7 @@ export component PaymentForm inherits Rectangle {
                             VerticalLayout {
                                 horizontal-stretch: 1;
                                 spacing: 6px;
-                                Text { text: "Контрагент"; font-size: 12px; color: Theme.text-sub; }
+                                Text { text: "Контрагент"; font-size: 12px; color: Theme.text-second; }
                                 ComboBox {
                                     model: root.counterparty-names;
                                     current-index: root.v-counterparty;
@@ -207,7 +207,7 @@ export component PaymentForm inherits Rectangle {
                             VerticalLayout {
                                 horizontal-stretch: 1;
                                 spacing: 6px;
-                                Text { text: "Банк"; font-size: 12px; color: Theme.text-sub; }
+                                Text { text: "Банк"; font-size: 12px; color: Theme.text-second; }
                                 LineEdit {
                                     text: root.v-bank-name;
                                     placeholder-text: "Sense Bank";
@@ -218,7 +218,7 @@ export component PaymentForm inherits Rectangle {
                             VerticalLayout {
                                 horizontal-stretch: 1;
                                 spacing: 6px;
-                                Text { text: "Референс банку"; font-size: 12px; color: Theme.text-sub; }
+                                Text { text: "Референс банку"; font-size: 12px; color: Theme.text-second; }
                                 LineEdit {
                                     text: root.v-bank-ref;
                                     placeholder-text: "PAY-2026-0001";
@@ -229,7 +229,7 @@ export component PaymentForm inherits Rectangle {
 
                         VerticalLayout {
                             spacing: 6px;
-                            Text { text: "Призначення"; font-size: 12px; color: Theme.text-sub; }
+                            Text { text: "Призначення"; font-size: 12px; color: Theme.text-second; }
                             LineEdit {
                                 text: root.v-description;
                                 placeholder-text: "Оплата за акт / рахунок / витрати";
@@ -249,7 +249,7 @@ export component PaymentForm inherits Rectangle {
                                 text: "Порада: використовуйте формат дати дд.мм.рррр. Для витрат сума лишається додатною, напрямок визначає тип руху.";
                                 wrap: word-wrap;
                                 font-size: 12px;
-                                color: Theme.text-sub;
+                                color: Theme.text-second;
                             }
                         }
                     }

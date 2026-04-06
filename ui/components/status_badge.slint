@@ -16,14 +16,14 @@ export component StatusBadge inherits Rectangle {
     in property <color>  badge-bg:    #ABABB71F;
 
     width: 84px;
-    height: 24px;
-    border-radius: 12px;
+    height: Theme.badge-height;
+    border-radius: Theme.radius-lg;
     background: root.badge-bg;
 
     Text {
         text: root.label;
         color: root.badge-color;
-        font-size: 11px;
+        font-size: Theme.font-sm;
         font-weight: 500;
         horizontal-alignment: center;
         vertical-alignment: center;

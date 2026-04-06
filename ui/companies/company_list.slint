@@ -37,20 +37,20 @@ export component CompanyList {
 
         // ── Topbar (64px, білий, з нижньою межею) ───────────────────────────
         Rectangle {
-            height: 64px;
-            background: Theme.surface;
+            height: Theme.topbar-height;
+            background: Theme.bg-card;
 
             HorizontalLayout {
                 padding-left: 32px;
-                padding-right: 32px;
+                padding-right: Theme.space-8;
                 spacing: 16px;
                 alignment: center;
 
                 Text {
                     text: "Компанії";
-                    font-size: 18px;
+                    font-size: Theme.font-2xl;
                     font-weight: 600;
-                    color: Theme.text-main;
+                    color: Theme.text-primary;
                     vertical-alignment: center;
                     horizontal-stretch: 1;
                 }
@@ -58,20 +58,20 @@ export component CompanyList {
                 if root.companies.length > 0 : Text {
                     text: root.companies.length + " записів";
                     color: Theme.text-muted;
-                    font-size: 12px;
+                    font-size: Theme.font-base;
                     vertical-alignment: center;
                 }
 
                 new-btn := Rectangle {
                     background: Theme.primary;
-                    border-radius: 8px;
-                    height: 36px;
+                    border-radius: Theme.radius-md;
+                    height: Theme.btn-md-height;
                     width: 180px;
 
                     Text {
                         text: "+ Нова компанія";
-                        color: #ffffff;
-                        font-size: 13px;
+                        color: Theme.text-white;
+                        font-size: Theme.font-md;
                         font-weight: 500;
                         horizontal-alignment: center;
                         vertical-alignment: center;
@@ -93,15 +93,15 @@ export component CompanyList {
 
         // ── Основний контент ─────────────────────────────────────────────────
         Rectangle {
-            background: Theme.bg;
+            background: Theme.bg-page;
             vertical-stretch: 1;
 
             VerticalLayout {
-                padding-top: 24px;
-                padding-left: 32px;
-                padding-right: 32px;
-                padding-bottom: 24px;
-                spacing: 16px;
+                padding-top: Theme.space-6;
+                padding-left: Theme.space-8;
+                padding-right: Theme.space-8;
+                padding-bottom: Theme.space-6;
+                spacing: Theme.space-4;
 
                 if root.loading : ProgressIndicator {
                     indeterminate: true;
@@ -111,7 +111,7 @@ export component CompanyList {
                 // ── Таблиця ──────────────────────────────────────────────────
                 Rectangle {
                     vertical-stretch: 1;
-                    border-radius: 8px;
+                    border-radius: Theme.radius-md;
                     border-width: 1px;
                     border-color: Theme.border;
                     clip: true;
@@ -126,21 +126,21 @@ export component CompanyList {
 
                             HorizontalLayout {
                                 padding-left: 16px;
-                                padding-right: 16px;
+                                padding-right: Theme.space-4;
                                 spacing: 12px;
 
-                                Text { text: "Компанія";   color: Theme.text-sub; font-size: 12px; font-weight: 500; horizontal-stretch: 3; vertical-alignment: center; }
-                                Text { text: "ЄДРПОУ";     color: Theme.text-sub; font-size: 12px; font-weight: 500; horizontal-stretch: 1; vertical-alignment: center; }
-                                Text { text: "Актів";      color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 60px;           vertical-alignment: center; }
-                                Text { text: "Оборот, ₴"; color: Theme.text-sub; font-size: 12px; font-weight: 500; horizontal-stretch: 2; vertical-alignment: center; }
-                                Text { text: "Дії";        color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 172px;          vertical-alignment: center; }
+                                Text { text: "Компанія";   color: Theme.text-second; font-size: Theme.font-base; font-weight: 500; horizontal-stretch: 3; vertical-alignment: center; }
+                                Text { text: "ЄДРПОУ";     color: Theme.text-second; font-size: Theme.font-base; font-weight: 500; horizontal-stretch: 1; vertical-alignment: center; }
+                                Text { text: "Актів";      color: Theme.text-second; font-size: Theme.font-base; font-weight: 500; width: 60px;           vertical-alignment: center; }
+                                Text { text: "Оборот, ₴"; color: Theme.text-second; font-size: Theme.font-base; font-weight: 500; horizontal-stretch: 2; vertical-alignment: center; }
+                                Text { text: "Дії";        color: Theme.text-second; font-size: Theme.font-base; font-weight: 500; width: 172px;          vertical-alignment: center; }
                             }
                         }
 
                         // Порожній стан
                         if !root.loading && root.companies.length == 0 : Rectangle {
                             vertical-stretch: 1;
-                            background: Theme.surface;
+                            background: Theme.bg-card;
 
                             VerticalLayout {
                                 alignment: center;
@@ -155,12 +155,12 @@ export component CompanyList {
                                     text: "Компаній ще немає";
                                     font-size: 15px;
                                     font-weight: 500;
-                                    color: Theme.text-sub;
+                                    color: Theme.text-second;
                                     horizontal-alignment: center;
                                 }
                                 Text {
                                     text: "Натисніть «+ Нова компанія» щоб додати першу";
-                                    font-size: 13px;
+                                    font-size: Theme.font-md;
                                     color: Theme.text-muted;
                                     horizontal-alignment: center;
                                 }
@@ -172,12 +172,12 @@ export component CompanyList {
                             vertical-stretch: 1;
 
                             for c[i] in root.companies : Rectangle {
-                                height: 52px;
+                                height: Theme.row-height;
                                 background: c.is-current
                                     ? Theme.row-selected
                                     : (row-touch.has-hover
                                         ? Theme.row-hover
-                                        : (Math.mod(i, 2) == 0 ? Theme.surface : Theme.row-stripe));
+                                        : (Math.mod(i, 2) == 0 ? Theme.bg-card : Theme.row-stripe));
                                 animate background { duration: 80ms; easing: ease; }
 
                                 // нижня межа для розділення рядків
@@ -195,7 +195,7 @@ export component CompanyList {
 
                                 HorizontalLayout {
                                     padding-left: 16px;
-                                    padding-right: 16px;
+                                    padding-right: Theme.space-4;
                                     spacing: 12px;
 
                                     // Ініціали + назва
@@ -212,8 +212,8 @@ export component CompanyList {
 
                                             Text {
                                                 text: c.initials;
-                                                color: c.is-current ? #ffffff : Theme.primary;
-                                                font-size: 10px;
+                                                color: c.is-current ? Theme.text-white : Theme.primary;
+                                                font-size: Theme.font-xs;
                                                 font-weight: 600;
                                                 horizontal-alignment: center;
                                                 vertical-alignment: center;
@@ -222,8 +222,8 @@ export component CompanyList {
 
                                         Text {
                                             text: c.name;
-                                            color: Theme.text-main;
-                                            font-size: 13px;
+                                            color: Theme.text-primary;
+                                            font-size: Theme.font-md;
                                             font-weight: 500;
                                             horizontal-stretch: 1;
                                             vertical-alignment: center;
@@ -234,8 +234,8 @@ export component CompanyList {
                                     // ЄДРПОУ
                                     Text {
                                         text: c.edrpou;
-                                        color: Theme.text-sub;
-                                        font-size: 13px;
+                                        color: Theme.text-second;
+                                        font-size: Theme.font-md;
                                         horizontal-stretch: 1;
                                         vertical-alignment: center;
                                         overflow: elide;
@@ -244,8 +244,8 @@ export component CompanyList {
                                     // Кількість актів
                                     Text {
                                         text: "\{c.act-count}";
-                                        color: Theme.text-sub;
-                                        font-size: 13px;
+                                        color: Theme.text-second;
+                                        font-size: Theme.font-md;
                                         width: 60px;
                                         vertical-alignment: center;
                                     }
@@ -253,8 +253,8 @@ export component CompanyList {
                                     // Оборот
                                     Text {
                                         text: c.total-amount;
-                                        color: Theme.text-main;
-                                        font-size: 13px;
+                                        color: Theme.text-primary;
+                                        font-size: Theme.font-md;
                                         font-weight: 600;
                                         horizontal-stretch: 2;
                                         vertical-alignment: center;
@@ -266,20 +266,20 @@ export component CompanyList {
                                         width: 172px;
 
                                         HorizontalLayout {
-                                            spacing: 6px;
+                                            spacing: Theme.radius-sm;
                                             alignment: center;
 
                                             // Обрати / Активна
                                             Rectangle {
                                                 width: 80px;
                                                 height: 26px;
-                                                border-radius: 6px;
+                                                border-radius: Theme.radius-sm;
                                                 background: c.is-current ? Theme.btn-action-bg : Theme.primary;
 
                                                 Text {
                                                     text: c.is-current ? "✓ Активна" : "Обрати";
-                                                    color: c.is-current ? Theme.primary : #ffffff;
-                                                    font-size: 10px;
+                                                    color: c.is-current ? Theme.primary : Theme.text-white;
+                                                    font-size: Theme.font-xs;
                                                     font-weight: 500;
                                                     horizontal-alignment: center;
                                                     vertical-alignment: center;
@@ -295,13 +295,13 @@ export component CompanyList {
                                             Rectangle {
                                                 width: 38px;
                                                 height: 26px;
-                                                border-radius: 6px;
+                                                border-radius: Theme.radius-sm;
                                                 background: Theme.btn-action-bg;
 
                                                 Text {
                                                     text: "✎";
                                                     color: Theme.primary;
-                                                    font-size: 12px;
+                                                    font-size: Theme.font-base;
                                                     horizontal-alignment: center;
                                                     vertical-alignment: center;
                                                 }
@@ -315,12 +315,12 @@ export component CompanyList {
                                             Rectangle {
                                                 width: 38px;
                                                 height: 26px;
-                                                border-radius: 6px;
-                                                background: Theme.danger-light;
+                                                border-radius: Theme.radius-sm;
+                                                background: Theme.bg-danger;
 
                                                 Text {
                                                     text: "🗄";
-                                                    font-size: 12px;
+                                                    font-size: Theme.font-base;
                                                     horizontal-alignment: center;
                                                     vertical-alignment: center;
                                                 }

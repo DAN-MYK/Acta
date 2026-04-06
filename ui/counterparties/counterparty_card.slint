@@ -70,14 +70,14 @@ export component CounterpartyCard {
                         text: root.cp-name;
                         font-size: 24px;
                         font-weight: 700;
-                        color: Theme.text-main;
+                        color: Theme.text-primary;
                     }
 
                     Text {
                         text: (root.cp-edrpou != "" ? "ЄДРПОУ " + root.cp-edrpou + "  " : "")
                             + (root.cp-ipn != "" ? "ІПН " + root.cp-ipn : "");
                         font-size: 13px;
-                        color: Theme.text-sub;
+                        color: Theme.text-second;
                     }
                 }
 
@@ -103,7 +103,7 @@ export component CounterpartyCard {
                     horizontal-stretch: 1;
                     height: 72px;
                     border-radius: 14px;
-                    background: Theme.surface;
+                    background: Theme.bg-card;
                     border-width: 1px;
                     border-color: Theme.border;
 
@@ -118,14 +118,14 @@ export component CounterpartyCard {
                             text: stat.value;
                             font-size: 24px;
                             font-weight: 700;
-                            color: Theme.text-main;
+                            color: Theme.text-primary;
                         }
                     }
                 }
             }
 
             Rectangle {
-                background: Theme.surface;
+                background: Theme.bg-card;
                 border-width: 1px;
                 border-color: Theme.border;
                 border-radius: 16px;
@@ -145,7 +145,7 @@ export component CounterpartyCard {
 
                             Text {
                                 text: label;
-                                color: root.active-tab == i ? Theme.text-white : Theme.text-sub;
+                                color: root.active-tab == i ? Theme.text-white : Theme.text-second;
                                 font-size: 12px;
                                 font-weight: root.active-tab == i ? 600 : 500;
                                 horizontal-alignment: center;
@@ -168,10 +168,10 @@ export component CounterpartyCard {
                             HorizontalLayout {
                                 padding-left: 12px;
                                 padding-right: 12px;
-                                Text { text: row.number; width: 150px; font-size: 12px; color: Theme.text-main; vertical-alignment: center; }
-                                Text { text: row.date; width: 90px; font-size: 12px; color: Theme.text-sub; vertical-alignment: center; }
-                                Text { text: row.amount; width: 120px; font-size: 12px; color: Theme.text-main; vertical-alignment: center; }
-                                Text { text: row.status; font-size: 12px; color: Theme.text-sub; vertical-alignment: center; }
+                                Text { text: row.number; width: 150px; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; }
+                                Text { text: row.date; width: 90px; font-size: 12px; color: Theme.text-second; vertical-alignment: center; }
+                                Text { text: row.amount; width: 120px; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; }
+                                Text { text: row.status; font-size: 12px; color: Theme.text-second; vertical-alignment: center; }
                             }
                         }
                     }
@@ -185,10 +185,10 @@ export component CounterpartyCard {
                             HorizontalLayout {
                                 padding-left: 12px;
                                 padding-right: 12px;
-                                Text { text: row.number; width: 150px; font-size: 12px; color: Theme.text-main; vertical-alignment: center; }
-                                Text { text: row.date; width: 90px; font-size: 12px; color: Theme.text-sub; vertical-alignment: center; }
-                                Text { text: row.amount; width: 120px; font-size: 12px; color: Theme.text-main; vertical-alignment: center; }
-                                Text { text: row.status; font-size: 12px; color: Theme.text-sub; vertical-alignment: center; }
+                                Text { text: row.number; width: 150px; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; }
+                                Text { text: row.date; width: 90px; font-size: 12px; color: Theme.text-second; vertical-alignment: center; }
+                                Text { text: row.amount; width: 120px; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; }
+                                Text { text: row.status; font-size: 12px; color: Theme.text-second; vertical-alignment: center; }
                             }
                         }
                     }
@@ -202,10 +202,10 @@ export component CounterpartyCard {
                             HorizontalLayout {
                                 padding-left: 12px;
                                 padding-right: 12px;
-                                Text { text: row.date; width: 90px; font-size: 12px; color: Theme.text-sub; vertical-alignment: center; }
-                                Text { text: row.direction; width: 90px; font-size: 12px; color: Theme.text-main; vertical-alignment: center; }
-                                Text { text: row.amount; width: 120px; font-size: 12px; color: Theme.text-main; vertical-alignment: center; }
-                                Text { text: row.description; font-size: 12px; color: Theme.text-sub; vertical-alignment: center; overflow: elide; }
+                                Text { text: row.date; width: 90px; font-size: 12px; color: Theme.text-second; vertical-alignment: center; }
+                                Text { text: row.direction; width: 90px; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; }
+                                Text { text: row.amount; width: 120px; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; }
+                                Text { text: row.description; font-size: 12px; color: Theme.text-second; vertical-alignment: center; overflow: elide; }
                             }
                         }
                     }
@@ -219,10 +219,10 @@ export component CounterpartyCard {
                             HorizontalLayout {
                                 padding-left: 12px;
                                 padding-right: 12px;
-                                Text { text: row.number; width: 120px; font-size: 12px; color: Theme.text-main; vertical-alignment: center; }
-                                Text { text: row.subject; horizontal-stretch: 1; font-size: 12px; color: Theme.text-sub; vertical-alignment: center; overflow: elide; }
-                                Text { text: row.amount; width: 100px; font-size: 12px; color: Theme.text-main; vertical-alignment: center; }
-                                Text { text: row.status; width: 90px; font-size: 12px; color: Theme.text-sub; vertical-alignment: center; }
+                                Text { text: row.number; width: 120px; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; }
+                                Text { text: row.subject; horizontal-stretch: 1; font-size: 12px; color: Theme.text-second; vertical-alignment: center; overflow: elide; }
+                                Text { text: row.amount; width: 100px; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; }
+                                Text { text: row.status; width: 90px; font-size: 12px; color: Theme.text-second; vertical-alignment: center; }
                             }
                         }
                     }
@@ -242,7 +242,7 @@ export component CounterpartyCard {
                                 padding-left: 12px;
                                 padding-right: 12px;
                                 Text { text: item.label; width: 100px; font-size: 12px; color: Theme.text-muted; vertical-alignment: center; }
-                                Text { text: item.value == "" ? "—" : item.value; font-size: 12px; color: Theme.text-main; vertical-alignment: center; }
+                                Text { text: item.value == "" ? "—" : item.value; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; }
                             }
                         }
                     }
@@ -256,9 +256,9 @@ export component CounterpartyCard {
                             HorizontalLayout {
                                 padding-left: 12px;
                                 padding-right: 12px;
-                                Text { text: row.title; horizontal-stretch: 1; font-size: 12px; color: Theme.text-main; vertical-alignment: center; overflow: elide; }
-                                Text { text: row.due-date; width: 110px; font-size: 12px; color: Theme.text-sub; vertical-alignment: center; }
-                                Text { text: row.status; width: 90px; font-size: 12px; color: Theme.text-sub; vertical-alignment: center; }
+                                Text { text: row.title; horizontal-stretch: 1; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; overflow: elide; }
+                                Text { text: row.due-date; width: 110px; font-size: 12px; color: Theme.text-second; vertical-alignment: center; }
+                                Text { text: row.status; width: 90px; font-size: 12px; color: Theme.text-second; vertical-alignment: center; }
                             }
                         }
                     }

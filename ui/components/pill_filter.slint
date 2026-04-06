@@ -25,9 +25,9 @@ export component PillFilter inherits HorizontalLayout {
     for label[i] in root.items: Rectangle {
         private property <bool> is-active: i == root.active-index;
 
-        height: 32px;
+        height: Theme.btn-sm-height;
         width: pill-text.preferred-width + 24px;
-        border-radius: 6px;
+        border-radius: Theme.radius-sm;
         background: is-active ? Theme.primary : Theme.bg-gray;
         animate background { duration: 120ms; easing: ease; }
 

@@ -89,7 +89,7 @@ export component ActCard {
                         text: root.act-number;
                         font-size: 22px;
                         font-weight: 700;
-                        color: Theme.text-main;
+                        color: Theme.text-primary;
                     }
 
                     HorizontalLayout {
@@ -116,7 +116,7 @@ export component ActCard {
                         Text {
                             text: root.act-date;
                             font-size: 13px;
-                            color: Theme.text-sub;
+                            color: Theme.text-second;
                             vertical-alignment: center;
                         }
                     }
@@ -132,7 +132,7 @@ export component ActCard {
                         width: 80px;
                         height: 34px;
                         border-radius: 8px;
-                        background: pdf-touch.has-hover ? Theme.bg-primary : Theme.primary-light;
+                        background: pdf-touch.has-hover ? Theme.bg-primary : Theme.bg-primary;
                         animate background { duration: 80ms; }
 
                         Text {
@@ -182,14 +182,14 @@ export component ActCard {
                         width: 110px;
                         height: 34px;
                         border-radius: 8px;
-                        background: edit-touch.has-hover ? Theme.bg-gray : Theme.surface;
+                        background: edit-touch.has-hover ? Theme.bg-gray : Theme.bg-card;
                         border-width: 1px;
                         border-color: Theme.border;
                         animate background { duration: 80ms; }
 
                         Text {
                             text: "✎  Редагувати";
-                            color: Theme.text-main;
+                            color: Theme.text-primary;
                             font-size: 13px;
                             font-weight: 500;
                             horizontal-alignment: center;
@@ -207,14 +207,14 @@ export component ActCard {
                         width: 34px;
                         height: 34px;
                         border-radius: 8px;
-                        background: close-touch.has-hover ? Theme.bg-danger : Theme.surface;
+                        background: close-touch.has-hover ? Theme.bg-danger : Theme.bg-card;
                         border-width: 1px;
                         border-color: Theme.border;
                         animate background { duration: 80ms; }
 
                         Text {
                             text: "✕";
-                            color: close-touch.has-hover ? Theme.danger : Theme.text-sub;
+                            color: close-touch.has-hover ? Theme.danger : Theme.text-second;
                             font-size: 14px;
                             horizontal-alignment: center;
                             vertical-alignment: center;
@@ -240,7 +240,7 @@ export component ActCard {
                     horizontal-stretch: 1;
                     height: 64px;
                     border-radius: 12px;
-                    background: Theme.surface;
+                    background: Theme.bg-card;
                     border-width: 1px;
                     border-color: Theme.border;
 
@@ -259,7 +259,7 @@ export component ActCard {
                             text: item.value;
                             font-size: 14px;
                             font-weight: 600;
-                            color: Theme.text-main;
+                            color: Theme.text-primary;
                             overflow: elide;
                         }
                     }
@@ -268,7 +268,7 @@ export component ActCard {
 
             // ── Вкладки ──────────────────────────────────────────────────────
             Rectangle {
-                background: Theme.surface;
+                background: Theme.bg-card;
                 border-width: 1px;
                 border-color: Theme.border;
                 border-radius: 14px;
@@ -301,7 +301,7 @@ export component ActCard {
                                 text: tab-label;
                                 font-size: 12px;
                                 font-weight: tab-item.is-active ? 600 : 400;
-                                color: tab-item.is-active ? Theme.text-white : Theme.text-sub;
+                                color: tab-item.is-active ? Theme.text-white : Theme.text-second;
                             }
 
                             TouchArea {
@@ -350,18 +350,18 @@ export component ActCard {
 
                             for item[i] in root.act-items : Rectangle {
                                 height: 36px;
-                                background: Math.mod(i, 2) == 0 ? Theme.surface : Theme.row-stripe;
+                                background: Math.mod(i, 2) == 0 ? Theme.bg-card : Theme.row-stripe;
 
                                 HorizontalLayout {
                                     padding-left: 12px;
                                     padding-right: 12px;
 
                                     Text { text: (i + 1) + "";        width: 28px;  color: Theme.text-muted; font-size: 12px; vertical-alignment: center; }
-                                    Text { text: item.description;    horizontal-stretch: 1; color: Theme.text-main; font-size: 12px; vertical-alignment: center; overflow: elide; }
-                                    Text { text: item.quantity;       width: 60px;  color: Theme.text-sub; font-size: 12px; vertical-alignment: center; }
-                                    Text { text: item.unit;           width: 44px;  color: Theme.text-sub; font-size: 12px; vertical-alignment: center; }
-                                    Text { text: item.unit-price;     width: 90px;  color: Theme.text-sub; font-size: 12px; vertical-alignment: center; }
-                                    Text { text: item.amount;         width: 100px; color: Theme.text-main; font-size: 12px; font-weight: 600; vertical-alignment: center; }
+                                    Text { text: item.description;    horizontal-stretch: 1; color: Theme.text-primary; font-size: 12px; vertical-alignment: center; overflow: elide; }
+                                    Text { text: item.quantity;       width: 60px;  color: Theme.text-second; font-size: 12px; vertical-alignment: center; }
+                                    Text { text: item.unit;           width: 44px;  color: Theme.text-second; font-size: 12px; vertical-alignment: center; }
+                                    Text { text: item.unit-price;     width: 90px;  color: Theme.text-second; font-size: 12px; vertical-alignment: center; }
+                                    Text { text: item.amount;         width: 100px; color: Theme.text-primary; font-size: 12px; font-weight: 600; vertical-alignment: center; }
                                 }
                             }
                         }
@@ -413,7 +413,7 @@ export component ActCard {
                                         text: task.title;
                                         horizontal-stretch: 1;
                                         font-size: 13px;
-                                        color: Theme.text-main;
+                                        color: Theme.text-primary;
                                         vertical-alignment: center;
                                         overflow: elide;
                                     }
@@ -422,7 +422,7 @@ export component ActCard {
                                         text: task.due-date;
                                         width: 110px;
                                         font-size: 12px;
-                                        color: Theme.text-sub;
+                                        color: Theme.text-second;
                                         vertical-alignment: center;
                                     }
 
@@ -463,7 +463,7 @@ export component ActCard {
                                 y: 16px;
                                 width: parent.visible-width - 32px;
                                 text: root.act-notes;
-                                color: Theme.text-main;
+                                color: Theme.text-primary;
                                 font-size: 13px;
                                 wrap: word-wrap;
                             }

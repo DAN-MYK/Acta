@@ -17,12 +17,12 @@ component FormField inherits Rectangle {
         Text {
             text: root.label;
             font-size: 12px;
-            color: Theme.text-sub;
+            color: Theme.text-second;
         }
 
         Rectangle {
             height: 40px;
-            background: Theme.surface;
+            background: Theme.bg-card;
             border-width: 1px;
             border-color: Theme.border;
             border-radius: 8px;
@@ -36,7 +36,7 @@ component FormField inherits Rectangle {
 }
 
 export component CounterpartyForm inherits Rectangle {
-    background: Theme.bg;
+    background: Theme.bg-page;
 
     in property <bool>   is-edit-mode: false;
     in property <string> cp-edit-id: "";
@@ -80,7 +80,7 @@ export component CounterpartyForm inherits Rectangle {
 
             Rectangle {
                 height: 64px;
-                background: Theme.surface;
+                background: Theme.bg-card;
 
                 Rectangle {
                     y: 63px;
@@ -118,7 +118,7 @@ export component CounterpartyForm inherits Rectangle {
                             text: root.is-edit-mode ? "Редагування контрагента" : "Новий контрагент";
                             font-size: 14px;
                             font-weight: 600;
-                            color: Theme.text-main;
+                            color: Theme.text-primary;
                             vertical-alignment: center;
                         }
                     }
@@ -130,13 +130,13 @@ export component CounterpartyForm inherits Rectangle {
                         border-radius: 8px;
                         border-width: 1px;
                         border-color: Theme.border;
-                        background: cp-cancel-touch.has-hover ? Theme.hover-bg : Theme.bg;
+                        background: cp-cancel-touch.has-hover ? Theme.bg-hover : Theme.bg-page;
                         animate background { duration: 80ms; }
 
                         Text {
                             text: "Скасувати";
                             font-size: 14px;
-                            color: Theme.text-sub;
+                            color: Theme.text-second;
                             horizontal-alignment: center;
                             vertical-alignment: center;
                         }
@@ -158,7 +158,7 @@ export component CounterpartyForm inherits Rectangle {
                             text: "Зберегти";
                             font-size: 14px;
                             font-weight: 600;
-                            color: #ffffff;
+                        color: Theme.text-white;
                             horizontal-alignment: center;
                             vertical-alignment: center;
                         }
@@ -195,7 +195,7 @@ export component CounterpartyForm inherits Rectangle {
             }
 
             Rectangle {
-                background: Theme.bg;
+                background: Theme.bg-page;
                 vertical-stretch: 1;
 
                 HorizontalLayout {
@@ -209,7 +209,7 @@ export component CounterpartyForm inherits Rectangle {
                     Rectangle {
                         horizontal-stretch: 1;
                         vertical-stretch: 1;
-                        background: Theme.surface;
+                        background: Theme.bg-card;
                         border-radius: 14px;
                         border-width: 1px;
                         border-color: Theme.border;
@@ -222,7 +222,7 @@ export component CounterpartyForm inherits Rectangle {
                                 text: "Основна інформація";
                                 font-size: 16px;
                                 font-weight: 600;
-                                color: Theme.text-main;
+                                color: Theme.text-primary;
                             }
 
                             FormField {
@@ -264,7 +264,7 @@ export component CounterpartyForm inherits Rectangle {
                                 text: "Контактна інформація";
                                 font-size: 16px;
                                 font-weight: 600;
-                                color: Theme.text-main;
+                                color: Theme.text-primary;
                             }
 
                             HorizontalLayout {
@@ -296,7 +296,7 @@ export component CounterpartyForm inherits Rectangle {
 
                     Rectangle {
                         width: 260px;
-                        background: Theme.surface;
+                        background: Theme.bg-card;
                         border-radius: 14px;
                         border-width: 1px;
                         border-color: Theme.border;
@@ -310,27 +310,27 @@ export component CounterpartyForm inherits Rectangle {
                                 text: "Підказка";
                                 font-size: 16px;
                                 font-weight: 600;
-                                color: Theme.text-main;
+                                color: Theme.text-primary;
                             }
 
                             Text {
                                 text: "ЄДРПОУ — 8-значний код для юридичних осіб або ФОП.";
                                 font-size: 12px;
-                                color: Theme.text-sub;
+                                color: Theme.text-second;
                                 wrap: word-wrap;
                             }
 
                             Text {
                                 text: "IBAN — 29 символів, починається з UA та 6-значного МФО.";
                                 font-size: 12px;
-                                color: Theme.text-sub;
+                                color: Theme.text-second;
                                 wrap: word-wrap;
                             }
 
                             Text {
                                 text: "Телефон, email та адреса є необов'язковими. ІПН / РНОКПП заповнюйте для ФОП або фізичних осіб.";
                                 font-size: 12px;
-                                color: Theme.text-sub;
+                                color: Theme.text-second;
                                 wrap: word-wrap;
                             }
                         }

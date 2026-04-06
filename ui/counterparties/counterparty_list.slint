@@ -39,7 +39,7 @@ export component CounterpartyList {
 
         Rectangle {
             height: 64px;
-            background: Theme.surface;
+            background: Theme.bg-card;
 
             HorizontalLayout {
                 padding-left: 32px;
@@ -49,7 +49,7 @@ export component CounterpartyList {
                     text: "Контрагенти";
                     font-size: 18px;
                     font-weight: 600;
-                    color: Theme.text-main;
+                    color: Theme.text-primary;
                     vertical-alignment: center;
                     horizontal-stretch: 1;
                 }
@@ -63,7 +63,7 @@ export component CounterpartyList {
 
                     Text {
                         text: "+ Новий контрагент";
-                        color: #ffffff;
+                        color: Theme.text-white;
                         font-size: 13px;
                         font-weight: 500;
                         horizontal-alignment: center;
@@ -85,7 +85,7 @@ export component CounterpartyList {
         }
 
         Rectangle {
-            background: Theme.bg;
+            background: Theme.bg-page;
             vertical-stretch: 1;
 
             VerticalLayout {
@@ -101,7 +101,7 @@ export component CounterpartyList {
                     vertical-stretch: 0;
 
                     Rectangle {
-                        background: Theme.surface;
+                        background: Theme.bg-card;
                         border-radius: 8px;
                         border-width: 1px;
                         border-color: Theme.border;
@@ -115,7 +115,7 @@ export component CounterpartyList {
                             search-input := TextInput {
                                 vertical-alignment: center;
                                 font-size: 13px;
-                                color: Theme.text-main;
+                                color: Theme.text-primary;
                                 edited => { root.search-changed(search-input.text); }
                             }
                         }
@@ -132,7 +132,7 @@ export component CounterpartyList {
                     }
 
                     Rectangle {
-                        background: Theme.surface;
+                        background: Theme.bg-card;
                         border-radius: 8px;
                         border-width: 1px;
                         border-color: Theme.border;
@@ -141,7 +141,7 @@ export component CounterpartyList {
 
                         Text {
                             text: root.show-archived ? "Усі" : "Архів";
-                            color: Theme.text-sub;
+                            color: Theme.text-second;
                             font-size: 13px;
                             font-weight: 500;
                             horizontal-alignment: center;
@@ -198,12 +198,12 @@ export component CounterpartyList {
                                 padding-right: 16px;
                                 spacing: 12px;
 
-                                Text { text: "Назва"; color: Theme.text-sub; font-size: 12px; font-weight: 500; horizontal-stretch: 3; vertical-alignment: center; }
-                                Text { text: "ЄДРПОУ"; color: Theme.text-sub; font-size: 12px; font-weight: 500; horizontal-stretch: 1; vertical-alignment: center; }
-                                Text { text: "IBAN"; color: Theme.text-sub; font-size: 12px; font-weight: 500; horizontal-stretch: 2; vertical-alignment: center; }
-                                Text { text: "Телефон"; color: Theme.text-sub; font-size: 12px; font-weight: 500; horizontal-stretch: 1; vertical-alignment: center; }
-                                Text { text: "Статус"; color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 88px; vertical-alignment: center; }
-                                Text { text: "Дії"; color: Theme.text-sub; font-size: 12px; font-weight: 500; width: 120px; vertical-alignment: center; }
+                                Text { text: "Назва"; color: Theme.text-second; font-size: 12px; font-weight: 500; horizontal-stretch: 3; vertical-alignment: center; }
+                                Text { text: "ЄДРПОУ"; color: Theme.text-second; font-size: 12px; font-weight: 500; horizontal-stretch: 1; vertical-alignment: center; }
+                                Text { text: "IBAN"; color: Theme.text-second; font-size: 12px; font-weight: 500; horizontal-stretch: 2; vertical-alignment: center; }
+                                Text { text: "Телефон"; color: Theme.text-second; font-size: 12px; font-weight: 500; horizontal-stretch: 1; vertical-alignment: center; }
+                                Text { text: "Статус"; color: Theme.text-second; font-size: 12px; font-weight: 500; width: 88px; vertical-alignment: center; }
+                                Text { text: "Дії"; color: Theme.text-second; font-size: 12px; font-weight: 500; width: 120px; vertical-alignment: center; }
                             }
                         }
 
@@ -214,7 +214,7 @@ export component CounterpartyList {
 
                         if !root.loading && root.rows.length == 0 : Rectangle {
                             vertical-stretch: 1;
-                            background: Theme.surface;
+                            background: Theme.bg-card;
 
                             VerticalLayout {
                                 alignment: center;
@@ -224,7 +224,7 @@ export component CounterpartyList {
                                     text: root.show-archived ? "В архіві нікого немає" : "Нічого не знайдено";
                                     font-size: 14px;
                                     font-weight: 600;
-                                    color: Theme.text-sub;
+                                    color: Theme.text-second;
                                     horizontal-alignment: center;
                                 }
 
@@ -248,7 +248,7 @@ export component CounterpartyList {
                                 height: 52px;
                                 background: root.selected-row == i
                                     ? Theme.row-selected
-                                    : (row-touch.has-hover ? Theme.row-hover : (Math.mod(i, 2) == 0 ? Theme.surface : Theme.row-stripe));
+                                    : (row-touch.has-hover ? Theme.row-hover : (Math.mod(i, 2) == 0 ? Theme.bg-card : Theme.row-stripe));
                                 border-width: 1px;
                                 border-color: Theme.border;
                                 animate background { duration: 100ms; easing: ease; }
@@ -260,7 +260,7 @@ export component CounterpartyList {
 
                                     Text {
                                         text: row[0].text;
-                                        color: Theme.text-main;
+                                        color: Theme.text-primary;
                                         font-size: 13px;
                                         font-weight: 500;
                                         horizontal-stretch: 3;
@@ -270,7 +270,7 @@ export component CounterpartyList {
 
                                     Text {
                                         text: row[1].text;
-                                        color: Theme.text-sub;
+                                        color: Theme.text-second;
                                         font-size: 13px;
                                         horizontal-stretch: 1;
                                         vertical-alignment: center;
@@ -279,7 +279,7 @@ export component CounterpartyList {
 
                                     Text {
                                         text: row[2].text;
-                                        color: Theme.text-sub;
+                                        color: Theme.text-second;
                                         font-size: 13px;
                                         horizontal-stretch: 2;
                                         vertical-alignment: center;
@@ -288,7 +288,7 @@ export component CounterpartyList {
 
                                     Text {
                                         text: row[3].text;
-                                        color: Theme.text-sub;
+                                        color: Theme.text-second;
                                         font-size: 13px;
                                         horizontal-stretch: 1;
                                         vertical-alignment: center;
@@ -345,7 +345,7 @@ export component CounterpartyList {
                                                 height: 24px;
                                                 y: (parent.height - self.height) / 2;
                                                 border-radius: 6px;
-                                                background: Theme.danger-light;
+                                                background: Theme.bg-danger;
 
                                                 Text {
                                                     text: "Архів";
@@ -402,7 +402,7 @@ export component CounterpartyList {
                     // Кнопка "← Назад" — compact secondary стиль
                     Rectangle {
                         background: prev-touch.has-hover && root.current-page > 1
-                            ? Theme.hover-bg : transparent;
+                            ? Theme.bg-hover : transparent;
                         border-radius: 6px;
                         width: 72px;
                         height: 28px;
@@ -411,7 +411,7 @@ export component CounterpartyList {
 
                         Text {
                             text: "← Назад";
-                            color: root.current-page > 1 ? Theme.text-sub : Theme.text-muted;
+                            color: root.current-page > 1 ? Theme.text-second : Theme.text-muted;
                             font-size: 12px;
                             horizontal-alignment: center;
                             vertical-alignment: center;
@@ -437,7 +437,7 @@ export component CounterpartyList {
                     // Кнопка "Далі →"
                     Rectangle {
                         background: next-touch.has-hover && root.current-page < root.total-pages
-                            ? Theme.hover-bg : transparent;
+                            ? Theme.bg-hover : transparent;
                         border-radius: 6px;
                         width: 60px;
                         height: 28px;
@@ -446,7 +446,7 @@ export component CounterpartyList {
 
                         Text {
                             text: "Далі →";
-                            color: root.current-page < root.total-pages ? Theme.text-sub : Theme.text-muted;
+                            color: root.current-page < root.total-pages ? Theme.text-second : Theme.text-muted;
                             font-size: 12px;
                             horizontal-alignment: center;
                             vertical-alignment: center;

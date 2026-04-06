@@ -30,7 +30,7 @@ export component SettingsPage {
                 text: "Налаштування";
                 font-size: 24px;
                 font-weight: 700;
-                color: Theme.text-main;
+                color: Theme.text-primary;
             }
 
             HorizontalLayout {
@@ -43,7 +43,7 @@ export component SettingsPage {
 
                     Text {
                         text: label;
-                        color: root.active-tab == i ? Theme.text-white : Theme.text-sub;
+                        color: root.active-tab == i ? Theme.text-white : Theme.text-second;
                         font-size: 13px;
                         font-weight: root.active-tab == i ? 600 : 500;
                         horizontal-alignment: center;
@@ -58,7 +58,7 @@ export component SettingsPage {
             }
 
             if root.active-tab == 0 : Rectangle {
-                background: Theme.surface;
+                background: Theme.bg-card;
                 border-width: 1px;
                 border-color: Theme.border;
                 border-radius: 16px;
@@ -73,7 +73,7 @@ export component SettingsPage {
                             text: "Реквізити активної компанії";
                             font-size: 18px;
                             font-weight: 700;
-                            color: Theme.text-main;
+                            color: Theme.text-primary;
                             horizontal-stretch: 1;
                         }
 
@@ -108,7 +108,7 @@ export component SettingsPage {
                             Text {
                                 text: item.value == "" ? "—" : item.value;
                                 font-size: 13px;
-                                color: Theme.text-main;
+                                color: Theme.text-primary;
                                 vertical-alignment: center;
                             }
                         }
@@ -117,7 +117,7 @@ export component SettingsPage {
             }
 
             if root.active-tab == 1 : Rectangle {
-                background: Theme.surface;
+                background: Theme.bg-card;
                 border-width: 1px;
                 border-color: Theme.border;
                 border-radius: 16px;
@@ -131,7 +131,7 @@ export component SettingsPage {
                         text: "Категорії доходів і витрат";
                         font-size: 18px;
                         font-weight: 700;
-                        color: Theme.text-main;
+                        color: Theme.text-primary;
                     }
 
                     for row in root.category-rows: Rectangle {
@@ -155,7 +155,7 @@ export component SettingsPage {
                             Text {
                                 text: row.depth > 0 ? "↳ " + row.name : row.name;
                                 font-size: 13px;
-                                color: Theme.text-main;
+                                color: Theme.text-primary;
                                 vertical-alignment: center;
                             }
                         }
@@ -164,7 +164,7 @@ export component SettingsPage {
             }
 
             if root.active-tab == 2 : Rectangle {
-                background: Theme.surface;
+                background: Theme.bg-card;
                 border-width: 1px;
                 border-color: Theme.border;
                 border-radius: 16px;
