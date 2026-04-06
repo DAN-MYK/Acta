@@ -8,14 +8,12 @@
 
 import { Theme } from "../theme.slint";
 import { ProgressIndicator, ListView } from "std-widgets.slint";
+import { TaskRow } from "../structs.slint";
 
 export component TaskList {
 
     // ── Вхідні дані (Rust → Slint) ─────────────────────────────────────────
-    in property <[[StandardListViewItem]]> rows;
-    in property <[string]>                 row-ids;
-    in property <[string]>                 row-statuses;
-    in property <[string]>                 row-priorities;
+    in property <[TaskRow]> rows;
     in property <bool>                     loading: false;
 
     // ── Колбеки (Slint → Rust) ──────────────────────────────────────────────
@@ -208,8 +206,8 @@ export component TaskList {
                             vertical-stretch: 1;
 
                             for row[i] in root.rows : Rectangle {
-                                property <string> raw-status: i < root.row-statuses.length ? root.row-statuses[i] : "open";
-                                property <string> raw-priority: i < root.row-priorities.length ? root.row-priorities[i] : "normal";
+                                property <string> raw-status: row.status;
+                                property <string> raw-priority: row.priority;
                                 property <color> status-color:
                                     raw-status == "done"       ? Theme.success :
                                     raw-status == "in_progress"? Theme.primary :
@@ -246,7 +244,7 @@ export component TaskList {
                                     padding-right: 15px;
 
                                     Text {
-                                        text: row[0].text;
+                                        text: row.title;
                                         color: Theme.text-main;
                                         font-size: 13px;
                                         font-weight: 500;
@@ -264,7 +262,7 @@ export component TaskList {
                                             border-radius: 12px;
                                             background: priority-bg;
                                             Text {
-                                                text: row[1].text;
+                                                text: row.priority-label;
                                                 color: priority-color;
                                                 font-size: 11px;
                                                 font-weight: 500;
@@ -275,7 +273,7 @@ export component TaskList {
                                     }
 
                                     Text {
-                                        text: row[2].text;
+                                        text: row.due-date;
                                         color: Theme.text-sub;
                                         font-size: 13px;
                                         width: 160px;
@@ -284,7 +282,7 @@ export component TaskList {
                                     }
 
                                     Text {
-                                        text: row[3].text;
+                                        text: row.reminder;
                                         color: Theme.text-sub;
                                         font-size: 13px;
                                         width: 160px;
@@ -301,7 +299,7 @@ export component TaskList {
                                             border-radius: 12px;
                                             background: status-bg;
                                             Text {
-                                                text: row[4].text;
+                                                text: row.status-label;
                                                 color: status-color;
                                                 font-size: 11px;
                                                 font-weight: 500;
@@ -315,15 +313,13 @@ export component TaskList {
                                 row-touch := TouchArea {
                                     mouse-cursor: pointer;
                                     clicked => {
-                                        root.selected-row = i;
+                                        root.selected-row      = i;
                                         root.delete-confirm-armed = false;
-                                        if i < root.row-ids.length {
-                                            root.selected-id = root.row-ids[i];
-                                            root.selected-status = root.row-statuses[i];
-                                            root.selected-title = row[0].text;
-                                            root.selected-priority = row[1].text;
-                                            root.row-selected(root.row-ids[i]);
-                                        }
+                                        root.selected-id       = row.id;
+                                        root.selected-status   = row.status;
+                                        root.selected-title    = row.title;
+                                        root.selected-priority = row.priority-label;
+                                        root.row-selected(row.id);
                                     }
                                 }
                             }

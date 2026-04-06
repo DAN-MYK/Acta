@@ -7,6 +7,7 @@
 
 import { Theme } from "../theme.slint";
 import { Button, LineEdit, TextEdit, ComboBox, ScrollView } from "std-widgets.slint";
+import { FormItemRow } from "../structs.slint";
 
 export component InvoiceForm inherits Rectangle {
     background: Theme.bg;
@@ -26,12 +27,8 @@ export component InvoiceForm inherits Rectangle {
     in property <bool>   is-edit-mode: false;
     in property <string> invoice-edit-id: "";
 
-    // ── Позиції: паралельні масиви ─────────────────────────────────────────
-    in property <[string]> item-descriptions;
-    in property <[string]> item-quantities;
-    in property <[string]> item-units;
-    in property <[string]> item-prices;    // "price" (не "unit-price")
-    in property <[string]> item-amounts;   // quantity × price, рахує Rust
+    // ── Позиції ───────────────────────────────────────────────────────────
+    in property <[FormItemRow]> items;
 
     // ── Категорії та договори (необов'язково) ─────────────────────────────
     // category-names/ids[0] = "" (без категорії), [1..] = реальні значення
@@ -451,7 +448,7 @@ export component InvoiceForm inherits Rectangle {
 
                 VerticalLayout {
 
-                    for desc[i] in root.item-descriptions: VerticalLayout {
+                    for item[i] in root.items: VerticalLayout {
                         spacing: 0;
 
                         Rectangle {
@@ -466,31 +463,31 @@ export component InvoiceForm inherits Rectangle {
                                 spacing: 8px;
 
                                 LineEdit {
-                                    text: desc;
+                                    text: item.description;
                                     font-size: 13px;
                                     horizontal-stretch: 3;
                                     edited(v) => { root.item-changed(i, "desc", v); }
                                 }
                                 LineEdit {
-                                    text: root.item-quantities[i];
+                                    text: item.quantity;
                                     font-size: 13px;
                                     width: 80px;
                                     edited(v) => { root.item-changed(i, "qty", v); }
                                 }
                                 LineEdit {
-                                    text: root.item-units[i];
+                                    text: item.unit;
                                     font-size: 13px;
                                     width: 70px;
                                     edited(v) => { root.item-changed(i, "unit", v); }
                                 }
                                 LineEdit {
-                                    text: root.item-prices[i];
+                                    text: item.price;
                                     font-size: 13px;
                                     width: 100px;
                                     edited(v) => { root.item-changed(i, "price", v); }
                                 }
                                 Text {
-                                    text: root.item-amounts[i];
+                                    text: item.amount;
                                     font-size: 13px;
                                     font-weight: 600;
                                     color: Theme.text-main;
@@ -529,7 +526,7 @@ export component InvoiceForm inherits Rectangle {
                         }
                     }
 
-                    if root.item-descriptions.length == 0 : Rectangle {
+                    if root.items.length == 0 : Rectangle {
                         height: 80px;
 
                         Text {

@@ -1,0 +1,62 @@
+// ui/structs.slint — Спільні структури даних для таблиць і форм
+//
+// Замінюють паралельні масиви (антипатерн):
+//   замість `in property <[string]> row-ids; in property <[string]> row-dates; ...`
+//   використовується `in property <[PaymentRow]> rows;`
+
+export struct ActRow {
+    id: string,
+    num: string,
+    date: string,
+    counterparty: string,
+    amount: string,
+    status-label: string,
+    status: string,        // "draft" | "issued" | "signed" | "paid"
+}
+
+export struct InvoiceRow {
+    id: string,
+    num: string,
+    date: string,
+    counterparty: string,
+    amount: string,
+    status-label: string,
+    status: string,        // "draft" | "issued" | "signed" | "paid"
+}
+
+export struct TaskRow {
+    id: string,
+    title: string,
+    priority-label: string,
+    due-date: string,
+    reminder: string,
+    status-label: string,
+    status: string,        // "open" | "in_progress" | "done" | "cancelled"
+    priority: string,      // "critical" | "high" | "normal" | "low"
+}
+
+export struct PaymentRow {
+    id: string,
+    date: string,
+    counterparty: string,
+    description: string,
+    bank: string,
+    amount: string,
+    direction: string,     // "income" | "expense"
+    reconciled: bool,
+}
+
+export struct FormItemRow {
+    description: string,
+    quantity: string,
+    unit: string,
+    price: string,
+    amount: string,
+}
+
+export enum ActStatus {
+    draft,
+    issued,
+    signed,
+    paid,
+}

@@ -11,14 +11,41 @@ import { Theme } from "../theme.slint";
 import { ProgressIndicator, ListView } from "std-widgets.slint";
 import { StatCard } from "../components/stat_card.slint";
 import { StatusBadge } from "../components/status_badge.slint";
+import { ActRow } from "../structs.slint";
+
+component ActionButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> primary: false;
+    in property <bool> disabled: false;
+    callback clicked();
+
+    height: 36px;
+    border-radius: 8px;
+    background: disabled
+        ? Theme.border
+        : (primary ? Theme.primary : Theme.surface);
+    border-width: primary ? 0px : 1px;
+    border-color: Theme.border;
+
+    Text {
+        text: root.text;
+        color: disabled ? Theme.text-muted : (primary ? Theme.text-white : Theme.text-main);
+        font-size: 13px;
+        font-weight: 500;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    TouchArea {
+        mouse-cursor: disabled ? default : pointer;
+        clicked => { if (!root.disabled) { root.clicked(); } }
+    }
+}
 
 export component ActList {
 
     // ── Вхідні дані (Rust → Slint) ─────────────────────────────────────────
-    in property <[[StandardListViewItem]]> rows;
-    in property <[string]>                 row-ids;
-    // "draft" | "issued" | "signed" | "paid" — для badge-кольорів
-    in property <[string]>                 row-statuses;
+    in property <[ActRow]> rows;
     in property <bool>                     loading: false;
     in property <[int]>                    status-counts: [0, 0, 0, 0, 0];
 
@@ -222,6 +249,8 @@ export component ActList {
                             padding-left: 12px;
                             padding-right: 12px;
 
+                            // TODO: замінити на LineEdit коли Slint додасть placeholder у LineEdit
+                            // Зараз: TextInput + overlay Text для симуляції placeholder
                             search-input := TextInput {
                                 vertical-alignment: center;
                                 font-size: 13px;
@@ -306,14 +335,15 @@ export component ActList {
                             }
                         }
 
+                        // RUST-SIDE: rows керується через Rc<VecModel<ActRow>>
+                        // search-changed / status-filter-changed → Rust фільтрує і замінює весь VecModel
                         // Рядки даних
                         ListView {
                             vertical-stretch: 1;
 
                             for row[i] in root.rows : Rectangle {
                                 // Визначаємо raw-статус для badge-кольору
-                                property <string> raw-status: i < root.row-statuses.length
-                                    ? root.row-statuses[i] : "draft";
+                                property <string> raw-status: row.status;
                                 // Колір тексту badge
                                 property <color> badge-color:
                                     raw-status == "paid"   ? Theme.success  :
@@ -343,7 +373,7 @@ export component ActList {
 
                                     // Номер акту
                                     Text {
-                                        text: row[0].text;
+                                        text: row.num;
                                         color: Theme.text-main;
                                         font-size: 13px;
                                         font-weight: 500;
@@ -353,7 +383,7 @@ export component ActList {
                                     }
                                     // Дата
                                     Text {
-                                        text: row[1].text;
+                                        text: row.date;
                                         color: Theme.text-sub;
                                         font-size: 13px;
                                         horizontal-stretch: 1;
@@ -362,7 +392,7 @@ export component ActList {
                                     }
                                     // Контрагент
                                     Text {
-                                        text: row[2].text;
+                                        text: row.counterparty;
                                         color: Theme.text-sub;
                                         font-size: 13px;
                                         horizontal-stretch: 3;
@@ -371,7 +401,7 @@ export component ActList {
                                     }
                                     // Сума — виділена жирним
                                     Text {
-                                        text: row[3].text;
+                                        text: row.amount;
                                         color: Theme.text-main;
                                         font-size: 13px;
                                         font-weight: 600;
@@ -384,7 +414,7 @@ export component ActList {
                                         width: 100px;
                                         StatusBadge {
                                             y: (parent.height - self.height) / 2;
-                                            label: row[4].text;
+                                            label: row.status-label;
                                             badge-color: badge-color;
                                             badge-bg: badge-bg;
                                         }
@@ -420,9 +450,7 @@ export component ActList {
                                                 pdf-btn-touch := TouchArea {
                                                     mouse-cursor: pointer;
                                                     clicked => {
-                                                        if i < root.row-ids.length {
-                                                            root.pdf-clicked(root.row-ids[i]);
-                                                        }
+                                                        root.pdf-clicked(row.id);
                                                     }
                                                 }
                                             }
@@ -433,13 +461,11 @@ export component ActList {
                                 row-touch := TouchArea {
                                     mouse-cursor: pointer;
                                     clicked => {
-                                        root.selected-row = i;
-                                        if i < root.row-ids.length {
-                                            root.selected-id     = root.row-ids[i];
-                                            root.selected-status = root.row-statuses[i];
-                                            root.selected-number = row[0].text;
-                                            root.row-selected(root.row-ids[i]);
-                                        }
+                                        root.selected-row    = i;
+                                        root.selected-id     = row.id;
+                                        root.selected-status = row.status;
+                                        root.selected-number = row.num;
+                                        root.row-selected(row.id);
                                     }
                                 }
                             }
@@ -465,62 +491,31 @@ export component ActList {
                     }
 
                     // Кнопка "Редагувати" — вторинний стиль
-                    Rectangle {
-                        background: Theme.surface;
-                        border-radius: 8px;
-                        border-width: 1px;
-                        border-color: Theme.border;
-                        height: 36px;
+                    ActionButton {
                         width: 130px;
                         y: (parent.height - self.height) / 2;
-
-                        Text {
-                            text: "✎  Редагувати";
-                            color: Theme.text-main;
-                            font-size: 13px;
-                            font-weight: 500;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
-
-                        TouchArea {
-                            mouse-cursor: pointer;
-                            clicked => {
-                                if root.selected-id != "" {
-                                    root.edit-clicked(root.selected-id);
-                                }
+                        text: "✎  Редагувати";
+                        clicked => {
+                            if root.selected-id != "" {
+                                root.edit-clicked(root.selected-id);
                             }
                         }
                     }
 
                     // Кнопка "Наступний статус" — синя або сіра (paid = фінал)
-                    Rectangle {
-                        background: root.selected-status != "paid"
-                            ? Theme.primary : Theme.border;
-                        border-radius: 8px;
-                        height: 36px;
+                    ActionButton {
                         width: 180px;
                         y: (parent.height - self.height) / 2;
-
-                        Text {
-                            text: "Наступний статус ▶";
-                            color: root.selected-status != "paid" ? Theme.text-white : Theme.text-muted;
-                            font-size: 13px;
-                            font-weight: 500;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
-
-                        TouchArea {
-                            mouse-cursor: root.selected-status != "paid" ? pointer : default;
-                            clicked => {
-                                if root.selected-id != "" && root.selected-status != "paid" {
-                                    root.advance-status-clicked(root.selected-id);
-                                    root.selected-row    = -1;
-                                    root.selected-id     = "";
-                                    root.selected-status = "";
-                                    root.selected-number = "";
-                                }
+                        text: "Наступний статус ▶";
+                        primary: true;
+                        disabled: root.selected-status == "paid";
+                        clicked => {
+                            if root.selected-id != "" {
+                                root.advance-status-clicked(root.selected-id);
+                                root.selected-row    = -1;
+                                root.selected-id     = "";
+                                root.selected-status = "";
+                                root.selected-number = "";
                             }
                         }
                     }

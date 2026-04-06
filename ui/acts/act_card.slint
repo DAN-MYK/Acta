@@ -6,13 +6,14 @@
 //   - Вкладки: Позиції | Задачі | Нотатки
 
 import { Theme } from "../theme.slint";
-import { ListView } from "std-widgets.slint";
+import { ListView, ScrollView } from "std-widgets.slint";  // ScrollView використовується у вкладці Нотатки (active-tab == 2)
+import { ActStatus } from "../structs.slint";
 
 export struct ActCardItemRow {
     description: string,
     quantity:    string,
     unit:        string,
-    unit-price:  string,
+    unit-price:  string,  // Rust: unit_price
     amount:      string,
 }
 
@@ -20,14 +21,14 @@ export struct ActCardTaskRow {
     title:    string,
     status:   string,
     priority: string,
-    due-date: string,
+    due-date: string,  // Rust: due_date
 }
 
 export component ActCard {
     // ── Властивості ─────────────────────────────────────────────────────────
     in property <string> act-number:          "";
     in property <string> act-date:            "";
-    in property <string> act-status:          "draft";  // "draft"|"issued"|"signed"|"paid"
+    in property <ActStatus> act-status:       ActStatus.draft;
     in property <string> act-status-label:    "Чернетка";
     in property <string> act-counterparty:    "";
     in property <string> act-total:           "0,00 ₴";
@@ -40,23 +41,32 @@ export component ActCard {
     callback close-clicked();
     callback edit-clicked();
     callback pdf-clicked();
-    callback advance-status-clicked();
+    callback advance-status-clicked(ActStatus);
 
     // ── Внутрішній стан ──────────────────────────────────────────────────────
     private property <int> active-tab: 0;  // 0=Позиції, 1=Задачі, 2=Нотатки
 
     // ── Допоміжні кольори статусу ────────────────────────────────────────────
+    private property <[string]> tab-labels: ["Позиції", "Задачі", "Нотатки"];
+
     private property <color> status-color:
-        act-status == "paid"   ? Theme.success  :
-        act-status == "signed" ? Theme.primary  :
-        act-status == "issued" ? Theme.warning  :
+        act-status == ActStatus.paid   ? Theme.success  :
+        act-status == ActStatus.signed ? Theme.primary  :
+        act-status == ActStatus.issued ? Theme.warning  :
         Theme.text-muted;
 
     private property <color> status-bg:
-        act-status == "paid"   ? Theme.bg-success  :
-        act-status == "signed" ? Theme.bg-primary  :
-        act-status == "issued" ? Theme.bg-warning  :
+        act-status == ActStatus.paid   ? Theme.bg-success  :
+        act-status == ActStatus.signed ? Theme.bg-primary  :
+        act-status == ActStatus.issued ? Theme.bg-warning  :
         Theme.bg-gray;
+
+    pure function next-status() -> ActStatus {
+        if (root.act-status == ActStatus.draft) { return ActStatus.issued; }
+        if (root.act-status == ActStatus.issued) { return ActStatus.signed; }
+        if (root.act-status == ActStatus.signed) { return ActStatus.paid; }
+        return root.act-status;
+    }
 
     Rectangle {
         background: Theme.bg-page;
@@ -118,7 +128,7 @@ export component ActCard {
                     alignment: center;
 
                     // PDF
-                    if root.act-status != "draft" : pdf-btn := Rectangle {
+                    if root.act-status != ActStatus.draft : pdf-btn := Rectangle {
                         width: 80px;
                         height: 34px;
                         border-radius: 8px;
@@ -141,7 +151,7 @@ export component ActCard {
                     }
 
                     // Наступний статус (якщо не Оплачено)
-                    if root.act-status != "paid" : advance-btn := Rectangle {
+                    if root.act-status != ActStatus.paid : advance-btn := Rectangle {
                         width: 160px;
                         height: 34px;
                         border-radius: 8px;
@@ -149,7 +159,11 @@ export component ActCard {
                         animate background { duration: 80ms; }
 
                         Text {
-                            text: "Наступний статус ▶";
+                            text:
+                                root.act-status == ActStatus.draft  ? "Виставити рахунок ▶" :
+                                root.act-status == ActStatus.issued ? "Позначити підписаним ▶" :
+                                root.act-status == ActStatus.signed ? "Позначити оплаченим ▶" :
+                                "Наступний статус ▶";
                             color: Theme.text-white;
                             font-size: 12px;
                             font-weight: 600;
@@ -159,7 +173,7 @@ export component ActCard {
 
                         advance-touch := TouchArea {
                             mouse-cursor: pointer;
-                            clicked => { root.advance-status-clicked(); }
+                            clicked => { root.advance-status-clicked(root.next-status()); }
                         }
                     }
 
@@ -168,9 +182,10 @@ export component ActCard {
                         width: 110px;
                         height: 34px;
                         border-radius: 8px;
-                        background: Theme.surface;
+                        background: edit-touch.has-hover ? Theme.bg-gray : Theme.surface;
                         border-width: 1px;
-                        border-color: Theme.border;
+                        border-color: edit-touch.has-hover ? Theme.border : Theme.border;
+                        animate background { duration: 80ms; }
 
                         Text {
                             text: "✎  Редагувати";
@@ -181,7 +196,7 @@ export component ActCard {
                             vertical-alignment: center;
                         }
 
-                        TouchArea {
+                        edit-touch := TouchArea {
                             mouse-cursor: pointer;
                             clicked => { root.edit-clicked(); }
                         }
@@ -271,7 +286,7 @@ export component ActCard {
                         height: 32px;
                         vertical-stretch: 0;
 
-                        for tab-label[ti] in ["Позиції", "Задачі", "Нотатки"]: tab-item := Rectangle {
+                        for tab-label[ti] in root.tab-labels: tab-item := Rectangle {
                             property <bool> is-active: root.active-tab == ti;
                             height: 32px;
                             width: tab-text.preferred-width + 24px;
@@ -341,7 +356,7 @@ export component ActCard {
                                     padding-left: 12px;
                                     padding-right: 12px;
 
-                                    Text { text: i + 1 + "";          width: 28px;  color: Theme.text-muted; font-size: 12px; vertical-alignment: center; }
+                                    Text { text: (i + 1) + "";        width: 28px;  color: Theme.text-muted; font-size: 12px; vertical-alignment: center; }
                                     Text { text: item.description;    horizontal-stretch: 1; color: Theme.text-main; font-size: 12px; vertical-alignment: center; overflow: elide; }
                                     Text { text: item.quantity;       width: 60px;  color: Theme.text-sub; font-size: 12px; vertical-alignment: center; }
                                     Text { text: item.unit;           width: 44px;  color: Theme.text-sub; font-size: 12px; vertical-alignment: center; }
@@ -379,21 +394,20 @@ export component ActCard {
                                 HorizontalLayout {
                                     padding-left: 12px;
                                     padding-right: 12px;
+                                    alignment: center;
+                                    spacing: 8px;
 
                                     // Пріоритет-кружок
                                     priority-dot := Rectangle {
                                         width: 8px;
                                         height: 8px;
                                         border-radius: 4px;
-                                        y: (parent.height - self.height) / 2;
                                         background:
                                             task.priority == "critical" ? Theme.danger :
                                             task.priority == "high"     ? Theme.priority-high :
                                             task.priority == "normal"   ? Theme.primary :
                                             Theme.text-muted;
                                     }
-
-                                    Rectangle { width: 8px; } // spacer
 
                                     Text {
                                         text: task.title;
@@ -431,6 +445,8 @@ export component ActCard {
                         border-radius: 10px;
                         clip: true;
 
+                        // Slint не має else-гілки для умовних елементів.
+                        // Два if з протилежними умовами — коректний патерн.
                         if root.act-notes == "" : Text {
                             width: parent.width;
                             height: parent.height;
@@ -442,9 +458,9 @@ export component ActCard {
                         }
 
                         if root.act-notes != "" : ScrollView {
-                            padding: 16px;
-
                             Text {
+                                x: 16px;
+                                y: 16px;
                                 width: parent.visible-width - 32px;
                                 text: root.act-notes;
                                 color: Theme.text-main;

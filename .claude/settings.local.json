@@ -44,7 +44,8 @@
       "mcp__obsidian__read_file",
       "Bash(kill %1)",
       "Bash(wait)",
-      "Bash(grep \" --> src\\\\\\\\\\\\\\\\main.rs\")"
+      "Bash(grep \" --> src\\\\\\\\\\\\\\\\main.rs\")",
+      "Bash(scoop info:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

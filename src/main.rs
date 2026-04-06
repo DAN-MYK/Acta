@@ -16,9 +16,9 @@ use sqlx::postgres::PgPoolOptions;
 use std::sync::{Arc, Mutex};
 
 use models::{
-    ActStatus, Company, CompanySummary, InvoiceStatus, NewAct, NewActItem, NewCompany,
-    NewCounterparty, NewInvoice, NewInvoiceItem, NewTask, Task, TaskPriority, TaskStatus,
-    UpdateAct, UpdateCompany, UpdateCounterparty, UpdateInvoice,
+    ActStatus as ModelActStatus, Company, CompanySummary, InvoiceStatus, NewAct, NewActItem,
+    NewCompany, NewCounterparty, NewInvoice, NewInvoiceItem, NewTask, Task, TaskPriority,
+    TaskStatus, UpdateAct, UpdateCompany, UpdateCounterparty, UpdateInvoice,
 };
 
 // UUID дефолтної компанії (з міграції 012) — використовується якщо ще не обрано іншу.
@@ -36,7 +36,7 @@ struct CounterpartyListState {
 #[derive(Clone, Default)]
 struct ActListState {
     query: String,
-    status_filter: Option<ActStatus>,
+    status_filter: Option<ModelActStatus>,
 }
 
 #[derive(Clone, Default)]
@@ -485,12 +485,12 @@ async fn main() -> Result<()> {
         let ui_handle = ui_weak_acts_filter.clone();
         let cid = *active_company_id_acts_filter.lock().unwrap();
 
-        // Перетворюємо індекс ComboBox в Option<ActStatus>
+// Перетворюємо індекс ComboBox в Option<ModelActStatus>
         let status_filter = match filter_idx {
-            1 => Some(ActStatus::Draft),
-            2 => Some(ActStatus::Issued),
-            3 => Some(ActStatus::Signed),
-            4 => Some(ActStatus::Paid),
+        1 => Some(ModelActStatus::Draft),
+        2 => Some(ModelActStatus::Issued),
+        3 => Some(ModelActStatus::Signed),
+        4 => Some(ModelActStatus::Paid),
             _ => None, // 0 = "Усі"
         };
         let query = {
@@ -613,17 +613,14 @@ async fn main() -> Result<()> {
             let cat_id_str = act.category_id.map(|id| id.to_string()).unwrap_or_default();
             let cat_index = cat_ids.iter().position(|id| id.as_str() == cat_id_str).unwrap_or(0) as i32;
 
-            let item_descs: Vec<SharedString> = items.iter()
-                .map(|it| SharedString::from(it.description.as_str())).collect();
-            let item_qtys: Vec<SharedString> = items.iter()
-                .map(|it| SharedString::from(format!("{}", it.quantity).as_str())).collect();
-            let item_units: Vec<SharedString> = items.iter()
-                .map(|it| SharedString::from(it.unit.as_str())).collect();
-            let item_prices: Vec<SharedString> = items.iter()
-                .map(|it| SharedString::from(format!("{}", it.unit_price).as_str())).collect();
-            let item_amounts: Vec<SharedString> = items.iter()
-                .map(|it| SharedString::from(format!("{:.2}", it.amount).as_str())).collect();
-            let task_data = to_tasks_table_data(&tasks);
+            let form_items: Vec<FormItemRow> = items.iter().map(|it| FormItemRow {
+                description: SharedString::from(it.description.as_str()),
+                quantity: SharedString::from(format!("{}", it.quantity).as_str()),
+                unit: SharedString::from(it.unit.as_str()),
+                price: SharedString::from(format!("{}", it.unit_price).as_str()),
+                amount: SharedString::from(format!("{:.2}", it.amount).as_str()),
+            }).collect();
+            let task_rows = to_task_rows(&tasks);
 
             let act_number = act.number.clone();
             let act_date = act.date.format("%d.%m.%Y").to_string();
@@ -635,8 +632,6 @@ async fn main() -> Result<()> {
                 .unwrap_or_default();
 
             ui_handle.upgrade_in_event_loop(move |ui| {
-                let (task_rows, task_ids, task_statuses, task_priorities) =
-                    build_task_models(task_data);
                 ui.set_show_act_card(false);
                 ui.set_act_form_number(SharedString::from(act_number.as_str()));
                 ui.set_act_form_date(SharedString::from(act_date.as_str()));
@@ -651,15 +646,8 @@ async fn main() -> Result<()> {
                 ui.set_act_form_category_ids(ModelRc::new(VecModel::from(cat_ids)));
                 ui.set_act_form_category_index(cat_index);
                 ui.set_act_form_expected_payment_date(SharedString::from(exp_date_str.as_str()));
-                ui.set_act_form_item_descriptions(ModelRc::new(VecModel::from(item_descs)));
-                ui.set_act_form_item_quantities(ModelRc::new(VecModel::from(item_qtys)));
-                ui.set_act_form_item_units(ModelRc::new(VecModel::from(item_units)));
-                ui.set_act_form_item_prices(ModelRc::new(VecModel::from(item_prices)));
-                ui.set_act_form_item_amounts(ModelRc::new(VecModel::from(item_amounts)));
-                ui.set_act_task_rows(task_rows);
-                ui.set_act_task_row_ids(task_ids);
-                ui.set_act_task_row_statuses(task_statuses);
-                ui.set_act_task_row_priorities(task_priorities);
+                ui.set_act_form_items(ModelRc::new(VecModel::from(form_items)));
+                ui.set_act_task_rows(ModelRc::new(VecModel::from(task_rows)));
                 ui.set_act_tasks_loading(false);
                 ui.set_show_act_form(true);
             }).ok();
@@ -759,16 +747,17 @@ async fn main() -> Result<()> {
     let ui_weak_act_card_adv = ui.as_weak();
     let active_company_id_act_card_adv = active_company_id.clone();
     let act_state_for_card = act_state.clone();
-    ui.on_act_card_advance_status_clicked(move |id| {
+    ui.on_act_card_advance_status_clicked(move |id, new_status| {
         let pool = pool_act_card_adv.clone();
         let ui_weak = ui_weak_act_card_adv.clone();
         let id_str = id.to_string();
         let cid = *active_company_id_act_card_adv.lock().unwrap();
         let act_state_clone = act_state_for_card.clone();
+        let new_status = act_status_from_ui(new_status);
 
         tokio::spawn(async move {
             let Ok(uuid) = id_str.parse::<uuid::Uuid>() else { return; };
-            if let Err(e) = db::acts::advance_status(&pool, uuid).await {
+            if let Err(e) = db::acts::change_status(&pool, uuid, new_status).await {
                 tracing::error!("Advance status (картка): {e}");
                 return;
             }
@@ -860,26 +849,9 @@ async fn main() -> Result<()> {
                     ui.set_act_form_category_ids(ModelRc::new(VecModel::from(cat_ids)));
                     ui.set_act_form_category_index(0);
                     ui.set_act_form_expected_payment_date(SharedString::from(""));
-                    // Очищаємо позиції з попереднього відкриття форми
-                    let empty: Vec<SharedString> = vec![];
-                    ui.set_act_form_item_descriptions(ModelRc::new(VecModel::from(empty.clone())));
-                    ui.set_act_form_item_quantities(ModelRc::new(VecModel::from(empty.clone())));
-                    ui.set_act_form_item_units(ModelRc::new(VecModel::from(empty.clone())));
-                    ui.set_act_form_item_prices(ModelRc::new(VecModel::from(empty.clone())));
-                    ui.set_act_form_item_amounts(ModelRc::new(VecModel::from(empty)));
-                    ui.set_act_task_rows(ModelRc::new(VecModel::from(Vec::<
-                        ModelRc<StandardListViewItem>,
-                    >::new(
-                    ))));
-                    ui.set_act_task_row_ids(ModelRc::new(VecModel::from(
-                        Vec::<SharedString>::new(),
-                    )));
-                    ui.set_act_task_row_statuses(ModelRc::new(VecModel::from(
-                        Vec::<SharedString>::new(),
-                    )));
-                    ui.set_act_task_row_priorities(ModelRc::new(VecModel::from(
-                        Vec::<SharedString>::new(),
-                    )));
+                    // Очищаємо позиції та задачі з попереднього відкриття форми
+                    ui.set_act_form_items(ModelRc::new(VecModel::from(Vec::<FormItemRow>::new())));
+                    ui.set_act_task_rows(ModelRc::new(VecModel::from(Vec::<TaskRow>::new())));
                     ui.set_act_tasks_loading(false);
                     // Перемикаємо на форму
                     ui.set_show_act_form(true);
@@ -1108,27 +1080,14 @@ async fn main() -> Result<()> {
                 .position(|(id, _)| *id == act.counterparty_id)
                 .unwrap_or(0) as i32;
 
-            let item_descs: Vec<SharedString> = items
-                .iter()
-                .map(|it| SharedString::from(it.description.as_str()))
-                .collect();
-            let item_qtys: Vec<SharedString> = items
-                .iter()
-                .map(|it| SharedString::from(format!("{}", it.quantity).as_str()))
-                .collect();
-            let item_units: Vec<SharedString> = items
-                .iter()
-                .map(|it| SharedString::from(it.unit.as_str()))
-                .collect();
-            let item_prices: Vec<SharedString> = items
-                .iter()
-                .map(|it| SharedString::from(format!("{}", it.unit_price).as_str()))
-                .collect();
-            let item_amounts: Vec<SharedString> = items
-                .iter()
-                .map(|it| SharedString::from(format!("{:.2}", it.amount).as_str()))
-                .collect();
-            let task_data = to_tasks_table_data(&tasks);
+            let form_items: Vec<FormItemRow> = items.iter().map(|it| FormItemRow {
+                description: SharedString::from(it.description.as_str()),
+                quantity: SharedString::from(format!("{}", it.quantity).as_str()),
+                unit: SharedString::from(it.unit.as_str()),
+                price: SharedString::from(format!("{}", it.unit_price).as_str()),
+                amount: SharedString::from(format!("{:.2}", it.amount).as_str()),
+            }).collect();
+            let task_rows = to_task_rows(&tasks);
 
             let act_number = act.number.clone();
             // Дата у форматі ДД.ММ.РРРР (урок 2026-04-01)
@@ -1152,8 +1111,6 @@ async fn main() -> Result<()> {
 
             ui_handle
                 .upgrade_in_event_loop(move |ui| {
-                    let (task_rows, task_ids, task_statuses, task_priorities) =
-                        build_task_models(task_data);
                     ui.set_act_form_number(SharedString::from(act_number.as_str()));
                     ui.set_act_form_date(SharedString::from(act_date.as_str()));
                     ui.set_act_form_notes(SharedString::from(act_notes.as_str()));
@@ -1167,15 +1124,8 @@ async fn main() -> Result<()> {
                     ui.set_act_form_category_ids(ModelRc::new(VecModel::from(cat_ids)));
                     ui.set_act_form_category_index(cat_index as i32);
                     ui.set_act_form_expected_payment_date(SharedString::from(exp_date_str.as_str()));
-                    ui.set_act_form_item_descriptions(ModelRc::new(VecModel::from(item_descs)));
-                    ui.set_act_form_item_quantities(ModelRc::new(VecModel::from(item_qtys)));
-                    ui.set_act_form_item_units(ModelRc::new(VecModel::from(item_units)));
-                    ui.set_act_form_item_prices(ModelRc::new(VecModel::from(item_prices)));
-                    ui.set_act_form_item_amounts(ModelRc::new(VecModel::from(item_amounts)));
-                    ui.set_act_task_rows(task_rows);
-                    ui.set_act_task_row_ids(task_ids);
-                    ui.set_act_task_row_statuses(task_statuses);
-                    ui.set_act_task_row_priorities(task_priorities);
+                    ui.set_act_form_items(ModelRc::new(VecModel::from(form_items)));
+                    ui.set_act_task_rows(ModelRc::new(VecModel::from(task_rows)));
                     ui.set_act_tasks_loading(false);
                     ui.set_show_act_form(true);
                 })
@@ -1596,26 +1546,17 @@ async fn main() -> Result<()> {
             return;
         };
 
-        // Локальна функція (не closure) — не захоплює змінних, може бути вбудована
-        fn append(model: ModelRc<SharedString>, val: &str) -> ModelRc<SharedString> {
-            let mut v: Vec<SharedString> = (0..model.row_count())
-                .filter_map(|i| model.row_data(i))
-                .collect();
-            v.push(SharedString::from(val));
-            ModelRc::new(VecModel::from(v))
-        }
-
-        ui.set_act_form_item_descriptions(append(
-            ui.get_act_form_item_descriptions(),
-            "Нова послуга",
-        ));
-        ui.set_act_form_item_quantities(append(ui.get_act_form_item_quantities(), "1"));
-        ui.set_act_form_item_units(append(ui.get_act_form_item_units(), "шт"));
-        ui.set_act_form_item_prices(append(ui.get_act_form_item_prices(), "0.00"));
-        ui.set_act_form_item_amounts(append(ui.get_act_form_item_amounts(), "0.00"));
-
-        // Перераховуємо total (після append amount = 0.00, тому total не змінюється)
-        // Повноцінний перерахунок — після реалізації edit-item
+        let mut items: Vec<FormItemRow> = (0..ui.get_act_form_items().row_count())
+            .filter_map(|j| ui.get_act_form_items().row_data(j))
+            .collect();
+        items.push(FormItemRow {
+            description: SharedString::from("Нова послуга"),
+            quantity: SharedString::from("1"),
+            unit: SharedString::from("шт"),
+            price: SharedString::from("0.00"),
+            amount: SharedString::from("0.00"),
+        });
+        ui.set_act_form_items(ModelRc::new(VecModel::from(items)));
     });
 
     // ── Колбек: видалити позицію з форми ────────────────────────────────────
@@ -1625,33 +1566,18 @@ async fn main() -> Result<()> {
             return;
         };
         let i = idx as usize;
-
-        fn remove_at(model: ModelRc<SharedString>, i: usize) -> ModelRc<SharedString> {
-            let mut v: Vec<SharedString> = (0..model.row_count())
-                .filter_map(|j| model.row_data(j))
-                .collect();
-            if i < v.len() {
-                v.remove(i);
-            }
-            ModelRc::new(VecModel::from(v))
+        let mut items: Vec<FormItemRow> = (0..ui.get_act_form_items().row_count())
+            .filter_map(|j| ui.get_act_form_items().row_data(j))
+            .collect();
+        if i < items.len() {
+            items.remove(i);
         }
-
-        ui.set_act_form_item_descriptions(remove_at(ui.get_act_form_item_descriptions(), i));
-        ui.set_act_form_item_quantities(remove_at(ui.get_act_form_item_quantities(), i));
-        ui.set_act_form_item_units(remove_at(ui.get_act_form_item_units(), i));
-        ui.set_act_form_item_prices(remove_at(ui.get_act_form_item_prices(), i));
-        ui.set_act_form_item_amounts(remove_at(ui.get_act_form_item_amounts(), i));
+        ui.set_act_form_items(ModelRc::new(VecModel::from(items)));
     });
 
     // ── Колбек: редагування поля позиції акту ───────────────────────────────
     //
-    // Синхронний колбек (немає DB) — лише перебудовуємо ModelRc.
     // При зміні qty або price — перераховуємо amounts та total.
-    //
-    // Чому не оновлюємо qty/price через set_row_data: ModelRc не дає
-    // доступу до внутрішнього VecModel після побудови. Замість цього
-    // створюємо новий ModelRc — Slint порівнює значення і не скидає
-    // фокус LineEdit якщо значення не змінилось.
     let ui_weak_item = ui.as_weak();
 
     ui.on_act_form_item_changed(move |idx, field, value| {
@@ -1661,59 +1587,36 @@ async fn main() -> Result<()> {
         let i = idx as usize;
         let val = value.to_string();
 
-        // Перебудувати ModelRc з одним зміненим елементом
-        fn set_at(model: ModelRc<SharedString>, i: usize, val: &str) -> ModelRc<SharedString> {
-            let mut v: Vec<SharedString> = (0..model.row_count())
-                .filter_map(|j| model.row_data(j))
-                .collect();
-            if i < v.len() {
-                v[i] = SharedString::from(val);
-            }
-            ModelRc::new(VecModel::from(v))
-        }
+        let mut items: Vec<FormItemRow> = (0..ui.get_act_form_items().row_count())
+            .filter_map(|j| ui.get_act_form_items().row_data(j))
+            .collect();
 
-        match field.as_str() {
-            "desc" => ui.set_act_form_item_descriptions(set_at(
-                ui.get_act_form_item_descriptions(),
-                i,
-                &val,
-            )),
-            "qty" => {
-                ui.set_act_form_item_quantities(set_at(ui.get_act_form_item_quantities(), i, &val))
+        if let Some(item) = items.get_mut(i) {
+            match field.as_str() {
+                "desc"  => item.description = SharedString::from(val.as_str()),
+                "qty"   => item.quantity    = SharedString::from(val.as_str()),
+                "unit"  => item.unit        = SharedString::from(val.as_str()),
+                "price" => item.price       = SharedString::from(val.as_str()),
+                _ => return,
             }
-            "unit" => ui.set_act_form_item_units(set_at(ui.get_act_form_item_units(), i, &val)),
-            "price" => ui.set_act_form_item_prices(set_at(ui.get_act_form_item_prices(), i, &val)),
-            _ => return,
+        } else {
+            return;
         }
 
         // Перераховуємо суми рядків та total лише при зміні qty або price
         if field == "qty" || field == "price" {
-            let qtys = ui.get_act_form_item_quantities();
-            let prices = ui.get_act_form_item_prices();
-            let n = qtys.row_count();
-
-            let mut new_amounts: Vec<SharedString> = Vec::with_capacity(n);
             let mut total = Decimal::ZERO;
-
-            for j in 0..n {
-                let qty = qtys
-                    .row_data(j)
-                    .unwrap_or_default()
-                    .parse::<Decimal>()
-                    .unwrap_or_default();
-                let price = prices
-                    .row_data(j)
-                    .unwrap_or_default()
-                    .parse::<Decimal>()
-                    .unwrap_or_default();
+            for it in &mut items {
+                let qty = it.quantity.parse::<Decimal>().unwrap_or_default();
+                let price = it.price.parse::<Decimal>().unwrap_or_default();
                 let amt = qty * price;
+                it.amount = SharedString::from(format!("{:.2}", amt).as_str());
                 total += amt;
-                new_amounts.push(SharedString::from(format!("{:.2}", amt).as_str()));
             }
-
-            ui.set_act_form_item_amounts(ModelRc::new(VecModel::from(new_amounts)));
             ui.set_act_form_total(SharedString::from(format!("{:.2}", total).as_str()));
         }
+
+        ui.set_act_form_items(ModelRc::new(VecModel::from(items)));
     });
 
     // ── Колбек: зберегти акт ("Зберегти") ───────────────────────────────────
@@ -2266,12 +2169,7 @@ async fn main() -> Result<()> {
                 ui.set_invoice_form_category_ids(ModelRc::new(VecModel::from(cat_ids)));
                 ui.set_invoice_form_category_index(0);
                 ui.set_invoice_form_expected_payment_date(SharedString::from(""));
-                let empty: Vec<SharedString> = vec![];
-                ui.set_invoice_form_item_descriptions(ModelRc::new(VecModel::from(empty.clone())));
-                ui.set_invoice_form_item_quantities(ModelRc::new(VecModel::from(empty.clone())));
-                ui.set_invoice_form_item_units(ModelRc::new(VecModel::from(empty.clone())));
-                ui.set_invoice_form_item_prices(ModelRc::new(VecModel::from(empty.clone())));
-                ui.set_invoice_form_item_amounts(ModelRc::new(VecModel::from(empty)));
+                ui.set_invoice_form_items(ModelRc::new(VecModel::from(Vec::<FormItemRow>::new())));
                 ui.set_show_invoice_form(true);
             }).ok();
         });
@@ -2367,16 +2265,14 @@ async fn main() -> Result<()> {
                 ui.set_invoice_form_category_ids(ModelRc::new(VecModel::from(cat_ids)));
                 ui.set_invoice_form_category_index(cat_index as i32);
                 ui.set_invoice_form_expected_payment_date(SharedString::from(exp_date_str.as_str()));
-                let descs: Vec<SharedString> = items.iter().map(|it| SharedString::from(it.description.as_str())).collect();
-                let qtys: Vec<SharedString> = items.iter().map(|it| SharedString::from(it.quantity.to_string().as_str())).collect();
-                let units_v: Vec<SharedString> = items.iter().map(|it| SharedString::from(it.unit.as_deref().unwrap_or(""))).collect();
-                let prices: Vec<SharedString> = items.iter().map(|it| SharedString::from(it.price.to_string().as_str())).collect();
-                let amounts: Vec<SharedString> = items.iter().map(|it| SharedString::from(it.amount.to_string().as_str())).collect();
-                ui.set_invoice_form_item_descriptions(ModelRc::new(VecModel::from(descs)));
-                ui.set_invoice_form_item_quantities(ModelRc::new(VecModel::from(qtys)));
-                ui.set_invoice_form_item_units(ModelRc::new(VecModel::from(units_v)));
-                ui.set_invoice_form_item_prices(ModelRc::new(VecModel::from(prices)));
-                ui.set_invoice_form_item_amounts(ModelRc::new(VecModel::from(amounts)));
+                let form_items: Vec<FormItemRow> = items.iter().map(|it| FormItemRow {
+                    description: SharedString::from(it.description.as_str()),
+                    quantity: SharedString::from(it.quantity.to_string().as_str()),
+                    unit: SharedString::from(it.unit.as_deref().unwrap_or("")),
+                    price: SharedString::from(it.price.to_string().as_str()),
+                    amount: SharedString::from(it.amount.to_string().as_str()),
+                }).collect();
+                ui.set_invoice_form_items(ModelRc::new(VecModel::from(form_items)));
                 ui.set_show_invoice_form(true);
             }).ok();
         });
@@ -2392,17 +2288,18 @@ async fn main() -> Result<()> {
     let ui_weak_inv_add = ui.as_weak();
     ui.on_invoice_form_add_item(move || {
         if let Some(ui) = ui_weak_inv_add.upgrade() {
-            fn push_inv(model: ModelRc<SharedString>, val: &str) -> ModelRc<SharedString> {
-                use slint::Model;
-                let mut v: Vec<SharedString> = (0..model.row_count()).filter_map(|i| model.row_data(i)).collect();
-                v.push(SharedString::from(val));
-                ModelRc::new(VecModel::from(v))
-            }
-            ui.set_invoice_form_item_descriptions(push_inv(ui.get_invoice_form_item_descriptions(), ""));
-            ui.set_invoice_form_item_quantities(push_inv(ui.get_invoice_form_item_quantities(), "1"));
-            ui.set_invoice_form_item_units(push_inv(ui.get_invoice_form_item_units(), "шт"));
-            ui.set_invoice_form_item_prices(push_inv(ui.get_invoice_form_item_prices(), "0.00"));
-            ui.set_invoice_form_item_amounts(push_inv(ui.get_invoice_form_item_amounts(), "0.00"));
+            use slint::Model;
+            let mut items: Vec<FormItemRow> = (0..ui.get_invoice_form_items().row_count())
+                .filter_map(|i| ui.get_invoice_form_items().row_data(i))
+                .collect();
+            items.push(FormItemRow {
+                description: SharedString::from(""),
+                quantity: SharedString::from("1"),
+                unit: SharedString::from("шт"),
+                price: SharedString::from("0.00"),
+                amount: SharedString::from("0.00"),
+            });
+            ui.set_invoice_form_items(ModelRc::new(VecModel::from(items)));
         }
     });
 
@@ -2410,17 +2307,12 @@ async fn main() -> Result<()> {
     ui.on_invoice_form_remove_item(move |idx| {
         if let Some(ui) = ui_weak_inv_remove.upgrade() {
             use slint::Model;
-            fn remove_inv(model: ModelRc<SharedString>, idx: usize) -> ModelRc<SharedString> {
-                let mut v: Vec<SharedString> = (0..model.row_count()).filter_map(|i| model.row_data(i)).collect();
-                if idx < v.len() { v.remove(idx); }
-                ModelRc::new(VecModel::from(v))
-            }
+            let mut items: Vec<FormItemRow> = (0..ui.get_invoice_form_items().row_count())
+                .filter_map(|i| ui.get_invoice_form_items().row_data(i))
+                .collect();
             let idx = idx as usize;
-            ui.set_invoice_form_item_descriptions(remove_inv(ui.get_invoice_form_item_descriptions(), idx));
-            ui.set_invoice_form_item_quantities(remove_inv(ui.get_invoice_form_item_quantities(), idx));
-            ui.set_invoice_form_item_units(remove_inv(ui.get_invoice_form_item_units(), idx));
-            ui.set_invoice_form_item_prices(remove_inv(ui.get_invoice_form_item_prices(), idx));
-            ui.set_invoice_form_item_amounts(remove_inv(ui.get_invoice_form_item_amounts(), idx));
+            if idx < items.len() { items.remove(idx); }
+            ui.set_invoice_form_items(ModelRc::new(VecModel::from(items)));
             recalculate_invoice_total(&ui);
         }
     });
@@ -2429,18 +2321,22 @@ async fn main() -> Result<()> {
     ui.on_invoice_form_item_changed(move |idx, field, value| {
         if let Some(ui) = ui_weak_inv_item.upgrade() {
             use slint::Model;
-            fn update_inv(model: ModelRc<SharedString>, idx: usize, val: SharedString) -> ModelRc<SharedString> {
-                let mut v: Vec<SharedString> = (0..model.row_count()).filter_map(|i| model.row_data(i)).collect();
-                if idx < v.len() { v[idx] = val; }
-                ModelRc::new(VecModel::from(v))
-            }
+            let mut items: Vec<FormItemRow> = (0..ui.get_invoice_form_items().row_count())
+                .filter_map(|i| ui.get_invoice_form_items().row_data(i))
+                .collect();
             let idx = idx as usize;
-            match field.as_str() {
-                "desc"  => { ui.set_invoice_form_item_descriptions(update_inv(ui.get_invoice_form_item_descriptions(), idx, value)); }
-                "qty"   => { ui.set_invoice_form_item_quantities(update_inv(ui.get_invoice_form_item_quantities(), idx, value)); recalculate_invoice_total(&ui); }
-                "unit"  => { ui.set_invoice_form_item_units(update_inv(ui.get_invoice_form_item_units(), idx, value)); }
-                "price" => { ui.set_invoice_form_item_prices(update_inv(ui.get_invoice_form_item_prices(), idx, value)); recalculate_invoice_total(&ui); }
-                _ => {}
+            if idx < items.len() {
+                match field.as_str() {
+                    "desc"  => { items[idx].description = value; }
+                    "qty"   => { items[idx].quantity = value; }
+                    "unit"  => { items[idx].unit = value; }
+                    "price" => { items[idx].price = value; }
+                    _ => {}
+                }
+                ui.set_invoice_form_items(ModelRc::new(VecModel::from(items)));
+                if matches!(field.as_str(), "qty" | "price") {
+                    recalculate_invoice_total(&ui);
+                }
             }
         }
     });
@@ -3714,70 +3610,20 @@ fn to_table_data(cps: &[models::Counterparty]) -> TableData {
     }
 }
 
-// ── Проміжний формат для актів (Send) ───────────────────────────────────────
-struct ActsTableData {
-    rows: Vec<Vec<SharedString>>,
-    ids: Vec<SharedString>,
-    // Сирі рядки статусів ("draft", "issued", ...) для логіки кнопки в Slint
-    statuses: Vec<SharedString>,
-}
-
-fn to_acts_table_data(acts: &[models::ActListRow]) -> ActsTableData {
-    let rows = acts
-        .iter()
-        .map(|a| {
-            vec![
-                SharedString::from(a.number.as_str()),
-                // NaiveDate → "дд.мм.рррр" для відображення в таблиці
-                SharedString::from(a.date.format("%d.%m.%Y").to_string().as_str()),
-                SharedString::from(a.counterparty_name.as_str()),
-                SharedString::from(format_amount_ua(a.total_amount).as_str()),
-                SharedString::from(a.status.label()),
-            ]
+// Перетворити список актів у Vec<ActRow> для Slint.
+// Vec<ActRow> є Send, тому можна безпечно передати в upgrade_in_event_loop.
+fn to_act_rows(acts: &[models::ActListRow]) -> Vec<ActRow> {
+    acts.iter()
+        .map(|a| ActRow {
+            id: SharedString::from(a.id.to_string().as_str()),
+            num: SharedString::from(a.number.as_str()),
+            date: SharedString::from(a.date.format("%d.%m.%Y").to_string().as_str()),
+            counterparty: SharedString::from(a.counterparty_name.as_str()),
+            amount: SharedString::from(format_amount_ua(a.total_amount).as_str()),
+            status_label: SharedString::from(a.status.label()),
+            status: SharedString::from(a.status.as_str()),
         })
-        .collect();
-
-    let ids = acts
-        .iter()
-        .map(|a| SharedString::from(a.id.to_string().as_str()))
-        .collect();
-
-    let statuses = acts
-        .iter()
-        .map(|a| SharedString::from(a.status.as_str()))
-        .collect();
-
-    ActsTableData {
-        rows,
-        ids,
-        statuses,
-    }
-}
-
-fn build_acts_models(
-    data: ActsTableData,
-) -> (
-    ModelRc<ModelRc<StandardListViewItem>>,
-    ModelRc<SharedString>,
-    ModelRc<SharedString>,
-) {
-    let rows: Vec<ModelRc<StandardListViewItem>> = data
-        .rows
-        .into_iter()
-        .map(|cells| {
-            let items: Vec<StandardListViewItem> = cells
-                .iter()
-                .map(|s| StandardListViewItem::from(s.as_str()))
-                .collect();
-            ModelRc::new(VecModel::from(items))
-        })
-        .collect();
-
-    (
-        ModelRc::new(VecModel::from(rows)),
-        ModelRc::new(VecModel::from(data.ids)),
-        ModelRc::new(VecModel::from(data.statuses)),
-    )
+        .collect()
 }
 
 // Будуємо Slint моделі з TableData.
@@ -3821,27 +3667,16 @@ fn build_models(
 ///
 /// Позиції з невалідними числами (quantity або price) — мовчки пропускаються.
 fn collect_form_items(ui: &MainWindow) -> Vec<NewActItem> {
-    let descs = ui.get_act_form_item_descriptions();
-    let qtys = ui.get_act_form_item_quantities();
-    let units = ui.get_act_form_item_units();
-    let prices = ui.get_act_form_item_prices();
-
-    (0..descs.row_count())
+    let items_model = ui.get_act_form_items();
+    (0..items_model.row_count())
         .filter_map(|i| {
-            let description = descs.row_data(i)?.to_string();
-            let qty_str = qtys.row_data(i)?;
-            let unit = units.row_data(i)?.to_string();
-            let price_str = prices.row_data(i)?;
-
-            // parse::<Decimal>() — стандартний FromStr для rust_decimal
-            // Якщо поле порожнє або не є числом — filter_map видаляє рядок
-            let quantity = qty_str.parse::<Decimal>().ok()?;
-            let unit_price = price_str.parse::<Decimal>().ok()?;
-
+            let item = items_model.row_data(i)?;
+            let quantity = item.quantity.parse::<Decimal>().ok()?;
+            let unit_price = item.price.parse::<Decimal>().ok()?;
             Some(NewActItem {
-                description,
+                description: item.description.to_string(),
                 quantity,
-                unit,
+                unit: item.unit.to_string(),
                 unit_price,
             })
         })
@@ -3930,7 +3765,7 @@ async fn reload_acts(
     pool: &sqlx::PgPool,
     ui_weak: Weak<MainWindow>,
     company_id: uuid::Uuid,
-    status_filter: Option<ActStatus>,
+    status_filter: Option<ModelActStatus>,
     query: String,
     close_form: bool,
 ) -> Result<()> {
@@ -3943,17 +3778,14 @@ async fn reload_acts(
     let acts = acts_result?;
     let counts = counts_result?;
     let kpi = kpi_result?;
-    let data = to_acts_table_data(&acts);
+    let act_rows = to_act_rows(&acts);
 
     let kpi_revenue = format_kpi_amount(kpi.revenue_this_month);
     let kpi_unpaid  = format_kpi_amount(kpi.unpaid_total);
 
     ui_weak
         .upgrade_in_event_loop(move |ui| {
-            let (rows, ids, statuses) = build_acts_models(data);
-            ui.set_act_rows(rows);
-            ui.set_act_row_ids(ids);
-            ui.set_act_row_statuses(statuses);
+            ui.set_act_rows(ModelRc::new(VecModel::from(act_rows)));
             ui.set_act_status_counts(ModelRc::new(VecModel::from(counts)));
             ui.set_act_kpi_acts_month(kpi.acts_this_month as i32);
             ui.set_act_kpi_revenue(SharedString::from(kpi_revenue.as_str()));
@@ -4079,42 +3911,27 @@ async fn reload_invoices(
     close_form: bool,
 ) -> Result<()> {
     let invoices = db::invoices::list_filtered(pool, company_id, status_filter, None, normalized_query(&query), None, None, None).await?;
-    let rows: Vec<Vec<SharedString>> = invoices
+    let invoice_rows: Vec<InvoiceRow> = invoices
         .iter()
-        .map(|inv| {
-            let status_label = match inv.status {
-                InvoiceStatus::Draft => "Чернетка",
+        .map(|inv| InvoiceRow {
+            id: SharedString::from(inv.id.to_string().as_str()),
+            num: SharedString::from(inv.number.as_str()),
+            date: SharedString::from(inv.date.format("%d.%m.%Y").to_string().as_str()),
+            counterparty: SharedString::from(inv.counterparty_name.as_str()),
+            amount: SharedString::from(format_amount_ua(inv.total_amount).as_str()),
+            status_label: SharedString::from(match inv.status {
+                InvoiceStatus::Draft  => "Чернетка",
                 InvoiceStatus::Issued => "Виставлено",
                 InvoiceStatus::Signed => "Підписано",
-                InvoiceStatus::Paid => "Оплачено",
-            };
-            vec![
-                SharedString::from(inv.number.as_str()),
-                SharedString::from(inv.date.format("%d.%m.%Y").to_string().as_str()),
-                SharedString::from(inv.counterparty_name.as_str()),
-                SharedString::from(format_amount_ua(inv.total_amount).as_str()),
-                SharedString::from(status_label),
-            ]
+                InvoiceStatus::Paid   => "Оплачено",
+            }),
+            status: SharedString::from(inv.status.as_str()),
         })
         .collect();
-    let ids: Vec<SharedString> = invoices.iter().map(|inv| SharedString::from(inv.id.to_string().as_str())).collect();
-    let statuses: Vec<SharedString> = invoices.iter().map(|inv| SharedString::from(inv.status.as_str())).collect();
 
     ui_weak
         .upgrade_in_event_loop(move |ui| {
-            let slint_rows: Vec<_> = rows
-                .into_iter()
-                .map(|row| {
-                    let items: Vec<StandardListViewItem> = row
-                        .into_iter()
-                        .map(StandardListViewItem::from)
-                        .collect();
-                    ModelRc::new(VecModel::from(items))
-                })
-                .collect();
-            ui.set_invoice_rows(ModelRc::new(VecModel::from(slint_rows)));
-            ui.set_invoice_row_ids(ModelRc::new(VecModel::from(ids)));
-            ui.set_invoice_row_statuses(ModelRc::new(VecModel::from(statuses)));
+            ui.set_invoice_rows(ModelRc::new(VecModel::from(invoice_rows)));
             if close_form {
                 ui.set_show_invoice_form(false);
             }
@@ -4162,26 +3979,19 @@ async fn reload_payments(
         }
     }
 
-    ui_weak.upgrade_in_event_loop(move |ui| {
-        let ids: Vec<SharedString> = rows.iter().map(|r| SharedString::from(r.id.to_string())).collect();
-        let dates: Vec<SharedString> = rows.iter().map(|r| SharedString::from(r.date.as_str())).collect();
-        let cps: Vec<SharedString> = rows.iter().map(|r| SharedString::from(r.counterparty_name.as_deref().unwrap_or(""))).collect();
-        let descs: Vec<SharedString> = rows.iter().map(|r| SharedString::from(r.description.as_deref().unwrap_or(""))).collect();
-        let banks: Vec<SharedString> = rows.iter().map(|r| SharedString::from(r.bank_name.as_deref().unwrap_or(""))).collect();
-        let amounts: Vec<SharedString> = rows.iter().map(|r| SharedString::from(format!("{:.2}", r.amount))).collect();
-        let directions: Vec<SharedString> = rows.iter().map(|r| {
-            SharedString::from(r.direction.label())
-        }).collect();
-        let reconciled: Vec<bool> = rows.iter().map(|r| r.is_reconciled).collect();
+    let payment_rows: Vec<PaymentRow> = rows.iter().map(|r| PaymentRow {
+        id: SharedString::from(r.id.to_string().as_str()),
+        date: SharedString::from(r.date.as_str()),
+        counterparty: SharedString::from(r.counterparty_name.as_deref().unwrap_or("")),
+        description: SharedString::from(r.description.as_deref().unwrap_or("")),
+        bank: SharedString::from(r.bank_name.as_deref().unwrap_or("")),
+        amount: SharedString::from(format!("{:.2}", r.amount).as_str()),
+        direction: SharedString::from(r.direction.label()),
+        reconciled: r.is_reconciled,
+    }).collect();
 
-        ui.set_payment_row_ids(ModelRc::new(VecModel::from(ids)));
-        ui.set_payment_row_dates(ModelRc::new(VecModel::from(dates)));
-        ui.set_payment_row_counterparties(ModelRc::new(VecModel::from(cps)));
-        ui.set_payment_row_descriptions(ModelRc::new(VecModel::from(descs)));
-        ui.set_payment_row_banks(ModelRc::new(VecModel::from(banks)));
-        ui.set_payment_row_amounts(ModelRc::new(VecModel::from(amounts)));
-        ui.set_payment_row_directions(ModelRc::new(VecModel::from(directions)));
-        ui.set_payment_row_reconciled(ModelRc::new(VecModel::from(reconciled)));
+    ui_weak.upgrade_in_event_loop(move |ui| {
+        ui.set_payment_rows(ModelRc::new(VecModel::from(payment_rows)));
         ui.set_payment_total_income(SharedString::from(format!("{:.2}", total_income)));
         ui.set_payment_total_expense(SharedString::from(format!("{:.2}", total_expense)));
         ui.set_payments_loading(false);
@@ -4281,10 +4091,17 @@ async fn open_act_card(
 
     ui_weak
         .upgrade_in_event_loop(move |ui| {
+            let act_card_status = match act.status {
+                ModelActStatus::Draft => ActStatus::Draft,
+                ModelActStatus::Issued => ActStatus::Issued,
+                ModelActStatus::Signed => ActStatus::Signed,
+                ModelActStatus::Paid => ActStatus::Paid,
+            };
+
             ui.set_act_card_id(SharedString::from(act.id.to_string()));
             ui.set_act_card_number(SharedString::from(act.number.as_str()));
             ui.set_act_card_date(SharedString::from(act.date.format("%d.%m.%Y").to_string()));
-            ui.set_act_card_status(SharedString::from(act.status.as_str()));
+            ui.set_act_card_status(act_card_status);
             ui.set_act_card_status_label(SharedString::from(act.status.label()));
             ui.set_act_card_counterparty(SharedString::from(counterparty.name.as_str()));
             ui.set_act_card_total(SharedString::from(format_amount_ua(act.total_amount)));
@@ -4592,26 +4409,21 @@ async fn reload_doc_cp_filter(
     Ok(())
 }
 
-/// Зібрати позиції накладної з UI-полів у Vec<NewInvoiceItem>.
+/// Зібрати позиції накладної з UI-форми у Vec<NewInvoiceItem>.
 fn collect_invoice_items_from_ui(ui_weak: &Weak<MainWindow>) -> Vec<NewInvoiceItem> {
     use slint::Model;
     let Some(ui) = ui_weak.upgrade() else { return vec![]; };
-    let descs = ui.get_invoice_form_item_descriptions();
-    let qtys = ui.get_invoice_form_item_quantities();
-    let units = ui.get_invoice_form_item_units();
-    let prices = ui.get_invoice_form_item_prices();
-    let count = descs.row_count();
+    let model = ui.get_invoice_form_items();
+    let count = model.row_count();
     let mut items = Vec::with_capacity(count);
     for i in 0..count {
-        let desc = descs.row_data(i).unwrap_or_default().to_string();
-        let qty_str = qtys.row_data(i).unwrap_or_default().to_string();
-        let unit = units.row_data(i).unwrap_or_default().to_string();
-        let price_str = prices.row_data(i).unwrap_or_default().to_string();
-        let quantity = qty_str.parse::<Decimal>().unwrap_or(Decimal::ONE);
-        let price = price_str.parse::<Decimal>().unwrap_or(Decimal::ZERO);
+        let row = model.row_data(i).unwrap_or_default();
+        let quantity = row.quantity.to_string().parse::<Decimal>().unwrap_or(Decimal::ONE);
+        let price = row.price.to_string().parse::<Decimal>().unwrap_or(Decimal::ZERO);
+        let unit = row.unit.to_string();
         items.push(NewInvoiceItem {
             position: (i + 1) as i16,
-            description: desc,
+            description: row.description.to_string(),
             unit: if unit.is_empty() { None } else { Some(unit) },
             quantity,
             price,
@@ -4623,22 +4435,17 @@ fn collect_invoice_items_from_ui(ui_weak: &Weak<MainWindow>) -> Vec<NewInvoiceIt
 /// Перерахувати total-amount у формі накладної на основі позицій.
 fn recalculate_invoice_total(ui: &MainWindow) {
     use slint::Model;
-    let qtys = ui.get_invoice_form_item_quantities();
-    let prices = ui.get_invoice_form_item_prices();
+    let model = ui.get_invoice_form_items();
+    let mut items: Vec<FormItemRow> = (0..model.row_count()).filter_map(|i| model.row_data(i)).collect();
     let mut total = Decimal::ZERO;
-    for i in 0..qtys.row_count() {
-        let qty = qtys.row_data(i).unwrap_or_default().to_string().parse::<Decimal>().unwrap_or(Decimal::ZERO);
-        let price = prices.row_data(i).unwrap_or_default().to_string().parse::<Decimal>().unwrap_or(Decimal::ZERO);
-        // Оновлюємо amount для рядка (відображення)
-        let amounts = ui.get_invoice_form_item_amounts();
-        let mut amounts_v: Vec<SharedString> = (0..amounts.row_count()).filter_map(|j| amounts.row_data(j)).collect();
+    for item in &mut items {
+        let qty = item.quantity.to_string().parse::<Decimal>().unwrap_or(Decimal::ZERO);
+        let price = item.price.to_string().parse::<Decimal>().unwrap_or(Decimal::ZERO);
         let amount = (qty * price).round_dp(2);
-        if i < amounts_v.len() {
-            amounts_v[i] = SharedString::from(amount.to_string().as_str());
-        }
-        ui.set_invoice_form_item_amounts(ModelRc::new(VecModel::from(amounts_v)));
+        item.amount = SharedString::from(format!("{:.2}", amount).as_str());
         total += amount;
     }
+    ui.set_invoice_form_items(ModelRc::new(VecModel::from(items)));
     ui.set_invoice_form_total(SharedString::from(format!("{:.2}", total).as_str()));
 }
 
@@ -4706,6 +4513,15 @@ fn company_initials(company: &CompanySummary) -> String {
     }
 
     letters
+}
+
+fn act_status_from_ui(status: ActStatus) -> ModelActStatus {
+    match status {
+        ActStatus::Draft => ModelActStatus::Draft,
+        ActStatus::Issued => ModelActStatus::Issued,
+        ActStatus::Signed => ModelActStatus::Signed,
+        ActStatus::Paid => ModelActStatus::Paid,
+    }
 }
 
 fn format_company_total(amount: &Decimal) -> String {
@@ -5079,12 +4895,7 @@ fn show_toast(ui_weak: Weak<MainWindow>, message: String, is_error: bool) {
     });
 }
 
-struct TasksTableData {
-    rows: Vec<Vec<SharedString>>,
-    ids: Vec<SharedString>,
-    statuses: Vec<SharedString>,
-    priorities: Vec<SharedString>,
-}
+
 
 fn task_priority_from_index(index: i32) -> TaskPriority {
     match index {
@@ -5138,69 +4949,20 @@ fn task_matches_query(task: &Task, query: Option<&str>) -> bool {
             .contains(&needle)
 }
 
-fn to_tasks_table_data(tasks: &[Task]) -> TasksTableData {
-    let rows = tasks
+fn to_task_rows(tasks: &[Task]) -> Vec<TaskRow> {
+    tasks
         .iter()
-        .map(|task| {
-            vec![
-                SharedString::from(task.title.as_str()),
-                SharedString::from(task.priority.label()),
-                format_task_datetime(task.due_date),
-                format_task_datetime(task.reminder_at),
-                SharedString::from(task.status.label()),
-            ]
+        .map(|task| TaskRow {
+            id: SharedString::from(task.id.to_string().as_str()),
+            title: SharedString::from(task.title.as_str()),
+            priority_label: SharedString::from(task.priority.label()),
+            due_date: format_task_datetime(task.due_date),
+            reminder: format_task_datetime(task.reminder_at),
+            status_label: SharedString::from(task.status.label()),
+            status: SharedString::from(task.status.as_str()),
+            priority: SharedString::from(task.priority.as_str()),
         })
-        .collect();
-
-    let ids = tasks
-        .iter()
-        .map(|task| SharedString::from(task.id.to_string().as_str()))
-        .collect();
-
-    let statuses = tasks
-        .iter()
-        .map(|task| SharedString::from(task.status.as_str()))
-        .collect();
-
-    let priorities = tasks
-        .iter()
-        .map(|task| SharedString::from(task.priority.as_str()))
-        .collect();
-
-    TasksTableData {
-        rows,
-        ids,
-        statuses,
-        priorities,
-    }
-}
-
-fn build_task_models(
-    data: TasksTableData,
-) -> (
-    ModelRc<ModelRc<StandardListViewItem>>,
-    ModelRc<SharedString>,
-    ModelRc<SharedString>,
-    ModelRc<SharedString>,
-) {
-    let rows: Vec<ModelRc<StandardListViewItem>> = data
-        .rows
-        .into_iter()
-        .map(|cells| {
-            let items: Vec<StandardListViewItem> = cells
-                .iter()
-                .map(|s| StandardListViewItem::from(s.as_str()))
-                .collect();
-            ModelRc::new(VecModel::from(items))
-        })
-        .collect();
-
-    (
-        ModelRc::new(VecModel::from(rows)),
-        ModelRc::new(VecModel::from(data.ids)),
-        ModelRc::new(VecModel::from(data.statuses)),
-        ModelRc::new(VecModel::from(data.priorities)),
-    )
+        .collect()
 }
 
 async fn reload_tasks(
@@ -5214,15 +4976,11 @@ async fn reload_tasks(
         .into_iter()
         .filter(|task| task_matches_query(task, normalized_query(&query)))
         .collect();
-    let data = to_tasks_table_data(&filtered);
+    let task_rows = to_task_rows(&filtered);
 
     ui_weak
         .upgrade_in_event_loop(move |ui| {
-            let (rows, ids, statuses, priorities) = build_task_models(data);
-            ui.set_task_rows(rows);
-            ui.set_task_row_ids(ids);
-            ui.set_task_row_statuses(statuses);
-            ui.set_task_row_priorities(priorities);
+            ui.set_task_rows(ModelRc::new(VecModel::from(task_rows)));
             ui.set_tasks_loading(false);
             if close_form {
                 ui.set_show_task_form(false);
@@ -5240,15 +4998,11 @@ async fn reload_act_tasks(
     act_id: uuid::Uuid,
 ) -> Result<()> {
     let tasks = db::tasks::list_by_act(pool, act_id).await?;
-    let data = to_tasks_table_data(&tasks);
+    let task_rows = to_task_rows(&tasks);
 
     ui_weak
         .upgrade_in_event_loop(move |ui| {
-            let (rows, ids, statuses, priorities) = build_task_models(data);
-            ui.set_act_task_rows(rows);
-            ui.set_act_task_row_ids(ids);
-            ui.set_act_task_row_statuses(statuses);
-            ui.set_act_task_row_priorities(priorities);
+            ui.set_act_task_rows(ModelRc::new(VecModel::from(task_rows)));
             ui.set_act_tasks_loading(false);
         })
         .map_err(anyhow::Error::from)?;
@@ -5398,11 +5152,11 @@ mod tests {
     };
 
     use super::{
-        MainWindow, build_acts_models, build_models, build_task_models, company_display_name,
+        MainWindow, build_models, company_display_name,
         company_initials, company_subtitle, format_amount_ua, format_company_total, format_kpi_amount,
         format_task_datetime, normalized_query, parse_task_datetime, task_matches_query,
-        task_priority_from_index, task_priority_index, to_acts_table_data, to_table_data,
-        to_tasks_table_data,
+        task_priority_from_index, task_priority_index, to_act_rows, to_table_data,
+        to_task_rows,
     };
 
     fn sample_counterparty() -> Counterparty {
@@ -5464,7 +5218,7 @@ mod tests {
     }
 
     #[test]
-    fn to_acts_table_data_formats_date_amount_and_status() {
+    fn to_act_rows_formats_date_amount_and_status() {
         let act = ActListRow {
             id: Uuid::new_v4(),
             number: "АКТ-2026-007".to_string(),
@@ -5475,14 +5229,14 @@ mod tests {
             status: ActStatus::Issued,
         };
 
-        let table = to_acts_table_data(&[act]);
-        assert_eq!(table.rows.len(), 1);
-        assert_eq!(table.rows[0][0].as_str(), "АКТ-2026-007");
-        assert_eq!(table.rows[0][1].as_str(), "01.04.2026");
-        assert_eq!(table.rows[0][2].as_str(), "ФОП Іваненко");
-        assert_eq!(table.rows[0][3].as_str(), "123,45 ₴");
-        assert_eq!(table.rows[0][4].as_str(), "Виставлено");
-        assert_eq!(table.statuses[0].as_str(), "issued");
+        let rows = to_act_rows(&[act]);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].num.as_str(), "АКТ-2026-007");
+        assert_eq!(rows[0].date.as_str(), "01.04.2026");
+        assert_eq!(rows[0].counterparty.as_str(), "ФОП Іваненко");
+        assert_eq!(rows[0].amount.as_str(), "123,45 ₴");
+        assert_eq!(rows[0].status_label.as_str(), "Виставлено");
+        assert_eq!(rows[0].status.as_str(), "issued");
     }
 
     #[test]
@@ -5529,18 +5283,18 @@ mod tests {
     }
 
     #[test]
-    fn to_tasks_table_data_formats_rows_and_metadata() {
+    fn to_task_rows_formats_rows_and_metadata() {
         let task = sample_task();
-        let table = to_tasks_table_data(&[task.clone()]);
-        assert_eq!(table.rows.len(), 1);
-        assert_eq!(table.rows[0][0].as_str(), "Перевірити оплату");
-        assert_eq!(table.rows[0][1].as_str(), "Критичний");
-        assert_eq!(table.rows[0][2].as_str(), "03.04.2026 18:45");
-        assert_eq!(table.rows[0][3].as_str(), "—");
-        assert_eq!(table.rows[0][4].as_str(), "В роботі");
-        assert_eq!(table.ids[0].as_str(), task.id.to_string());
-        assert_eq!(table.statuses[0].as_str(), "in_progress");
-        assert_eq!(table.priorities[0].as_str(), "critical");
+        let rows = to_task_rows(&[task.clone()]);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].title.as_str(), "Перевірити оплату");
+        assert_eq!(rows[0].priority_label.as_str(), "Критичний");
+        assert_eq!(rows[0].due_date.as_str(), "03.04.2026 18:45");
+        assert_eq!(rows[0].reminder.as_str(), "—");
+        assert_eq!(rows[0].status_label.as_str(), "В роботі");
+        assert_eq!(rows[0].id.as_str(), task.id.to_string());
+        assert_eq!(rows[0].status.as_str(), "in_progress");
+        assert_eq!(rows[0].priority.as_str(), "critical");
     }
 
     #[test]
@@ -5551,7 +5305,7 @@ mod tests {
         assert_eq!(ids.row_count(), 1);
         assert_eq!(archived.row_count(), 1);
 
-        let act_data = to_acts_table_data(&[ActListRow {
+        let act_rows = to_act_rows(&[ActListRow {
             id: Uuid::new_v4(),
             number: "АКТ-1".to_string(),
             direction: "outgoing".to_string(),
@@ -5560,17 +5314,10 @@ mod tests {
             total_amount: Decimal::new(1000, 2),
             status: ActStatus::Draft,
         }]);
-        let (act_rows, act_ids, act_statuses) = build_acts_models(act_data);
-        assert_eq!(act_rows.row_count(), 1);
-        assert_eq!(act_ids.row_count(), 1);
-        assert_eq!(act_statuses.row_count(), 1);
+        assert_eq!(act_rows.len(), 1);
 
-        let task_data = to_tasks_table_data(&[sample_task()]);
-        let (task_rows, task_ids, task_statuses, task_priorities) = build_task_models(task_data);
-        assert_eq!(task_rows.row_count(), 1);
-        assert_eq!(task_ids.row_count(), 1);
-        assert_eq!(task_statuses.row_count(), 1);
-        assert_eq!(task_priorities.row_count(), 1);
+        let task_rows = to_task_rows(&[sample_task()]);
+        assert_eq!(task_rows.len(), 1);
     }
 
     #[test]

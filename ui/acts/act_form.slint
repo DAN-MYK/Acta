@@ -21,8 +21,65 @@
 import { Theme } from "../theme.slint";
 import { LineEdit, TextEdit, ComboBox, ScrollView, ProgressIndicator, ListView } from "std-widgets.slint";
 import { StatusOption } from "../components/status_option.slint";
+import { TaskRow, FormItemRow } from "../structs.slint";
 
 // ── Головний компонент форми ───────────────────────────────────────────────
+component FieldLabel {
+    in property <string> text;
+    in property <bool> required: false;
+
+    Text {
+        text: root.required ? root.text + " *" : root.text;
+        font-size: 12px;
+        font-weight: 600;
+        color: Theme.text-sub;
+    }
+}
+
+component FieldBox inherits Rectangle {
+    height: 40px;
+    background: Theme.surface;
+    border-width: 1px;
+    border-color: Theme.border;
+    border-radius: 8px;
+    @children
+}
+
+component SectionDivider inherits Rectangle {
+    height: 1px;
+    background: Theme.border;
+}
+
+component TopbarButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> primary: false;
+    callback clicked();
+
+    width: primary ? 112px : 120px;
+    height: 36px;
+    border-radius: 8px;
+    border-width: primary ? 0px : 1px;
+    border-color: Theme.border;
+    background: primary
+        ? Theme.primary
+        : (btn-touch.has-hover ? Theme.hover-bg : Theme.bg);
+    animate background { duration: 80ms; }
+
+    Text {
+        text: root.text;
+        font-size: 14px;
+        font-weight: primary ? 600 : 400;
+        color: primary ? Theme.text-white : Theme.text-sub;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    btn-touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
 export component ActForm inherits Rectangle {
 
     // ── Вхідні дані (Rust → Slint) ────────────────────────────────────────
@@ -41,18 +98,11 @@ export component ActForm inherits Rectangle {
     // а Slint міг змінити через статус-пікер.
     in-out property <int>  act-status: 0;
 
-    // ── Позиції акту: паралельні масиви ───────────────────────────────────
-    in property <[string]> item-descriptions;
-    in property <[string]> item-quantities;
-    in property <[string]> item-units;
-    in property <[string]> item-prices;
-    in property <[string]> item-amounts;
+    // ── Позиції акту ─────────────────────────────────────────────────────
+    in property <[FormItemRow]> items;
 
     // ── Задачі, прив'язані до акту ────────────────────────────────────────
-    in property <[[StandardListViewItem]]> act-task-rows;
-    in property <[string]>                 act-task-row-ids;
-    in property <[string]>                 act-task-row-statuses;
-    in property <[string]>                 act-task-row-priorities;
+    in property <[TaskRow]> act-task-rows;
     in property <bool>                     act-tasks-loading: false;
 
     // ── Категорії та договори (необов'язково) ─────────────────────────────
@@ -171,86 +221,54 @@ export component ActForm inherits Rectangle {
                     }
 
                     // Кнопка «Скасувати»
-                    Rectangle {
-                        width: 120px;
-                        height: 36px;
+                    TopbarButton {
                         y: (parent.height - self.height) / 2;
-                        border-radius: 8px;
-                        border-width: 1px;
-                        border-color: Theme.border;
-                        background: cancel-touch.has-hover ? Theme.hover-bg : Theme.bg;
-                        animate background { duration: 80ms; }
-
-                        Text {
-                            text: "Скасувати";
-                            font-size: 14px;
-                            color: Theme.text-sub;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
-                        cancel-touch := TouchArea {
-                            mouse-cursor: pointer;
-                            clicked => { root.cancel(); }
-                        }
+                        text: "Скасувати";
+                        clicked => { root.cancel(); }
                     }
 
                     // Кнопка «Зберегти»
                     // Логіка: edit → update; draft-статус → save-draft; інакше → save
-                    Rectangle {
-                        width: 112px;
-                        height: 36px;
+                    TopbarButton {
                         y: (parent.height - self.height) / 2;
-                        border-radius: 8px;
-                        background: Theme.primary;
-                        animate background { duration: 80ms; }
-
-                        Text {
-                            text: "Зберегти";
-                            font-size: 14px;
-                            font-weight: 600;
-                            color: Theme.text-white;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
-                        save-touch := TouchArea {
-                            mouse-cursor: pointer;
-                            clicked => {
-                                // category-ids[0] = "" (без категорії), [1..] = реальні ID
-                                // Захист від порожніх масивів: ComboBox завжди має валідний
-                                // current-index, але масиви IDs мають рівну довжину з names.
-                                // Rust гарантує це, але додаємо guard на випадок race condition.
-                                if root.counterparty-ids.length == 0 { return; }
-                                if (root.is-edit-mode) {
-                                    root.update(
-                                        number-field.text,
-                                        date-field.text,
-                                        root.counterparty-ids[cp-combo.current-index],
-                                        notes-field.text,
-                                        cat-combo.current-index < root.category-ids.length ? root.category-ids[cat-combo.current-index] : "",
-                                        con-combo.current-index < root.contract-ids.length ? root.contract-ids[con-combo.current-index] : "",
-                                        exp-date-field.text
-                                    );
-                                } else if (root.act-status == 0) {
-                                    root.save-draft(
-                                        number-field.text,
-                                        date-field.text,
-                                        root.counterparty-ids[cp-combo.current-index],
-                                        notes-field.text,
-                                        cat-combo.current-index < root.category-ids.length ? root.category-ids[cat-combo.current-index] : "",
-                                        con-combo.current-index < root.contract-ids.length ? root.contract-ids[con-combo.current-index] : "",
-                                        exp-date-field.text
-                                    );
-                                } else {
-                                    root.save(
-                                        number-field.text,
-                                        date-field.text,
-                                        root.counterparty-ids[cp-combo.current-index],
-                                        notes-field.text,
-                                        cat-combo.current-index < root.category-ids.length ? root.category-ids[cat-combo.current-index] : "",
-                                        con-combo.current-index < root.contract-ids.length ? root.contract-ids[con-combo.current-index] : "",
-                                        exp-date-field.text
-                                    );
-                                }
+                        text: "Зберегти";
+                        primary: true;
+                        clicked => {
+                            // category-ids[0] = "" (без категорії), [1..] = реальні ID
+                            // Захист від порожніх масивів: ComboBox завжди має валідний
+                            // current-index, але масиви IDs мають рівну довжину з names.
+                            // Rust гарантує це, але додаємо guard на випадок race condition.
+                            if root.counterparty-ids.length == 0 { return; }
+                            if (root.is-edit-mode) {
+                                root.update(
+                                    number-field.text,
+                                    date-field.text,
+                                    root.counterparty-ids[cp-combo.current-index],
+                                    notes-field.text,
+                                    cat-combo.current-index < root.category-ids.length ? root.category-ids[cat-combo.current-index] : "",
+                                    con-combo.current-index < root.contract-ids.length ? root.contract-ids[con-combo.current-index] : "",
+                                    exp-date-field.text
+                                );
+                            } else if (root.act-status == 0) {
+                                root.save-draft(
+                                    number-field.text,
+                                    date-field.text,
+                                    root.counterparty-ids[cp-combo.current-index],
+                                    notes-field.text,
+                                    cat-combo.current-index < root.category-ids.length ? root.category-ids[cat-combo.current-index] : "",
+                                    con-combo.current-index < root.contract-ids.length ? root.contract-ids[con-combo.current-index] : "",
+                                    exp-date-field.text
+                                );
+                            } else {
+                                root.save(
+                                    number-field.text,
+                                    date-field.text,
+                                    root.counterparty-ids[cp-combo.current-index],
+                                    notes-field.text,
+                                    cat-combo.current-index < root.category-ids.length ? root.category-ids[cat-combo.current-index] : "",
+                                    con-combo.current-index < root.contract-ids.length ? root.contract-ids[con-combo.current-index] : "",
+                                    exp-date-field.text
+                                );
                             }
                         }
                     }
@@ -304,23 +322,16 @@ export component ActForm inherits Rectangle {
                                     }
                                 }
 
-                                Rectangle { height: 1px; background: Theme.border; }
+                                SectionDivider { }
 
                                 // Поле «Контрагент» (повна ширина)
                                 VerticalLayout {
                                     spacing: 4px;
-                                    Text {
-                                        text: "Контрагент *";
-                                        font-size: 12px;
-                                        font-weight: 600;
-                                        color: Theme.text-sub;
+                                    FieldLabel {
+                                        text: "Контрагент";
+                                        required: true;
                                     }
-                                    Rectangle {
-                                        height: 40px;
-                                        background: Theme.surface;
-                                        border-width: 1px;
-                                        border-color: Theme.border;
-                                        border-radius: 8px;
+                                    FieldBox {
                                         cp-combo := ComboBox {
                                             model: root.counterparty-names;
                                             current-index: root.act-cp-index;
@@ -336,18 +347,11 @@ export component ActForm inherits Rectangle {
                                     VerticalLayout {
                                         spacing: 4px;
                                         horizontal-stretch: 1;
-                                        Text {
-                                            text: "Дата акту *";
-                                            font-size: 12px;
-                                            font-weight: 600;
-                                            color: Theme.text-sub;
+                                        FieldLabel {
+                                            text: "Дата акту";
+                                            required: true;
                                         }
-                                        Rectangle {
-                                            height: 40px;
-                                            background: Theme.surface;
-                                            border-width: 1px;
-                                            border-color: Theme.border;
-                                            border-radius: 8px;
+                                        FieldBox {
                                             date-field := LineEdit {
                                                 text: root.act-date;
                                                 placeholder-text: "ДД.ММ.РРРР";
@@ -359,18 +363,11 @@ export component ActForm inherits Rectangle {
                                     VerticalLayout {
                                         spacing: 4px;
                                         horizontal-stretch: 1;
-                                        Text {
-                                            text: "Номер акту *";
-                                            font-size: 12px;
-                                            font-weight: 600;
-                                            color: Theme.text-sub;
+                                        FieldLabel {
+                                            text: "Номер акту";
+                                            required: true;
                                         }
-                                        Rectangle {
-                                            height: 40px;
-                                            background: Theme.surface;
-                                            border-width: 1px;
-                                            border-color: Theme.border;
-                                            border-radius: 8px;
+                                        FieldBox {
                                             number-field := LineEdit {
                                                 text: root.act-number;
                                                 placeholder-text: "АКТ-001";
@@ -387,18 +384,10 @@ export component ActForm inherits Rectangle {
                                     VerticalLayout {
                                         spacing: 4px;
                                         horizontal-stretch: 1;
-                                        Text {
+                                        FieldLabel {
                                             text: "Категорія";
-                                            font-size: 12px;
-                                            font-weight: 600;
-                                            color: Theme.text-sub;
                                         }
-                                        Rectangle {
-                                            height: 40px;
-                                            background: Theme.surface;
-                                            border-width: 1px;
-                                            border-color: Theme.border;
-                                            border-radius: 8px;
+                                        FieldBox {
                                             cat-combo := ComboBox {
                                                 model: root.category-names;
                                                 current-index: root.act-category-index;
@@ -410,18 +399,10 @@ export component ActForm inherits Rectangle {
                                     VerticalLayout {
                                         spacing: 4px;
                                         horizontal-stretch: 1;
-                                        Text {
+                                        FieldLabel {
                                             text: "Договір";
-                                            font-size: 12px;
-                                            font-weight: 600;
-                                            color: Theme.text-sub;
                                         }
-                                        Rectangle {
-                                            height: 40px;
-                                            background: Theme.surface;
-                                            border-width: 1px;
-                                            border-color: Theme.border;
-                                            border-radius: 8px;
+                                        FieldBox {
                                             con-combo := ComboBox {
                                                 model: root.contract-names;
                                                 current-index: root.act-contract-index;
@@ -433,18 +414,10 @@ export component ActForm inherits Rectangle {
                                 // «Очікувана дата оплати» (необов'язкове)
                                 VerticalLayout {
                                     spacing: 4px;
-                                    Text {
+                                    FieldLabel {
                                         text: "Очікувана дата оплати";
-                                        font-size: 12px;
-                                        font-weight: 600;
-                                        color: Theme.text-sub;
                                     }
-                                    Rectangle {
-                                        height: 40px;
-                                        background: Theme.surface;
-                                        border-width: 1px;
-                                        border-color: Theme.border;
-                                        border-radius: 8px;
+                                    FieldBox {
                                         exp-date-field := LineEdit {
                                             text: root.act-expected-payment-date;
                                             placeholder-text: "ДД.ММ.РРРР (необов'язково)";
@@ -452,7 +425,7 @@ export component ActForm inherits Rectangle {
                                     }
                                 }
 
-                                Rectangle { height: 1px; background: Theme.border; }
+                                SectionDivider { }
 
                                 // Заголовок секції позицій + кнопка «+ Додати»
                                 HorizontalLayout {
@@ -514,6 +487,11 @@ export component ActForm inherits Rectangle {
                                     }
                                 }
 
+                                // RUST-SIDE: items керується через Rc<VecModel<FormItemRow>>
+                                // НЕ мутуй items напряму з UI — тільки через callbacks:
+                                //   add-item()            → Rust додає рядок, оновлює model
+                                //   remove-item(i)        → Rust видаляє за індексом
+                                //   item-changed(i,f,v)   → Rust оновлює поле, перераховує amount
                                 // Список позицій
                                 //
                                 // `for desc[i] in root.item-descriptions` — for-loop з індексом:
@@ -522,7 +500,7 @@ export component ActForm inherits Rectangle {
                                     spacing: 0;
                                     min-height: 80px;
 
-                                    for desc[i] in root.item-descriptions : VerticalLayout {
+                                    for item[i] in root.items : VerticalLayout {
                                         spacing: 0;
 
                                         Rectangle {
@@ -537,34 +515,32 @@ export component ActForm inherits Rectangle {
                                                 spacing: 8px;
 
                                                 LineEdit {
-                                                    text: desc;
+                                                    text: item.description;
                                                     font-size: 13px;
                                                     horizontal-stretch: 3;
                                                     edited(v) => { root.item-changed(i, "desc", v); }
                                                 }
-                                                // Паралельні масиви: Rust оновлює всі разом, але
-                                                // додаємо bounds-check на випадок тимчасового розсинхрону.
                                                 LineEdit {
-                                                    text: i < root.item-quantities.length ? root.item-quantities[i] : "";
+                                                    text: item.quantity;
                                                     font-size: 13px;
                                                     width: 72px;
                                                     edited(v) => { root.item-changed(i, "qty", v); }
                                                 }
                                                 LineEdit {
-                                                    text: i < root.item-units.length ? root.item-units[i] : "";
+                                                    text: item.unit;
                                                     font-size: 13px;
                                                     width: 70px;
                                                     edited(v) => { root.item-changed(i, "unit", v); }
                                                 }
                                                 LineEdit {
-                                                    text: i < root.item-prices.length ? root.item-prices[i] : "";
+                                                    text: item.price;
                                                     font-size: 13px;
                                                     width: 100px;
                                                     edited(v) => { root.item-changed(i, "price", v); }
                                                 }
                                                 // amount — read-only, обчислюється в Rust
                                                 Text {
-                                                    text: i < root.item-amounts.length ? root.item-amounts[i] : "";
+                                                    text: item.amount;
                                                     font-size: 13px;
                                                     font-weight: 600;
                                                     color: Theme.text-main;
@@ -599,11 +575,11 @@ export component ActForm inherits Rectangle {
                                             }
                                         }
 
-                                        Rectangle { height: 1px; background: Theme.border; }
+                                        SectionDivider { }
                                     }
 
                                     // Empty state позицій
-                                    if root.item-descriptions.length == 0 : Rectangle {
+                                    if root.items.length == 0 : Rectangle {
                                         height: 80px;
                                         Text {
                                             text: "Позиції відсутні. Натисніть \"+ Додати позицію\".";
@@ -615,7 +591,7 @@ export component ActForm inherits Rectangle {
                                     }
                                 }
 
-                                Rectangle { height: 1px; background: Theme.border; }
+                                SectionDivider { }
 
                                 // Разом + До сплати (вирівняно праворуч)
                                 VerticalLayout {
@@ -641,7 +617,7 @@ export component ActForm inherits Rectangle {
                                         }
                                     }
 
-                                    Rectangle { height: 1px; background: Theme.border; }
+                                    SectionDivider { }
 
                                     HorizontalLayout {
                                         alignment: end;
@@ -665,16 +641,13 @@ export component ActForm inherits Rectangle {
                                     }
                                 }
 
-                                Rectangle { height: 1px; background: Theme.border; }
+                                SectionDivider { }
 
                                 // Примітки
                                 VerticalLayout {
                                     spacing: 4px;
-                                    Text {
+                                    FieldLabel {
                                         text: "Примітки";
-                                        font-size: 12px;
-                                        font-weight: 600;
-                                        color: Theme.text-sub;
                                     }
                                     Rectangle {
                                         height: 80px;
@@ -762,8 +735,8 @@ export component ActForm inherits Rectangle {
                                         vertical-stretch: 1;
 
                                         for row[i] in root.act-task-rows : Rectangle {
-                                            property <string> raw-status: i < root.act-task-row-statuses.length ? root.act-task-row-statuses[i] : "open";
-                                            property <string> raw-priority: i < root.act-task-row-priorities.length ? root.act-task-row-priorities[i] : "normal";
+                                            property <string> raw-status: row.status;
+                                            property <string> raw-priority: row.priority;
                                             property <color> status-color:
                                                 raw-status == "done"        ? Theme.success :
                                                 raw-status == "in_progress" ? Theme.primary :
@@ -793,7 +766,7 @@ export component ActForm inherits Rectangle {
                                                 padding-right: 12px;
 
                                                 Text {
-                                                    text: row[0].text;
+                                                    text: row.title;
                                                     color: Theme.text-main;
                                                     font-size: 13px;
                                                     font-weight: 500;
@@ -811,7 +784,7 @@ export component ActForm inherits Rectangle {
                                                         border-radius: 11px;
                                                         background: priority-bg;
                                                         Text {
-                                                            text: row[1].text;
+                                                            text: row.priority-label;
                                                             color: priority-color;
                                                             font-size: 11px;
                                                             font-weight: 500;
@@ -821,8 +794,8 @@ export component ActForm inherits Rectangle {
                                                     }
                                                 }
 
-                                                Text { text: row[2].text; color: Theme.text-sub; font-size: 13px; width: 120px; vertical-alignment: center; overflow: elide; }
-                                                Text { text: row[3].text; color: Theme.text-sub; font-size: 13px; width: 120px; vertical-alignment: center; overflow: elide; }
+                                                Text { text: row.due-date; color: Theme.text-sub; font-size: 13px; width: 120px; vertical-alignment: center; overflow: elide; }
+                                                Text { text: row.reminder; color: Theme.text-sub; font-size: 13px; width: 120px; vertical-alignment: center; overflow: elide; }
 
                                                 Rectangle {
                                                     width: 100px;
@@ -833,7 +806,7 @@ export component ActForm inherits Rectangle {
                                                         border-radius: 11px;
                                                         background: status-bg;
                                                         Text {
-                                                            text: row[4].text;
+                                                            text: row.status-label;
                                                             color: status-color;
                                                             font-size: 11px;
                                                             font-weight: 500;
@@ -858,9 +831,7 @@ export component ActForm inherits Rectangle {
                                                         TouchArea {
                                                             mouse-cursor: pointer;
                                                             clicked => {
-                                                                if i < root.act-task-row-ids.length {
-                                                                    root.act-task-edit-clicked(root.act-task-row-ids[i]);
-                                                                }
+                                                                root.act-task-edit-clicked(row.id);
                                                             }
                                                         }
                                                     }
@@ -874,9 +845,7 @@ export component ActForm inherits Rectangle {
                                                         TouchArea {
                                                             mouse-cursor: pointer;
                                                             clicked => {
-                                                                if i < root.act-task-row-ids.length {
-                                                                    root.act-task-toggle-status-clicked(root.act-task-row-ids[i]);
-                                                                }
+                                                                root.act-task-toggle-status-clicked(row.id);
                                                             }
                                                         }
                                                     }
@@ -892,9 +861,7 @@ export component ActForm inherits Rectangle {
                                                         TouchArea {
                                                             mouse-cursor: pointer;
                                                             clicked => {
-                                                                if i < root.act-task-row-ids.length {
-                                                                    root.act-task-delete-clicked(root.act-task-row-ids[i]);
-                                                                }
+                                                                root.act-task-delete-clicked(row.id);
                                                             }
                                                         }
                                                     }

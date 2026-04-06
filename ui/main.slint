@@ -6,10 +6,13 @@
 //
 // Навігація: ліва панель з основними розділами, права — контент поточного розділу.
 // Перемикання через in-out property <int> current-page.
-// Нумерація сторінок: 0=Контрагенти, 1=Акти, 2=Накладні, 3=Платежі, 4=Звіти, 5=To-Do, 6=Компанії, 7=Календар платежів
+// Нумерація сторінок: 0=Контрагенти | 1=Документи (акти+накладні) | 3=Платежі | 4=Звіти (заглушка)
+// 5=To-Do | 6=Компанії | 7=Календар (заглушка) | 8=Dashboard
+// Сторінка 2 не використовується
 
 import { Button, ListView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { ActRow, InvoiceRow, TaskRow, PaymentRow, FormItemRow, ActStatus } from "structs.slint";
 import { DashboardPage, DashboardActRow, DashboardPaymentRow } from "dashboard/dashboard.slint";
 import { CounterpartyList } from "counterparties/counterparty_list.slint";
 import { CounterpartyForm } from "counterparties/counterparty_form.slint";
@@ -76,11 +79,12 @@ component NavItem {
             padding-left: 10px;
             padding-right: 12px;
             spacing: 8px;
-            alignment: center;
+            alignment: start;
 
             Rectangle {
                 width: 18px;
                 height: 18px;
+                y: (parent.height - self.height) / 2;
                 background: transparent;
                 opacity: root.disabled ? 0.45 : 1.0;
 
@@ -108,11 +112,7 @@ component NavItem {
         nav-touch := TouchArea {
             enabled: !root.disabled;
             mouse-cursor: root.disabled ? default : pointer;
-            clicked => {
-                if (!root.disabled) {
-                    root.clicked();
-                }
-            }
+            clicked => { root.clicked(); }
         }
     }
 }
@@ -126,7 +126,8 @@ export component MainWindow inherits Window {
     preferred-height: 900px;
 
     // ── Стан навігації ───────────────────────────────────────────────────────
-    // 0=Контрагенти | 1=Акти | 2=Накладні | 3=Платежі | 4=Звіти | 5=To-Do | 6=Компанії | 7=Календар платежів | 8=Dashboard
+    // 0=Контрагенти | 1=Документи (акти+накладні) | 3=Платежі | 4=Звіти (заглушка)
+    // 5=To-Do | 6=Компанії | 7=Календар (заглушка) | 8=Dashboard  |  сторінка 2 не використовується
     in-out property <int> current-page: 8;
 
     // ── Дані Dashboard ───────────────────────────────────────────────────────
@@ -185,9 +186,7 @@ export component MainWindow inherits Window {
     in property <string> cp-form-notes: "";
 
     // ── Дані актів ───────────────────────────────────────────────────────────
-    in property <[[StandardListViewItem]]> act-rows;
-    in property <[string]>                 act-row-ids;
-    in property <[string]>                 act-row-statuses;
+    in property <[ActRow]> act-rows;
     in property <bool>                     acts-loading: false;
     in property <[int]>                    act-status-counts: [0, 0, 0, 0, 0];
     in property <int>                      act-kpi-acts-month: 0;
@@ -206,15 +205,8 @@ export component MainWindow inherits Window {
     in property <string>   act-form-total: "0.00";
     in property <[string]> act-form-cp-names;
     in property <[string]> act-form-cp-ids;
-    in property <[string]> act-form-item-descriptions;
-    in property <[string]> act-form-item-quantities;
-    in property <[string]> act-form-item-units;
-    in property <[string]> act-form-item-prices;
-    in property <[string]> act-form-item-amounts;
-    in property <[[StandardListViewItem]]> act-task-rows;
-    in property <[string]>                 act-task-row-ids;
-    in property <[string]>                 act-task-row-statuses;
-    in property <[string]>                 act-task-row-priorities;
+    in property <[FormItemRow]> act-form-items;
+    in property <[TaskRow]>     act-task-rows;
     in property <bool>                     act-tasks-loading: false;
     // Категорія/Договір/Дата оплати для форми акту
     in property <[string]> act-form-category-names;
@@ -226,9 +218,7 @@ export component MainWindow inherits Window {
     in property <string>   act-form-expected-payment-date: "";
 
     // ── Дані накладних ──────────────────────────────────────────────────────
-    in property <[[StandardListViewItem]]> invoice-rows;
-    in property <[string]>                 invoice-row-ids;
-    in property <[string]>                 invoice-row-statuses;
+    in property <[InvoiceRow]> invoice-rows;
     in property <bool>                     invoices-loading: false;
 
     // ── Стан форми накладної ─────────────────────────────────────────────────
@@ -242,11 +232,7 @@ export component MainWindow inherits Window {
     in property <string>   invoice-form-total: "0.00";
     in property <[string]> invoice-form-cp-names;
     in property <[string]> invoice-form-cp-ids;
-    in property <[string]> invoice-form-item-descriptions;
-    in property <[string]> invoice-form-item-quantities;
-    in property <[string]> invoice-form-item-units;
-    in property <[string]> invoice-form-item-prices;
-    in property <[string]> invoice-form-item-amounts;
+    in property <[FormItemRow]> invoice-form-items;
     // Категорія/Договір/Дата оплати для форми накладної
     in property <[string]> invoice-form-category-names;
     in property <[string]> invoice-form-category-ids;
@@ -257,10 +243,7 @@ export component MainWindow inherits Window {
     in property <string>   invoice-form-expected-payment-date: "";
 
     // ── Дані задач ─────────────────────────────────────────────────────────
-    in property <[[StandardListViewItem]]> task-rows;
-    in property <[string]>                 task-row-ids;
-    in property <[string]>                 task-row-statuses;
-    in property <[string]>                 task-row-priorities;
+    in property <[TaskRow]> task-rows;
     in property <bool>                     tasks-loading: false;
 
     // ── Стан форми задачі ──────────────────────────────────────────────────
@@ -332,14 +315,7 @@ export component MainWindow inherits Window {
     callback invoice-form-item-changed(int, string, string);
 
     // ── Дані платежів ──────────────────────────────────────────────────────
-    in property <[string]> payment-row-ids;
-    in property <[string]> payment-row-dates;
-    in property <[string]> payment-row-counterparties;
-    in property <[string]> payment-row-descriptions;
-    in property <[string]> payment-row-banks;
-    in property <[string]> payment-row-amounts;
-    in property <[string]> payment-row-directions;
-    in property <[bool]>   payment-row-reconciled;
+    in property <[PaymentRow]> payment-rows;
     in property <bool>     payments-loading: false;
     in property <string>   payment-total-income: "0.00";
     in property <string>   payment-total-expense: "0.00";
@@ -401,7 +377,7 @@ export component MainWindow inherits Window {
     in property <string>            act-card-id: "";
     in property <string>            act-card-number: "";
     in property <string>            act-card-date: "";
-    in property <string>            act-card-status: "draft";
+    in property <ActStatus>         act-card-status: ActStatus.draft;
     in property <string>            act-card-status-label: "Чернетка";
     in property <string>            act-card-counterparty: "";
     in property <string>            act-card-total: "0,00 ₴";
@@ -412,7 +388,7 @@ export component MainWindow inherits Window {
     callback act-card-close-clicked();
     callback act-card-edit-clicked(string);
     callback act-card-pdf-clicked(string);
-    callback act-card-advance-status-clicked(string);
+    callback act-card-advance-status-clicked(string, ActStatus);
 
     // ── Дані документів (єдиний список актів + накладних) ──────────────────
     in property <[DocRow]> document-rows;
@@ -490,6 +466,8 @@ export component MainWindow inherits Window {
     // ── Розмітка ─────────────────────────────────────────────────────────────
     // Rectangle-обгортка потрібна щоб накладати toast overlay поверх layout.
     Rectangle {
+        width: parent.width;
+        height: parent.height;
 
     HorizontalLayout {
 
@@ -534,74 +512,58 @@ export component MainWindow inherits Window {
 
                 // ── Перемикач активної компанії ────────────────────────────
                 Rectangle {
-                    height: 52px;
+                    height: 44px;
                     vertical-stretch: 0;
 
-                    HorizontalLayout {
-                        padding-left: 10px;
-                        padding-right: 10px;
-                        alignment: center;
+                    company-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.switch-company(); }
 
-                        company-btn := Rectangle {
-                            height: 40px;
-                            border-radius: 8px;
-                            background: company-touch.has-hover ? Theme.sidebar-switcher-hover : Theme.sidebar-switcher-bg;
-                            horizontal-stretch: 1;
-                            animate background { duration: 100ms; }
+                        HorizontalLayout {
+                            padding-left: 14px;
+                            padding-right: 36px;
+                            spacing: 8px;
+                            alignment: start;
 
-                            company-touch := TouchArea {
-                                mouse-cursor: pointer;
-                                clicked => { root.switch-company(); }
+                            // Кольорова крапка
+                            Rectangle {
+                                width: 8px;
+                                height: 8px;
+                                border-radius: 4px;
+                                background: Theme.primary;
+                                y: (parent.height - self.height) / 2;
+                            }
 
-                                HorizontalLayout {
-                                    padding-left: 8px;
-                                    padding-right: 8px;
-                                    spacing: 8px;
-                                    alignment: center;
+                            // Назва + ЄДРПОУ
+                            VerticalLayout {
+                                horizontal-stretch: 1;
+                                spacing: 2px;
+                                alignment: center;
 
-                                    Rectangle {
-                                        width: 28px;
-                                        height: 28px;
-                                        border-radius: 14px;
-                                        background: Theme.primary;
-
-                                        Text {
-                                            text: "ФІ";
-                                            color: #ffffff;
-                                            font-size: 10px;
-                                            font-weight: 600;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
-                                        }
-                                    }
-
-                                    VerticalLayout {
-                                        horizontal-stretch: 1;
-                                        spacing: 1px;
-                                        alignment: center;
-
-                                        Text {
-                                            text: root.active-company-name;
-                                            font-size: 12px;
-                                            color: #F6F8FC;
-                                            overflow: elide;
-                                        }
-                                        Text {
-                                            text: root.active-company-subtitle;
-                                            font-size: 10px;
-                                            color: Theme.sidebar-text-muted;
-                                            overflow: elide;
-                                        }
-                                    }
-
-                                    Text {
-                                        text: "в–ѕ";
-                                        font-size: 10px;
-                                        color: Theme.sidebar-text-muted;
-                                        vertical-alignment: center;
-                                    }
+                                Text {
+                                    text: root.active-company-name;
+                                    font-size: 12px;
+                                    font-weight: 500;
+                                    color: #D8E4FF;
+                                    overflow: elide;
+                                }
+                                Text {
+                                    text: root.active-company-subtitle;
+                                    font-size: 10px;
+                                    color: Theme.sidebar-text-muted;
+                                    overflow: elide;
                                 }
                             }
+                        }
+
+                        // Стрілка вниз — абсолютне позиціонування
+                        Image {
+                            width: 14px;
+                            height: 14px;
+                            source: @image-url("assets/icons/Chevron-Down.svg");
+                            colorize: Theme.sidebar-text-muted;
+                            x: parent.width - 14px - 10px;
+                            y: (parent.height - self.height) / 2;
                         }
                     }
                 }
@@ -615,14 +577,16 @@ export component MainWindow inherits Window {
                 }
 
                 // ── Навігаційні пункти (з відступами 12px з боків, 8px між) ──
-                Text {
-                    x: 20px;
+                HorizontalLayout {
+                    padding-left: 20px;
                     height: 22px;
-                    text: "МЕНЮ";
-                    font-size: Theme.font-xs;
-                    font-weight: 600;
-                    color: Theme.sidebar-label;
-                    vertical-alignment: center;
+                    Text {
+                        text: "МЕНЮ";
+                        font-size: Theme.font-xs;
+                        font-weight: 600;
+                        color: Theme.sidebar-label;
+                        vertical-alignment: center;
+                    }
                 }
 
                 VerticalLayout {
@@ -666,22 +630,26 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                Rectangle {
+                HorizontalLayout {
+                    padding-left: 20px;
+                    padding-right: 20px;
                     height: 1px;
-                    x: 20px;
-                    width: 180px;
-                    background: Theme.sidebar-divider;
-                    vertical-stretch: 0;
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        background: Theme.sidebar-divider;
+                    }
                 }
 
-                Text {
-                    x: 20px;
+                HorizontalLayout {
+                    padding-left: 20px;
                     height: 22px;
-                    text: "УТИЛІТИ";
-                    font-size: Theme.font-xs;
-                    font-weight: 600;
-                    color: Theme.sidebar-label;
-                    vertical-alignment: center;
+                    Text {
+                        text: "УТИЛІТИ";
+                        font-size: Theme.font-xs;
+                        font-weight: 600;
+                        color: Theme.sidebar-label;
+                        vertical-alignment: center;
+                    }
                 }
 
                 VerticalLayout {
@@ -739,6 +707,7 @@ export component MainWindow inherits Window {
 
         // ══ Область контенту ════════════════════════════════════════════════
         Rectangle {
+            horizontal-stretch: 1;
             background: Theme.bg-page;
 
             // ── Сторінка 0: Контрагенти — список ────────────────────────────
@@ -816,15 +785,8 @@ export component MainWindow inherits Window {
                 is-edit-mode:         root.act-form-is-edit;
                 counterparty-names:   root.act-form-cp-names;
                 counterparty-ids:     root.act-form-cp-ids;
-                item-descriptions:    root.act-form-item-descriptions;
-                item-quantities:      root.act-form-item-quantities;
-                item-units:           root.act-form-item-units;
-                item-prices:          root.act-form-item-prices;
-                item-amounts:         root.act-form-item-amounts;
+                items:                root.act-form-items;
                 act-task-rows:        root.act-task-rows;
-                act-task-row-ids:     root.act-task-row-ids;
-                act-task-row-statuses: root.act-task-row-statuses;
-                act-task-row-priorities: root.act-task-row-priorities;
                 act-tasks-loading:    root.act-tasks-loading;
                 category-names:       root.act-form-category-names;
                 category-ids:         root.act-form-category-ids;
@@ -849,11 +811,8 @@ export component MainWindow inherits Window {
 
             // ── Сторінка 5: To-Do — список ────────────────────────────────
             if root.current-page == 5 && !root.show-task-form : TaskList {
-                rows:             root.task-rows;
-                row-ids:          root.task-row-ids;
-                row-statuses:     root.task-row-statuses;
-                row-priorities:   root.task-row-priorities;
-                loading:          root.tasks-loading;
+                rows:    root.task-rows;
+                loading: root.tasks-loading;
 
                 search-changed(q)         => { root.task-search-changed(q); }
                 row-selected(id)          => { root.task-selected(id); }
@@ -918,11 +877,7 @@ export component MainWindow inherits Window {
                 is-edit-mode:         root.invoice-form-is-edit;
                 counterparty-names:   root.invoice-form-cp-names;
                 counterparty-ids:     root.invoice-form-cp-ids;
-                item-descriptions:    root.invoice-form-item-descriptions;
-                item-quantities:      root.invoice-form-item-quantities;
-                item-units:           root.invoice-form-item-units;
-                item-prices:          root.invoice-form-item-prices;
-                item-amounts:         root.invoice-form-item-amounts;
+                items:                root.invoice-form-items;
                 category-names:       root.invoice-form-category-names;
                 category-ids:         root.invoice-form-category-ids;
                 invoice-category-index: root.invoice-form-category-index;
@@ -965,18 +920,11 @@ export component MainWindow inherits Window {
                 add-todo-clicked => { root.dashboard-add-todo-clicked(); }
             }
 
-            if root.current-page == 3 : PaymentList {
-                row-ids:             root.payment-row-ids;
-                row-dates:           root.payment-row-dates;
-                row-counterparties:  root.payment-row-counterparties;
-                row-descriptions:    root.payment-row-descriptions;
-                row-banks:           root.payment-row-banks;
-                row-amounts:         root.payment-row-amounts;
-                row-directions:      root.payment-row-directions;
-                row-reconciled:      root.payment-row-reconciled;
-                loading:             root.payments-loading;
-                total-income:        root.payment-total-income;
-                total-expense:       root.payment-total-expense;
+            if root.current-page == 3 && !root.show-payment-form : PaymentList {
+                rows:         root.payment-rows;
+                loading:      root.payments-loading;
+                total-income: root.payment-total-income;
+                total-expense: root.payment-total-expense;
 
                 direction-filter-changed(i) => { root.payment-direction-filter-changed(i); }
                 search-changed(q)           => { root.payment-search-changed(q); }
@@ -1008,17 +956,7 @@ export component MainWindow inherits Window {
                 cancel => { root.payment-form-cancel(); }
             }
 
-            if root.current-page == 4 : SettingsPage {
-                company-name: root.settings-company-name;
-                company-edrpou: root.settings-company-edrpou;
-                company-iban: root.settings-company-iban;
-                company-director: root.settings-company-director;
-                company-address: root.settings-company-address;
-                category-rows: root.settings-category-rows;
-                edit-company-clicked => { root.settings-edit-company-clicked(); }
-            }
-
-            if false && root.current-page == 4 : Rectangle {
+            if root.current-page == 4 : Rectangle {
                 Text {
                     text: "📊  Звіти\nБуде реалізовано у наступній версії";
                     color: Theme.text-muted;
@@ -1029,17 +967,7 @@ export component MainWindow inherits Window {
                 }
             }
 
-            if root.current-page == 7 : SettingsPage {
-                company-name: root.settings-company-name;
-                company-edrpou: root.settings-company-edrpou;
-                company-iban: root.settings-company-iban;
-                company-director: root.settings-company-director;
-                company-address: root.settings-company-address;
-                category-rows: root.settings-category-rows;
-                edit-company-clicked => { root.settings-edit-company-clicked(); }
-            }
-
-            if false && root.current-page == 7 : Rectangle {
+            if root.current-page == 7 : Rectangle {
                 Text {
                     text: "📅  Календар платежів\nБуде реалізовано у наступній версії";
                     color: Theme.text-muted;
@@ -1052,7 +980,7 @@ export component MainWindow inherits Window {
         }
     }
 
-    // в”Ђв”Ђ Company Picker overlay в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+    // ── Company Picker overlay ──────────────────────────────────────────────────
     // Показується при старті якщо компаній > 1 і не відомо яку обрати.
     // Rust встановлює show-company-picker=true, user обирає → callback company-select-clicked.
     if root.show-counterparty-card : Rectangle {
@@ -1123,7 +1051,7 @@ export component MainWindow inherits Window {
                 close-clicked           => { root.act-card-close-clicked(); }
                 edit-clicked            => { root.act-card-edit-clicked(root.act-card-id); }
                 pdf-clicked             => { root.act-card-pdf-clicked(root.act-card-id); }
-                advance-status-clicked  => { root.act-card-advance-status-clicked(root.act-card-id); }
+                advance-status-clicked(new-status)  => { root.act-card-advance-status-clicked(root.act-card-id, new-status); }
             }
         }
     }
@@ -1221,7 +1149,7 @@ export component MainWindow inherits Window {
                                 padding-left: 12px;
                                 padding-right: 16px;
                                 spacing: 12px;
-                                alignment: center;
+                                alignment: start;
 
                                 Rectangle {
                                     width: 36px;
@@ -1256,10 +1184,10 @@ export component MainWindow inherits Window {
                                     }
                                 }
 
-                                Text {
+                                if root.active-company-id == c.id : Text {
                                     text: "✓";
                                     font-size: 16px;
-                                    color: root.active-company-id == c.id ? Theme.primary : transparent;
+                                    color: Theme.primary;
                                     vertical-alignment: center;
                                 }
                             }

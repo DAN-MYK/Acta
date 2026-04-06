@@ -8,13 +8,12 @@
 import { Theme } from "../theme.slint";
 import { ProgressIndicator, ComboBox, ListView } from "std-widgets.slint";
 import { StatusBadge } from "../components/status_badge.slint";
+import { InvoiceRow } from "../structs.slint";
 
 export component InvoiceList {
 
     // ── Вхідні дані ────────────────────────────────────────────────────────
-    in property <[[StandardListViewItem]]> rows;
-    in property <[string]>                 row-ids;
-    in property <[string]>                 row-statuses;
+    in property <[InvoiceRow]> rows;
     in property <bool>                     loading: false;
 
     // ── Колбеки ─────────────────────────────────────────────────────────────
@@ -236,8 +235,7 @@ export component InvoiceList {
                             vertical-stretch: 1;
 
                             for row[i] in root.rows : Rectangle {
-                                property <string> raw-status: i < root.row-statuses.length
-                                    ? root.row-statuses[i] : "draft";
+                                property <string> raw-status: row.status;
                                 property <color> badge-color:
                                     raw-status == "paid"   ? Theme.success  :
                                     raw-status == "signed" ? Theme.primary  :
@@ -264,7 +262,7 @@ export component InvoiceList {
                                     padding-right: 15px;
 
                                     Text {
-                                        text: row[0].text;
+                                        text: row.num;
                                         color: Theme.text-main;
                                         font-size: 13px;
                                         font-weight: 500;
@@ -273,7 +271,7 @@ export component InvoiceList {
                                         overflow: elide;
                                     }
                                     Text {
-                                        text: row[1].text;
+                                        text: row.date;
                                         color: Theme.text-sub;
                                         font-size: 13px;
                                         horizontal-stretch: 1;
@@ -281,7 +279,7 @@ export component InvoiceList {
                                         overflow: elide;
                                     }
                                     Text {
-                                        text: row[2].text;
+                                        text: row.counterparty;
                                         color: Theme.text-sub;
                                         font-size: 13px;
                                         horizontal-stretch: 3;
@@ -289,7 +287,7 @@ export component InvoiceList {
                                         overflow: elide;
                                     }
                                     Text {
-                                        text: row[3].text;
+                                        text: row.amount;
                                         color: Theme.text-main;
                                         font-size: 13px;
                                         font-weight: 600;
@@ -301,7 +299,7 @@ export component InvoiceList {
                                         width: 100px;
                                         StatusBadge {
                                             y: (parent.height - self.height) / 2;
-                                            label: row[4].text;
+                                            label: row.status-label;
                                             badge-color: badge-color;
                                             badge-bg: badge-bg;
                                         }
@@ -311,13 +309,11 @@ export component InvoiceList {
                                 row-touch := TouchArea {
                                     mouse-cursor: pointer;
                                     clicked => {
-                                        root.selected-row = i;
-                                        if i < root.row-ids.length {
-                                            root.selected-id     = root.row-ids[i];
-                                            root.selected-status = root.row-statuses[i];
-                                            root.selected-number = row[0].text;
-                                            root.row-selected(root.row-ids[i]);
-                                        }
+                                        root.selected-row    = i;
+                                        root.selected-id     = row.id;
+                                        root.selected-status = row.status;
+                                        root.selected-number = row.num;
+                                        root.row-selected(row.id);
                                     }
                                 }
                             }

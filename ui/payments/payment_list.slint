@@ -5,19 +5,12 @@
 
 import { Theme } from "../theme.slint";
 import { ProgressIndicator, Button } from "std-widgets.slint";
+import { PaymentRow } from "../structs.slint";
 
 export component PaymentList {
 
     // ── Вхідні дані ────────────────────────────────────────────────────────
-    // Паралельні масиви для рядків таблиці
-    in property <[string]> row-ids;
-    in property <[string]> row-dates;
-    in property <[string]> row-counterparties;   // назва або ""
-    in property <[string]> row-descriptions;
-    in property <[string]> row-banks;            // bank_name або ""
-    in property <[string]> row-amounts;          // відформатована сума
-    in property <[string]> row-directions;       // "income" | "expense"
-    in property <[bool]>   row-reconciled;
+    in property <[PaymentRow]> rows;
 
     in property <bool>   loading: false;
     in property <string> total-income:  "0.00";
@@ -283,7 +276,7 @@ export component PaymentList {
             vertical-stretch: 1;
             background: Theme.bg-page;
 
-            if root.row-ids.length == 0 : Rectangle {
+            if root.rows.length == 0 : Rectangle {
                 background: Theme.surface;
                 border-radius: Theme.radius-lg;
                 height: 120px;
@@ -297,8 +290,8 @@ export component PaymentList {
                 }
             }
 
-            if root.row-ids.length > 0 : VerticalLayout {
-                for id[i] in root.row-ids: Rectangle {
+            if root.rows.length > 0 : VerticalLayout {
+                for row[i] in root.rows: Rectangle {
                     height: 48px;
                     background: root.selected-row == i
                         ? Theme.row-selected
@@ -311,7 +304,7 @@ export component PaymentList {
                         mouse-cursor: pointer;
                         clicked => {
                             root.selected-row = i;
-                            root.selected-id = id;
+                            root.selected-id = row.id;
                         }
                     }
 
@@ -325,19 +318,19 @@ export component PaymentList {
                             width: 3px;
                             height: 28px;
                             border-radius: 2px;
-                            background: root.row-directions[i] == "income"
+                            background: row.direction == "income"
                                 ? Theme.success : Theme.danger;
                         }
 
                         Text {
-                            text: root.row-dates[i];
+                            text: row.date;
                             font-size: Theme.font-md;
                             color: Theme.text-sub;
                             vertical-alignment: center;
                             width: 97px;
                         }
                         Text {
-                            text: root.row-counterparties[i] == "" ? "—" : root.row-counterparties[i];
+                            text: row.counterparty == "" ? "—" : row.counterparty;
                             font-size: Theme.font-md;
                             color: Theme.text-main;
                             vertical-alignment: center;
@@ -345,7 +338,7 @@ export component PaymentList {
                             horizontal-stretch: 1;
                         }
                         Text {
-                            text: root.row-descriptions[i] == "" ? "—" : root.row-descriptions[i];
+                            text: row.description == "" ? "—" : row.description;
                             font-size: Theme.font-md;
                             color: Theme.text-sub;
                             vertical-alignment: center;
@@ -353,7 +346,7 @@ export component PaymentList {
                             horizontal-stretch: 2;
                         }
                         Text {
-                            text: root.row-banks[i] == "" ? "—" : root.row-banks[i];
+                            text: row.bank == "" ? "—" : row.bank;
                             font-size: Theme.font-sm;
                             color: Theme.text-muted;
                             vertical-alignment: center;
@@ -363,10 +356,10 @@ export component PaymentList {
 
                         // Сума з кольором
                         Text {
-                            text: (root.row-directions[i] == "income" ? "+" : "−") + root.row-amounts[i] + " ₴";
+                            text: (row.direction == "income" ? "+" : "−") + row.amount + " ₴";
                             font-size: Theme.font-md;
                             font-weight: 700;
-                            color: root.row-directions[i] == "income" ? Theme.success : Theme.danger;
+                            color: row.direction == "income" ? Theme.success : Theme.danger;
                             horizontal-alignment: right;
                             vertical-alignment: center;
                             width: 110px;
@@ -378,9 +371,9 @@ export component PaymentList {
                             height: 24px;
 
                             Text {
-                                text: root.row-reconciled[i] ? "✓" : "—";
+                                text: row.reconciled ? "✓" : "—";
                                 font-size: Theme.font-md;
-                                color: root.row-reconciled[i] ? Theme.success : Theme.text-disabled;
+                                color: row.reconciled ? Theme.success : Theme.text-disabled;
                                 horizontal-alignment: center;
                                 vertical-alignment: center;
                             }
@@ -393,7 +386,7 @@ export component PaymentList {
                             alignment: center;
 
                             // Зведення
-                            if !root.row-reconciled[i] : rec-rect := Rectangle {
+                            if !row.reconciled : rec-rect := Rectangle {
                                 width: 30px;
                                 height: 30px;
                                 border-radius: Theme.radius-sm;
@@ -411,7 +404,7 @@ export component PaymentList {
 
                                 rec-touch := TouchArea {
                                     mouse-cursor: pointer;
-                                    clicked => { root.reconcile-clicked(id); }
+                                    clicked => { root.reconcile-clicked(row.id); }
                                 }
                             }
 
@@ -434,7 +427,7 @@ export component PaymentList {
 
                                 edit-touch := TouchArea {
                                     mouse-cursor: pointer;
-                                    clicked => { root.edit-clicked(id); }
+                                    clicked => { root.edit-clicked(row.id); }
                                 }
                             }
                         }
