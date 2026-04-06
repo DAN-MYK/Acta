@@ -11,7 +11,7 @@ import { Theme } from "../theme.slint";
 import { ProgressIndicator, ListView } from "std-widgets.slint";
 import { StatCard } from "../components/stat_card.slint";
 import { StatusBadge } from "../components/status_badge.slint";
-import { ActRow } from "../structs.slint";
+import { ActRow, ActStatus } from "../structs.slint";
 
 component ActionButton inherits Rectangle {
     in property <string> text;
@@ -68,7 +68,7 @@ export component ActList {
     // ── Внутрішній стан ─────────────────────────────────────────────────────
     private property <int>    selected-row: -1;
     private property <string> selected-id: "";
-    private property <string> selected-status: "";
+    private property <ActStatus> selected-status: ActStatus.draft;
     private property <string> selected-number: "";
     private property <int>    active-tab: 0;
 
@@ -88,6 +88,7 @@ export component ActList {
                 padding-left: 32px;
                 padding-right: 32px;
                 spacing: 16px;
+                alignment: center;
 
                 Text {
                     text: "Акти";
@@ -103,7 +104,6 @@ export component ActList {
                     border-radius: 8px;
                     height: 36px;
                     width: 140px;
-                    y: (parent.height - self.height) / 2;
 
                     Text {
                         text: "+ Новий акт";
@@ -133,14 +133,14 @@ export component ActList {
             height: 44px;
             background: Theme.surface;
 
-            property <[string]> _tab-names: ["Всі", "Чернетка", "Виставлені", "Підписані", "Оплачені"];
+            private property <[string]> tab-names: ["Всі", "Чернетка", "Виставлені", "Підписані", "Оплачені"];
 
             HorizontalLayout {
                 alignment: start;
                 padding-left: 32px;
                 spacing: 0;
 
-                for tab-name[ti] in _tab-names : Rectangle {
+                for tab-name[ti] in tab-names : Rectangle {
                     property <bool> is-active: root.active-tab == ti;
                     property <int>  tab-count: ti < root.status-counts.length
                         ? root.status-counts[ti] : 0;
@@ -343,18 +343,18 @@ export component ActList {
 
                             for row[i] in root.rows : Rectangle {
                                 // Визначаємо raw-статус для badge-кольору
-                                property <string> raw-status: row.status;
+                                property <ActStatus> raw-status: row.status;
                                 // Колір тексту badge
                                 property <color> badge-color:
-                                    raw-status == "paid"   ? Theme.success  :
-                                    raw-status == "signed" ? Theme.primary  :
-                                    raw-status == "issued" ? Theme.warning  :
+                                    raw-status == ActStatus.paid   ? Theme.success  :
+                                    raw-status == ActStatus.signed ? Theme.primary  :
+                                    raw-status == ActStatus.issued ? Theme.warning  :
                                     Theme.text-muted;
                                 // Фон badge (12% прозорість відповідного кольору)
                                 property <color> badge-bg:
-                                    raw-status == "paid"   ? Theme.success.with-alpha(0.12) :
-                                    raw-status == "signed" ? Theme.primary.with-alpha(0.10) :
-                                    raw-status == "issued" ? Theme.warning.with-alpha(0.12) :
+                                    raw-status == ActStatus.paid   ? Theme.success.with-alpha(0.12) :
+                                    raw-status == ActStatus.signed ? Theme.primary.with-alpha(0.10) :
+                                    raw-status == ActStatus.issued ? Theme.warning.with-alpha(0.12) :
                                     Theme.text-muted.with-alpha(0.12);
 
                                 height: 52px;
@@ -370,6 +370,7 @@ export component ActList {
                                 HorizontalLayout {
                                     padding-left: 15px;
                                     padding-right: 15px;
+                                    alignment: center;
 
                                     // Номер акту
                                     Text {
@@ -413,7 +414,6 @@ export component ActList {
                                     Rectangle {
                                         width: 100px;
                                         StatusBadge {
-                                            y: (parent.height - self.height) / 2;
                                             label: row.status-label;
                                             badge-color: badge-color;
                                             badge-bg: badge-bg;
@@ -425,14 +425,13 @@ export component ActList {
                                         width: 120px;
 
                                         HorizontalLayout {
-                                            alignment: start;
+                                            alignment: center;
                                             padding-left: 4px;
                                             spacing: 0;
 
                                             pdf-btn := Rectangle {
                                                 width: 46px;
                                                 height: 26px;
-                                                y: (parent.height - self.height) / 2;
                                                 border-radius: 6px;
                                                 background: pdf-btn-touch.has-hover
                                                     ? Theme.primary-light : Theme.btn-action-bg;
@@ -478,6 +477,7 @@ export component ActList {
                     height: 48px;
                     spacing: 8px;
                     vertical-stretch: 0;
+                    alignment: center;
 
                     // Назва вибраного акту
                     Text {
@@ -493,7 +493,6 @@ export component ActList {
                     // Кнопка "Редагувати" — вторинний стиль
                     ActionButton {
                         width: 130px;
-                        y: (parent.height - self.height) / 2;
                         text: "✎  Редагувати";
                         clicked => {
                             if root.selected-id != "" {
@@ -505,16 +504,15 @@ export component ActList {
                     // Кнопка "Наступний статус" — синя або сіра (paid = фінал)
                     ActionButton {
                         width: 180px;
-                        y: (parent.height - self.height) / 2;
                         text: "Наступний статус ▶";
                         primary: true;
-                        disabled: root.selected-status == "paid";
+                        disabled: root.selected-status == ActStatus.paid;
                         clicked => {
                             if root.selected-id != "" {
                                 root.advance-status-clicked(root.selected-id);
                                 root.selected-row    = -1;
                                 root.selected-id     = "";
-                                root.selected-status = "";
+                                root.selected-status = ActStatus.draft;
                                 root.selected-number = "";
                             }
                         }

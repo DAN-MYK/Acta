@@ -44,6 +44,7 @@ export component CompanyList {
                 padding-left: 32px;
                 padding-right: 32px;
                 spacing: 16px;
+                alignment: center;
 
                 Text {
                     text: "Компанії";
@@ -66,7 +67,6 @@ export component CompanyList {
                     border-radius: 8px;
                     height: 36px;
                     width: 180px;
-                    y: (parent.height - self.height) / 2;
 
                     Text {
                         text: "+ Нова компанія";
@@ -168,7 +168,7 @@ export component CompanyList {
                         }
 
                         // Рядки даних
-                        ListView {
+                        if !root.loading && root.companies.length > 0 : ListView {
                             vertical-stretch: 1;
 
                             for c[i] in root.companies : Rectangle {
@@ -178,9 +178,20 @@ export component CompanyList {
                                     : (row-touch.has-hover
                                         ? Theme.row-hover
                                         : (Math.mod(i, 2) == 0 ? Theme.surface : Theme.row-stripe));
-                                border-width: 1px;
-                                border-color: Theme.border;
                                 animate background { duration: 80ms; easing: ease; }
+
+                                // нижня межа для розділення рядків
+                                Rectangle {
+                                    y: parent.height - 1px;
+                                    height: 1px;
+                                    background: Theme.border;
+                                }
+
+                                // row-touch першим → нижчий z-order; кнопки дій після → вищий пріоритет
+                                row-touch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => { root.select(c.id); }
+                                }
 
                                 HorizontalLayout {
                                     padding-left: 16px;
@@ -191,13 +202,13 @@ export component CompanyList {
                                     HorizontalLayout {
                                         horizontal-stretch: 3;
                                         spacing: 10px;
+                                        alignment: center;
 
                                         Rectangle {
                                             width: 28px;
                                             height: 28px;
                                             border-radius: 14px;
                                             background: c.is-current ? Theme.primary : Theme.btn-action-bg;
-                                            y: (parent.height - self.height) / 2;
 
                                             Text {
                                                 text: c.initials;
@@ -232,7 +243,7 @@ export component CompanyList {
 
                                     // Кількість актів
                                     Text {
-                                        text: c.act-count + "";
+                                        text: "\{c.act-count}";
                                         color: Theme.text-sub;
                                         font-size: 13px;
                                         width: 60px;
@@ -256,12 +267,12 @@ export component CompanyList {
 
                                         HorizontalLayout {
                                             spacing: 6px;
+                                            alignment: center;
 
                                             // Обрати / Активна
                                             Rectangle {
                                                 width: 80px;
                                                 height: 26px;
-                                                y: (parent.height - self.height) / 2;
                                                 border-radius: 6px;
                                                 background: c.is-current ? Theme.btn-action-bg : Theme.primary;
 
@@ -284,7 +295,6 @@ export component CompanyList {
                                             Rectangle {
                                                 width: 38px;
                                                 height: 26px;
-                                                y: (parent.height - self.height) / 2;
                                                 border-radius: 6px;
                                                 background: Theme.btn-action-bg;
 
@@ -305,7 +315,6 @@ export component CompanyList {
                                             Rectangle {
                                                 width: 38px;
                                                 height: 26px;
-                                                y: (parent.height - self.height) / 2;
                                                 border-radius: 6px;
                                                 background: Theme.danger-light;
 
@@ -325,10 +334,6 @@ export component CompanyList {
                                     }
                                 }
 
-                                row-touch := TouchArea {
-                                    mouse-cursor: pointer;
-                                    clicked => { root.select(c.id); }
-                                }
                             }
                         }
                     }

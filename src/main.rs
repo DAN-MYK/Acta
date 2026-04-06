@@ -3439,12 +3439,11 @@ async fn main() -> Result<()> {
     let ui_weak_company_update = ui.as_weak();
     let active_company_id_company_update = active_company_id.clone();
 
-    ui.on_company_form_update(move |name, edrpou, iban, address, director, accountant, is_vat| {
-        let Some(ui_ref) = ui_weak_company_update.upgrade() else { return; };
-        let edit_id = ui_ref.get_company_form_edit_id().to_string();
+    ui.on_company_form_update(move |id, name, edrpou, iban, address, director, accountant, is_vat| {
         let pool = pool_company_update.clone();
         let ui_weak = ui_weak_company_update.clone();
         let active_company_id = active_company_id_company_update.clone();
+        let edit_id = id.to_string();
 
         tokio::spawn(async move {
             let Ok(uuid) = edit_id.parse::<uuid::Uuid>() else {
@@ -3621,7 +3620,12 @@ fn to_act_rows(acts: &[models::ActListRow]) -> Vec<ActRow> {
             counterparty: SharedString::from(a.counterparty_name.as_str()),
             amount: SharedString::from(format_amount_ua(a.total_amount).as_str()),
             status_label: SharedString::from(a.status.label()),
-            status: SharedString::from(a.status.as_str()),
+            status: match a.status {
+                ModelActStatus::Draft => ActStatus::Draft,
+                ModelActStatus::Issued => ActStatus::Issued,
+                ModelActStatus::Signed => ActStatus::Signed,
+                ModelActStatus::Paid => ActStatus::Paid,
+            },
         })
         .collect()
 }

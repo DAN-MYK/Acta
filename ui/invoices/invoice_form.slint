@@ -170,8 +170,10 @@ export component InvoiceForm inherits Rectangle {
                                         date-field.text,
                                         root.counterparty-ids[cp-combo.current-index],
                                         notes-field.text,
-                                        root.category-ids[inv-cat-combo.current-index],
-                                        root.contract-ids[inv-con-combo.current-index],
+                                        inv-cat-combo.current-index < root.category-ids.length
+                                            ? root.category-ids[inv-cat-combo.current-index] : "",
+                                        inv-con-combo.current-index < root.contract-ids.length
+                                            ? root.contract-ids[inv-con-combo.current-index] : "",
                                         inv-exp-date-field.text
                                     );
                                 } else {
@@ -180,8 +182,10 @@ export component InvoiceForm inherits Rectangle {
                                         date-field.text,
                                         root.counterparty-ids[cp-combo.current-index],
                                         notes-field.text,
-                                        root.category-ids[inv-cat-combo.current-index],
-                                        root.contract-ids[inv-con-combo.current-index],
+                                        inv-cat-combo.current-index < root.category-ids.length
+                                            ? root.category-ids[inv-cat-combo.current-index] : "",
+                                        inv-con-combo.current-index < root.contract-ids.length
+                                            ? root.contract-ids[inv-con-combo.current-index] : "",
                                         inv-exp-date-field.text
                                     );
                                 }

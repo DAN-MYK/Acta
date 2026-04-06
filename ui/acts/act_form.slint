@@ -21,7 +21,7 @@
 import { Theme } from "../theme.slint";
 import { LineEdit, TextEdit, ComboBox, ScrollView, ProgressIndicator, ListView } from "std-widgets.slint";
 import { StatusOption } from "../components/status_option.slint";
-import { TaskRow, FormItemRow } from "../structs.slint";
+import { ActStatus, TaskRow, FormItemRow } from "../structs.slint";
 
 // ── Головний компонент форми ───────────────────────────────────────────────
 component FieldLabel {
@@ -96,7 +96,7 @@ export component ActForm inherits Rectangle {
     // Статус: 0=Чернетка 1=Виставлений 2=Підписаний 3=Оплачений
     // in-out — щоб Rust міг встановити статус при редагуванні,
     // а Slint міг змінити через статус-пікер.
-    in-out property <int>  act-status: 0;
+    in-out property <ActStatus> act-status: ActStatus.draft;
 
     // ── Позиції акту ─────────────────────────────────────────────────────
     in property <[FormItemRow]> items;
@@ -184,9 +184,10 @@ export component ActForm inherits Rectangle {
                 }
 
                 HorizontalLayout {
-                    padding-left: 32px;
-                    padding-right: 32px;
-                    spacing: 8px;
+                padding-left: 32px;
+                padding-right: 32px;
+                spacing: 8px;
+                alignment: center;
 
                     // Breadcrumb (займає увесь вільний простір)
                     HorizontalLayout {
@@ -222,7 +223,6 @@ export component ActForm inherits Rectangle {
 
                     // Кнопка «Скасувати»
                     TopbarButton {
-                        y: (parent.height - self.height) / 2;
                         text: "Скасувати";
                         clicked => { root.cancel(); }
                     }
@@ -230,7 +230,6 @@ export component ActForm inherits Rectangle {
                     // Кнопка «Зберегти»
                     // Логіка: edit → update; draft-статус → save-draft; інакше → save
                     TopbarButton {
-                        y: (parent.height - self.height) / 2;
                         text: "Зберегти";
                         primary: true;
                         clicked => {
@@ -249,7 +248,7 @@ export component ActForm inherits Rectangle {
                                     con-combo.current-index < root.contract-ids.length ? root.contract-ids[con-combo.current-index] : "",
                                     exp-date-field.text
                                 );
-                            } else if (root.act-status == 0) {
+                            } else if (root.act-status == ActStatus.draft) {
                                 root.save-draft(
                                     number-field.text,
                                     date-field.text,
@@ -513,6 +512,7 @@ export component ActForm inherits Rectangle {
                                                 padding-top: 4px;
                                                 padding-bottom: 4px;
                                                 spacing: 8px;
+                                                alignment: center;
 
                                                 LineEdit {
                                                     text: item.description;
@@ -553,7 +553,6 @@ export component ActForm inherits Rectangle {
                                                 del-rect := Rectangle {
                                                     width: 36px;
                                                     height: 36px;
-                                                    y: (parent.height - self.height) / 2;
                                                     border-radius: 4px;
                                                     background: del-touch.has-hover ? Theme.danger-border : transparent;
                                                     animate background { duration: 100ms; easing: ease; }
@@ -932,30 +931,30 @@ export component ActForm inherits Rectangle {
                                 StatusOption {
                                     title: "Чернетка";
                                     subtitle: "Не відправлений";
-                                    selected: root.act-status == 0;
+                                    selected: root.act-status == ActStatus.draft;
                                     accent: Theme.text-sub;
-                                    clicked => { root.act-status = 0; }
+                                    clicked => { root.act-status = ActStatus.draft; }
                                 }
                                 StatusOption {
                                     title: "Виставлений";
                                     subtitle: "Очікує підпису";
-                                    selected: root.act-status == 1;
+                                    selected: root.act-status == ActStatus.issued;
                                     accent: Theme.warning;
-                                    clicked => { root.act-status = 1; }
+                                    clicked => { root.act-status = ActStatus.issued; }
                                 }
                                 StatusOption {
                                     title: "Підписаний";
                                     subtitle: "Підписаний сторонами";
-                                    selected: root.act-status == 2;
+                                    selected: root.act-status == ActStatus.signed;
                                     accent: Theme.primary;
-                                    clicked => { root.act-status = 2; }
+                                    clicked => { root.act-status = ActStatus.signed; }
                                 }
                                 StatusOption {
                                     title: "Оплачений";
                                     subtitle: "Кошти отримані";
-                                    selected: root.act-status == 3;
+                                    selected: root.act-status == ActStatus.paid;
                                     accent: Theme.success;
-                                    clicked => { root.act-status = 3; }
+                                    clicked => { root.act-status = ActStatus.paid; }
                                 }
                             }
                         }

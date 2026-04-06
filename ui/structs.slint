@@ -4,6 +4,13 @@
 //   замість `in property <[string]> row-ids; in property <[string]> row-dates; ...`
 //   використовується `in property <[PaymentRow]> rows;`
 
+export enum ActStatus {
+    draft,
+    issued,
+    signed,
+    paid,
+}
+
 export struct ActRow {
     id: string,
     num: string,
@@ -11,7 +18,7 @@ export struct ActRow {
     counterparty: string,
     amount: string,
     status-label: string,
-    status: string,        // "draft" | "issued" | "signed" | "paid"
+    status: ActStatus,
 }
 
 export struct InvoiceRow {
@@ -52,11 +59,4 @@ export struct FormItemRow {
     unit: string,
     price: string,
     amount: string,
-}
-
-export enum ActStatus {
-    draft,
-    issued,
-    signed,
-    paid,
 }

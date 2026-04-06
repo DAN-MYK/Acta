@@ -403,11 +403,11 @@ export component TaskList {
                         border-width: 1px;
                         border-color: Theme.danger-border;
                         height: 36px;
-                        width: 110px;
+                        width: root.delete-confirm-armed ? 150px : 110px;
                         y: (parent.height - self.height) / 2;
 
                         Text {
-                            text: root.delete-confirm-armed ? "Підтв. видалення" : "🗑  Видалити";
+                            text: root.delete-confirm-armed ? "Підтвердити" : "🗑  Видалити";
                             color: Theme.danger;
                             font-size: 13px;
                             font-weight: 500;
