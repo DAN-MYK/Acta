@@ -28,6 +28,16 @@ export component PaymentForm inherits Rectangle {
     private property <string> v-bank-ref: payment-bank-ref;
     private property <string> v-description: payment-description;
 
+    esc-handler := FocusScope {
+        key-pressed(event) => {
+            if (event.text == Key.Escape) {
+                root.cancel();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
     VerticalLayout {
         spacing: 0;
 

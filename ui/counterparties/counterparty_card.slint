@@ -52,6 +52,16 @@ export component CounterpartyCard {
 
     private property <int> active-tab: 0;
 
+    esc-handler := FocusScope {
+        key-pressed(event) => {
+            if (event.text == Key.Escape) {
+                root.close-clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
     Rectangle {
         background: Theme.bg-page;
 

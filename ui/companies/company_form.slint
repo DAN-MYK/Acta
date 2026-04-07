@@ -35,6 +35,16 @@ export component CompanyForm inherits Rectangle {
     private property v-accountant <=> accountant-edit.text;
     private property v-vat        <=> vat-check.checked;
 
+    esc-handler := FocusScope {
+        key-pressed(event) => {
+            if (event.text == Key.Escape) {
+                root.cancel();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
     VerticalLayout {
         spacing: 0;
 
