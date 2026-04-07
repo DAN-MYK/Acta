@@ -738,26 +738,6 @@ export component MainWindow inherits Window {
                 next-page-clicked   => { root.counterparty-next-page-clicked(); }
             }
 
-            // ── Сторінка 0: Контрагенти — форма ─────────────────────────────
-            if root.current-page == 0 && root.show-cp-form : CounterpartyForm {
-                width: parent.width;
-                height: parent.height;
-                is-edit-mode: root.cp-form-is-edit;
-                cp-edit-id:   root.cp-form-edit-id;
-                cp-name:      root.cp-form-name;
-                cp-edrpou:    root.cp-form-edrpou;
-                cp-ipn:       root.cp-form-ipn;
-                cp-iban:      root.cp-form-iban;
-                cp-phone:     root.cp-form-phone;
-                cp-email:     root.cp-form-email;
-                cp-address:   root.cp-form-address;
-                cp-notes:     root.cp-form-notes;
-
-                save(nm, ed, ip, ib, ph, em, ad, nt)    => { root.cp-form-save(nm, ed, ip, ib, ph, em, ad, nt); }
-                update(nm, ed, ip, ib, ph, em, ad, nt)  => { root.cp-form-update(nm, ed, ip, ib, ph, em, ad, nt); }
-                cancel                              => { root.cp-form-cancel(); }
-            }
-
             // ── Сторінка 1: Документи — список ────────────────────────────────
             if root.current-page == 1 && !root.show-act-form && !root.show-invoice-form : DocumentList {
                 width: parent.width;
@@ -1078,6 +1058,42 @@ export component MainWindow inherits Window {
                 edit-clicked            => { root.act-card-edit-clicked(root.act-card-id); }
                 pdf-clicked             => { root.act-card-pdf-clicked(root.act-card-id); }
                 advance-status-clicked(new-status)  => { root.act-card-advance-status-clicked(root.act-card-id, new-status); }
+            }
+        }
+    }
+
+    // ── Overlay: форма контрагента ────────────────────────────────────────────
+    if root.show-cp-form : Rectangle {
+        background: Theme.overlay;
+
+        Rectangle {
+            width: min(parent.width - 80px, 860px);
+            height: parent.height - 80px;
+            x: (parent.width  - self.width)  / 2;
+            y: (parent.height - self.height) / 2;
+            border-radius: 18px;
+            background: Theme.surface;
+            border-width: 1px;
+            border-color: Theme.border;
+            clip: true;
+
+            CounterpartyForm {
+                width: parent.width;
+                height: parent.height;
+                is-edit-mode: root.cp-form-is-edit;
+                cp-edit-id:   root.cp-form-edit-id;
+                cp-name:      root.cp-form-name;
+                cp-edrpou:    root.cp-form-edrpou;
+                cp-ipn:       root.cp-form-ipn;
+                cp-iban:      root.cp-form-iban;
+                cp-phone:     root.cp-form-phone;
+                cp-email:     root.cp-form-email;
+                cp-address:   root.cp-form-address;
+                cp-notes:     root.cp-form-notes;
+
+                save(nm, ed, ip, ib, ph, em, ad, nt)   => { root.cp-form-save(nm, ed, ip, ib, ph, em, ad, nt); }
+                update(nm, ed, ip, ib, ph, em, ad, nt)  => { root.cp-form-update(nm, ed, ip, ib, ph, em, ad, nt); }
+                cancel                               => { root.cp-form-cancel(); }
             }
         }
     }
