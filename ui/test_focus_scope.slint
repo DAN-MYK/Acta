@@ -1,0 +1,21 @@
+import { LineEdit } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+export component TestFocusScope inherits Rectangle {
+    callback cancel();
+    
+    focus-scope := FocusScope {
+        key-pressed(event) => {
+            if (event.text == Key.Escape) {
+                root.cancel();
+                return accept;
+            }
+            return reject;
+        }
+        
+        VerticalLayout {
+            spacing: 0;
+            LineEdit { }
+        }
+    }
+}

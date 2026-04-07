@@ -52,7 +52,7 @@ export component CounterpartyCard {
 
     private property <int> active-tab: 0;
 
-    esc-handler := FocusScope {
+    focus-scope := FocusScope {
         key-pressed(event) => {
             if (event.text == Key.Escape) {
                 root.close-clicked();
@@ -60,215 +60,215 @@ export component CounterpartyCard {
             }
             return reject;
         }
-    }
 
-    Rectangle {
-        background: Theme.bg-page;
+        Rectangle {
+            background: Theme.bg-page;
 
-        VerticalLayout {
-            padding: 24px;
-            spacing: 16px;
+            VerticalLayout {
+                padding: 24px;
+                spacing: 16px;
 
-            HorizontalLayout {
-                spacing: 12px;
-
-                VerticalLayout {
-                    horizontal-stretch: 1;
-                    spacing: 4px;
-
-                    Text {
-                        text: root.cp-name;
-                        font-size: 24px;
-                        font-weight: 700;
-                        color: Theme.text-primary;
-                    }
-
-                    Text {
-                        text: (root.cp-edrpou != "" ? "ЄДРПОУ " + root.cp-edrpou + "  " : "")
-                            + (root.cp-ipn != "" ? "ІПН " + root.cp-ipn : "");
-                        font-size: 13px;
-                        color: Theme.text-second;
-                    }
-                }
-
-                Button {
-                    text: "Редагувати";
-                    clicked => { root.edit-clicked(); }
-                }
-
-                Button {
-                    text: "Закрити";
-                    clicked => { root.close-clicked(); }
-                }
-            }
-
-            HorizontalLayout {
-                spacing: 12px;
-                for stat in [
-                    { label: "Акти",     value: root.stat-acts      },
-                    { label: "Рахунки",  value: root.stat-invoices  },
-                    { label: "Платежі",  value: root.stat-payments  },
-                    { label: "Договори", value: root.stat-contracts }
-                ]: Rectangle {
-                    horizontal-stretch: 1;
-                    height: 72px;
-                    border-radius: 14px;
-                    background: Theme.bg-card;
-                    border-width: 1px;
-                    border-color: Theme.border;
+                HorizontalLayout {
+                    spacing: 12px;
 
                     VerticalLayout {
-                        padding: 14px;
+                        horizontal-stretch: 1;
+                        spacing: 4px;
+
                         Text {
-                            text: stat.label;
-                            font-size: 12px;
-                            color: Theme.text-muted;
-                        }
-                        Text {
-                            text: stat.value;
+                            text: root.cp-name;
                             font-size: 24px;
                             font-weight: 700;
                             color: Theme.text-primary;
                         }
+
+                        Text {
+                            text: (root.cp-edrpou != "" ? "ЄДРПОУ " + root.cp-edrpou + "  " : "")
+                                + (root.cp-ipn != "" ? "ІПН " + root.cp-ipn : "");
+                            font-size: 13px;
+                            color: Theme.text-second;
+                        }
+                    }
+
+                    Button {
+                        text: "Редагувати";
+                        clicked => { root.edit-clicked(); }
+                    }
+
+                    Button {
+                        text: "Закрити";
+                        clicked => { root.close-clicked(); }
                     }
                 }
-            }
 
-            Rectangle {
-                background: Theme.bg-card;
-                border-width: 1px;
-                border-color: Theme.border;
-                border-radius: 16px;
-                vertical-stretch: 1;
+                HorizontalLayout {
+                    spacing: 12px;
+                    for stat in [
+                        { label: "Акти",     value: root.stat-acts      },
+                        { label: "Рахунки",  value: root.stat-invoices  },
+                        { label: "Платежі",  value: root.stat-payments  },
+                        { label: "Договори", value: root.stat-contracts }
+                    ]: Rectangle {
+                        horizontal-stretch: 1;
+                        height: 72px;
+                        border-radius: 14px;
+                        background: Theme.bg-card;
+                        border-width: 1px;
+                        border-color: Theme.border;
 
-                VerticalLayout {
-                    padding: 24px;
-                    spacing: 14px;
-
-                    HorizontalLayout {
-                        spacing: 8px;
-                        for label[i] in ["Акти", "Рахунки", "Платежі", "Договори", "Інформація", "To-Do"]: Rectangle {
-                            height: 34px;
-                            width: i == 4 ? 110px : 92px;
-                            border-radius: Theme.radius-md;
-                            background: root.active-tab == i ? Theme.primary : Theme.bg-gray;
-
+                        VerticalLayout {
+                            padding: 14px;
                             Text {
-                                text: label;
-                                color: root.active-tab == i ? Theme.text-white : Theme.text-second;
+                                text: stat.label;
                                 font-size: 12px;
-                                font-weight: root.active-tab == i ? 600 : 500;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
+                                color: Theme.text-muted;
                             }
-
-                            TouchArea {
-                                mouse-cursor: pointer;
-                                clicked => { root.active-tab = i; }
-                            }
-                        }
-                    }
-
-                    if root.active-tab == 0 : VerticalLayout {
-                        spacing: 8px;
-                        for row in root.acts: Rectangle {
-                            height: 38px;
-                            border-radius: 10px;
-                            background: Theme.bg-gray;
-                            HorizontalLayout {
-                                padding-left: 12px;
-                                padding-right: 12px;
-                                Text { text: row.number; width: 150px; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; }
-                                Text { text: row.date; width: 90px; font-size: 12px; color: Theme.text-second; vertical-alignment: center; }
-                                Text { text: row.amount; width: 120px; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; }
-                                Text { text: row.status; font-size: 12px; color: Theme.text-second; vertical-alignment: center; }
+                            Text {
+                                text: stat.value;
+                                font-size: 24px;
+                                font-weight: 700;
+                                color: Theme.text-primary;
                             }
                         }
                     }
+                }
 
-                    if root.active-tab == 1 : VerticalLayout {
-                        spacing: 8px;
-                        for row in root.invoices: Rectangle {
-                            height: 38px;
-                            border-radius: 10px;
-                            background: Theme.bg-gray;
-                            HorizontalLayout {
-                                padding-left: 12px;
-                                padding-right: 12px;
-                                Text { text: row.number; width: 150px; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; }
-                                Text { text: row.date; width: 90px; font-size: 12px; color: Theme.text-second; vertical-alignment: center; }
-                                Text { text: row.amount; width: 120px; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; }
-                                Text { text: row.status; font-size: 12px; color: Theme.text-second; vertical-alignment: center; }
+                Rectangle {
+                    background: Theme.bg-card;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    border-radius: 16px;
+                    vertical-stretch: 1;
+
+                    VerticalLayout {
+                        padding: 24px;
+                        spacing: 14px;
+
+                        HorizontalLayout {
+                            spacing: 8px;
+                            for label[i] in ["Акти", "Рахунки", "Платежі", "Договори", "Інформація", "To-Do"]: Rectangle {
+                                height: 34px;
+                                width: i == 4 ? 110px : 92px;
+                                border-radius: Theme.radius-md;
+                                background: root.active-tab == i ? Theme.primary : Theme.bg-gray;
+
+                                Text {
+                                    text: label;
+                                    color: root.active-tab == i ? Theme.text-white : Theme.text-second;
+                                    font-size: 12px;
+                                    font-weight: root.active-tab == i ? 600 : 500;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+
+                                TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => { root.active-tab = i; }
+                                }
                             }
                         }
-                    }
 
-                    if root.active-tab == 2 : VerticalLayout {
-                        spacing: 8px;
-                        for row in root.payments: Rectangle {
-                            height: 38px;
-                            border-radius: 10px;
-                            background: Theme.bg-gray;
-                            HorizontalLayout {
-                                padding-left: 12px;
-                                padding-right: 12px;
-                                Text { text: row.date; width: 90px; font-size: 12px; color: Theme.text-second; vertical-alignment: center; }
-                                Text { text: row.direction; width: 90px; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; }
-                                Text { text: row.amount; width: 120px; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; }
-                                Text { text: row.description; font-size: 12px; color: Theme.text-second; vertical-alignment: center; overflow: elide; }
+                        if root.active-tab == 0 : VerticalLayout {
+                            spacing: 8px;
+                            for row in root.acts: Rectangle {
+                                height: 38px;
+                                border-radius: 10px;
+                                background: Theme.bg-gray;
+                                HorizontalLayout {
+                                    padding-left: 12px;
+                                    padding-right: 12px;
+                                    Text { text: row.number; width: 150px; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; }
+                                    Text { text: row.date; width: 90px; font-size: 12px; color: Theme.text-second; vertical-alignment: center; }
+                                    Text { text: row.amount; width: 120px; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; }
+                                    Text { text: row.status; font-size: 12px; color: Theme.text-second; vertical-alignment: center; }
+                                }
                             }
                         }
-                    }
 
-                    if root.active-tab == 3 : VerticalLayout {
-                        spacing: 8px;
-                        for row in root.contracts: Rectangle {
-                            height: 38px;
-                            border-radius: 10px;
-                            background: Theme.bg-gray;
-                            HorizontalLayout {
-                                padding-left: 12px;
-                                padding-right: 12px;
-                                Text { text: row.number; width: 120px; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; }
-                                Text { text: row.subject; horizontal-stretch: 1; font-size: 12px; color: Theme.text-second; vertical-alignment: center; overflow: elide; }
-                                Text { text: row.amount; width: 100px; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; }
-                                Text { text: row.status; width: 90px; font-size: 12px; color: Theme.text-second; vertical-alignment: center; }
+                        if root.active-tab == 1 : VerticalLayout {
+                            spacing: 8px;
+                            for row in root.invoices: Rectangle {
+                                height: 38px;
+                                border-radius: 10px;
+                                background: Theme.bg-gray;
+                                HorizontalLayout {
+                                    padding-left: 12px;
+                                    padding-right: 12px;
+                                    Text { text: row.number; width: 150px; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; }
+                                    Text { text: row.date; width: 90px; font-size: 12px; color: Theme.text-second; vertical-alignment: center; }
+                                    Text { text: row.amount; width: 120px; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; }
+                                    Text { text: row.status; font-size: 12px; color: Theme.text-second; vertical-alignment: center; }
+                                }
                             }
                         }
-                    }
 
-                    if root.active-tab == 4 : VerticalLayout {
-                        spacing: 10px;
-                        for item in [
-                            { label: "IBAN",    value: root.cp-iban    },
-                            { label: "Телефон", value: root.cp-phone   },
-                            { label: "Email",   value: root.cp-email   },
-                            { label: "Адреса",  value: root.cp-address }
-                        ]: Rectangle {
-                            height: 38px;
-                            border-radius: 10px;
-                            background: Theme.bg-gray;
-                            HorizontalLayout {
-                                padding-left: 12px;
-                                padding-right: 12px;
-                                Text { text: item.label; width: 100px; font-size: 12px; color: Theme.text-muted; vertical-alignment: center; }
-                                Text { text: item.value == "" ? "—" : item.value; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; }
+                        if root.active-tab == 2 : VerticalLayout {
+                            spacing: 8px;
+                            for row in root.payments: Rectangle {
+                                height: 38px;
+                                border-radius: 10px;
+                                background: Theme.bg-gray;
+                                HorizontalLayout {
+                                    padding-left: 12px;
+                                    padding-right: 12px;
+                                    Text { text: row.date; width: 90px; font-size: 12px; color: Theme.text-second; vertical-alignment: center; }
+                                    Text { text: row.direction; width: 90px; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; }
+                                    Text { text: row.amount; width: 120px; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; }
+                                    Text { text: row.description; font-size: 12px; color: Theme.text-second; vertical-alignment: center; overflow: elide; }
+                                }
                             }
                         }
-                    }
 
-                    if root.active-tab == 5 : VerticalLayout {
-                        spacing: 8px;
-                        for row in root.tasks: Rectangle {
-                            height: 38px;
-                            border-radius: 10px;
-                            background: Theme.bg-gray;
-                            HorizontalLayout {
-                                padding-left: 12px;
-                                padding-right: 12px;
-                                Text { text: row.title; horizontal-stretch: 1; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; overflow: elide; }
-                                Text { text: row.due-date; width: 110px; font-size: 12px; color: Theme.text-second; vertical-alignment: center; }
-                                Text { text: row.status; width: 90px; font-size: 12px; color: Theme.text-second; vertical-alignment: center; }
+                        if root.active-tab == 3 : VerticalLayout {
+                            spacing: 8px;
+                            for row in root.contracts: Rectangle {
+                                height: 38px;
+                                border-radius: 10px;
+                                background: Theme.bg-gray;
+                                HorizontalLayout {
+                                    padding-left: 12px;
+                                    padding-right: 12px;
+                                    Text { text: row.number; width: 120px; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; }
+                                    Text { text: row.subject; horizontal-stretch: 1; font-size: 12px; color: Theme.text-second; vertical-alignment: center; overflow: elide; }
+                                    Text { text: row.amount; width: 100px; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; }
+                                    Text { text: row.status; width: 90px; font-size: 12px; color: Theme.text-second; vertical-alignment: center; }
+                                }
+                            }
+                        }
+
+                        if root.active-tab == 4 : VerticalLayout {
+                            spacing: 10px;
+                            for item in [
+                                { label: "IBAN",    value: root.cp-iban    },
+                                { label: "Телефон", value: root.cp-phone   },
+                                { label: "Email",   value: root.cp-email   },
+                                { label: "Адреса",  value: root.cp-address }
+                            ]: Rectangle {
+                                height: 38px;
+                                border-radius: 10px;
+                                background: Theme.bg-gray;
+                                HorizontalLayout {
+                                    padding-left: 12px;
+                                    padding-right: 12px;
+                                    Text { text: item.label; width: 100px; font-size: 12px; color: Theme.text-muted; vertical-alignment: center; }
+                                    Text { text: item.value == "" ? "—" : item.value; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; }
+                                }
+                            }
+                        }
+
+                        if root.active-tab == 5 : VerticalLayout {
+                            spacing: 8px;
+                            for row in root.tasks: Rectangle {
+                                height: 38px;
+                                border-radius: 10px;
+                                background: Theme.bg-gray;
+                                HorizontalLayout {
+                                    padding-left: 12px;
+                                    padding-right: 12px;
+                                    Text { text: row.title; horizontal-stretch: 1; font-size: 12px; color: Theme.text-primary; vertical-alignment: center; overflow: elide; }
+                                    Text { text: row.due-date; width: 110px; font-size: 12px; color: Theme.text-second; vertical-alignment: center; }
+                                    Text { text: row.status; width: 90px; font-size: 12px; color: Theme.text-second; vertical-alignment: center; }
+                                }
                             }
                         }
                     }

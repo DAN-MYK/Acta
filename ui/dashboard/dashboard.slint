@@ -1,7 +1,7 @@
-// dashboard.slint — Головна сторінка (Dashboard)
+// dashboard.slint - Головна сторінка (Dashboard)
 // Відповідає макету Figma: DashboardScreen
 
-import { Theme }      from "../theme.slint";
+import { Theme } from "../theme.slint";
 import { StatusBadge, KpiCard, Topbar } from "../components/shared.slint";
 
 export struct DashboardActRow {
@@ -13,15 +13,12 @@ export struct DashboardActRow {
 }
 
 export struct DashboardPaymentRow {
-    date-label:  string,
-    contractor:  string,
-    amount:      string,
-    is-overdue:  bool,
+    date-label: string,
+    contractor: string,
+    amount:     string,
+    is-overdue: bool,
 }
 
-// ────────────────────────────────────────────────────────────
-// DashboardPage — публічний API (зберігаємо сумісність з Rust)
-// ────────────────────────────────────────────────────────────
 export component DashboardPage {
     in property <string> kpi-revenue:        "0 ₴";
     in property <string> kpi-revenue-trend:  "";
@@ -33,7 +30,7 @@ export component DashboardPage {
     in property <string> kpi-cp-trend:       "";
     in property <string> current-month-label: "";
 
-    in property <[string]> chart-bar-labels:       ["", "", "", "", "", ""];
+    in property <[string]> chart-bar-labels:        ["", "", "", "", "", ""];
     in property <[string]> chart-bar-value-labels:  ["", "", "", "", "", ""];
     in property <[float]>  chart-bar-fractions:     [0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 
@@ -57,342 +54,363 @@ export component DashboardPage {
     VerticalLayout {
         spacing: 0;
 
-        // ── Topbar ───────────────────────────────────────
         Topbar {
-            title:    "Головна";
+            title: "Головна";
             subtitle: root.current-month-label;
             btn-label: "+ Новий акт";
             btn-clicked => { root.new-act-clicked(); }
         }
 
-        // ── Content ──────────────────────────────────────
         Rectangle {
             background: Theme.bg-page;
             vertical-stretch: 1;
 
-            // ── KPI ──────────────────────────────────────
-            HorizontalLayout {
-                x: 32px; y: 16px;
-                width: parent.width - 64px;
-                height: 100px;
+            VerticalLayout {
+                alignment: start;
+                padding-left: 32px;
+                padding-right: 32px;
+                padding-top: 16px;
+                padding-bottom: 16px;
                 spacing: 16px;
 
-                KpiCard {
-                    horizontal-stretch: 1;
-                    accent: Theme.success;
-                    value: root.kpi-revenue;
-                    label: "Виручка (місяць)";
-                    trend: root.kpi-revenue-trend;
-                    trend-color: Theme.success;
-                }
-                KpiCard {
-                    horizontal-stretch: 1;
-                    accent: Theme.warning;
-                    value: root.kpi-unpaid;
-                    label: "Неоплачено";
-                    trend: root.kpi-unpaid-trend;
-                    trend-color: Theme.warning;
-                }
-                KpiCard {
-                    horizontal-stretch: 1;
-                    accent: Theme.primary;
-                    value: root.kpi-acts-month;
-                    label: "Актів за місяць";
-                    trend: root.kpi-acts-trend;
-                    trend-color: Theme.success;
-                }
-                KpiCard {
-                    horizontal-stretch: 1;
-                    accent: Theme.purple;
-                    value: root.kpi-counterparties;
-                    label: "Контрагенти";
-                    trend: root.kpi-cp-trend;
-                    trend-color: Theme.success;
-                }
-            }
+                HorizontalLayout {
+                    height: 100px;
+                    spacing: 16px;
 
-            // ── Графік виручки ───────────────────────────
-            Rectangle {
-                x: 32px; y: 132px;
-                width: (parent.width - 84px) * 0.65;
-                height: 260px;
-                border-radius: Theme.radius-lg;
-                background: Theme.bg-card;
-                border-width: 1px; border-color: Theme.border;
-                drop-shadow-blur: 10px;
-                drop-shadow-color: rgba(0,0,0,5%);
-                drop-shadow-offset-y: 1px;
-
-                Text { x: 24px; y: 20px; text: "Виручка по місяцях"; font-size: 15px; font-weight: 600; color: Theme.text-primary; }
-                Text { x: 24px; y: 40px; text: "Останні 6 місяців · грн"; font-size: Theme.font-base; color: Theme.text-second; }
-
-                // Сітка
-                Rectangle { x: 60px; y: 72px;  width: parent.width - 90px; height: 1px; background: Theme.border; }
-                Rectangle { x: 60px; y: 129px; width: parent.width - 90px; height: 1px; background: Theme.border; }
-                Rectangle { x: 60px; y: 186px; width: parent.width - 90px; height: 1px; background: Theme.border; }
-                Rectangle { x: 60px; y: 242px; width: parent.width - 90px; height: 1px; background: Theme.border; }
-
-                Text { x: 8px; y: 66px;  text: "200k"; font-size: Theme.font-sm; color: Theme.text-second; }
-                Text { x: 8px; y: 123px; text: "150k"; font-size: Theme.font-sm; color: Theme.text-second; }
-                Text { x: 8px; y: 180px; text: "100k"; font-size: Theme.font-sm; color: Theme.text-second; }
-                Text { x: 8px; y: 236px; text: "50k";  font-size: Theme.font-sm; color: Theme.text-second; }
-
-                for idx in [0, 1, 2, 3, 4, 5]: Rectangle {
-                    private property <length> bar-h: root.chart-bar-fractions[idx] > 0
-                        ? 146px * root.chart-bar-fractions[idx] : 2px;
-                    x: 60px + idx * 100px;
-                    y: 227px - self.bar-h;
-                    width: 62px;
-                    height: self.bar-h;
-                    border-top-left-radius: 4px;
-                    border-top-right-radius: 4px;
-                    background: idx == 5 ? Theme.primary : #D6DFF7;
-
-                    Text {
-                        x: 0; y: -18px; width: 62px;
-                        horizontal-alignment: center;
-                        text: root.chart-bar-value-labels[idx];
-                        font-size: Theme.font-sm;
-                        font-weight: idx == 5 ? 600 : 400;
-                        color: idx == 5 ? Theme.primary : Theme.text-second;
+                    KpiCard {
+                        horizontal-stretch: 1;
+                        accent: Theme.success;
+                        value: root.kpi-revenue;
+                        label: "Виручка (місяць)";
+                        trend: root.kpi-revenue-trend;
+                        trend-color: Theme.success;
+                    }
+                    KpiCard {
+                        horizontal-stretch: 1;
+                        accent: Theme.warning;
+                        value: root.kpi-unpaid;
+                        label: "Неоплачено";
+                        trend: root.kpi-unpaid-trend;
+                        trend-color: Theme.warning;
+                    }
+                    KpiCard {
+                        horizontal-stretch: 1;
+                        accent: Theme.primary;
+                        value: root.kpi-acts-month;
+                        label: "Актів за місяць";
+                        trend: root.kpi-acts-trend;
+                        trend-color: Theme.success;
+                    }
+                    KpiCard {
+                        horizontal-stretch: 1;
+                        accent: Theme.purple;
+                        value: root.kpi-counterparties;
+                        label: "Контрагенти";
+                        trend: root.kpi-cp-trend;
+                        trend-color: Theme.success;
                     }
                 }
 
-                // Підписи осі X (окремий цикл — нижче всіх стовпців)
-                for idx in [0, 1, 2, 3, 4, 5]: Text {
-                    x: 60px + idx * 100px;
-                    y: 244px;
-                    width: 62px;
-                    horizontal-alignment: center;
-                    text: root.chart-bar-labels[idx];
-                    font-size: Theme.font-sm;
-                    color: Theme.text-second;
-                }
-            }
-
-            // ── Статуси актів ─────────────────────────────
-            Rectangle {
-                x: 32px + (parent.width - 84px) * 0.65 + 20px;
-                y: 132px;
-                width: (parent.width - 84px) * 0.35;
-                height: 260px;
-                border-radius: Theme.radius-lg;
-                background: Theme.bg-card;
-                border-width: 1px; border-color: Theme.border;
-                drop-shadow-blur: 10px;
-                drop-shadow-color: rgba(0,0,0,5%);
-                drop-shadow-offset-y: 1px;
-
-                Text { x: 24px; y: 20px; text: "Статуси актів"; font-size: 15px; font-weight: 600; color: Theme.text-primary; }
-                Text { x: 24px; y: 40px; text: "Поточний місяць"; font-size: Theme.font-base; color: Theme.text-second; }
-
-                // Стилізоване кільце
-                Rectangle {
-                    x: 24px; y: 64px; width: 116px; height: 116px;
-                    border-radius: 58px;
-                    border-width: 16px;
-                    border-color: Theme.primary;
-                    Text { x: 0; y: 30px; width: 116px; horizontal-alignment: center;
-                        text: "\{root.status-paid + root.status-issued + root.status-signed + root.status-draft}";
-                        font-size: Theme.font-3xl; font-weight: 700; color: Theme.text-primary; }
-                    Text { x: 0; y: 60px; width: 116px; horizontal-alignment: center; text: "актів"; font-size: Theme.font-sm; color: Theme.text-muted; }
-                }
-
-                // Легенда
-                Rectangle { x: 157px; y: 68px;  width: 10px; height: 10px; border-radius: 5px; background: Theme.success; }
-                Text { x: 173px; y: 64px;  text: "Оплачені";   font-size: Theme.font-base; color: Theme.text-primary; }
-                Text { x: parent.width - 42px; y: 64px;  text: "\{root.status-paid}";   font-size: Theme.font-base; font-weight: 600; color: Theme.success; }
-
-                Rectangle { x: 157px; y: 104px; width: 10px; height: 10px; border-radius: 5px; background: Theme.primary; }
-                Text { x: 173px; y: 100px; text: "Виставлені";  font-size: Theme.font-base; color: Theme.text-primary; }
-                Text { x: parent.width - 42px; y: 100px; text: "\{root.status-issued}"; font-size: Theme.font-base; font-weight: 600; color: Theme.primary; }
-
-                Rectangle { x: 157px; y: 140px; width: 10px; height: 10px; border-radius: 5px; background: Theme.warning; }
-                Text { x: 173px; y: 136px; text: "Підписані";   font-size: Theme.font-base; color: Theme.text-primary; }
-                Text { x: parent.width - 42px; y: 136px; text: "\{root.status-signed}"; font-size: Theme.font-base; font-weight: 600; color: Theme.text-second; }
-
-                Rectangle { x: 157px; y: 176px; width: 10px; height: 10px; border-radius: 5px; background: Theme.text-muted; }
-                Text { x: 173px; y: 172px; text: "Чернетки";    font-size: Theme.font-base; color: Theme.text-primary; }
-                Text { x: parent.width - 42px; y: 172px; text: "\{root.status-draft}";  font-size: Theme.font-base; font-weight: 600; color: Theme.text-muted; }
-            }
-
-            // ── Таблиця останніх актів ────────────────────
-            Rectangle {
-                x: 32px; y: 408px;
-                width: (parent.width - 84px) * 0.65;
-                height: 316px;
-                border-radius: Theme.radius-lg;
-                background: Theme.bg-card;
-                border-width: 1px; border-color: Theme.border;
-                drop-shadow-blur: 10px;
-                drop-shadow-color: rgba(0,0,0,5%);
-                drop-shadow-offset-y: 1px;
-                clip: true;
-
-                Text { x: 24px; y: 20px; text: "Останні акти"; font-size: 15px; font-weight: 600; color: Theme.text-primary; }
-
-                link-touch := TouchArea {
-                    x: parent.width - 100px; y: 18px;
-                    width: 80px; height: 20px;
-                    mouse-cursor: pointer;
-                    clicked => { root.all-acts-clicked(); }
-                    Text { x: 0; y: 0; text: "Всі акти →"; font-size: Theme.font-base; font-weight: 600; color: Theme.primary; }
-                }
-
-                // Заголовок таблиці
-                Rectangle {
-                    x: 0; y: 48px;
-                    width: parent.width; height: 36px;
-                    background: Theme.bg-gray-soft;
-                    Text { x: 24px;  y: 12px; text: "Номер ↕";      font-size: Theme.font-base; font-weight: 600; color: Theme.text-second; }
-                    Text { x: 160px; y: 12px; text: "Контрагент ↕"; font-size: Theme.font-base; font-weight: 600; color: Theme.text-second; }
-                    Text { x: 440px; y: 12px; text: "Сума ↕";       font-size: Theme.font-base; font-weight: 600; color: Theme.text-second; }
-                    Text { x: 556px; y: 12px; text: "Статус ↕";     font-size: Theme.font-base; font-weight: 600; color: Theme.text-second; }
-                    Text { x: 668px; y: 12px; text: "Дата ↕";       font-size: Theme.font-base; font-weight: 600; color: Theme.text-second; }
-                }
-
-                // Рядки
-                for row[i] in root.recent-acts: TouchArea {
-                    x: 0; y: 84px + i * 52px;
-                    width: parent.width; height: 52px;
+                HorizontalLayout {
+                    height: 260px;
+                    spacing: 20px;
 
                     Rectangle {
-                        width: parent.width; height: 52px;
-                        background: i == 0 ? Theme.bg-hover
-                            : (Math.mod(i, 2) == 0 ? Theme.bg-card : Theme.bg-alt);
+                        horizontal-stretch: 65;
+                        height: 260px;
+                        border-radius: Theme.radius-lg;
+                        background: Theme.bg-card;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        drop-shadow-blur: 10px;
+                        drop-shadow-color: rgba(0, 0, 0, 5%);
+                        drop-shadow-offset-y: 1px;
 
-                        // Акцентна смужка першого рядка
-                        if i == 0: Rectangle {
-                            x: 0; y: 0; width: 3px; height: 52px;
-                            background: Theme.primary; border-radius: 1px;
+                        Text { x: 24px; y: 20px; text: "Виручка по місяцях"; font-size: 15px; font-weight: 600; color: Theme.text-primary; }
+                        Text { x: 24px; y: 40px; text: "Останні 6 місяців · грн"; font-size: Theme.font-base; color: Theme.text-second; }
+
+                        Rectangle { x: 60px; y: 72px;  width: parent.width - 90px; height: 1px; background: Theme.border; }
+                        Rectangle { x: 60px; y: 129px; width: parent.width - 90px; height: 1px; background: Theme.border; }
+                        Rectangle { x: 60px; y: 186px; width: parent.width - 90px; height: 1px; background: Theme.border; }
+                        Rectangle { x: 60px; y: 242px; width: parent.width - 90px; height: 1px; background: Theme.border; }
+
+                        Text { x: 8px; y: 66px;  text: "200k"; font-size: Theme.font-sm; color: Theme.text-second; }
+                        Text { x: 8px; y: 123px; text: "150k"; font-size: Theme.font-sm; color: Theme.text-second; }
+                        Text { x: 8px; y: 180px; text: "100k"; font-size: Theme.font-sm; color: Theme.text-second; }
+                        Text { x: 8px; y: 236px; text: "50k";  font-size: Theme.font-sm; color: Theme.text-second; }
+
+                        for idx in [0, 1, 2, 3, 4, 5]: Rectangle {
+                            private property <length> bar-h: root.chart-bar-fractions[idx] > 0
+                                ? 146px * root.chart-bar-fractions[idx] : 2px;
+                            x: 60px + idx * 100px;
+                            y: 227px - self.bar-h;
+                            width: 62px;
+                            height: self.bar-h;
+                            border-top-left-radius: 4px;
+                            border-top-right-radius: 4px;
+                            background: idx == 5 ? Theme.primary : #D6DFF7;
+
+                            Text {
+                                x: 0; y: -18px; width: 62px;
+                                horizontal-alignment: center;
+                                text: root.chart-bar-value-labels[idx];
+                                font-size: Theme.font-sm;
+                                font-weight: idx == 5 ? 600 : 400;
+                                color: idx == 5 ? Theme.primary : Theme.text-second;
+                            }
                         }
 
-                        Text { x: 24px;  y: 18px; text: row.num;        font-size: Theme.font-md; font-weight: 600; color: Theme.primary; }
-                        Text { x: 160px; y: 18px; text: row.contractor;  font-size: Theme.font-base; color: Theme.text-primary; width: 260px; overflow: elide; }
-                        Text { x: 440px; y: 18px; text: row.amount;      font-size: Theme.font-md; font-weight: 600; color: Theme.text-primary; }
-                        StatusBadge { x: 556px; y: 14px; status: row.status; }
-                        Text { x: 668px; y: 18px; text: row.date;        font-size: Theme.font-base; color: Theme.text-second; }
-
-                        if i < root.recent-acts.length - 1: Rectangle {
-                            x: 24px; y: 51px;
-                            width: parent.width - 48px; height: 1px;
-                            background: Theme.border;
-                        }
-                    }
-                }
-
-                if root.recent-acts.length == 0: Text {
-                    x: 24px; y: 100px;
-                    text: "Ще немає жодного акту.";
-                    font-size: Theme.font-md;
-                    color: Theme.text-muted;
-                }
-            }
-
-            // ── To-Do ─────────────────────────────────────
-            Rectangle {
-                x: 32px + (parent.width - 84px) * 0.65 + 20px;
-                y: 408px;
-                width: (parent.width - 84px) * 0.35;
-                height: 148px;
-                border-radius: Theme.radius-lg;
-                background: Theme.bg-card;
-                border-width: 1px; border-color: Theme.border;
-                drop-shadow-blur: 10px;
-                drop-shadow-color: rgba(0,0,0,5%);
-                drop-shadow-offset-y: 1px;
-
-                Text { x: 24px; y: 20px; text: "To-Do"; font-size: Theme.font-lg; font-weight: 600; color: Theme.text-primary; }
-
-                todo-touch := TouchArea {
-                    x: parent.width - 80px; y: 22px;
-                    width: 64px; height: 18px;
-                    mouse-cursor: pointer;
-                    clicked => { root.add-todo-clicked(); }
-                    Text { x: 0; y: 0; text: "Додати →"; font-size: Theme.font-base; font-weight: 500; color: Theme.primary; }
-                }
-
-                // Рядок 1 — незавершений
-                Rectangle {
-                    x: 24px; y: 52px; width: 16px; height: 16px;
-                    border-radius: 4px; border-width: 1px; border-color: Theme.border;
-                    background: Theme.bg-card;
-                }
-                Text { x: 48px; y: 54px; text: "Надіслати акт АКТ-2026-012"; font-size: Theme.font-base; color: Theme.text-primary; }
-
-                // Рядок 2 — завершений
-                Rectangle {
-                    x: 24px; y: 84px; width: 16px; height: 16px;
-                    border-radius: 4px; background: Theme.success;
-                    Text { x: 0; y: 1px; width: 16px; height: 16px; horizontal-alignment: center; vertical-alignment: center; text: "✓"; font-size: Theme.font-sm; font-weight: 700; color: white; }
-                }
-                Text { x: 48px; y: 86px; text: "Уточнити реквізити ФОП Петренко"; font-size: Theme.font-base; color: Theme.text-muted; }
-
-                // Рядок 3 — незавершений
-                Rectangle {
-                    x: 24px; y: 116px; width: 16px; height: 16px;
-                    border-radius: 4px; border-width: 1px; border-color: Theme.border;
-                    background: Theme.bg-card;
-                }
-                Text { x: 48px; y: 118px; text: "Перевірити оплату ТОВ Медіа Груп"; font-size: Theme.font-base; color: Theme.text-primary; }
-            }
-
-            // ── Очікувані платежі ─────────────────────────
-            Rectangle {
-                x: 32px + (parent.width - 84px) * 0.65 + 20px;
-                y: 572px;
-                width: (parent.width - 84px) * 0.35;
-                height: 148px;
-                border-radius: Theme.radius-lg;
-                background: Theme.bg-card;
-                border-width: 1px; border-color: Theme.border;
-                drop-shadow-blur: 10px;
-                drop-shadow-color: rgba(0,0,0,5%);
-                drop-shadow-offset-y: 1px;
-
-                Text { x: 24px; y: 20px; text: "Очікувані платежі"; font-size: Theme.font-lg; font-weight: 600; color: Theme.text-primary; }
-
-                for p[i] in root.upcoming-payments: Rectangle {
-                    x: 24px; y: 52px + i * 28px;
-                    width: parent.width - 48px; height: 28px;
-
-                    Rectangle {
-                        x: 0; y: 0; width: 54px; height: 20px;
-                        border-radius: Theme.radius-sm;
-                        background: p.is-overdue ? Theme.bg-danger : Theme.bg-warning;
-                        Text {
-                            x: 0; y: 4px; width: 54px;
+                        for idx in [0, 1, 2, 3, 4, 5]: Text {
+                            x: 60px + idx * 100px;
+                            y: 244px;
+                            width: 62px;
                             horizontal-alignment: center;
-                            text: p.date-label;
-                            font-size: Theme.font-xs;
-                            font-weight: 600;
-                            color: p.is-overdue ? Theme.danger : Theme.warning;
+                            text: root.chart-bar-labels[idx];
+                            font-size: Theme.font-sm;
+                            color: Theme.text-second;
                         }
                     }
 
-                    Text {
-                        x: 64px; y: 3px;
-                        width: parent.width - 130px;
-                        text: p.contractor;
-                        font-size: Theme.font-base;
-                        color: p.is-overdue ? Theme.danger : Theme.text-primary;
-                        overflow: elide;
-                    }
+                    Rectangle {
+                        horizontal-stretch: 35;
+                        height: 260px;
+                        border-radius: Theme.radius-lg;
+                        background: Theme.bg-card;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        drop-shadow-blur: 10px;
+                        drop-shadow-color: rgba(0, 0, 0, 5%);
+                        drop-shadow-offset-y: 1px;
 
-                    Text {
-                        x: parent.width - 88px; y: 3px;
-                        text: p.amount;
-                        font-size: Theme.font-base;
-                        font-weight: 600;
-                        color: p.is-overdue ? Theme.danger : Theme.text-primary;
+                        Text { x: 24px; y: 20px; text: "Статуси актів"; font-size: 15px; font-weight: 600; color: Theme.text-primary; }
+                        Text { x: 24px; y: 40px; text: "Поточний місяць"; font-size: Theme.font-base; color: Theme.text-second; }
+
+                        Rectangle {
+                            x: 24px; y: 64px; width: 116px; height: 116px;
+                            border-radius: 58px;
+                            border-width: 16px;
+                            border-color: Theme.primary;
+
+                            Text {
+                                x: 0; y: 30px; width: 116px;
+                                horizontal-alignment: center;
+                                text: "\{root.status-paid + root.status-issued + root.status-signed + root.status-draft}";
+                                font-size: Theme.font-3xl;
+                                font-weight: 700;
+                                color: Theme.text-primary;
+                            }
+                            Text {
+                                x: 0; y: 60px; width: 116px;
+                                horizontal-alignment: center;
+                                text: "актів";
+                                font-size: Theme.font-sm;
+                                color: Theme.text-muted;
+                            }
+                        }
+
+                        Rectangle { x: 157px; y: 68px;  width: 10px; height: 10px; border-radius: 5px; background: Theme.success; }
+                        Text { x: 173px; y: 64px;  text: "Оплачені";   font-size: Theme.font-base; color: Theme.text-primary; }
+                        Text { x: parent.width - 42px; y: 64px;  text: "\{root.status-paid}";   font-size: Theme.font-base; font-weight: 600; color: Theme.success; }
+
+                        Rectangle { x: 157px; y: 104px; width: 10px; height: 10px; border-radius: 5px; background: Theme.primary; }
+                        Text { x: 173px; y: 100px; text: "Виставлені";  font-size: Theme.font-base; color: Theme.text-primary; }
+                        Text { x: parent.width - 42px; y: 100px; text: "\{root.status-issued}"; font-size: Theme.font-base; font-weight: 600; color: Theme.primary; }
+
+                        Rectangle { x: 157px; y: 140px; width: 10px; height: 10px; border-radius: 5px; background: Theme.warning; }
+                        Text { x: 173px; y: 136px; text: "Підписані";   font-size: Theme.font-base; color: Theme.text-primary; }
+                        Text { x: parent.width - 42px; y: 136px; text: "\{root.status-signed}"; font-size: Theme.font-base; font-weight: 600; color: Theme.text-second; }
+
+                        Rectangle { x: 157px; y: 176px; width: 10px; height: 10px; border-radius: 5px; background: Theme.text-muted; }
+                        Text { x: 173px; y: 172px; text: "Чернетки";    font-size: Theme.font-base; color: Theme.text-primary; }
+                        Text { x: parent.width - 42px; y: 172px; text: "\{root.status-draft}";  font-size: Theme.font-base; font-weight: 600; color: Theme.text-muted; }
                     }
                 }
 
-                if root.upcoming-payments.length == 0: Text {
-                    x: 24px; y: 56px;
-                    text: "Немає очікуваних платежів";
-                    font-size: Theme.font-base;
-                    color: Theme.text-muted;
+                HorizontalLayout {
+                    height: 316px;
+                    spacing: 20px;
+
+                    Rectangle {
+                        horizontal-stretch: 65;
+                        height: 316px;
+                        border-radius: Theme.radius-lg;
+                        background: Theme.bg-card;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        drop-shadow-blur: 10px;
+                        drop-shadow-color: rgba(0, 0, 0, 5%);
+                        drop-shadow-offset-y: 1px;
+                        clip: true;
+
+                        Text { x: 24px; y: 20px; text: "Останні акти"; font-size: 15px; font-weight: 600; color: Theme.text-primary; }
+
+                        link-touch := TouchArea {
+                            x: parent.width - 100px; y: 18px;
+                            width: 80px; height: 20px;
+                            mouse-cursor: pointer;
+                            clicked => { root.all-acts-clicked(); }
+                            Text { x: 0; y: 0; text: "Всі акти →"; font-size: Theme.font-base; font-weight: 600; color: Theme.primary; }
+                        }
+
+                        Rectangle {
+                            x: 0; y: 48px;
+                            width: parent.width; height: 36px;
+                            background: Theme.bg-gray-soft;
+                            Text { x: 24px;  y: 12px; text: "Номер ↕";      font-size: Theme.font-base; font-weight: 600; color: Theme.text-second; }
+                            Text { x: 160px; y: 12px; text: "Контрагент ↕"; font-size: Theme.font-base; font-weight: 600; color: Theme.text-second; }
+                            Text { x: 440px; y: 12px; text: "Сума ↕";       font-size: Theme.font-base; font-weight: 600; color: Theme.text-second; }
+                            Text { x: 556px; y: 12px; text: "Статус ↕";     font-size: Theme.font-base; font-weight: 600; color: Theme.text-second; }
+                            Text { x: 668px; y: 12px; text: "Дата ↕";       font-size: Theme.font-base; font-weight: 600; color: Theme.text-second; }
+                        }
+
+                        for row[i] in root.recent-acts: TouchArea {
+                            x: 0; y: 84px + i * 52px;
+                            width: parent.width; height: 52px;
+
+                            Rectangle {
+                                width: parent.width;
+                                height: 52px;
+                                background: i == 0 ? Theme.bg-hover
+                                    : (Math.mod(i, 2) == 0 ? Theme.bg-card : Theme.bg-alt);
+
+                                if i == 0: Rectangle {
+                                    x: 0; y: 0; width: 3px; height: 52px;
+                                    background: Theme.primary;
+                                    border-radius: 1px;
+                                }
+
+                                Text { x: 24px;  y: 18px; text: row.num;        font-size: Theme.font-md; font-weight: 600; color: Theme.primary; }
+                                Text { x: 160px; y: 18px; text: row.contractor;  font-size: Theme.font-base; color: Theme.text-primary; width: 260px; overflow: elide; }
+                                Text { x: 440px; y: 18px; text: row.amount;      font-size: Theme.font-md; font-weight: 600; color: Theme.text-primary; }
+                                StatusBadge { x: 556px; y: 14px; status: row.status; }
+                                Text { x: 668px; y: 18px; text: row.date;        font-size: Theme.font-base; color: Theme.text-second; }
+
+                                if i < root.recent-acts.length - 1: Rectangle {
+                                    x: 24px; y: 51px;
+                                    width: parent.width - 48px; height: 1px;
+                                    background: Theme.border;
+                                }
+                            }
+                        }
+
+                        if root.recent-acts.length == 0: Text {
+                            x: 24px; y: 100px;
+                            text: "Ще немає жодного акту.";
+                            font-size: Theme.font-md;
+                            color: Theme.text-muted;
+                        }
+                    }
+
+                    VerticalLayout {
+                        horizontal-stretch: 35;
+                        height: 316px;
+                        spacing: 16px;
+                        alignment: start;
+
+                        Rectangle {
+                            height: 148px;
+                            border-radius: Theme.radius-lg;
+                            background: Theme.bg-card;
+                            border-width: 1px;
+                            border-color: Theme.border;
+                            drop-shadow-blur: 10px;
+                            drop-shadow-color: rgba(0, 0, 0, 5%);
+                            drop-shadow-offset-y: 1px;
+
+                            Text { x: 24px; y: 20px; text: "To-Do"; font-size: Theme.font-lg; font-weight: 600; color: Theme.text-primary; }
+
+                            todo-touch := TouchArea {
+                                x: parent.width - 80px; y: 22px;
+                                width: 64px; height: 18px;
+                                mouse-cursor: pointer;
+                                clicked => { root.add-todo-clicked(); }
+                                Text { x: 0; y: 0; text: "Додати →"; font-size: Theme.font-base; font-weight: 500; color: Theme.primary; }
+                            }
+
+                            Rectangle {
+                                x: 24px; y: 52px; width: 16px; height: 16px;
+                                border-radius: 4px;
+                                border-width: 1px;
+                                border-color: Theme.border;
+                                background: Theme.bg-card;
+                            }
+                            Text { x: 48px; y: 54px; text: "Надіслати акт АКТ-2026-012"; font-size: Theme.font-base; color: Theme.text-primary; }
+
+                            Rectangle {
+                                x: 24px; y: 84px; width: 16px; height: 16px;
+                                border-radius: 4px;
+                                background: Theme.success;
+                                Text { x: 0; y: 1px; width: 16px; height: 16px; horizontal-alignment: center; vertical-alignment: center; text: "✓"; font-size: Theme.font-sm; font-weight: 700; color: white; }
+                            }
+                            Text { x: 48px; y: 86px; text: "Уточнити реквізити ФОП Петренко"; font-size: Theme.font-base; color: Theme.text-muted; }
+
+                            Rectangle {
+                                x: 24px; y: 116px; width: 16px; height: 16px;
+                                border-radius: 4px;
+                                border-width: 1px;
+                                border-color: Theme.border;
+                                background: Theme.bg-card;
+                            }
+                            Text { x: 48px; y: 118px; text: "Перевірити оплату ТОВ Медіа Груп"; font-size: Theme.font-base; color: Theme.text-primary; }
+                        }
+
+                        Rectangle {
+                            height: 148px;
+                            border-radius: Theme.radius-lg;
+                            background: Theme.bg-card;
+                            border-width: 1px;
+                            border-color: Theme.border;
+                            drop-shadow-blur: 10px;
+                            drop-shadow-color: rgba(0, 0, 0, 5%);
+                            drop-shadow-offset-y: 1px;
+
+                            Text { x: 24px; y: 20px; text: "Очікувані платежі"; font-size: Theme.font-lg; font-weight: 600; color: Theme.text-primary; }
+
+                            for p[i] in root.upcoming-payments: Rectangle {
+                                x: 24px; y: 52px + i * 28px;
+                                width: parent.width - 48px; height: 28px;
+
+                                Rectangle {
+                                    x: 0; y: 0; width: 54px; height: 20px;
+                                    border-radius: Theme.radius-sm;
+                                    background: p.is-overdue ? Theme.bg-danger : Theme.bg-warning;
+
+                                    Text {
+                                        x: 0; y: 4px; width: 54px;
+                                        horizontal-alignment: center;
+                                        text: p.date-label;
+                                        font-size: Theme.font-xs;
+                                        font-weight: 600;
+                                        color: p.is-overdue ? Theme.danger : Theme.warning;
+                                    }
+                                }
+
+                                Text {
+                                    x: 64px; y: 3px;
+                                    width: parent.width - 130px;
+                                    text: p.contractor;
+                                    font-size: Theme.font-base;
+                                    color: p.is-overdue ? Theme.danger : Theme.text-primary;
+                                    overflow: elide;
+                                }
+
+                                Text {
+                                    x: parent.width - 88px; y: 3px;
+                                    text: p.amount;
+                                    font-size: Theme.font-base;
+                                    font-weight: 600;
+                                    color: p.is-overdue ? Theme.danger : Theme.text-primary;
+                                }
+                            }
+
+                            if root.upcoming-payments.length == 0: Text {
+                                x: 24px; y: 56px;
+                                text: "Немає очікуваних платежів";
+                                font-size: Theme.font-base;
+                                color: Theme.text-muted;
+                            }
+                        }
+                    }
                 }
             }
         }

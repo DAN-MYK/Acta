@@ -709,10 +709,13 @@ export component MainWindow inherits Window {
         // ══ Область контенту ════════════════════════════════════════════════
         Rectangle {
             horizontal-stretch: 1;
+            vertical-stretch: 1;
             background: Theme.bg-page;
 
             // ── Сторінка 0: Контрагенти — список ────────────────────────────
             if root.current-page == 0 && !root.show-cp-form : CounterpartyList {
+                width: parent.width;
+                height: parent.height;
                 rows:             root.counterparty-rows;
                 row-ids:          root.counterparty-ids;
                 row-archived:     root.counterparty-archived;
@@ -737,6 +740,8 @@ export component MainWindow inherits Window {
 
             // ── Сторінка 0: Контрагенти — форма ─────────────────────────────
             if root.current-page == 0 && root.show-cp-form : CounterpartyForm {
+                width: parent.width;
+                height: parent.height;
                 is-edit-mode: root.cp-form-is-edit;
                 cp-edit-id:   root.cp-form-edit-id;
                 cp-name:      root.cp-form-name;
@@ -755,6 +760,8 @@ export component MainWindow inherits Window {
 
             // ── Сторінка 1: Документи — список ────────────────────────────────
             if root.current-page == 1 && !root.show-act-form && !root.show-invoice-form : DocumentList {
+                width: parent.width;
+                height: parent.height;
                 rows:                   root.document-rows;
                 loading:                root.documents-loading;
                 direction-index:        root.doc-direction-index;
@@ -777,6 +784,8 @@ export component MainWindow inherits Window {
 
             // ── Сторінка 1: Акти — форма ─────────────────────────────────────
             if root.current-page == 1 && root.show-act-form : ActForm {
+                width: parent.width;
+                height: parent.height;
                 act-number:           root.act-form-number;
                 act-date:             root.act-form-date;
                 act-notes:            root.act-form-notes;
@@ -812,6 +821,8 @@ export component MainWindow inherits Window {
 
             // ── Сторінка 5: To-Do — список ────────────────────────────────
             if root.current-page == 5 && !root.show-task-form : TaskList {
+                width: parent.width;
+                height: parent.height;
                 rows:    root.task-rows;
                 loading: root.tasks-loading;
 
@@ -825,6 +836,8 @@ export component MainWindow inherits Window {
 
             // ── Сторінка 5: To-Do — форма ─────────────────────────────────
             if root.current-page == 5 && root.show-task-form : TaskForm {
+                width: parent.width;
+                height: parent.height;
                 is-edit-mode:           root.task-form-is-edit;
                 task-edit-id:           root.task-form-edit-id;
                 task-title:             root.task-form-title;
@@ -841,6 +854,8 @@ export component MainWindow inherits Window {
 
             // ── Сторінка 6: Компанії — список ────────────────────────────
             if root.current-page == 6 && !root.show-company-form : CompanyList {
+                width: parent.width;
+                height: parent.height;
                 companies:   root.company-rows;
                 loading:     root.companies-loading;
 
@@ -852,6 +867,8 @@ export component MainWindow inherits Window {
 
             // ── Сторінка 6: Компанії — форма ─────────────────────────────
             if root.current-page == 6 && root.show-company-form : CompanyForm {
+                width: parent.width;
+                height: parent.height;
                 is-edit:           root.company-form-is-edit;
                 edit-id:           root.company-form-edit-id;
                 form-name:         root.company-form-name;
@@ -869,6 +886,8 @@ export component MainWindow inherits Window {
 
             // ── Сторінка 1: Документи — форма накладної ───────────────────────
             if root.current-page == 1 && root.show-invoice-form : InvoiceForm {
+                width: parent.width;
+                height: parent.height;
                 invoice-number:       root.invoice-form-number;
                 invoice-date:         root.invoice-form-date;
                 invoice-notes:        root.invoice-form-notes;
@@ -897,6 +916,8 @@ export component MainWindow inherits Window {
 
             // ── Сторінка 8: Dashboard ────────────────────────────────────────
             if root.current-page == 8 : DashboardPage {
+                width: parent.width;
+                height: parent.height;
                 kpi-revenue:             root.dashboard-kpi-revenue;
                 kpi-revenue-trend:       root.dashboard-kpi-revenue-trend;
                 kpi-unpaid:              root.dashboard-kpi-unpaid;
@@ -922,6 +943,8 @@ export component MainWindow inherits Window {
             }
 
             if root.current-page == 3 && !root.show-payment-form : PaymentList {
+                width: parent.width;
+                height: parent.height;
                 rows:         root.payment-rows;
                 loading:      root.payments-loading;
                 total-income: root.payment-total-income;
@@ -936,6 +959,8 @@ export component MainWindow inherits Window {
             }
 
             if root.current-page == 3 && root.show-payment-form : PaymentForm {
+                width: parent.width;
+                height: parent.height;
                 is-edit-mode: root.payment-form-is-edit;
                 payment-edit-id: root.payment-form-edit-id;
                 payment-date: root.payment-form-date;

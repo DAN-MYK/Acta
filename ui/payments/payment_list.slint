@@ -40,6 +40,7 @@ export component PaymentList {
         // ── Topbar ─────────────────────────────────────────────────────────
         Rectangle {
             height: 64px;
+            vertical-stretch: 0;
             background: Theme.bg-card;
 
             HorizontalLayout {
@@ -68,6 +69,7 @@ export component PaymentList {
         // ── KPI-рядок: Доходи / Витрати ────────────────────────────────────
         Rectangle {
             height: 56px;
+            vertical-stretch: 0;
             background: Theme.bg-alt;
 
             HorizontalLayout {
@@ -132,6 +134,7 @@ export component PaymentList {
         // ── Панель пошуку та фільтру ────────────────────────────────────────
         Rectangle {
             height: 56px;
+            vertical-stretch: 0;
             background: Theme.bg-card;
             border-width: 1px;
             border-color: Theme.border;
@@ -203,6 +206,7 @@ export component PaymentList {
         // ── Заголовок таблиці ───────────────────────────────────────────────
         Rectangle {
             height: 36px;
+            vertical-stretch: 0;
             background: Theme.table-header;
             border-width: 1px;
             border-color: Theme.border;

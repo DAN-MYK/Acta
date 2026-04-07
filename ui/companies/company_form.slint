@@ -26,16 +26,7 @@ export component CompanyForm inherits Rectangle {
     callback update(string /*id*/, string, string, string, string, string, string, bool);
     callback cancel();
 
-    // Двостороннє зв'язування з полями вводу (<=> не розривається при введенні)
-    private property v-name       <=> name-edit.text;
-    private property v-edrpou     <=> edrpou-edit.text;
-    private property v-iban       <=> iban-edit.text;
-    private property v-address    <=> address-edit.text;
-    private property v-director   <=> director-edit.text;
-    private property v-accountant <=> accountant-edit.text;
-    private property v-vat        <=> vat-check.checked;
-
-    esc-handler := FocusScope {
+    focus-scope := FocusScope {
         key-pressed(event) => {
             if (event.text == Key.Escape) {
                 root.cancel();
@@ -43,9 +34,8 @@ export component CompanyForm inherits Rectangle {
             }
             return reject;
         }
-    }
 
-    VerticalLayout {
+        VerticalLayout {
         spacing: 0;
 
         // ── Topbar ─────────────────────────────────────────────────────────
@@ -139,15 +129,15 @@ export component CompanyForm inherits Rectangle {
                             if root.is-edit {
                                 root.update(
                                     root.edit-id,
-                                    root.v-name, root.v-edrpou, root.v-iban,
-                                    root.v-address, root.v-director, root.v-accountant,
-                                    root.v-vat
+                                    name-edit.text, edrpou-edit.text, iban-edit.text,
+                                    address-edit.text, director-edit.text, accountant-edit.text,
+                                    vat-check.checked
                                 );
                             } else {
                                 root.save(
-                                    root.v-name, root.v-edrpou, root.v-iban,
-                                    root.v-address, root.v-director, root.v-accountant,
-                                    root.v-vat
+                                    name-edit.text, edrpou-edit.text, iban-edit.text,
+                                    address-edit.text, director-edit.text, accountant-edit.text,
+                                    vat-check.checked
                                 );
                             }
                         }
@@ -157,80 +147,81 @@ export component CompanyForm inherits Rectangle {
         }
 
         // ── Контент ────────────────────────────────────────────────────────
-        ScrollView {
-            vertical-stretch: 1;
+            ScrollView {
+                vertical-stretch: 1;
 
-            VerticalLayout {
-                padding: Theme.space-8;
-                spacing: 12px;
-
-                // Назва (обов'язково)
                 VerticalLayout {
-                    spacing: 4px;
-                    Text { text: "Назва *"; font-size: Theme.font-base; color: Theme.text-second; }
-                    name-edit := LineEdit {
-                        text: root.form-name;
-                        placeholder-text: "ТОВ «Назва компанії»";
-                    }
-                }
+                    padding: Theme.space-8;
+                    spacing: 12px;
 
-                // ЄДРПОУ
-                VerticalLayout {
-                    spacing: 4px;
-                    Text { text: "ЄДРПОУ"; font-size: Theme.font-base; color: Theme.text-second; }
-                    edrpou-edit := LineEdit {
-                        text: root.form-edrpou;
-                        placeholder-text: "12345678";
+                    // Назва (обов'язково)
+                    VerticalLayout {
+                        spacing: 4px;
+                        Text { text: "Назва *"; font-size: Theme.font-base; color: Theme.text-second; }
+                        name-edit := LineEdit {
+                            text: root.form-name;
+                            placeholder-text: "ТОВ «Назва компанії»";
+                        }
                     }
-                }
 
-                // IBAN
-                VerticalLayout {
-                    spacing: 4px;
-                    Text { text: "IBAN"; font-size: Theme.font-base; color: Theme.text-second; }
-                    iban-edit := LineEdit {
-                        text: root.form-iban;
-                        placeholder-text: "UA123456789012345678901234567";
+                    // ЄДРПОУ
+                    VerticalLayout {
+                        spacing: 4px;
+                        Text { text: "ЄДРПОУ"; font-size: Theme.font-base; color: Theme.text-second; }
+                        edrpou-edit := LineEdit {
+                            text: root.form-edrpou;
+                            placeholder-text: "12345678";
+                        }
                     }
-                }
 
-                // Юридична адреса
-                VerticalLayout {
-                    spacing: 4px;
-                    Text { text: "Юридична адреса"; font-size: Theme.font-base; color: Theme.text-second; }
-                    address-edit := LineEdit {
-                        text: root.form-legal-address;
-                        placeholder-text: "м. Київ, вул. Хрещатик, 1";
+                    // IBAN
+                    VerticalLayout {
+                        spacing: 4px;
+                        Text { text: "IBAN"; font-size: Theme.font-base; color: Theme.text-second; }
+                        iban-edit := LineEdit {
+                            text: root.form-iban;
+                            placeholder-text: "UA123456789012345678901234567";
+                        }
                     }
-                }
 
-                // Директор
-                VerticalLayout {
-                    spacing: 4px;
-                    Text { text: "Директор (ПІБ)"; font-size: Theme.font-base; color: Theme.text-second; }
-                    director-edit := LineEdit {
-                        text: root.form-director-name;
-                        placeholder-text: "Іванов Іван Іванович";
+                    // Юридична адреса
+                    VerticalLayout {
+                        spacing: 4px;
+                        Text { text: "Юридична адреса"; font-size: Theme.font-base; color: Theme.text-second; }
+                        address-edit := LineEdit {
+                            text: root.form-legal-address;
+                            placeholder-text: "м. Київ, вул. Хрещатик, 1";
+                        }
                     }
-                }
 
-                // Бухгалтер
-                VerticalLayout {
-                    spacing: 4px;
-                    Text { text: "Бухгалтер (ПІБ)"; font-size: Theme.font-base; color: Theme.text-second; }
-                    accountant-edit := LineEdit {
-                        text: root.form-accountant-name;
-                        placeholder-text: "Петренко Петро Петрович";
+                    // Директор
+                    VerticalLayout {
+                        spacing: 4px;
+                        Text { text: "Директор (ПІБ)"; font-size: Theme.font-base; color: Theme.text-second; }
+                        director-edit := LineEdit {
+                            text: root.form-director-name;
+                            placeholder-text: "Іванов Іван Іванович";
+                        }
                     }
-                }
 
-                // Платник ПДВ
-                HorizontalLayout {
-                    spacing: 8px;
-                    alignment: start;
-                    vat-check := CheckBox {
-                        text: "Платник ПДВ";
-                        checked: root.form-is-vat-payer;
+                    // Бухгалтер
+                    VerticalLayout {
+                        spacing: 4px;
+                        Text { text: "Бухгалтер (ПІБ)"; font-size: Theme.font-base; color: Theme.text-second; }
+                        accountant-edit := LineEdit {
+                            text: root.form-accountant-name;
+                            placeholder-text: "Петренко Петро Петрович";
+                        }
+                    }
+
+                    // Платник ПДВ
+                    HorizontalLayout {
+                        spacing: 8px;
+                        alignment: start;
+                        vat-check := CheckBox {
+                            text: "Платник ПДВ";
+                            checked: root.form-is-vat-payer;
+                        }
                     }
                 }
             }

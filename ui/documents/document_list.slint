@@ -61,6 +61,7 @@ export component DocumentList {
         // ── Topbar ───────────────────────────────────────────────────────────
         Rectangle {
             height: 64px;
+            vertical-stretch: 0;
             background: Theme.bg-card;
             drop-shadow-blur: 10px;
             drop-shadow-color: rgba(0,0,0,5%);
@@ -129,6 +130,7 @@ export component DocumentList {
         // ── Таби + пошук ─────────────────────────────────────────────────────
         Rectangle {
             height: 56px;
+            vertical-stretch: 0;
             background: Theme.bg-card;
             border-width: 1px;
             border-color: Theme.border;
@@ -238,6 +240,7 @@ export component DocumentList {
         // ── Рядок фільтрів ───────────────────────────────────────────────────
         Rectangle {
             height: 44px;
+            vertical-stretch: 0;
             background: Theme.bg-card;
             border-width: 1px;
             border-color: Theme.border;
@@ -345,6 +348,7 @@ export component DocumentList {
         // ── Заголовок таблиці ────────────────────────────────────────────────
         Rectangle {
             height: 40px;
+            vertical-stretch: 0;
             background: Theme.bg-gray-soft;
             border-width: 1px;
             border-color: Theme.border;
@@ -443,6 +447,7 @@ export component DocumentList {
             }
 
             if root.rows.length > 0 : VerticalLayout {
+                alignment: start;
                 for row[i] in root.rows: Rectangle {
                     height: 52px;
                     background: root.hovered-row == i

@@ -20,15 +20,7 @@ export component PaymentForm inherits Rectangle {
     callback update(string, string, int, string, string, string, string);
     callback cancel();
 
-    private property <string> v-date: payment-date;
-    private property <string> v-amount: payment-amount;
-    private property <int> v-direction: payment-direction-index;
-    private property <int> v-counterparty: payment-counterparty-index;
-    private property <string> v-bank-name: payment-bank-name;
-    private property <string> v-bank-ref: payment-bank-ref;
-    private property <string> v-description: payment-description;
-
-    esc-handler := FocusScope {
+    focus-scope := FocusScope {
         key-pressed(event) => {
             if (event.text == Key.Escape) {
                 root.cancel();
@@ -36,230 +28,223 @@ export component PaymentForm inherits Rectangle {
             }
             return reject;
         }
-    }
 
-    VerticalLayout {
-        spacing: 0;
+        VerticalLayout {
+            spacing: 0;
 
-        // ── Topbar ─────────────────────────────────────────────────────────
-        Rectangle {
-            height: 64px;
-            background: Theme.bg-card;
-
+            // ── Topbar ─────────────────────────────────────────────────────────
             Rectangle {
-                y: 63px;
-                height: 1px;
-                background: Theme.border;
-            }
+                height: 64px;
+                background: Theme.bg-card;
 
-            HorizontalLayout {
-                padding-left: 32px;
-                padding-right: 32px;
-                spacing: 8px;
+                Rectangle {
+                    y: 63px;
+                    height: 1px;
+                    background: Theme.border;
+                }
 
                 HorizontalLayout {
-                    spacing: 6px;
-                    horizontal-stretch: 1;
-                    alignment: start;
+                    padding-left: 32px;
+                    padding-right: 32px;
+                    spacing: 8px;
 
-                    Text {
-                        text: "← Платежі";
-                        font-size: 14px;
-                        color: Theme.primary;
-                        vertical-alignment: center;
-                        TouchArea {
+                    HorizontalLayout {
+                        spacing: 6px;
+                        horizontal-stretch: 1;
+                        alignment: start;
+
+                        Text {
+                            text: "← Платежі";
+                            font-size: 14px;
+                            color: Theme.primary;
+                            vertical-alignment: center;
+                            TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { root.cancel(); }
+                            }
+                        }
+                        Text {
+                            text: "/";
+                            font-size: 14px;
+                            color: Theme.text-muted;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: root.is-edit-mode ? "Редагування платежу" : "Новий платіж";
+                            font-size: 14px;
+                            font-weight: 600;
+                            color: Theme.text-primary;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    Rectangle {
+                        width: 120px;
+                        height: 36px;
+                        y: (parent.height - self.height) / 2;
+                        border-radius: 8px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        background: pay-cancel-touch.has-hover ? Theme.bg-hover : Theme.bg-page;
+                        animate background { duration: 80ms; }
+
+                        Text {
+                            text: "Скасувати";
+                            font-size: 14px;
+                            color: Theme.text-second;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        pay-cancel-touch := TouchArea {
                             mouse-cursor: pointer;
                             clicked => { root.cancel(); }
                         }
                     }
-                    Text {
-                        text: "/";
-                        font-size: 14px;
-                        color: Theme.text-muted;
-                        vertical-alignment: center;
-                    }
-                    Text {
-                        text: root.is-edit-mode ? "Редагування платежу" : "Новий платіж";
-                        font-size: 14px;
-                        font-weight: 600;
-                        color: Theme.text-primary;
-                        vertical-alignment: center;
-                    }
-                }
 
-                Rectangle {
-                    width: 120px;
-                    height: 36px;
-                    y: (parent.height - self.height) / 2;
-                    border-radius: 8px;
-                    border-width: 1px;
-                    border-color: Theme.border;
-                    background: pay-cancel-touch.has-hover ? Theme.bg-hover : Theme.bg-page;
-                    animate background { duration: 80ms; }
+                    Rectangle {
+                        width: 112px;
+                        height: 36px;
+                        y: (parent.height - self.height) / 2;
+                        border-radius: 8px;
+                        background: pay-save-touch.has-hover ? #2D64E3 : Theme.primary;
+                        animate background { duration: 80ms; }
 
-                    Text {
-                        text: "Скасувати";
-                        font-size: 14px;
-                        color: Theme.text-second;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    pay-cancel-touch := TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => { root.cancel(); }
-                    }
-                }
-
-                Rectangle {
-                    width: 112px;
-                    height: 36px;
-                    y: (parent.height - self.height) / 2;
-                    border-radius: 8px;
-                    background: pay-save-touch.has-hover ? #2D64E3 : Theme.primary;
-                    animate background { duration: 80ms; }
-
-                    Text {
-                        text: root.is-edit-mode ? "Зберегти" : "Створити";
-                        font-size: 14px;
-                        font-weight: 600;
-                        color: Theme.text-white;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    pay-save-touch := TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => {
-                            if (root.is-edit-mode) {
-                                root.update(root.v-date, root.v-amount, root.v-direction, root.v-counterparty < root.counterparty-ids.length ? root.counterparty-ids[root.v-counterparty] : "", root.v-bank-name, root.v-bank-ref, root.v-description);
-                            } else {
-                                root.save(root.v-date, root.v-amount, root.v-direction, root.v-counterparty < root.counterparty-ids.length ? root.counterparty-ids[root.v-counterparty] : "", root.v-bank-name, root.v-bank-ref, root.v-description);
+                        Text {
+                            text: root.is-edit-mode ? "Зберегти" : "Створити";
+                            font-size: 14px;
+                            font-weight: 600;
+                            color: Theme.text-white;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        pay-save-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                if (root.is-edit-mode) {
+                                    root.update(root.payment-date, root.payment-amount, root.payment-direction-index, root.payment-counterparty-index < root.counterparty-ids.length ? root.counterparty-ids[root.payment-counterparty-index] : "", root.payment-bank-name, root.payment-bank-ref, root.payment-description);
+                                } else {
+                                    root.save(root.payment-date, root.payment-amount, root.payment-direction-index, root.payment-counterparty-index < root.counterparty-ids.length ? root.counterparty-ids[root.payment-counterparty-index] : "", root.payment-bank-name, root.payment-bank-ref, root.payment-description);
+                                }
                             }
                         }
                     }
                 }
             }
-        }
 
-        // ── Контент ────────────────────────────────────────────────────────
-        Rectangle {
-            vertical-stretch: 1;
+            // ── Контент ────────────────────────────────────────────────────────
+            Rectangle {
+                vertical-stretch: 1;
 
-            VerticalLayout {
-                padding: 32px;
-                spacing: 16px;
+                VerticalLayout {
+                    padding: 32px;
+                    spacing: 16px;
 
-                Rectangle {
-                    background: Theme.bg-card;
-                    border-width: 1px;
-                    border-color: Theme.border;
-                    border-radius: 16px;
-                    vertical-stretch: 0;
-
-                    VerticalLayout {
-                        padding: 24px;
-                        spacing: 16px;
-
-                        HorizontalLayout {
-                            spacing: 16px;
-
-                            VerticalLayout {
-                                horizontal-stretch: 1;
-                                spacing: 6px;
-                                Text { text: "Дата *"; font-size: 12px; color: Theme.text-second; }
-                                LineEdit {
-                                    text: root.v-date;
-                                    placeholder-text: "03.04.2026";
-                                    edited(t) => { root.v-date = t; }
-                                }
-                            }
-
-                            VerticalLayout {
-                                horizontal-stretch: 1;
-                                spacing: 6px;
-                                Text { text: "Сума *"; font-size: 12px; color: Theme.text-second; }
-                                LineEdit {
-                                    text: root.v-amount;
-                                    placeholder-text: "78000.00";
-                                    edited(t) => { root.v-amount = t; }
-                                }
-                            }
-                        }
-
-                        HorizontalLayout {
-                            spacing: 16px;
-
-                            VerticalLayout {
-                                horizontal-stretch: 1;
-                                spacing: 6px;
-                                Text { text: "Напрямок"; font-size: 12px; color: Theme.text-second; }
-                                ComboBox {
-                                    model: ["Надходження", "Витрата"];
-                                    current-index: root.v-direction;
-                                    selected(_) => { root.v-direction = self.current-index; }
-                                }
-                            }
-
-                            VerticalLayout {
-                                horizontal-stretch: 1;
-                                spacing: 6px;
-                                Text { text: "Контрагент"; font-size: 12px; color: Theme.text-second; }
-                                ComboBox {
-                                    model: root.counterparty-names;
-                                    current-index: root.v-counterparty;
-                                    selected(_) => { root.v-counterparty = self.current-index; }
-                                }
-                            }
-                        }
-
-                        HorizontalLayout {
-                            spacing: 16px;
-
-                            VerticalLayout {
-                                horizontal-stretch: 1;
-                                spacing: 6px;
-                                Text { text: "Банк"; font-size: 12px; color: Theme.text-second; }
-                                LineEdit {
-                                    text: root.v-bank-name;
-                                    placeholder-text: "Sense Bank";
-                                    edited(t) => { root.v-bank-name = t; }
-                                }
-                            }
-
-                            VerticalLayout {
-                                horizontal-stretch: 1;
-                                spacing: 6px;
-                                Text { text: "Референс банку"; font-size: 12px; color: Theme.text-second; }
-                                LineEdit {
-                                    text: root.v-bank-ref;
-                                    placeholder-text: "PAY-2026-0001";
-                                    edited(t) => { root.v-bank-ref = t; }
-                                }
-                            }
-                        }
+                    Rectangle {
+                        background: Theme.bg-card;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        border-radius: 16px;
+                        vertical-stretch: 0;
 
                         VerticalLayout {
-                            spacing: 6px;
-                            Text { text: "Призначення"; font-size: 12px; color: Theme.text-second; }
-                            LineEdit {
-                                text: root.v-description;
-                                placeholder-text: "Оплата за акт / рахунок / витрати";
-                                edited(t) => { root.v-description = t; }
+                            padding: 24px;
+                            spacing: 16px;
+
+                            HorizontalLayout {
+                                spacing: 16px;
+
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    spacing: 6px;
+                                    Text { text: "Дата *"; font-size: 12px; color: Theme.text-second; }
+                                    LineEdit {
+                                        text: root.payment-date;
+                                        placeholder-text: "03.04.2026";
+                                    }
+                                }
+
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    spacing: 6px;
+                                    Text { text: "Сума *"; font-size: 12px; color: Theme.text-second; }
+                                    LineEdit {
+                                        text: root.payment-amount;
+                                        placeholder-text: "78000.00";
+                                    }
+                                }
                             }
-                        }
 
-                        Rectangle {
-                            background: Theme.bg-gray;
-                            border-radius: 12px;
-                            min-height: 74px;
+                            HorizontalLayout {
+                                spacing: 16px;
 
-                            Text {
-                                x: 16px;
-                                y: 14px;
-                                width: parent.width - 32px;
-                                text: "Порада: використовуйте формат дати дд.мм.рррр. Для витрат сума лишається додатною, напрямок визначає тип руху.";
-                                wrap: word-wrap;
-                                font-size: 12px;
-                                color: Theme.text-second;
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    spacing: 6px;
+                                    Text { text: "Напрямок"; font-size: 12px; color: Theme.text-second; }
+                                    ComboBox {
+                                        model: ["Надходження", "Витрата"];
+                                        current-index: root.payment-direction-index;
+                                    }
+                                }
+
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    spacing: 6px;
+                                    Text { text: "Контрагент"; font-size: 12px; color: Theme.text-second; }
+                                    ComboBox {
+                                        model: root.counterparty-names;
+                                        current-index: root.payment-counterparty-index;
+                                    }
+                                }
+                            }
+
+                            HorizontalLayout {
+                                spacing: 16px;
+
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    spacing: 6px;
+                                    Text { text: "Банк"; font-size: 12px; color: Theme.text-second; }
+                                    LineEdit {
+                                        text: root.payment-bank-name;
+                                        placeholder-text: "Sense Bank";
+                                    }
+                                }
+
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    spacing: 6px;
+                                    Text { text: "Референс банку"; font-size: 12px; color: Theme.text-second; }
+                                    LineEdit {
+                                        text: root.payment-bank-ref;
+                                        placeholder-text: "PAY-2026-0001";
+                                    }
+                                }
+                            }
+
+                            VerticalLayout {
+                                spacing: 6px;
+                                Text { text: "Призначення"; font-size: 12px; color: Theme.text-second; }
+                                LineEdit {
+                                    text: root.payment-description;
+                                    placeholder-text: "Оплата за акт / рахунок / витрати";
+                                }
+                            }
+
+                            Rectangle {
+                                background: Theme.bg-gray;
+                                border-radius: 12px;
+                                min-height: 74px;
+
+                                Text {
+                                    x: 16px;
+                                    y: 14px;
+                                    width: parent.width - 32px;
+                                    text: "Порада: використовуйте формат дати дд.мм.рррр. Для витрат сума лишається додатною, напрямок визначає тип руху.";
+                                    wrap: word-wrap;
+                                    font-size: 12px;
+                                    color: Theme.text-second;
+                                }
                             }
                         }
                     }

@@ -38,6 +38,7 @@ export component CompanyList {
         // ── Topbar (64px, білий, з нижньою межею) ───────────────────────────
         Rectangle {
             height: Theme.topbar-height;
+            vertical-stretch: 0;
             background: Theme.bg-card;
 
             HorizontalLayout {
@@ -122,6 +123,7 @@ export component CompanyList {
                         // Заголовок таблиці
                         Rectangle {
                             height: 40px;
+                            vertical-stretch: 0;
                             background: Theme.table-header;
 
                             HorizontalLayout {
