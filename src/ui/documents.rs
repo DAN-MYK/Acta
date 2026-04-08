@@ -211,12 +211,12 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Зміна таба ────────────────────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     let state = ctx.doc_state.clone();
     ui.on_doc_tab_changed(move |tab| {
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         let (query, direction, cp_id, df, dt) = {
             let mut s = state.lock().unwrap();
             s.tab = tab;
@@ -239,12 +239,12 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Зміна напрямку ────────────────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     let state = ctx.doc_state.clone();
     ui.on_doc_direction_changed(move |index| {
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         let (tab, direction, query, cp_id, df, dt) = {
             let mut s = state.lock().unwrap();
             s.direction = doc_direction_from_index(index).to_string();
@@ -274,12 +274,12 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Текстовий пошук ───────────────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     let state = ctx.doc_state.clone();
     ui.on_doc_search_changed(move |q| {
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         let (tab, direction, query, cp_id, df, dt) = {
             let mut s = state.lock().unwrap();
             s.query = q.to_string();
@@ -324,13 +324,13 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Фільтр за контрагентом ────────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     let state = ctx.doc_state.clone();
     let doc_cp_ids = ctx.doc_cp_ids.clone();
     ui.on_doc_cp_filter_changed(move |idx| {
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         let cp_id = if idx <= 0 {
             None
         } else {
@@ -366,7 +366,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Фільтр за датою від ───────────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     let state = ctx.doc_state.clone();
     ui.on_doc_date_from_changed(move |text| {
         let df = if text.len() == 10 {
@@ -378,7 +378,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
         };
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         let (tab, direction, query, cp_id, dt) = {
             let mut s = state.lock().unwrap();
             s.date_from = df;
@@ -400,7 +400,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Фільтр за датою до ────────────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     let state = ctx.doc_state.clone();
     ui.on_doc_date_to_changed(move |text| {
         let dt = if text.len() == 10 {
@@ -412,7 +412,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
         };
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         let (tab, direction, query, cp_id, df) = {
             let mut s = state.lock().unwrap();
             s.date_to = dt;
@@ -462,12 +462,12 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Видалення документу ───────────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     let state = ctx.doc_state.clone();
     ui.on_doc_delete_clicked(move |id| {
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         let id_s = id.to_string();
         let (tab, direction, query, cp_id, df, dt) = {
             let s = state.lock().unwrap();

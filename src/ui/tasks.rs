@@ -370,9 +370,9 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
     let state = task_state.clone();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_task_form_save(move |title, description, priority_idx, due_str, reminder_str| {
-        let company_id = *cid_arc.lock().unwrap();
+        let company_id = *company_id_arc.lock().unwrap();
         let act_id = ui_weak
             .upgrade()
             .map(|ui| ui.get_task_form_act_id().to_string())
@@ -396,9 +396,9 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
     let state = task_state.clone();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_task_form_update(move |title, description, priority_idx, due_str, reminder_str| {
-        let company_id = *cid_arc.lock().unwrap();
+        let company_id = *company_id_arc.lock().unwrap();
         let edit_id = ui_weak
             .upgrade()
             .map(|ui| ui.get_task_form_edit_id().to_string())

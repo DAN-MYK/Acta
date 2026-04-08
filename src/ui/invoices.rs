@@ -223,12 +223,12 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
     let state = ctx.invoice_state.clone();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_invoice_status_filter_changed(move |filter_idx| {
         let pool = pool.clone();
         let ui_handle = ui_weak.clone();
         let inv_state = state.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         tokio::spawn(async move {
             let status_filter = match filter_idx {
                 1 => Some(InvoiceStatus::Draft),
@@ -254,12 +254,12 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
     let state = ctx.invoice_state.clone();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_invoice_search_changed(move |query| {
         let pool = pool.clone();
         let ui_handle = ui_weak.clone();
         let inv_state = state.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         let query = query.to_string();
         tokio::spawn(async move {
             let (status_filter, query) = {
@@ -280,11 +280,11 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Новий рахунок ─────────────────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_invoice_create_clicked(move || {
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         tokio::spawn(async move {
             let (cps, next_number, categories) = tokio::join!(
                 db::invoices::counterparties_for_select(&pool, cid),
@@ -342,12 +342,12 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
     let state = ctx.invoice_state.clone();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_invoice_advance_status_clicked(move |id| {
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
         let inv_state = state.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         let id_str = id.to_string();
         tokio::spawn(async move {
             let invoice_id = match uuid::Uuid::parse_str(&id_str) {
@@ -379,11 +379,11 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Відкрити накладну для редагування ────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_invoice_edit_clicked(move |inv_id| {
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         let id_str = inv_id.to_string();
         tokio::spawn(async move {
             let invoice_uuid = match uuid::Uuid::parse_str(&id_str) {
@@ -556,9 +556,9 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let ui_weak = ui.as_weak();
     let state = ctx.invoice_state.clone();
     let doc_state = ctx.doc_state.clone();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_invoice_form_save(move |number, date_str, cp_id_str, notes, cat_id_str, con_id_str, exp_date_str| {
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         let items = collect_invoice_items_from_ui(&ui_weak);
         spawn_save_invoice(
             pool.clone(),
@@ -582,9 +582,9 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let ui_weak = ui.as_weak();
     let state = ctx.invoice_state.clone();
     let doc_state = ctx.doc_state.clone();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_invoice_form_update(move |number, date_str, cp_id_str, notes, cat_id_str, con_id_str, exp_date_str| {
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         let edit_id = ui_weak
             .upgrade()
             .map(|ui| ui.get_invoice_form_edit_id().to_string())

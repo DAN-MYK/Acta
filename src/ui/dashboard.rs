@@ -143,11 +143,11 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // Оновити дані Dashboard
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_dashboard_refresh(move || {
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         tokio::spawn(async move {
             if let Err(e) = reload_dashboard(&pool, ui_weak, cid).await {
                 tracing::error!("Dashboard refresh помилка: {e:#}");

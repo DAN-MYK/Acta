@@ -277,11 +277,11 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
     let state = ctx.counterparty_state.clone();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_counterparty_search_changed(move |query| {
         let pool = pool.clone();
         let ui_handle = ui_weak.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         let (query_str, include_archived) = {
             let mut s = state.lock().unwrap();
             s.query = query.to_string();
@@ -301,11 +301,11 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Вибір контрагента — відкрити картку ────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_counterparty_selected(move |id| {
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         let id_str = id.to_string();
         tokio::spawn(async move {
             let Ok(counterparty_id) = id_str.parse::<uuid::Uuid>() else {
@@ -455,11 +455,11 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
     let state = ctx.counterparty_state.clone();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_counterparty_filter_clicked(move || {
         let pool = pool.clone();
         let ui_handle = ui_weak.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         let (query, include_archived) = {
             let mut s = state.lock().unwrap();
             s.include_archived = !s.include_archived;
@@ -480,11 +480,11 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
     let state = ctx.counterparty_state.clone();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_counterparty_prev_page_clicked(move || {
         let pool = pool.clone();
         let ui_handle = ui_weak.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         let (query, include_archived, page, should_reload) = {
             let mut s = state.lock().unwrap();
             if s.page == 0 {
@@ -510,11 +510,11 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
     let state = ctx.counterparty_state.clone();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_counterparty_next_page_clicked(move || {
         let pool = pool.clone();
         let ui_handle = ui_weak.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         let (query, include_archived, page) = {
             let mut s = state.lock().unwrap();
             s.page += 1;
@@ -542,12 +542,12 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
     let state = ctx.counterparty_state.clone();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_cp_form_save(move |name, edrpou, ipn, iban, phone, email, address, notes| {
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
         let state = state.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         let name_s = name.to_string();
         let edrpou_s = edrpou.to_string();
         let ipn_s = ipn.to_string();
@@ -617,13 +617,13 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
     let state = ctx.counterparty_state.clone();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_cp_form_update(move |name, edrpou, ipn, iban, phone, email, address, notes| {
         let Some(ui_ref) = ui_weak.upgrade() else { return; };
         let edit_id = ui_ref.get_cp_form_edit_id().to_string();
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         let state = state.clone();
         let name_s = name.to_string();
         let edrpou_s = edrpou.to_string();
@@ -698,12 +698,12 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
     let state = ctx.counterparty_state.clone();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_counterparty_archive_clicked(move |id| {
         let pool = pool.clone();
         let ui_handle = ui_weak.clone();
         let state = state.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         let id_str = id.to_string();
         tokio::spawn(async move {
             let Ok(uuid) = id_str.parse::<uuid::Uuid>() else {

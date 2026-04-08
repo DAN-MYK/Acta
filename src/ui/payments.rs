@@ -150,13 +150,13 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Фільтр напрямку ───────────────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     let state = payment_state.clone();
     ui.on_payment_direction_filter_changed(move |index| {
         use models::payment::PaymentDirection;
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         let direction: Option<PaymentDirection> = match index {
             1 => Some(PaymentDirection::Income),
             2 => Some(PaymentDirection::Expense),
@@ -177,12 +177,12 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Пошук ─────────────────────────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     let state = payment_state.clone();
     ui.on_payment_search_changed(move |query| {
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         let (query, direction) = {
             let mut s = state.lock().unwrap();
             s.query = query.to_string();
@@ -198,12 +198,12 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Зведення платежу ─────────────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     let state = payment_state.clone();
     ui.on_payment_reconcile_clicked(move |id_str| {
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         let (query, direction) = {
             let s = state.lock().unwrap();
             (s.query.clone(), s.direction_filter.clone())
@@ -236,11 +236,11 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Редагувати платіж ─────────────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_payment_edit_clicked(move |id| {
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         let id_str = id.to_string();
         tokio::spawn(async move {
             let Ok(payment_id) = id_str.parse::<uuid::Uuid>() else {
@@ -274,12 +274,12 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Видалити платіж ───────────────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     let state = payment_state.clone();
     ui.on_payment_delete_clicked(move |id| {
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         let (query, direction) = {
             let s = state.lock().unwrap();
             (s.query.clone(), s.direction_filter.clone())
@@ -305,13 +305,13 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Зберегти платіж ───────────────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     let state = payment_state.clone();
     ui.on_payment_form_save(
         move |date, amount, direction, counterparty_id, bank_name, bank_ref, description| {
             let pool = pool.clone();
             let ui_weak = ui_weak.clone();
-            let cid = *cid_arc.lock().unwrap();
+            let cid = *company_id_arc.lock().unwrap();
             let (query, direction_filter) = {
                 let s = state.lock().unwrap();
                 (s.query.clone(), s.direction_filter.clone())
@@ -378,13 +378,13 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Оновити платіж ────────────────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     let state = payment_state.clone();
     ui.on_payment_form_update(
         move |date, amount, direction, counterparty_id, bank_name, bank_ref, description| {
             let pool = pool.clone();
             let ui_weak = ui_weak.clone();
-            let cid = *cid_arc.lock().unwrap();
+            let cid = *company_id_arc.lock().unwrap();
             let edit_id = ui_weak
                 .upgrade()
                 .map(|ui| ui.get_payment_form_edit_id().to_string())

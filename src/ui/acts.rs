@@ -315,11 +315,11 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
     let state = ctx.act_state.clone();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_act_status_filter_changed(move |filter_idx| {
         let pool = pool.clone();
         let ui_handle = ui_weak.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         let status_filter = match filter_idx {
             1 => Some(ModelActStatus::Draft),
             2 => Some(ModelActStatus::Issued),
@@ -343,11 +343,11 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
     let state = ctx.act_state.clone();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_act_search_changed(move |query| {
         let pool = pool.clone();
         let ui_handle = ui_weak.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         let (query, status_filter) = {
             let mut s = state.lock().unwrap();
             s.query = query.to_string();
@@ -389,12 +389,12 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Редагувати з картки акту ──────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_act_card_edit_clicked(move |id| {
         let pool = pool.clone();
         let ui_handle = ui_weak.clone();
         let id_str = id.to_string();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         tokio::spawn(async move {
             let Ok(uuid) = id_str.parse::<uuid::Uuid>() else {
                 tracing::error!("Редагувати акт з картки: некоректний UUID: {id_str}");
@@ -498,12 +498,12 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── PDF з картки акту ─────────────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_act_card_pdf_clicked(move |id| {
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
         let id_str = id.to_string();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         tokio::spawn(async move {
             let Ok(uuid) = id_str.parse::<uuid::Uuid>() else { return; };
             let (act_result, company_result) = tokio::join!(
@@ -577,13 +577,13 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Наступний статус з картки акту ────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     let act_state = ctx.act_state.clone();
     ui.on_act_card_advance_status_clicked(move |id, new_status| {
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
         let id_str = id.to_string();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         let act_state_clone = act_state.clone();
         let new_status = act_status_from_ui(new_status);
         tokio::spawn(async move {
@@ -610,11 +610,11 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Новий акт — відкрити форму ────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_act_create_clicked(move || {
         let pool = pool.clone();
         let ui_handle = ui_weak.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         tokio::spawn(async move {
             let (cp_result, num_result, cat_result) = tokio::join!(
                 db::acts::counterparties_for_select(&pool, cid),
@@ -680,13 +680,13 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
     let act_state = ctx.act_state.clone();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_act_advance_status_clicked(move |id| {
         let pool = pool.clone();
         let ui_handle = ui_weak.clone();
         let id_str = id.to_string();
         let act_state = act_state.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         tokio::spawn(async move {
             let Ok(uuid) = id_str.parse::<uuid::Uuid>() else {
                 tracing::error!("Некоректний UUID акту: {id_str}");
@@ -725,11 +725,11 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
 
     // ── PDF акту зі списку ────────────────────────────────────────────────────
     let pool = ctx.pool.clone();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_act_pdf_clicked(move |act_id| {
         let pool = pool.clone();
         let id_str = act_id.to_string();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         tokio::spawn(async move {
             let Ok(uuid) = id_str.parse::<uuid::Uuid>() else {
                 tracing::error!("PDF: некоректний UUID акту: {id_str}");
@@ -809,12 +809,12 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Відкрити акт для редагування ─────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_act_edit_clicked(move |act_id| {
         let pool = pool.clone();
         let ui_handle = ui_weak.clone();
         let id_str = act_id.to_string();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         tokio::spawn(async move {
             let Ok(uuid) = id_str.parse::<uuid::Uuid>() else {
                 tracing::error!("Некоректний UUID акту: {id_str}");
@@ -922,14 +922,14 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let ui_weak = ui.as_weak();
     let act_state = ctx.act_state.clone();
     let doc_state = ctx.doc_state.clone();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_act_form_update(move |number, date_str, cp_id_str, notes, cat_id_str, con_id_str, exp_date_str| {
         let Some(ui_ref) = ui_weak.upgrade() else { return; };
         let edit_id = ui_ref.get_act_form_edit_id().to_string();
         let items = collect_form_items(&ui_ref);
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         let number = number.to_string();
         let date_str = date_str.to_string();
         let cp_id_str = cp_id_str.to_string();
@@ -1119,11 +1119,11 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let ui_weak = ui.as_weak();
     let act_state = ctx.act_state.clone();
     let doc_state = ctx.doc_state.clone();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_act_form_save(move |number, date_str, cp_id_str, notes, cat_id_str, con_id_str, exp_date_str| {
         let Some(ui_ref) = ui_weak.upgrade() else { return; };
         let items = collect_form_items(&ui_ref);
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         spawn_save_act(
             pool.clone(),
             ui_weak.clone(),
@@ -1146,11 +1146,11 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let ui_weak = ui.as_weak();
     let act_state = ctx.act_state.clone();
     let doc_state = ctx.doc_state.clone();
-    let cid_arc = ctx.active_company_id.clone();
+    let company_id_arc = ctx.active_company_id.clone();
     ui.on_act_form_save_draft(move |number, date_str, cp_id_str, notes, cat_id_str, con_id_str, exp_date_str| {
         let Some(ui_ref) = ui_weak.upgrade() else { return; };
         let items = collect_form_items(&ui_ref);
-        let cid = *cid_arc.lock().unwrap();
+        let cid = *company_id_arc.lock().unwrap();
         spawn_save_act(
             pool.clone(),
             ui_weak.clone(),
