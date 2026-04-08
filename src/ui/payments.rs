@@ -144,8 +144,7 @@ pub async fn reload_payment_counterparty_options(
 // ═══════════════════════════════════════════════════════════════════════════════
 
 pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
-    // Локальний стан пошуку/фільтру — не потребує доступу з інших модулів.
-    let payment_state = Arc::new(Mutex::new(PaymentListState::default()));
+    let payment_state = ctx.payment_state.clone();
 
     // ── Фільтр напрямку ───────────────────────────────────────────────────────
     let pool = ctx.pool.clone();
@@ -179,6 +178,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let ui_weak = ui.as_weak();
     let company_id_arc = ctx.active_company_id.clone();
     let state = payment_state.clone();
+    let search_task: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>> = Arc::new(Mutex::new(None));
     ui.on_payment_search_changed(move |query| {
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
@@ -188,11 +188,14 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
             s.query = query.to_string();
             (s.query.clone(), s.direction_filter.clone())
         };
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             if let Err(e) = reload_payments(&pool, ui_weak, cid, direction, &query).await {
                 tracing::error!("Помилка пошуку платежів: {e}");
             }
         });
+        if let Some(old) = search_task.lock().unwrap().replace(handle) {
+            old.abort();
+        }
     });
 
     // ── Зведення платежу ─────────────────────────────────────────────────────

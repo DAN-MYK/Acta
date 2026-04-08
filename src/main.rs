@@ -8,7 +8,7 @@ slint::include_modules!();
 mod app_ctx;
 mod ui;
 
-use app_ctx::{AppCtx, ActListState, CounterpartyListState, DocListState, InvoiceListState};
+use app_ctx::{AppCtx, ActListState, CounterpartyListState, DocListState, InvoiceListState, TaskListState, PaymentListState};
 use acta::{config::AppConfig, db, notifications};
 use anyhow::Result;
 use slint::{ModelRc, SharedString, VecModel};
@@ -176,6 +176,8 @@ fn main() -> Result<()> {
         act_state: Arc::new(Mutex::new(ActListState::default())),
         invoice_state: Arc::new(Mutex::new(InvoiceListState::default())),
         doc_state: Arc::new(Mutex::new(DocListState::default())),
+        task_state: Arc::new(Mutex::new(TaskListState::default())),
+        payment_state: Arc::new(Mutex::new(PaymentListState::default())),
     });
 
     // ── Реєстрація callbacks по модулях ──────────────────────────────────────

@@ -149,6 +149,14 @@ pub fn setup(ui: &MainWindow, ctx: std::sync::Arc<AppCtx>) {
                             let mut state = ctx.doc_state.lock().unwrap();
                             *state = DocListState::default();
                         }
+                        {
+                            let mut state = ctx.task_state.lock().unwrap();
+                            *state = crate::app_ctx::TaskListState::default();
+                        }
+                        {
+                            let mut state = ctx.payment_state.lock().unwrap();
+                            *state = crate::app_ctx::PaymentListState::default();
+                        }
 
                         ui_handle.upgrade_in_event_loop(move |ui| {
                             ui.set_active_company_name(SharedString::from(name.as_str()));

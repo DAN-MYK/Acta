@@ -207,13 +207,13 @@ pub fn spawn_save_task(
 // ═══════════════════════════════════════════════════════════════════════════════
 
 pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
-    // Локальний стан пошуку — не потребує доступу з інших модулів.
-    let task_state = Arc::new(Mutex::new(TaskListState::default()));
+    let task_state = ctx.task_state.clone();
 
     // ── Пошук задач ───────────────────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
     let state = task_state.clone();
+    let search_task: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>> = Arc::new(Mutex::new(None));
     ui.on_task_search_changed(move |query| {
         let pool = pool.clone();
         let ui_handle = ui_weak.clone();
@@ -225,11 +225,14 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
         if let Some(ui) = ui_handle.upgrade() {
             ui.set_tasks_loading(true);
         }
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             if let Err(e) = reload_tasks(&pool, ui_handle, query_str, false).await {
                 tracing::error!("Помилка пошуку задач: {e}");
             }
         });
+        if let Some(old) = search_task.lock().unwrap().replace(handle) {
+            old.abort();
+        }
     });
 
     ui.on_task_selected(|id| {

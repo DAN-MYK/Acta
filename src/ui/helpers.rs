@@ -9,7 +9,7 @@ use anyhow::Result;
 use chrono::{DateTime, Local, NaiveDateTime, TimeZone, Utc};
 use rust_decimal::Decimal;
 use slint::{Model, ModelRc, SharedString, StandardListViewItem, VecModel, Weak};
-pub use crate::app_ctx::{ActListState, DocListState, InvoiceListState, PaymentListState, TaskListState};
+pub use crate::app_ctx::{ActListState, DocListState, InvoiceListState, TaskListState};
 pub use acta::models::{
     ActStatus as ModelActStatus, Company, CompanySummary, NewActItem, NewInvoiceItem,
     Task, TaskPriority,

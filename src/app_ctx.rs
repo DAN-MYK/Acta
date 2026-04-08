@@ -74,6 +74,8 @@ pub struct AppCtx {
     pub act_state: Arc<Mutex<ActListState>>,
     pub invoice_state: Arc<Mutex<InvoiceListState>>,
     pub doc_state: Arc<Mutex<DocListState>>,
+    pub task_state: Arc<Mutex<TaskListState>>,
+    pub payment_state: Arc<Mutex<PaymentListState>>,
 }
 
 impl AppCtx {

@@ -307,6 +307,106 @@ pub fn spawn_save_act(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// ── populate_act_form — підготовка і відображення форми редагування акту ───────
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Завантажує акт, контрагентів, задачі та категорії з БД і заповнює форму редагування.
+/// `close_card`: true — перед відкриттям форми приховати картку акту (on_act_card_edit_clicked).
+async fn populate_act_form(
+    pool: &sqlx::PgPool,
+    ui_weak: Weak<MainWindow>,
+    uuid: uuid::Uuid,
+    cid: uuid::Uuid,
+    close_card: bool,
+) -> Result<()> {
+    let (act_result, cp_result, tasks_result, cat_result) = tokio::join!(
+        db::acts::get_for_edit(pool, uuid),
+        db::acts::counterparties_for_select(pool, cid),
+        db::tasks::list_by_act(pool, uuid),
+        db::categories::list_all_for_select(pool, cid),
+    );
+
+    let counterparties: Vec<(uuid::Uuid, String)> = cp_result
+        .map_err(|e| { tracing::error!("Помилка завантаження контрагентів: {e}"); e })?;
+    let (act, items) = act_result
+        .map_err(|e| { tracing::error!("Помилка завантаження акту: {e}"); e })?
+        .ok_or_else(|| { tracing::warn!("Акт {uuid} не знайдено."); anyhow::anyhow!("not found") })?;
+    let tasks = tasks_result.unwrap_or_default();
+    let categories = cat_result.unwrap_or_default();
+
+    let cp_names: Vec<SharedString> = counterparties
+        .iter()
+        .map(|(_, n)| SharedString::from(n.as_str()))
+        .collect();
+    let cp_ids: Vec<SharedString> = counterparties
+        .iter()
+        .map(|(id, _)| SharedString::from(id.to_string().as_str()))
+        .collect();
+    let cp_index = counterparties
+        .iter()
+        .position(|(id, _)| *id == act.counterparty_id)
+        .unwrap_or(0) as i32;
+
+    let mut cat_names: Vec<SharedString> = vec![SharedString::from("— без категорії —")];
+    let mut cat_ids: Vec<SharedString> = vec![SharedString::from("")];
+    for c in &categories {
+        let prefix = if c.depth > 0 { "  └─ " } else { "" };
+        cat_names.push(SharedString::from(format!("{}{}", prefix, c.name)));
+        cat_ids.push(SharedString::from(c.id.to_string()));
+    }
+    let cat_id_str = act.category_id.map(|id| id.to_string()).unwrap_or_default();
+    let cat_index = cat_ids.iter().position(|id| id.as_str() == cat_id_str).unwrap_or(0) as i32;
+
+    let form_items: Vec<FormItemRow> = items
+        .iter()
+        .map(|it| FormItemRow {
+            description: SharedString::from(it.description.as_str()),
+            quantity: SharedString::from(format!("{}", it.quantity).as_str()),
+            unit: SharedString::from(it.unit.as_str()),
+            price: SharedString::from(format!("{}", it.unit_price).as_str()),
+            amount: SharedString::from(format!("{:.2}", it.amount).as_str()),
+        })
+        .collect();
+    let task_rows = to_task_rows(&tasks);
+
+    let act_number = act.number.clone();
+    let act_date = act.date.format("%d.%m.%Y").to_string();
+    let act_notes = act.notes.clone().unwrap_or_default();
+    let act_id_str = act.id.to_string();
+    let total_str = format!("{:.2}", act.total_amount);
+    let exp_date_str = act
+        .expected_payment_date
+        .map(|d| d.format("%d.%m.%Y").to_string())
+        .unwrap_or_default();
+
+    ui_weak
+        .upgrade_in_event_loop(move |ui| {
+            if close_card {
+                ui.set_show_act_card(false);
+            }
+            ui.set_act_form_number(SharedString::from(act_number.as_str()));
+            ui.set_act_form_date(SharedString::from(act_date.as_str()));
+            ui.set_act_form_notes(SharedString::from(act_notes.as_str()));
+            ui.set_act_form_cp_index(cp_index);
+            ui.set_act_form_edit_id(SharedString::from(act_id_str.as_str()));
+            ui.set_act_form_total(SharedString::from(total_str.as_str()));
+            ui.set_act_form_is_edit(true);
+            ui.set_act_form_cp_names(ModelRc::new(VecModel::from(cp_names)));
+            ui.set_act_form_cp_ids(ModelRc::new(VecModel::from(cp_ids)));
+            ui.set_act_form_category_names(ModelRc::new(VecModel::from(cat_names)));
+            ui.set_act_form_category_ids(ModelRc::new(VecModel::from(cat_ids)));
+            ui.set_act_form_category_index(cat_index);
+            ui.set_act_form_expected_payment_date(SharedString::from(exp_date_str.as_str()));
+            ui.set_act_form_items(ModelRc::new(VecModel::from(form_items)));
+            ui.set_act_task_rows(ModelRc::new(VecModel::from(task_rows)));
+            ui.set_act_tasks_loading(false);
+            ui.set_show_act_form(true);
+        })
+        .ok();
+    Ok(())
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // ── setup — реєстрація колбеків ────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -400,98 +500,9 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
                 tracing::error!("Редагувати акт з картки: некоректний UUID: {id_str}");
                 return;
             };
-            let (act_result, cp_result, tasks_result, cat_result) = tokio::join!(
-                db::acts::get_for_edit(&pool, uuid),
-                db::acts::counterparties_for_select(&pool, cid),
-                db::tasks::list_by_act(&pool, uuid),
-                db::categories::list_all_for_select(&pool, cid),
-            );
-            let act_opt = match act_result {
-                Ok(v) => v,
-                Err(e) => { tracing::error!("Помилка завантаження акту: {e}"); return; }
-            };
-            let counterparties: Vec<(uuid::Uuid, String)> = match cp_result {
-                Ok(v) => v,
-                Err(e) => { tracing::error!("Помилка завантаження контрагентів: {e}"); return; }
-            };
-            let tasks = tasks_result.unwrap_or_default();
-            let categories = cat_result.unwrap_or_default();
-            let Some((act, items)) = act_opt else {
-                tracing::warn!("Акт {uuid} не знайдено.");
-                return;
-            };
-
-            let cp_names: Vec<SharedString> = counterparties
-                .iter()
-                .map(|(_, n)| SharedString::from(n.as_str()))
-                .collect();
-            let cp_ids: Vec<SharedString> = counterparties
-                .iter()
-                .map(|(id, _)| SharedString::from(id.to_string().as_str()))
-                .collect();
-            let cp_index = counterparties
-                .iter()
-                .position(|(id, _)| *id == act.counterparty_id)
-                .unwrap_or(0) as i32;
-
-            let mut cat_names: Vec<SharedString> =
-                vec![SharedString::from("— без категорії —")];
-            let mut cat_ids: Vec<SharedString> = vec![SharedString::from("")];
-            for c in &categories {
-                let prefix = if c.depth > 0 { "  └─ " } else { "" };
-                cat_names.push(SharedString::from(format!("{}{}", prefix, c.name)));
-                cat_ids.push(SharedString::from(c.id.to_string()));
+            if let Err(e) = populate_act_form(&pool, ui_handle, uuid, cid, true).await {
+                tracing::error!("Помилка підготовки форми акту: {e}");
             }
-            let cat_id_str = act.category_id.map(|id| id.to_string()).unwrap_or_default();
-            let cat_index =
-                cat_ids.iter().position(|id| id.as_str() == cat_id_str).unwrap_or(0) as i32;
-
-            let form_items: Vec<FormItemRow> = items
-                .iter()
-                .map(|it| FormItemRow {
-                    description: SharedString::from(it.description.as_str()),
-                    quantity: SharedString::from(format!("{}", it.quantity).as_str()),
-                    unit: SharedString::from(it.unit.as_str()),
-                    price: SharedString::from(format!("{}", it.unit_price).as_str()),
-                    amount: SharedString::from(format!("{:.2}", it.amount).as_str()),
-                })
-                .collect();
-            let task_rows = to_task_rows(&tasks);
-
-            let act_number = act.number.clone();
-            let act_date = act.date.format("%d.%m.%Y").to_string();
-            let act_notes = act.notes.clone().unwrap_or_default();
-            let act_id_str = act.id.to_string();
-            let total_str = format!("{:.2}", act.total_amount);
-            let exp_date_str = act
-                .expected_payment_date
-                .map(|d| d.format("%d.%m.%Y").to_string())
-                .unwrap_or_default();
-
-            ui_handle
-                .upgrade_in_event_loop(move |ui| {
-                    ui.set_show_act_card(false);
-                    ui.set_act_form_number(SharedString::from(act_number.as_str()));
-                    ui.set_act_form_date(SharedString::from(act_date.as_str()));
-                    ui.set_act_form_notes(SharedString::from(act_notes.as_str()));
-                    ui.set_act_form_cp_index(cp_index);
-                    ui.set_act_form_edit_id(SharedString::from(act_id_str.as_str()));
-                    ui.set_act_form_total(SharedString::from(total_str.as_str()));
-                    ui.set_act_form_is_edit(true);
-                    ui.set_act_form_cp_names(ModelRc::new(VecModel::from(cp_names)));
-                    ui.set_act_form_cp_ids(ModelRc::new(VecModel::from(cp_ids)));
-                    ui.set_act_form_category_names(ModelRc::new(VecModel::from(cat_names)));
-                    ui.set_act_form_category_ids(ModelRc::new(VecModel::from(cat_ids)));
-                    ui.set_act_form_category_index(cat_index);
-                    ui.set_act_form_expected_payment_date(SharedString::from(
-                        exp_date_str.as_str(),
-                    ));
-                    ui.set_act_form_items(ModelRc::new(VecModel::from(form_items)));
-                    ui.set_act_task_rows(ModelRc::new(VecModel::from(task_rows)));
-                    ui.set_act_tasks_loading(false);
-                    ui.set_show_act_form(true);
-                })
-                .ok();
         });
     });
 
@@ -562,10 +573,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
                 tracing::error!("PDF (картка): генерація: {e}"); return;
             }
             tracing::info!("PDF '{}' → {}", act.number, output_path.display());
-            if let Err(e) = std::process::Command::new("cmd")
-                .args(["/C", "start", "", &output_path.to_string_lossy()])
-                .spawn()
-            {
+            if let Err(e) = open::that(&output_path) {
                 tracing::error!("PDF (картка): відкриття: {e}");
             }
             if let Err(e) = open_act_card(&pool, ui_weak, uuid).await {
@@ -797,10 +805,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
                 return;
             }
             tracing::info!("PDF '{}' → {}", act.number, output_path.display());
-            if let Err(e) = std::process::Command::new("cmd")
-                .args(["/C", "start", "", &output_path.to_string_lossy()])
-                .spawn()
-            {
+            if let Err(e) = open::that(&output_path) {
                 tracing::error!("PDF: не вдалось відкрити файл: {e}");
             }
         });
@@ -820,100 +825,9 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
                 tracing::error!("Некоректний UUID акту: {id_str}");
                 return;
             };
-            let (act_result, cp_result, tasks_result, cat_result) = tokio::join!(
-                db::acts::get_for_edit(&pool, uuid),
-                db::acts::counterparties_for_select(&pool, cid),
-                db::tasks::list_by_act(&pool, uuid),
-                db::categories::list_all_for_select(&pool, cid),
-            );
-            let act_opt = match act_result {
-                Ok(v) => v,
-                Err(e) => { tracing::error!("Помилка завантаження акту: {e}"); return; }
-            };
-            let counterparties = match cp_result {
-                Ok(v) => v,
-                Err(e) => { tracing::error!("Помилка завантаження контрагентів: {e}"); return; }
-            };
-            let tasks = match tasks_result {
-                Ok(v) => v,
-                Err(e) => { tracing::error!("Помилка завантаження задач акту: {e}"); return; }
-            };
-            let categories = cat_result.unwrap_or_default();
-            let Some((act, items)) = act_opt else {
-                tracing::warn!("Акт {uuid} не знайдено.");
-                return;
-            };
-
-            let cp_names: Vec<SharedString> = counterparties
-                .iter()
-                .map(|(_, n)| SharedString::from(n.as_str()))
-                .collect();
-            let cp_ids: Vec<SharedString> = counterparties
-                .iter()
-                .map(|(id, _)| SharedString::from(id.to_string().as_str()))
-                .collect();
-            let cp_index = counterparties
-                .iter()
-                .position(|(id, _)| *id == act.counterparty_id)
-                .unwrap_or(0) as i32;
-
-            let form_items: Vec<FormItemRow> = items
-                .iter()
-                .map(|it| FormItemRow {
-                    description: SharedString::from(it.description.as_str()),
-                    quantity: SharedString::from(format!("{}", it.quantity).as_str()),
-                    unit: SharedString::from(it.unit.as_str()),
-                    price: SharedString::from(format!("{}", it.unit_price).as_str()),
-                    amount: SharedString::from(format!("{:.2}", it.amount).as_str()),
-                })
-                .collect();
-            let task_rows = to_task_rows(&tasks);
-
-            let act_number = act.number.clone();
-            let act_date = act.date.format("%d.%m.%Y").to_string();
-            let act_notes = act.notes.clone().unwrap_or_default();
-            let act_id_str = act.id.to_string();
-            let total_str = format!("{:.2}", act.total_amount);
-
-            let mut cat_names: Vec<SharedString> =
-                vec![SharedString::from("— без категорії —")];
-            let mut cat_ids: Vec<SharedString> = vec![SharedString::from("")];
-            for c in &categories {
-                let prefix = if c.depth > 0 { "  └─ " } else { "" };
-                cat_names.push(SharedString::from(format!("{}{}", prefix, c.name)));
-                cat_ids.push(SharedString::from(c.id.to_string()));
+            if let Err(e) = populate_act_form(&pool, ui_handle, uuid, cid, false).await {
+                tracing::error!("Помилка підготовки форми акту: {e}");
             }
-            let cat_id_str = act.category_id.map(|id| id.to_string()).unwrap_or_default();
-            let cat_index =
-                cat_ids.iter().position(|id| id.as_str() == cat_id_str).unwrap_or(0);
-            let exp_date_str = act
-                .expected_payment_date
-                .map(|d| d.format("%d.%m.%Y").to_string())
-                .unwrap_or_default();
-
-            ui_handle
-                .upgrade_in_event_loop(move |ui| {
-                    ui.set_act_form_number(SharedString::from(act_number.as_str()));
-                    ui.set_act_form_date(SharedString::from(act_date.as_str()));
-                    ui.set_act_form_notes(SharedString::from(act_notes.as_str()));
-                    ui.set_act_form_cp_index(cp_index);
-                    ui.set_act_form_edit_id(SharedString::from(act_id_str.as_str()));
-                    ui.set_act_form_total(SharedString::from(total_str.as_str()));
-                    ui.set_act_form_is_edit(true);
-                    ui.set_act_form_cp_names(ModelRc::new(VecModel::from(cp_names)));
-                    ui.set_act_form_cp_ids(ModelRc::new(VecModel::from(cp_ids)));
-                    ui.set_act_form_category_names(ModelRc::new(VecModel::from(cat_names)));
-                    ui.set_act_form_category_ids(ModelRc::new(VecModel::from(cat_ids)));
-                    ui.set_act_form_category_index(cat_index as i32);
-                    ui.set_act_form_expected_payment_date(SharedString::from(
-                        exp_date_str.as_str(),
-                    ));
-                    ui.set_act_form_items(ModelRc::new(VecModel::from(form_items)));
-                    ui.set_act_task_rows(ModelRc::new(VecModel::from(task_rows)));
-                    ui.set_act_tasks_loading(false);
-                    ui.set_show_act_form(true);
-                })
-                .ok();
         });
     });
 
