@@ -13,6 +13,7 @@ END $$;
 
 CREATE TABLE acts (
     id               UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id       UUID           NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
     number           VARCHAR(50)    NOT NULL,
     counterparty_id  UUID           NOT NULL REFERENCES counterparties(id),
     -- contract_id поки без FK — таблиця contracts буде в майбутній міграції
@@ -39,6 +40,7 @@ CREATE TABLE act_items (
     updated_at   TIMESTAMPTZ    NOT NULL DEFAULT NOW()
 );
 
+CREATE INDEX idx_acts_company      ON acts(company_id);
 CREATE INDEX idx_acts_counterparty ON acts(counterparty_id);
 CREATE INDEX idx_acts_status       ON acts(status);
 CREATE INDEX idx_acts_date         ON acts(date DESC);

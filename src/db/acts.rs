@@ -146,12 +146,12 @@ pub async fn list_filtered(
         qb.push_bind(direction);
     }
     if let Some(q) = search_query {
-        let pattern = format!("%{q}%");
+        let pattern = super::ilike_pattern(&q);
         qb.push(" AND (a.number ILIKE ");
         qb.push_bind(pattern.clone());
-        qb.push(" OR c.name ILIKE ");
+        qb.push(r" ESCAPE '\' OR c.name ILIKE ");
         qb.push_bind(pattern);
-        qb.push(")");
+        qb.push(r" ESCAPE '\')");
     }
     if let Some(cp_id) = counterparty_id {
         qb.push(" AND a.counterparty_id = ");

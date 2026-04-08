@@ -1,0 +1,47 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            a.number          AS \"num!: String\",\n            c.name            AS \"contractor!: String\",\n            a.total_amount    AS \"amount!: Decimal\",\n            a.status::text    AS \"status!: String\",\n            TO_CHAR(a.date, 'DD.MM.YYYY') AS \"date!: String\"\n        FROM acts a\n        JOIN counterparties c ON c.id = a.counterparty_id\n        WHERE a.company_id = $1\n        ORDER BY a.created_at DESC\n        LIMIT $2\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "num!: String",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "contractor!: String",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "amount!: Decimal",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 3,
+        "name": "status!: String",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "date!: String",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "5f988084a84e8df634a0f555fed571fba0f7f49fd50fa6703853f59e9abd66bc"
+}

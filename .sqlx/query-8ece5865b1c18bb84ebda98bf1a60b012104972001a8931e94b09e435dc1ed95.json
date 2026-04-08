@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT status AS \"status: ActStatus\" FROM acts WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "status: ActStatus",
+        "type_info": {
+          "Custom": {
+            "name": "act_status",
+            "kind": {
+              "Enum": [
+                "draft",
+                "issued",
+                "signed",
+                "paid"
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "8ece5865b1c18bb84ebda98bf1a60b012104972001a8931e94b09e435dc1ed95"
+}

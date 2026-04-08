@@ -31,27 +31,4 @@ CREATE INDEX idx_companies_edrpou ON companies(edrpou);
 INSERT INTO companies (id, name, short_name)
 VALUES ('00000000-0000-0000-0000-000000000001', 'Компанія за замовчуванням', 'Default');
 
--- Частина 3: ALTER існуючих таблиць
-ALTER TABLE counterparties
-    ADD COLUMN company_id UUID REFERENCES companies(id) ON DELETE RESTRICT;
-
-ALTER TABLE acts
-    ADD COLUMN company_id UUID REFERENCES companies(id) ON DELETE RESTRICT;
-
--- Частина 4: Backfill
-UPDATE counterparties SET company_id = '00000000-0000-0000-0000-000000000001';
-UPDATE acts           SET company_id = '00000000-0000-0000-0000-000000000001';
-
--- Частина 5: NOT NULL
-ALTER TABLE counterparties ALTER COLUMN company_id SET NOT NULL;
-ALTER TABLE acts           ALTER COLUMN company_id SET NOT NULL;
-
--- tasks теж отримують company_id
-ALTER TABLE tasks ADD COLUMN company_id UUID REFERENCES companies(id) ON DELETE RESTRICT;
-UPDATE tasks SET company_id = '00000000-0000-0000-0000-000000000001';
-ALTER TABLE tasks ALTER COLUMN company_id SET NOT NULL;
-
--- Частина 6: Індекси
-CREATE INDEX idx_counterparties_company ON counterparties(company_id);
-CREATE INDEX idx_acts_company           ON acts(company_id);
-CREATE INDEX idx_tasks_company          ON tasks(company_id);
+-- Індекси для company_id створюються разом з таблицями у міграціях 012, 013, 020.

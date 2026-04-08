@@ -1,5 +1,15 @@
 // Модуль роботи з базою даних
 // Кожен файл — CRUD для однієї таблиці
+
+/// Екранує спецсимволи ILIKE: `\` → `\\`, `%` → `\%`, `_` → `\_`.
+/// Завжди використовувати разом з `ILIKE $n ESCAPE '\'` в SQL.
+pub fn ilike_pattern(q: &str) -> String {
+    let escaped = q
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_");
+    format!("%{escaped}%")
+}
 pub mod acts;
 pub mod categories;
 pub mod companies;

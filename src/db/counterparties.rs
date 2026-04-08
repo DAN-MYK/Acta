@@ -83,14 +83,14 @@ pub async fn list_filtered(
         }
         (Some(q), false) => {
             // $1 = pattern, $2 = company_id
-            let pattern = format!("%{q}%");
+            let pattern = super::ilike_pattern(&q);
             sqlx::query_as::<_, Counterparty>(
                 r#"
                 SELECT id, name, edrpou, ipn, iban, address, phone, email, notes,
                        is_archived, bas_id, created_at, updated_at
                 FROM counterparties
                 WHERE is_archived = FALSE
-                  AND (name ILIKE $1 OR COALESCE(edrpou, '') ILIKE $1)
+                  AND (name ILIKE $1 ESCAPE '\' OR COALESCE(edrpou, '') ILIKE $1 ESCAPE '\')
                   AND company_id = $2
                 ORDER BY name
                 LIMIT 100
@@ -103,13 +103,13 @@ pub async fn list_filtered(
         }
         (Some(q), true) => {
             // $1 = pattern, $2 = company_id
-            let pattern = format!("%{q}%");
+            let pattern = super::ilike_pattern(&q);
             sqlx::query_as::<_, Counterparty>(
                 r#"
                 SELECT id, name, edrpou, ipn, iban, address, phone, email, notes,
                        is_archived, bas_id, created_at, updated_at
                 FROM counterparties
-                WHERE (name ILIKE $1 OR COALESCE(edrpou, '') ILIKE $1)
+                WHERE (name ILIKE $1 ESCAPE '\' OR COALESCE(edrpou, '') ILIKE $1 ESCAPE '\')
                   AND company_id = $2
                 ORDER BY name
                 LIMIT 100

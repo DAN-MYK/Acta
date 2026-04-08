@@ -10,6 +10,7 @@ END $$;
 
 CREATE TABLE tasks (
     id              UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id      UUID            NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
     title           TEXT            NOT NULL,
     description     TEXT,
     status          task_status     NOT NULL DEFAULT 'open',
@@ -26,6 +27,7 @@ CREATE TABLE tasks (
     updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
 
+CREATE INDEX idx_tasks_company      ON tasks(company_id);
 CREATE INDEX idx_tasks_status       ON tasks(status);
 CREATE INDEX idx_tasks_priority     ON tasks(priority, due_date);
 CREATE INDEX idx_tasks_reminder     ON tasks(reminder_at) WHERE reminder_at IS NOT NULL;
