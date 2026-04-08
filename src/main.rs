@@ -4550,6 +4550,7 @@ async fn reload_documents(
 }
 
 /// Дані фільтру контрагентів для списку документів.
+#[derive(Clone)]
 struct DocCpFilterData {
     /// UUID-и контрагентів (без елемента "Всі контрагенти" на позиції 0).
     cp_ids: Vec<uuid::Uuid>,
