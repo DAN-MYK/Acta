@@ -8,7 +8,7 @@ slint::include_modules!();
 mod app_ctx;
 mod ui;
 
-use app_ctx::{AppCtx, ActListState, CounterpartyListState, DocListState, InvoiceListState, DEFAULT_COMPANY_ID};
+use app_ctx::{AppCtx, ActListState, CounterpartyListState, DocListState, InvoiceListState};
 use acta::{config::AppConfig, db, notifications};
 use anyhow::Result;
 use slint::{ModelRc, SharedString, VecModel};
@@ -62,7 +62,8 @@ fn main() -> Result<()> {
     ui.set_counterparty_show_archived(false);
 
     // ── Активна компанія та стани списків — спільні між усіма callbacks ──────
-    let active_company_id: Arc<Mutex<uuid::Uuid>> = Arc::new(Mutex::new(DEFAULT_COMPANY_ID));
+    // Nil UUID = компанія ще не обрана. DB-запити з nil UUID повернуть порожній результат.
+    let active_company_id: Arc<Mutex<uuid::Uuid>> = Arc::new(Mutex::new(uuid::Uuid::nil()));
     let doc_cp_ids: Arc<Mutex<Vec<uuid::Uuid>>> = Arc::new(Mutex::new(vec![]));
 
     // ── Початкове завантаження компаній ─────────────────────────────────────
@@ -121,44 +122,49 @@ fn main() -> Result<()> {
     // tokio::join! виконує всі запити до БД паралельно → швидший старт.
     // Після цього apply_*_to_ui встановлює дані напряму в UI:
     // вікно відкриється вже з даними (без "flash of empty content").
+    //
+    // Якщо компанія ще не обрана (nil UUID) — пропускаємо завантаження:
+    // UI залишається порожнім, picker/форма компанії вже відображені.
     let cid = *active_company_id.lock().unwrap();
-    let (cp_data, acts_data, inv_data, tasks_data, pay_data, doc_cp_data, docs_data, settings_data, pay_cp_data) =
-        rt.block_on(async {
-            let (r0, r1, r2, r3, r4, r5, r6, r7, r8) = tokio::join!(
-                prepare_counterparties_data(&pool, cid, String::new(), false, 0),
-                prepare_acts_data(&pool, cid, None, String::new()),
-                prepare_invoices_data(&pool, cid, None, String::new()),
-                prepare_tasks_data(&pool, String::new()),
-                prepare_payments_data(&pool, cid, None, ""),
-                fetch_doc_cp_filter_data(&pool, cid),
-                prepare_documents_data(&pool, cid, 0, "outgoing", "", None, None, None),
-                prepare_settings_data(&pool, cid),
-                prepare_payment_cp_options_data(&pool, cid),
-            );
-            Ok::<_, anyhow::Error>((r0?, r1?, r2?, r3?, r4?, r5?, r6?, r7?, r8?))
-        })?;
+    if !cid.is_nil() {
+        let (cp_data, acts_data, inv_data, tasks_data, pay_data, doc_cp_data, docs_data, settings_data, pay_cp_data) =
+            rt.block_on(async {
+                let (r0, r1, r2, r3, r4, r5, r6, r7, r8) = tokio::join!(
+                    prepare_counterparties_data(&pool, cid, String::new(), false, 0),
+                    prepare_acts_data(&pool, cid, None, String::new()),
+                    prepare_invoices_data(&pool, cid, None, String::new()),
+                    prepare_tasks_data(&pool, String::new()),
+                    prepare_payments_data(&pool, cid, None, ""),
+                    fetch_doc_cp_filter_data(&pool, cid),
+                    prepare_documents_data(&pool, cid, 0, "outgoing", "", None, None, None),
+                    prepare_settings_data(&pool, cid),
+                    prepare_payment_cp_options_data(&pool, cid),
+                );
+                Ok::<_, anyhow::Error>((r0?, r1?, r2?, r3?, r4?, r5?, r6?, r7?, r8?))
+            })?;
 
-    // Оновлюємо doc_cp_ids перед застосуванням фільтру
-    let DocCpFilterData { cp_ids: doc_cp_id_list, names: doc_cp_names } = doc_cp_data;
-    {
-        let mut ids = doc_cp_ids.lock().unwrap();
-        *ids = doc_cp_id_list;
-    }
+        // Оновлюємо doc_cp_ids перед застосуванням фільтру
+        let DocCpFilterData { cp_ids: doc_cp_id_list, names: doc_cp_names } = doc_cp_data;
+        {
+            let mut ids = doc_cp_ids.lock().unwrap();
+            *ids = doc_cp_id_list;
+        }
 
-    // Застосовуємо всі дані напряму (main thread — ui.set_*() без event loop)
-    apply_counterparties_to_ui(&ui, cp_data, false);
-    apply_acts_to_ui(&ui, acts_data, false);
-    apply_invoices_to_ui(&ui, inv_data, false);
-    apply_tasks_to_ui(&ui, tasks_data, false);
-    apply_payments_to_ui(&ui, pay_data);
-    ui.set_doc_filter_cp_names(ModelRc::new(VecModel::from(doc_cp_names)));
-    apply_documents_to_ui(&ui, docs_data);
-    apply_settings_to_ui(&ui, settings_data);
-    {
-        let d = pay_cp_data;
-        ui.set_payment_form_counterparty_names(ModelRc::new(VecModel::from(d.names)));
-        ui.set_payment_form_counterparty_ids(ModelRc::new(VecModel::from(d.ids)));
-        ui.set_payment_form_counterparty_index(0);
+        // Застосовуємо всі дані напряму (main thread — ui.set_*() без event loop)
+        apply_counterparties_to_ui(&ui, cp_data, false);
+        apply_acts_to_ui(&ui, acts_data, false);
+        apply_invoices_to_ui(&ui, inv_data, false);
+        apply_tasks_to_ui(&ui, tasks_data, false);
+        apply_payments_to_ui(&ui, pay_data);
+        ui.set_doc_filter_cp_names(ModelRc::new(VecModel::from(doc_cp_names)));
+        apply_documents_to_ui(&ui, docs_data);
+        apply_settings_to_ui(&ui, settings_data);
+        {
+            let d = pay_cp_data;
+            ui.set_payment_form_counterparty_names(ModelRc::new(VecModel::from(d.names)));
+            ui.set_payment_form_counterparty_ids(ModelRc::new(VecModel::from(d.ids)));
+            ui.set_payment_form_counterparty_index(0);
+        }
     }
 
     // ── Спільний контекст ────────────────────────────────────────────────────

@@ -294,8 +294,8 @@ pub async fn create(pool: &PgPool, company_id: Uuid, data: &NewAct) -> Result<Ac
     // ActStatus має #[derive(sqlx::Type)] — тому sqlx декодує ENUM автоматично.
     let act = sqlx::query_as::<_, Act>(
         r#"INSERT INTO acts (company_id, number, counterparty_id, contract_id, category_id,
-                             direction, date, expected_payment_date, notes, bas_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                             direction, date, expected_payment_date, status, notes, bas_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
            RETURNING id, number, counterparty_id, contract_id, category_id, direction,
                      date, expected_payment_date, total_amount,
                      status, notes, bas_id, created_at, updated_at"#
@@ -308,6 +308,7 @@ pub async fn create(pool: &PgPool, company_id: Uuid, data: &NewAct) -> Result<Ac
     .bind(&data.direction)
     .bind(data.date)
     .bind(data.expected_payment_date)
+    .bind(&data.status)
     .bind(&data.notes)
     .bind(&data.bas_id)
     .fetch_one(&mut *tx)

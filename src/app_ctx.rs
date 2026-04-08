@@ -6,9 +6,6 @@
 use sqlx::PgPool;
 use std::sync::{Arc, Mutex};
 
-/// UUID дефолтної компанії (з міграції 012) — використовується якщо ще не обрано іншу.
-pub const DEFAULT_COMPANY_ID: uuid::Uuid =
-    uuid::Uuid::from_bytes([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
 
 #[derive(Clone, Default)]
 pub struct CounterpartyListState {
@@ -81,8 +78,16 @@ pub struct AppCtx {
 
 impl AppCtx {
     /// Читає UUID активної компанії. Безпечний при отруєному mutex.
+    /// Повертає nil UUID якщо компанія ще не обрана — перевіряй `.is_nil()` або використовуй `company_id_opt()`.
     pub fn company_id(&self) -> uuid::Uuid {
         *self.active_company_id.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Повертає `Some(id)` якщо компанія обрана, або `None` якщо ні.
+    #[allow(dead_code)]
+    pub fn company_id_opt(&self) -> Option<uuid::Uuid> {
+        let id = self.company_id();
+        if id.is_nil() { None } else { Some(id) }
     }
 
     /// Встановлює UUID активної компанії. Безпечний при отруєному mutex.

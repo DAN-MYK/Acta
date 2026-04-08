@@ -123,6 +123,7 @@ pub struct NewAct {
     pub direction: String,
     pub date: NaiveDate,
     pub expected_payment_date: Option<NaiveDate>,
+    pub status: ActStatus,
     pub notes: Option<String>,
     pub bas_id: Option<String>,
     pub items: Vec<NewActItem>,

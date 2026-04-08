@@ -188,25 +188,26 @@ pub fn spawn_save_act(
     con_id_str: String,
     exp_date_str: String,
     items: Vec<acta::models::NewActItem>,
+    is_draft: bool,
 ) {
     tokio::spawn(async move {
         if number.trim().is_empty() {
-            tracing::error!("Номер акту не може бути порожнім");
+            show_toast(ui_weak.clone(), "Номер акту не може бути порожнім".to_string(), true);
             return;
         }
         if date_str.trim().is_empty() {
-            tracing::error!("Дата акту не може бути порожньою");
+            show_toast(ui_weak.clone(), "Дата акту не може бути порожньою".to_string(), true);
             return;
         }
         if cp_id_str.trim().is_empty() {
-            tracing::error!("Контрагент не вибраний");
+            show_toast(ui_weak.clone(), "Контрагент не вибраний".to_string(), true);
             return;
         }
 
         let date = match NaiveDate::parse_from_str(&date_str, "%d.%m.%Y") {
             Ok(d) => d,
             Err(_) => {
-                tracing::error!("Невірний формат дати: '{date_str}'. Очікується ДД.ММ.РРРР");
+                show_toast(ui_weak.clone(), format!("Невірний формат дати: '{date_str}'"), true);
                 return;
             }
         };
@@ -214,9 +215,7 @@ pub fn spawn_save_act(
         let cp_uuid = match uuid::Uuid::parse_str(&cp_id_str) {
             Ok(id) => id,
             Err(_) => {
-                tracing::error!(
-                    "Контрагент не вибраний або UUID некоректний: '{cp_id_str}'"
-                );
+                show_toast(ui_weak.clone(), "Контрагент не вибраний".to_string(), true);
                 return;
             }
         };
@@ -248,6 +247,7 @@ pub fn spawn_save_act(
             },
             date,
             expected_payment_date: exp_date_opt,
+            status: if is_draft { ModelActStatus::Draft } else { ModelActStatus::Issued },
             notes,
             bas_id: None,
             items,
@@ -1138,6 +1138,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
             con_id_str.to_string(),
             exp_date_str.to_string(),
             items,
+            false,
         );
     });
 
@@ -1165,6 +1166,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
             con_id_str.to_string(),
             exp_date_str.to_string(),
             items,
+            true,
         );
     });
 
