@@ -66,7 +66,7 @@ DELETE FROM companies
 WHERE name LIKE 'РўРћР’ "РўРµСЃС‚РѕРІР° РєРѕРјРїР°РЅС–СЏ %';
 "#;
 
-const SEED_SQL: &str = include_str!("../../migrations/016_seed_demo_data.sql");
+const SEED_SQL: &str = include_str!("../../migrations/022_seed_demo_data.sql");
 
 fn cleanup_statements() -> [&'static str; 7] {
     [

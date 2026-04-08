@@ -195,27 +195,50 @@ fn main() -> Result<()> {
         Ok::<(), anyhow::Error>(())
     })?;
 
-    // ── Початкове завантаження ───────────────────────────────────────────────
-    // block_on на головному потоці → ModelRc будувати безпечно.
+    // ── Початкове завантаження (паралельно, без upgrade_in_event_loop) ──────────
+    // Ми на main thread до ui.run() → ui.set_*() безпечно викликати напряму.
+    // tokio::join! виконує всі запити до БД паралельно → швидший старт.
+    // Після цього apply_*_to_ui встановлює дані напряму в UI:
+    // вікно відкриється вже з даними (без "flash of empty content").
     let cid = *active_company_id.lock().unwrap();
-    rt.block_on(async {
-        reload_counterparties(&pool, ui.as_weak(), cid, String::new(), false, 0, false).await?;
-        // ── Початкове завантаження актів ─────────────────────────────────────
-        reload_acts(&pool, ui.as_weak(), cid, None, String::new(), false).await?;
-        // ── Початкове завантаження накладних ─────────────────────────────────
-        reload_invoices(&pool, ui.as_weak(), cid, None, String::new(), false).await?;
-        // ── Початкове завантаження задач ────────────────────────────────────
-        ui.set_tasks_loading(true);
-        reload_tasks(&pool, ui.as_weak(), String::new(), false).await?;
-        // ── Початкове завантаження платежів ──────────────────────────────────
-        reload_payments(&pool, ui.as_weak(), cid, None, "").await?;
-        // ── Початкове завантаження єдиного списку документів + фільтру контрагентів
-        reload_doc_cp_filter(&pool, ui.as_weak(), cid, &doc_cp_ids).await?;
-        reload_documents(&pool, ui.as_weak(), cid, 0, "outgoing", "", None, None, None).await?;
-        reload_settings(&pool, ui.as_weak(), cid).await?;
-        reload_payment_counterparty_options(&pool, ui.as_weak(), cid).await?;
-        Ok::<(), anyhow::Error>(())
-    })?;
+    let (cp_data, acts_data, inv_data, tasks_data, pay_data, doc_cp_data, docs_data, settings_data, pay_cp_data) =
+        rt.block_on(async {
+            let (r0, r1, r2, r3, r4, r5, r6, r7, r8) = tokio::join!(
+                prepare_counterparties_data(&pool, cid, String::new(), false, 0),
+                prepare_acts_data(&pool, cid, None, String::new()),
+                prepare_invoices_data(&pool, cid, None, String::new()),
+                prepare_tasks_data(&pool, String::new()),
+                prepare_payments_data(&pool, cid, None, ""),
+                fetch_doc_cp_filter_data(&pool, cid),
+                prepare_documents_data(&pool, cid, 0, "outgoing", "", None, None, None),
+                prepare_settings_data(&pool, cid),
+                prepare_payment_cp_options_data(&pool, cid),
+            );
+            Ok::<_, anyhow::Error>((r0?, r1?, r2?, r3?, r4?, r5?, r6?, r7?, r8?))
+        })?;
+
+    // Оновлюємо doc_cp_ids перед застосуванням фільтру (деструктуризація — без clone)
+    let DocCpFilterData { cp_ids: doc_cp_id_list, names: doc_cp_names } = doc_cp_data;
+    {
+        let mut ids = doc_cp_ids.lock().unwrap();
+        *ids = doc_cp_id_list;
+    }
+
+    // Застосовуємо всі дані напряму (main thread — ui.set_*() без event loop)
+    apply_counterparties_to_ui(&ui, cp_data, false);
+    apply_acts_to_ui(&ui, acts_data, false);
+    apply_invoices_to_ui(&ui, inv_data, false);
+    apply_tasks_to_ui(&ui, tasks_data, false);
+    apply_payments_to_ui(&ui, pay_data);
+    ui.set_doc_filter_cp_names(ModelRc::new(VecModel::from(doc_cp_names)));
+    apply_documents_to_ui(&ui, docs_data);
+    apply_settings_to_ui(&ui, settings_data);
+    {
+        let d = pay_cp_data;
+        ui.set_payment_form_counterparty_names(ModelRc::new(VecModel::from(d.names)));
+        ui.set_payment_form_counterparty_ids(ModelRc::new(VecModel::from(d.ids)));
+        ui.set_payment_form_counterparty_index(0);
+    }
 
     // ── Колбек: пошук ────────────────────────────────────────────────────────
     //
@@ -3697,15 +3720,25 @@ fn collect_form_items(ui: &MainWindow) -> Vec<NewActItem> {
         .collect()
 }
 
-async fn reload_counterparties(
+/// Проміжні дані контрагентів — Send-safe (SharedString = Arc, без ModelRc).
+struct CounterpartiesUiData {
+    table_data: TableData,
+    total_all: i32,
+    active_all: i32,
+    archived_all: i32,
+    pagination: SharedString,
+    include_archived: bool,
+    current_page: i32,
+    total_pages: i32,
+}
+
+async fn prepare_counterparties_data(
     pool: &sqlx::PgPool,
-    ui_weak: Weak<MainWindow>,
     company_id: uuid::Uuid,
     query: String,
     include_archived: bool,
     page: usize,
-    close_form: bool,
-) -> Result<()> {
+) -> Result<CounterpartiesUiData> {
     let filter_query = normalized_query(&query);
     let all_counterparties =
         db::counterparties::list_filtered(pool, company_id, filter_query, true).await?;
@@ -3717,14 +3750,11 @@ async fn reload_counterparties(
     let filtered_counterparties: Vec<_> = if include_archived {
         all_counterparties
     } else {
-        all_counterparties
-            .into_iter()
-            .filter(|cp| !cp.is_archived)
-            .collect()
+        all_counterparties.into_iter().filter(|cp| !cp.is_archived).collect()
     };
 
-    let current_page = page.min(total_filtered_pages(filtered_counterparties.len()).saturating_sub(1));
-
+    let current_page =
+        page.min(total_filtered_pages(filtered_counterparties.len()).saturating_sub(1));
     let start = current_page * COUNTERPARTY_PAGE_SIZE;
     let end = (start + COUNTERPARTY_PAGE_SIZE).min(filtered_counterparties.len());
     let page_slice = if start < filtered_counterparties.len() {
@@ -3733,7 +3763,7 @@ async fn reload_counterparties(
         &filtered_counterparties[0..0]
     };
 
-    let data = to_table_data(page_slice);
+    let table_data = to_table_data(page_slice);
     let total_pages = total_filtered_pages(filtered_counterparties.len()) as i32;
     let page_label = if filtered_counterparties.is_empty() {
         "Показано 0 з 0 контрагентів".to_string()
@@ -3745,34 +3775,101 @@ async fn reload_counterparties(
             filtered_counterparties.len()
         )
     };
-    let pagination = SharedString::from(page_label.as_str());
-    let current_page_ui = (current_page + 1) as i32;
 
+    Ok(CounterpartiesUiData {
+        table_data,
+        total_all: total_all as i32,
+        active_all: active_all as i32,
+        archived_all: archived_all as i32,
+        pagination: SharedString::from(page_label.as_str()),
+        include_archived,
+        current_page: (current_page + 1) as i32,
+        total_pages: total_pages.max(1),
+    })
+}
+
+/// Застосувати дані контрагентів до UI. Викликати тільки з main thread.
+fn apply_counterparties_to_ui(ui: &MainWindow, d: CounterpartiesUiData, close_form: bool) {
+    let (rows, ids, archived) = build_models(d.table_data);
+    ui.set_counterparty_rows(rows);
+    ui.set_counterparty_ids(ids);
+    ui.set_counterparty_archived(archived);
+    ui.set_counterparty_total_count(d.total_all);
+    ui.set_counterparty_active_count(d.active_all);
+    ui.set_counterparty_archived_count(d.archived_all);
+    ui.set_counterparty_pagination_text(d.pagination);
+    ui.set_counterparty_show_archived(d.include_archived);
+    ui.set_counterparty_current_page(d.current_page);
+    ui.set_counterparty_total_pages(d.total_pages);
+    if close_form {
+        ui.set_show_cp_form(false);
+    }
+}
+
+async fn reload_counterparties(
+    pool: &sqlx::PgPool,
+    ui_weak: Weak<MainWindow>,
+    company_id: uuid::Uuid,
+    query: String,
+    include_archived: bool,
+    page: usize,
+    close_form: bool,
+) -> Result<()> {
+    let d = prepare_counterparties_data(pool, company_id, query, include_archived, page).await?;
     ui_weak
-        .upgrade_in_event_loop(move |ui| {
-            let (rows, ids, archived) = build_models(data);
-            ui.set_counterparty_rows(rows);
-            ui.set_counterparty_ids(ids);
-            ui.set_counterparty_archived(archived);
-            ui.set_counterparty_total_count(total_all as i32);
-            ui.set_counterparty_active_count(active_all as i32);
-            ui.set_counterparty_archived_count(archived_all as i32);
-            ui.set_counterparty_pagination_text(pagination);
-            ui.set_counterparty_show_archived(include_archived);
-            ui.set_counterparty_current_page(current_page_ui);
-            ui.set_counterparty_total_pages(total_pages.max(1));
-            if close_form {
-                ui.set_show_cp_form(false);
-            }
-        })
-        .map_err(anyhow::Error::from)?;
-
-    Ok(())
+        .upgrade_in_event_loop(move |ui| apply_counterparties_to_ui(&ui, d, close_form))
+        .map_err(anyhow::Error::from)
 }
 
 fn total_filtered_pages(total_items: usize) -> usize {
     let pages = total_items.div_ceil(COUNTERPARTY_PAGE_SIZE);
     pages.max(1)
+}
+
+struct ActsUiData {
+    act_rows: Vec<ActRow>,
+    counts: Vec<i32>,
+    kpi_acts_month: i32,
+    kpi_revenue: SharedString,
+    kpi_unpaid: SharedString,
+    kpi_overdue: i32,
+}
+
+async fn prepare_acts_data(
+    pool: &sqlx::PgPool,
+    company_id: uuid::Uuid,
+    status_filter: Option<ModelActStatus>,
+    query: String,
+) -> Result<ActsUiData> {
+    let (acts_result, counts_result, kpi_result) = tokio::join!(
+        db::acts::list_filtered(pool, company_id, status_filter, None, normalized_query(&query), None, None, None),
+        db::acts::count_by_status(pool, company_id),
+        db::acts::get_kpi(pool, company_id)
+    );
+    let acts = acts_result?;
+    let counts = counts_result?;
+    let kpi = kpi_result?;
+
+    Ok(ActsUiData {
+        act_rows: to_act_rows(&acts),
+        counts,
+        kpi_acts_month: kpi.acts_this_month as i32,
+        kpi_revenue: SharedString::from(format_kpi_amount(kpi.revenue_this_month).as_str()),
+        kpi_unpaid: SharedString::from(format_kpi_amount(kpi.unpaid_total).as_str()),
+        kpi_overdue: kpi.overdue_count as i32,
+    })
+}
+
+fn apply_acts_to_ui(ui: &MainWindow, d: ActsUiData, close_form: bool) {
+    ui.set_act_rows(ModelRc::new(VecModel::from(d.act_rows)));
+    ui.set_act_status_counts(ModelRc::new(VecModel::from(d.counts)));
+    ui.set_act_kpi_acts_month(d.kpi_acts_month);
+    ui.set_act_kpi_revenue(d.kpi_revenue);
+    ui.set_act_kpi_unpaid(d.kpi_unpaid);
+    ui.set_act_kpi_overdue(d.kpi_overdue);
+    if close_form {
+        ui.set_show_act_form(false);
+    }
 }
 
 async fn reload_acts(
@@ -3783,35 +3880,10 @@ async fn reload_acts(
     query: String,
     close_form: bool,
 ) -> Result<()> {
-    // Три незалежних запити паралельно (урок: tokio::join!)
-    let (acts_result, counts_result, kpi_result) = tokio::join!(
-        db::acts::list_filtered(pool, company_id, status_filter, None, normalized_query(&query), None, None, None),
-        db::acts::count_by_status(pool, company_id),
-        db::acts::get_kpi(pool, company_id)
-    );
-    let acts = acts_result?;
-    let counts = counts_result?;
-    let kpi = kpi_result?;
-    let act_rows = to_act_rows(&acts);
-
-    let kpi_revenue = format_kpi_amount(kpi.revenue_this_month);
-    let kpi_unpaid  = format_kpi_amount(kpi.unpaid_total);
-
+    let d = prepare_acts_data(pool, company_id, status_filter, query).await?;
     ui_weak
-        .upgrade_in_event_loop(move |ui| {
-            ui.set_act_rows(ModelRc::new(VecModel::from(act_rows)));
-            ui.set_act_status_counts(ModelRc::new(VecModel::from(counts)));
-            ui.set_act_kpi_acts_month(kpi.acts_this_month as i32);
-            ui.set_act_kpi_revenue(SharedString::from(kpi_revenue.as_str()));
-            ui.set_act_kpi_unpaid(SharedString::from(kpi_unpaid.as_str()));
-            ui.set_act_kpi_overdue(kpi.overdue_count as i32);
-            if close_form {
-                ui.set_show_act_form(false);
-            }
-        })
-        .map_err(anyhow::Error::from)?;
-
-    Ok(())
+        .upgrade_in_event_loop(move |ui| apply_acts_to_ui(&ui, d, close_form))
+        .map_err(anyhow::Error::from)
 }
 
 /// Завантажити всі дані Dashboard і оновити UI.
@@ -3915,17 +3987,21 @@ async fn reload_dashboard(
     Ok(())
 }
 
-/// Завантажити список накладних компанії і оновити UI.
-async fn reload_invoices(
+struct InvoicesUiData {
+    invoice_rows: Vec<InvoiceRow>,
+}
+
+async fn prepare_invoices_data(
     pool: &sqlx::PgPool,
-    ui_weak: Weak<MainWindow>,
     company_id: uuid::Uuid,
     status_filter: Option<InvoiceStatus>,
     query: String,
-    close_form: bool,
-) -> Result<()> {
-    let invoices = db::invoices::list_filtered(pool, company_id, status_filter, None, normalized_query(&query), None, None, None).await?;
-    let invoice_rows: Vec<InvoiceRow> = invoices
+) -> Result<InvoicesUiData> {
+    let invoices = db::invoices::list_filtered(
+        pool, company_id, status_filter, None, normalized_query(&query), None, None, None,
+    )
+    .await?;
+    let invoice_rows = invoices
         .iter()
         .map(|inv| InvoiceRow {
             id: SharedString::from(inv.id.to_string().as_str()),
@@ -3942,27 +4018,43 @@ async fn reload_invoices(
             status: SharedString::from(inv.status.as_str()),
         })
         .collect();
-
-    ui_weak
-        .upgrade_in_event_loop(move |ui| {
-            ui.set_invoice_rows(ModelRc::new(VecModel::from(invoice_rows)));
-            if close_form {
-                ui.set_show_invoice_form(false);
-            }
-        })
-        .map_err(anyhow::Error::from)?;
-
-    Ok(())
+    Ok(InvoicesUiData { invoice_rows })
 }
 
-/// Завантажити список платежів та агрегати доходів/витрат.
-async fn reload_payments(
+fn apply_invoices_to_ui(ui: &MainWindow, d: InvoicesUiData, close_form: bool) {
+    ui.set_invoice_rows(ModelRc::new(VecModel::from(d.invoice_rows)));
+    if close_form {
+        ui.set_show_invoice_form(false);
+    }
+}
+
+/// Завантажити список накладних компанії і оновити UI.
+async fn reload_invoices(
     pool: &sqlx::PgPool,
     ui_weak: Weak<MainWindow>,
     company_id: uuid::Uuid,
+    status_filter: Option<InvoiceStatus>,
+    query: String,
+    close_form: bool,
+) -> Result<()> {
+    let d = prepare_invoices_data(pool, company_id, status_filter, query).await?;
+    ui_weak
+        .upgrade_in_event_loop(move |ui| apply_invoices_to_ui(&ui, d, close_form))
+        .map_err(anyhow::Error::from)
+}
+
+struct PaymentsUiData {
+    payment_rows: Vec<PaymentRow>,
+    total_income: SharedString,
+    total_expense: SharedString,
+}
+
+async fn prepare_payments_data(
+    pool: &sqlx::PgPool,
+    company_id: uuid::Uuid,
     direction: Option<crate::models::payment::PaymentDirection>,
     query: &str,
-) -> Result<()> {
+) -> Result<PaymentsUiData> {
     use rust_decimal::Decimal;
     let query_lower = query.trim().to_lowercase();
     let rows = db::payments::list(pool, company_id, direction)
@@ -3993,25 +4085,92 @@ async fn reload_payments(
         }
     }
 
-    let payment_rows: Vec<PaymentRow> = rows.iter().map(|r| PaymentRow {
-        id: SharedString::from(r.id.to_string().as_str()),
-        date: SharedString::from(r.date.as_str()),
-        counterparty: SharedString::from(r.counterparty_name.as_deref().unwrap_or("")),
-        description: SharedString::from(r.description.as_deref().unwrap_or("")),
-        bank: SharedString::from(r.bank_name.as_deref().unwrap_or("")),
-        amount: SharedString::from(format!("{:.2}", r.amount).as_str()),
-        direction: SharedString::from(r.direction.label()),
-        reconciled: r.is_reconciled,
-    }).collect();
+    let payment_rows: Vec<PaymentRow> = rows
+        .iter()
+        .map(|r| PaymentRow {
+            id: SharedString::from(r.id.to_string().as_str()),
+            date: SharedString::from(r.date.as_str()),
+            counterparty: SharedString::from(r.counterparty_name.as_deref().unwrap_or("")),
+            description: SharedString::from(r.description.as_deref().unwrap_or("")),
+            bank: SharedString::from(r.bank_name.as_deref().unwrap_or("")),
+            amount: SharedString::from(format!("{:.2}", r.amount).as_str()),
+            direction: SharedString::from(r.direction.label()),
+            reconciled: r.is_reconciled,
+        })
+        .collect();
 
-    ui_weak.upgrade_in_event_loop(move |ui| {
-        ui.set_payment_rows(ModelRc::new(VecModel::from(payment_rows)));
-        ui.set_payment_total_income(SharedString::from(format!("{:.2}", total_income)));
-        ui.set_payment_total_expense(SharedString::from(format!("{:.2}", total_expense)));
-        ui.set_payments_loading(false);
-        ui.set_show_payment_form(false);
-    }).map_err(anyhow::Error::from)?;
-    Ok(())
+    Ok(PaymentsUiData {
+        payment_rows,
+        total_income: SharedString::from(format!("{:.2}", total_income).as_str()),
+        total_expense: SharedString::from(format!("{:.2}", total_expense).as_str()),
+    })
+}
+
+fn apply_payments_to_ui(ui: &MainWindow, d: PaymentsUiData) {
+    ui.set_payment_rows(ModelRc::new(VecModel::from(d.payment_rows)));
+    ui.set_payment_total_income(d.total_income);
+    ui.set_payment_total_expense(d.total_expense);
+    ui.set_payments_loading(false);
+    ui.set_show_payment_form(false);
+}
+
+/// Завантажити список платежів та агрегати доходів/витрат.
+async fn reload_payments(
+    pool: &sqlx::PgPool,
+    ui_weak: Weak<MainWindow>,
+    company_id: uuid::Uuid,
+    direction: Option<crate::models::payment::PaymentDirection>,
+    query: &str,
+) -> Result<()> {
+    let d = prepare_payments_data(pool, company_id, direction, query).await?;
+    ui_weak
+        .upgrade_in_event_loop(move |ui| apply_payments_to_ui(&ui, d))
+        .map_err(anyhow::Error::from)
+}
+
+struct SettingsUiData {
+    company: Option<Company>,
+    category_rows: Vec<SettingsCategoryRow>,
+}
+
+async fn prepare_settings_data(
+    pool: &sqlx::PgPool,
+    company_id: uuid::Uuid,
+) -> Result<SettingsUiData> {
+    let (company_res, categories_res) = tokio::join!(
+        db::companies::get_by_id(pool, company_id),
+        db::categories::list(pool, company_id),
+    );
+    let company = company_res?;
+    let categories = categories_res?;
+    let category_rows = categories
+        .iter()
+        .map(|cat| SettingsCategoryRow {
+            name: SharedString::from(cat.name.as_str()),
+            kind: SharedString::from(cat.kind.as_str()),
+            depth: if cat.parent_id.is_some() { 1 } else { 0 },
+        })
+        .collect();
+    Ok(SettingsUiData { company, category_rows })
+}
+
+fn apply_settings_to_ui(ui: &MainWindow, d: SettingsUiData) {
+    if let Some(company) = d.company {
+        ui.set_settings_company_name(SharedString::from(company.name.as_str()));
+        ui.set_settings_company_edrpou(SharedString::from(
+            company.edrpou.as_deref().unwrap_or(""),
+        ));
+        ui.set_settings_company_iban(SharedString::from(
+            company.iban.as_deref().unwrap_or(""),
+        ));
+        ui.set_settings_company_director(SharedString::from(
+            company.director_name.as_deref().unwrap_or(""),
+        ));
+        ui.set_settings_company_address(SharedString::from(
+            company.legal_address.as_deref().unwrap_or(""),
+        ));
+    }
+    ui.set_settings_category_rows(ModelRc::new(VecModel::from(d.category_rows)));
 }
 
 async fn reload_settings(
@@ -4019,47 +4178,21 @@ async fn reload_settings(
     ui_weak: Weak<MainWindow>,
     company_id: uuid::Uuid,
 ) -> Result<()> {
-    let company = db::companies::get_by_id(pool, company_id).await?;
-    let categories = db::categories::list(pool, company_id).await?;
-
+    let d = prepare_settings_data(pool, company_id).await?;
     ui_weak
-        .upgrade_in_event_loop(move |ui| {
-            if let Some(company) = company {
-                ui.set_settings_company_name(SharedString::from(company.name.as_str()));
-                ui.set_settings_company_edrpou(SharedString::from(
-                    company.edrpou.as_deref().unwrap_or(""),
-                ));
-                ui.set_settings_company_iban(SharedString::from(
-                    company.iban.as_deref().unwrap_or(""),
-                ));
-                ui.set_settings_company_director(SharedString::from(
-                    company.director_name.as_deref().unwrap_or(""),
-                ));
-                ui.set_settings_company_address(SharedString::from(
-                    company.legal_address.as_deref().unwrap_or(""),
-                ));
-            }
-
-            let rows = categories
-                .iter()
-                .map(|cat| SettingsCategoryRow {
-                    name: SharedString::from(cat.name.as_str()),
-                    kind: SharedString::from(cat.kind.as_str()),
-                    depth: if cat.parent_id.is_some() { 1 } else { 0 },
-                })
-                .collect::<Vec<_>>();
-            ui.set_settings_category_rows(ModelRc::new(VecModel::from(rows)));
-        })
-        .map_err(anyhow::Error::from)?;
-
-    Ok(())
+        .upgrade_in_event_loop(move |ui| apply_settings_to_ui(&ui, d))
+        .map_err(anyhow::Error::from)
 }
 
-async fn reload_payment_counterparty_options(
+struct PaymentCpOptionsUiData {
+    names: Vec<SharedString>,
+    ids: Vec<SharedString>,
+}
+
+async fn prepare_payment_cp_options_data(
     pool: &sqlx::PgPool,
-    ui_weak: Weak<MainWindow>,
     company_id: uuid::Uuid,
-) -> Result<()> {
+) -> Result<PaymentCpOptionsUiData> {
     let counterparties = db::counterparties::list(pool, company_id).await?;
     let mut names = vec![SharedString::from("Без контрагента")];
     let mut ids = vec![SharedString::from("")];
@@ -4067,16 +4200,24 @@ async fn reload_payment_counterparty_options(
         names.push(SharedString::from(cp.name.as_str()));
         ids.push(SharedString::from(cp.id.to_string().as_str()));
     }
+    Ok(PaymentCpOptionsUiData { names, ids })
+}
+
+async fn reload_payment_counterparty_options(
+    pool: &sqlx::PgPool,
+    ui_weak: Weak<MainWindow>,
+    company_id: uuid::Uuid,
+) -> Result<()> {
+    let d = prepare_payment_cp_options_data(pool, company_id).await?;
     ui_weak
         .upgrade_in_event_loop(move |ui| {
-            ui.set_payment_form_counterparty_names(ModelRc::new(VecModel::from(names)));
-            ui.set_payment_form_counterparty_ids(ModelRc::new(VecModel::from(ids)));
+            ui.set_payment_form_counterparty_names(ModelRc::new(VecModel::from(d.names)));
+            ui.set_payment_form_counterparty_ids(ModelRc::new(VecModel::from(d.ids)));
             if !ui.get_payment_form_is_edit() {
                 ui.set_payment_form_counterparty_index(0);
             }
         })
-        .map_err(anyhow::Error::from)?;
-    Ok(())
+        .map_err(anyhow::Error::from)
 }
 
 /// Завантажити дані акту та відкрити картку-overlay в UI.
@@ -4291,9 +4432,14 @@ async fn open_counterparty_card(
 /// Завантажити єдиний список документів (акти + накладні) і оновити UI.
 ///
 /// tab: 0=Всі, 1=Акти, 2=Рахунки
-async fn reload_documents(
+struct DocumentsUiData {
+    doc_rows: Vec<DocRow>,
+    tab: i32,
+    direction_index: i32,
+}
+
+async fn prepare_documents_data(
     pool: &sqlx::PgPool,
-    ui_weak: Weak<MainWindow>,
     company_id: uuid::Uuid,
     tab: i32,
     direction: &str,
@@ -4301,52 +4447,31 @@ async fn reload_documents(
     counterparty_id: Option<uuid::Uuid>,
     date_from: Option<chrono::NaiveDate>,
     date_to: Option<chrono::NaiveDate>,
-) -> Result<()> {
+) -> Result<DocumentsUiData> {
     let search = if query.trim().is_empty() { None } else { Some(query) };
 
-    // Паралельне завантаження актів та накладних залежно від таба
     let (acts_res, invs_res) = tokio::join!(
         async {
             if tab != 2 {
                 db::acts::list_filtered(
-                    pool,
-                    company_id,
-                    None,
-                    Some(direction),
-                    search,
-                    counterparty_id,
-                    date_from,
-                    date_to,
-                )
-                .await
-            } else {
-                Ok(vec![])
-            }
+                    pool, company_id, None, Some(direction), search,
+                    counterparty_id, date_from, date_to,
+                ).await
+            } else { Ok(vec![]) }
         },
         async {
             if tab != 1 {
                 db::invoices::list_filtered(
-                    pool,
-                    company_id,
-                    None,
-                    Some(direction),
-                    search,
-                    counterparty_id,
-                    date_from,
-                    date_to,
-                )
-                .await
-            } else {
-                Ok(vec![])
-            }
+                    pool, company_id, None, Some(direction), search,
+                    counterparty_id, date_from, date_to,
+                ).await
+            } else { Ok(vec![]) }
         }
     );
     let acts = acts_res?;
     let invs = invs_res?;
 
-    // Об'єднуємо в один вектор (date, DocRow) і сортуємо за датою DESC
     let mut combined: Vec<(chrono::NaiveDate, DocRow)> = Vec::with_capacity(acts.len() + invs.len());
-
     for a in &acts {
         combined.push((a.date, DocRow {
             id:           SharedString::from(format!("act:{}", a.id)),
@@ -4363,7 +4488,6 @@ async fn reload_documents(
             }),
         }));
     }
-
     for i in &invs {
         combined.push((i.date, DocRow {
             id:           SharedString::from(format!("inv:{}", i.id)),
@@ -4380,22 +4504,60 @@ async fn reload_documents(
             }),
         }));
     }
-
-    // Сортування за датою DESC
     combined.sort_by(|(da, _), (db, _)| db.cmp(da));
     let doc_rows: Vec<DocRow> = combined.into_iter().map(|(_, r)| r).collect();
-    let direction_index = doc_direction_index(direction);
 
+    Ok(DocumentsUiData {
+        doc_rows,
+        tab,
+        direction_index: doc_direction_index(direction),
+    })
+}
+
+fn apply_documents_to_ui(ui: &MainWindow, d: DocumentsUiData) {
+    ui.set_document_rows(ModelRc::new(VecModel::from(d.doc_rows)));
+    ui.set_doc_active_tab(d.tab);
+    ui.set_doc_direction_index(d.direction_index);
+    ui.set_documents_loading(false);
+}
+
+async fn reload_documents(
+    pool: &sqlx::PgPool,
+    ui_weak: Weak<MainWindow>,
+    company_id: uuid::Uuid,
+    tab: i32,
+    direction: &str,
+    query: &str,
+    counterparty_id: Option<uuid::Uuid>,
+    date_from: Option<chrono::NaiveDate>,
+    date_to: Option<chrono::NaiveDate>,
+) -> Result<()> {
+    let d = prepare_documents_data(
+        pool, company_id, tab, direction, query, counterparty_id, date_from, date_to,
+    )
+    .await?;
     ui_weak
-        .upgrade_in_event_loop(move |ui| {
-            ui.set_document_rows(ModelRc::new(VecModel::from(doc_rows)));
-            ui.set_doc_active_tab(tab);
-            ui.set_doc_direction_index(direction_index);
-            ui.set_documents_loading(false);
-        })
-        .map_err(anyhow::Error::from)?;
+        .upgrade_in_event_loop(move |ui| apply_documents_to_ui(&ui, d))
+        .map_err(anyhow::Error::from)
+}
 
-    Ok(())
+/// Дані фільтру контрагентів для списку документів.
+struct DocCpFilterData {
+    /// UUID-и контрагентів (без елемента "Всі контрагенти" на позиції 0).
+    cp_ids: Vec<uuid::Uuid>,
+    /// Назви з "Всі контрагенти" на позиції 0.
+    names: Vec<SharedString>,
+}
+
+async fn fetch_doc_cp_filter_data(
+    pool: &sqlx::PgPool,
+    company_id: uuid::Uuid,
+) -> Result<DocCpFilterData> {
+    let cps = db::acts::counterparties_for_select(pool, company_id).await?;
+    let cp_ids: Vec<uuid::Uuid> = cps.iter().map(|(id, _)| *id).collect();
+    let mut names: Vec<SharedString> = vec![SharedString::from("Всі контрагенти")];
+    names.extend(cps.iter().map(|(_, n)| SharedString::from(n.as_str())));
+    Ok(DocCpFilterData { cp_ids, names })
 }
 
 /// Завантажити список контрагентів для фільтру в списку документів.
@@ -4408,19 +4570,17 @@ async fn reload_doc_cp_filter(
     company_id: uuid::Uuid,
     doc_cp_ids: &Mutex<Vec<uuid::Uuid>>,
 ) -> Result<()> {
-    let cps = db::acts::counterparties_for_select(pool, company_id).await?;
+    let data = fetch_doc_cp_filter_data(pool, company_id).await?;
     {
         let mut ids = doc_cp_ids.lock().unwrap();
-        *ids = cps.iter().map(|(id, _)| *id).collect();
+        *ids = data.cp_ids;
     }
-    let mut names: Vec<slint::SharedString> = vec![slint::SharedString::from("Всі контрагенти")];
-    names.extend(cps.iter().map(|(_, n)| slint::SharedString::from(n.as_str())));
+    let names = data.names;
     ui_weak
         .upgrade_in_event_loop(move |ui| {
             ui.set_doc_filter_cp_names(ModelRc::new(VecModel::from(names)));
         })
-        .map_err(anyhow::Error::from)?;
-    Ok(())
+        .map_err(anyhow::Error::from)
 }
 
 /// Зібрати позиції накладної з UI-форми у Vec<NewInvoiceItem>.
@@ -4979,31 +5139,38 @@ fn to_task_rows(tasks: &[Task]) -> Vec<TaskRow> {
         .collect()
 }
 
+struct TasksUiData {
+    task_rows: Vec<TaskRow>,
+}
+
+async fn prepare_tasks_data(pool: &sqlx::PgPool, query: String) -> Result<TasksUiData> {
+    let tasks = db::tasks::list_open(pool).await?;
+    let filtered: Vec<Task> = tasks
+        .into_iter()
+        .filter(|task| task_matches_query(task, normalized_query(&query)))
+        .collect();
+    Ok(TasksUiData { task_rows: to_task_rows(&filtered) })
+}
+
+fn apply_tasks_to_ui(ui: &MainWindow, d: TasksUiData, close_form: bool) {
+    ui.set_task_rows(ModelRc::new(VecModel::from(d.task_rows)));
+    ui.set_tasks_loading(false);
+    if close_form {
+        ui.set_show_task_form(false);
+        ui.set_current_page(ui.get_task_form_return_page());
+    }
+}
+
 async fn reload_tasks(
     pool: &sqlx::PgPool,
     ui_weak: Weak<MainWindow>,
     query: String,
     close_form: bool,
 ) -> Result<()> {
-    let tasks = db::tasks::list_open(pool).await?;
-    let filtered: Vec<Task> = tasks
-        .into_iter()
-        .filter(|task| task_matches_query(task, normalized_query(&query)))
-        .collect();
-    let task_rows = to_task_rows(&filtered);
-
+    let d = prepare_tasks_data(pool, query).await?;
     ui_weak
-        .upgrade_in_event_loop(move |ui| {
-            ui.set_task_rows(ModelRc::new(VecModel::from(task_rows)));
-            ui.set_tasks_loading(false);
-            if close_form {
-                ui.set_show_task_form(false);
-                ui.set_current_page(ui.get_task_form_return_page());
-            }
-        })
-        .map_err(anyhow::Error::from)?;
-
-    Ok(())
+        .upgrade_in_event_loop(move |ui| apply_tasks_to_ui(&ui, d, close_form))
+        .map_err(anyhow::Error::from)
 }
 
 async fn reload_act_tasks(

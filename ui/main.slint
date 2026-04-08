@@ -1004,6 +1004,8 @@ export component MainWindow inherits Window {
             clip: true;
 
             CounterpartyCard {
+                width: parent.width;
+                height: parent.height;
                 cp-name: root.counterparty-card-name;
                 cp-edrpou: root.counterparty-card-edrpou;
                 cp-ipn: root.counterparty-card-ipn;

@@ -1,4 +1,3 @@
-import { Button } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 
 export struct CounterpartyDocSummary {
@@ -53,6 +52,8 @@ export component CounterpartyCard {
     private property <int> active-tab: 0;
 
     focus-scope := FocusScope {
+        width: 100%;
+        height: 100%;
         key-pressed(event) => {
             if (event.text == Key.Escape) {
                 root.close-clicked();
@@ -90,14 +91,46 @@ export component CounterpartyCard {
                         }
                     }
 
-                    Button {
-                        text: "Редагувати";
-                        clicked => { root.edit-clicked(); }
+                    edit-btn := Rectangle {
+                        width: 120px;
+                        height: 36px;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        background: edit-touch.has-hover ? Theme.bg-hover : Theme.bg-card;
+
+                        Text {
+                            text: "Редагувати";
+                            font-size: 13px;
+                            font-weight: 500;
+                            color: Theme.text-primary;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        edit-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.edit-clicked(); }
+                        }
                     }
 
-                    Button {
-                        text: "Закрити";
-                        clicked => { root.close-clicked(); }
+                    close-btn := Rectangle {
+                        width: 96px;
+                        height: 36px;
+                        border-radius: Theme.radius-md;
+                        background: close-touch.has-hover ? #2D64E3 : Theme.primary;
+
+                        Text {
+                            text: "Закрити";
+                            font-size: 13px;
+                            font-weight: 600;
+                            color: #ffffff;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        close-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.close-clicked(); }
+                        }
                     }
                 }
 
