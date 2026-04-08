@@ -81,20 +81,30 @@ struct PaymentListState {
     direction_filter: Option<models::payment::PaymentDirection>,
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
     let _ = dotenvy::dotenv();
+
+    // Tokio runtime — пул потоків окремо від головного потоку Slint.
+    // _rt_guard «входить» в runtime для поточного (головного) потоку,
+    // тому tokio::spawn всередині callbacks працює без змін.
+    // Slint вимагає що ui.run() виконується у справжньому OS main thread —
+    // ця схема гарантує це на всіх платформах.
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
+    let _rt_guard = rt.enter();
 
     let database_url =
         std::env::var("DATABASE_URL").expect("DATABASE_URL не задано. Перевір .env файл.");
 
-    let pool = PgPoolOptions::new()
-        .max_connections(5)
-        .connect(&database_url)
-        .await?;
+    let pool = rt.block_on(
+        PgPoolOptions::new()
+            .max_connections(5)
+            .connect(&database_url),
+    )?;
 
-    sqlx::migrate!("./migrations").run(&pool).await?;
+    rt.block_on(sqlx::migrate!("./migrations").run(&pool))?;
     tracing::info!("Міграції застосовано.");
 
     tokio::spawn(notifications::reminder_loop(Arc::new(pool.clone())));
@@ -121,8 +131,9 @@ async fn main() -> Result<()> {
         Arc::new(Mutex::new(DEFAULT_COMPANY_ID));
 
     // ── Початкове завантаження компаній ─────────────────────────────────────
-    let config = AppConfig::load();
-    {
+    // block_on виконується на головному потоці → Slint-виклики безпечні.
+    rt.block_on(async {
+        let config = AppConfig::load();
         let companies = db::companies::list(&pool).await.unwrap_or_default();
         let company_rows = db::companies::list_with_summary(&pool).await.unwrap_or_default();
         // Відображаємо список у UI (для сторінки Компанії)
@@ -181,31 +192,30 @@ async fn main() -> Result<()> {
                 }
             }
         }
-    }
+        Ok::<(), anyhow::Error>(())
+    })?;
 
     // ── Початкове завантаження ───────────────────────────────────────────────
-    // Тут ми ще в main thread (до ui.run()), тому ModelRc будувати безпечно.
+    // block_on на головному потоці → ModelRc будувати безпечно.
     let cid = *active_company_id.lock().unwrap();
-    reload_counterparties(&pool, ui.as_weak(), cid, String::new(), false, 0, false).await?;
-
-    // ── Початкове завантаження актів ─────────────────────────────────────────
-    reload_acts(&pool, ui.as_weak(), cid, None, String::new(), false).await?;
-
-    // ── Початкове завантаження накладних ─────────────────────────────────────
-    reload_invoices(&pool, ui.as_weak(), cid, None, String::new(), false).await?;
-
-    // ── Початкове завантаження задач ────────────────────────────────────────
-    ui.set_tasks_loading(true);
-    reload_tasks(&pool, ui.as_weak(), String::new(), false).await?;
-
-    // ── Початкове завантаження платежів ──────────────────────────────────────
-    reload_payments(&pool, ui.as_weak(), cid, None, "").await?;
-
-    // ── Початкове завантаження єдиного списку документів + фільтру контрагентів
-    reload_doc_cp_filter(&pool, ui.as_weak(), cid, &doc_cp_ids).await?;
-    reload_documents(&pool, ui.as_weak(), cid, 0, "outgoing", "", None, None, None).await?;
-    reload_settings(&pool, ui.as_weak(), cid).await?;
-    reload_payment_counterparty_options(&pool, ui.as_weak(), cid).await?;
+    rt.block_on(async {
+        reload_counterparties(&pool, ui.as_weak(), cid, String::new(), false, 0, false).await?;
+        // ── Початкове завантаження актів ─────────────────────────────────────
+        reload_acts(&pool, ui.as_weak(), cid, None, String::new(), false).await?;
+        // ── Початкове завантаження накладних ─────────────────────────────────
+        reload_invoices(&pool, ui.as_weak(), cid, None, String::new(), false).await?;
+        // ── Початкове завантаження задач ────────────────────────────────────
+        ui.set_tasks_loading(true);
+        reload_tasks(&pool, ui.as_weak(), String::new(), false).await?;
+        // ── Початкове завантаження платежів ──────────────────────────────────
+        reload_payments(&pool, ui.as_weak(), cid, None, "").await?;
+        // ── Початкове завантаження єдиного списку документів + фільтру контрагентів
+        reload_doc_cp_filter(&pool, ui.as_weak(), cid, &doc_cp_ids).await?;
+        reload_documents(&pool, ui.as_weak(), cid, 0, "outgoing", "", None, None, None).await?;
+        reload_settings(&pool, ui.as_weak(), cid).await?;
+        reload_payment_counterparty_options(&pool, ui.as_weak(), cid).await?;
+        Ok::<(), anyhow::Error>(())
+    })?;
 
     // ── Колбек: пошук ────────────────────────────────────────────────────────
     //
