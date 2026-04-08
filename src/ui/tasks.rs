@@ -1,6 +1,6 @@
 // ui/tasks.rs — колбеки та дані для сторінки Задачі.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
@@ -207,10 +207,13 @@ pub fn spawn_save_task(
 // ═══════════════════════════════════════════════════════════════════════════════
 
 pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
+    // Локальний стан пошуку — не потребує доступу з інших модулів.
+    let task_state = Arc::new(Mutex::new(TaskListState::default()));
+
     // ── Пошук задач ───────────────────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let state = ctx.task_state.clone();
+    let state = task_state.clone();
     ui.on_task_search_changed(move |query| {
         let pool = pool.clone();
         let ui_handle = ui_weak.clone();
@@ -299,7 +302,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Перемкнути статус задачі ──────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let state = ctx.task_state.clone();
+    let state = task_state.clone();
     ui.on_task_toggle_status_clicked(move |task_id| {
         let pool = pool.clone();
         let ui_handle = ui_weak.clone();
@@ -335,7 +338,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Видалити задачу ───────────────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let state = ctx.task_state.clone();
+    let state = task_state.clone();
     ui.on_task_delete_clicked(move |task_id| {
         let pool = pool.clone();
         let ui_handle = ui_weak.clone();
@@ -366,7 +369,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Зберегти задачу ───────────────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let state = ctx.task_state.clone();
+    let state = task_state.clone();
     let cid_arc = ctx.active_company_id.clone();
     ui.on_task_form_save(move |title, description, priority_idx, due_str, reminder_str| {
         let company_id = *cid_arc.lock().unwrap();
@@ -392,7 +395,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Оновити задачу ────────────────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let state = ctx.task_state.clone();
+    let state = task_state.clone();
     let cid_arc = ctx.active_company_id.clone();
     ui.on_task_form_update(move |title, description, priority_idx, due_str, reminder_str| {
         let company_id = *cid_arc.lock().unwrap();

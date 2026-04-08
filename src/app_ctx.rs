@@ -72,11 +72,21 @@ pub struct AppCtx {
     /// UUID-и контрагентів для фільтру в списку документів.
     /// Індекс 0 = "Всі контрагенти" (None), індекс n = cp_ids[n-1].
     pub doc_cp_ids: Arc<Mutex<Vec<uuid::Uuid>>>,
-    // Стани списків — спільні між модулями
+    // Стани списків — спільні між модулями (companies.rs потребує їх при перемиканні компанії)
     pub counterparty_state: Arc<Mutex<CounterpartyListState>>,
     pub act_state: Arc<Mutex<ActListState>>,
     pub invoice_state: Arc<Mutex<InvoiceListState>>,
-    pub task_state: Arc<Mutex<TaskListState>>,
     pub doc_state: Arc<Mutex<DocListState>>,
-    pub payment_state: Arc<Mutex<PaymentListState>>,
+}
+
+impl AppCtx {
+    /// Читає UUID активної компанії. Безпечний при отруєному mutex.
+    pub fn company_id(&self) -> uuid::Uuid {
+        *self.active_company_id.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Встановлює UUID активної компанії. Безпечний при отруєному mutex.
+    pub fn set_company_id(&self, id: uuid::Uuid) {
+        *self.active_company_id.lock().unwrap_or_else(|e| e.into_inner()) = id;
+    }
 }

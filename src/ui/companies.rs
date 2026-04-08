@@ -109,20 +109,12 @@ pub fn setup(ui: &MainWindow, ctx: std::sync::Arc<AppCtx>) {
     {
         let pool = ctx.pool.clone();
         let ui_weak = ui.as_weak();
-        let active_company_id = ctx.active_company_id.clone();
-        let counterparty_state = ctx.counterparty_state.clone();
-        let act_state = ctx.act_state.clone();
-        let doc_state = ctx.doc_state.clone();
-        let doc_cp_ids = ctx.doc_cp_ids.clone();
+        let ctx_c = ctx.clone();
 
         ui.on_company_select_clicked(move |id_str| {
             let pool = pool.clone();
             let ui_handle = ui_weak.clone();
-            let active_company_id = active_company_id.clone();
-            let counterparty_state = counterparty_state.clone();
-            let act_state = act_state.clone();
-            let doc_state = doc_state.clone();
-            let doc_cp_ids = doc_cp_ids.clone();
+            let ctx = ctx_c.clone();
             let id_s = id_str.to_string();
 
             tokio::spawn(async move {
@@ -134,7 +126,7 @@ pub fn setup(ui: &MainWindow, ctx: std::sync::Arc<AppCtx>) {
                 match db::companies::get_by_id(&pool, uuid).await {
                     Ok(Some(company)) => {
                         // Оновлюємо активну компанію
-                        *active_company_id.lock().unwrap() = company.id;
+                        ctx.set_company_id(company.id);
 
                         // Зберігаємо вибір у конфігу
                         let mut cfg = AppConfig::load();
@@ -146,15 +138,15 @@ pub fn setup(ui: &MainWindow, ctx: std::sync::Arc<AppCtx>) {
                         let id_str = company.id.to_string();
                         let company_id = company.id;
                         let (cp_query, include_archived, cp_page) = {
-                            let state = counterparty_state.lock().unwrap();
+                            let state = ctx.counterparty_state.lock().unwrap();
                             (state.query.clone(), state.include_archived, state.page)
                         };
                         let (act_query, status_filter) = {
-                            let state = act_state.lock().unwrap();
+                            let state = ctx.act_state.lock().unwrap();
                             (state.query.clone(), state.status_filter.clone())
                         };
                         {
-                            let mut state = doc_state.lock().unwrap();
+                            let mut state = ctx.doc_state.lock().unwrap();
                             *state = DocListState::default();
                         }
 
@@ -204,7 +196,7 @@ pub fn setup(ui: &MainWindow, ctx: std::sync::Arc<AppCtx>) {
                             tracing::error!("Помилка завантаження платежів після вибору компанії: {e}");
                         }
 
-                        if let Err(e) = crate::ui::documents::reload_doc_cp_filter(&pool, ui_handle.clone(), company_id, &doc_cp_ids).await {
+                        if let Err(e) = crate::ui::documents::reload_doc_cp_filter(&pool, ui_handle.clone(), company_id, &ctx.doc_cp_ids).await {
                             tracing::error!("Помилка оновлення фільтру контрагентів після вибору компанії: {e}");
                         }
                         if let Err(e) = crate::ui::documents::reload_documents(&pool, ui_handle.clone(), company_id, 0, "outgoing", "", None, None, None).await {
@@ -279,12 +271,12 @@ pub fn setup(ui: &MainWindow, ctx: std::sync::Arc<AppCtx>) {
     {
         let pool = ctx.pool.clone();
         let ui_weak = ui.as_weak();
-        let active_company_id = ctx.active_company_id.clone();
+        let ctx_c = ctx.clone();
 
         ui.on_settings_edit_company_clicked(move || {
             let pool = pool.clone();
             let ui_handle = ui_weak.clone();
-            let company_id = *active_company_id.lock().unwrap();
+            let company_id = ctx_c.company_id();
 
             tokio::spawn(async move {
                 match db::companies::get_by_id(&pool, company_id).await {
@@ -316,12 +308,12 @@ pub fn setup(ui: &MainWindow, ctx: std::sync::Arc<AppCtx>) {
     {
         let pool = ctx.pool.clone();
         let ui_weak = ui.as_weak();
-        let active_company_id = ctx.active_company_id.clone();
+        let ctx_c = ctx.clone();
 
         ui.on_company_archive_clicked(move |id_str| {
             let pool = pool.clone();
             let ui_handle = ui_weak.clone();
-            let active_company_id = active_company_id.clone();
+            let ctx = ctx_c.clone();
             let id_s = id_str.to_string();
 
             tokio::spawn(async move {
@@ -333,16 +325,16 @@ pub fn setup(ui: &MainWindow, ctx: std::sync::Arc<AppCtx>) {
                 match db::companies::archive(&pool, uuid).await {
                     Ok(true) => {
                         show_toast(ui_handle.clone(), "Компанію архівовано".to_string(), false);
-                        let active_id = *active_company_id.lock().unwrap();
+                        let active_id = ctx.company_id();
                         if let Err(e) = reload_companies(&pool, ui_handle.clone(), active_id).await {
                             tracing::error!("Помилка оновлення списку компаній: {e}");
                         }
 
-                        if *active_company_id.lock().unwrap() == uuid {
+                        if ctx.company_id() == uuid {
                             match db::companies::list(&pool).await {
                                 Ok(companies) if !companies.is_empty() => {
                                     let replacement = companies[0].clone();
-                                    *active_company_id.lock().unwrap() = replacement.id;
+                                    ctx.set_company_id(replacement.id);
 
                                     let mut cfg = AppConfig::load();
                                     cfg.last_company_id = Some(replacement.id);
@@ -398,16 +390,12 @@ pub fn setup(ui: &MainWindow, ctx: std::sync::Arc<AppCtx>) {
     {
         let pool = ctx.pool.clone();
         let ui_weak = ui.as_weak();
-        let active_company_id = ctx.active_company_id.clone();
-        let counterparty_state = ctx.counterparty_state.clone();
-        let act_state = ctx.act_state.clone();
+        let ctx_c = ctx.clone();
 
         ui.on_company_form_save(move |name, edrpou, iban, address, director, _accountant, is_vat| {
             let pool = pool.clone();
             let ui_weak = ui_weak.clone();
-            let active_company_id = active_company_id.clone();
-            let counterparty_state = counterparty_state.clone();
-            let act_state = act_state.clone();
+            let ctx = ctx_c.clone();
             let data = NewCompany {
                 name: name.to_string(),
                 short_name: None,
@@ -429,7 +417,7 @@ pub fn setup(ui: &MainWindow, ctx: std::sync::Arc<AppCtx>) {
                     Ok(c) => {
                         tracing::info!("Компанію '{}' створено (id={}).", c.name, c.id);
                         show_toast(ui_weak.clone(), format!("Компанію '{}' створено", c.name), false);
-                        *active_company_id.lock().unwrap() = c.id;
+                        ctx.set_company_id(c.id);
 
                         // Заповнюємо стандартні категорії доходів/витрат
                         if let Err(e) = db::categories::seed_defaults(&pool, c.id).await {
@@ -452,11 +440,11 @@ pub fn setup(ui: &MainWindow, ctx: std::sync::Arc<AppCtx>) {
                         }
 
                         let (cp_query, include_archived, cp_page) = {
-                            let state = counterparty_state.lock().unwrap();
+                            let state = ctx.counterparty_state.lock().unwrap();
                             (state.query.clone(), state.include_archived, state.page)
                         };
                         let (act_query, status_filter) = {
-                            let state = act_state.lock().unwrap();
+                            let state = ctx.act_state.lock().unwrap();
                             (state.query.clone(), state.status_filter.clone())
                         };
 
@@ -514,12 +502,12 @@ pub fn setup(ui: &MainWindow, ctx: std::sync::Arc<AppCtx>) {
     {
         let pool = ctx.pool.clone();
         let ui_weak = ui.as_weak();
-        let active_company_id = ctx.active_company_id.clone();
+        let ctx_c = ctx.clone();
 
         ui.on_company_form_update(move |id, name, edrpou, iban, address, director, accountant, is_vat| {
             let pool = pool.clone();
             let ui_weak = ui_weak.clone();
-            let active_company_id = active_company_id.clone();
+            let ctx = ctx_c.clone();
             let edit_id = id.to_string();
 
             tokio::spawn(async move {
@@ -543,11 +531,11 @@ pub fn setup(ui: &MainWindow, ctx: std::sync::Arc<AppCtx>) {
                     Ok(Some(c)) => {
                         tracing::info!("Компанію '{}' оновлено.", c.name);
                         show_toast(ui_weak.clone(), format!("Компанію '{}' оновлено", c.name), false);
-                        let active_id = *active_company_id.lock().unwrap();
+                        let active_id = ctx.company_id();
                         if let Err(e) = reload_companies(&pool, ui_weak.clone(), active_id).await {
                             tracing::error!("Помилка оновлення списку компаній: {e}");
                         }
-                        if *active_company_id.lock().unwrap() == c.id {
+                        if ctx.company_id() == c.id {
                             if let Err(e) = reload_settings(&pool, ui_weak.clone(), c.id).await {
                                 tracing::error!("Помилка оновлення налаштувань після редагування компанії: {e}");
                             }
@@ -556,7 +544,7 @@ pub fn setup(ui: &MainWindow, ctx: std::sync::Arc<AppCtx>) {
                             }
                         }
 
-                        if *active_company_id.lock().unwrap() == c.id {
+                        if ctx.company_id() == c.id {
                             let name = company_display_name(&c);
                             let subtitle = company_subtitle(&c);
                             let id = c.id.to_string();

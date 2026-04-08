@@ -8,20 +8,22 @@ slint::include_modules!();
 mod app_ctx;
 mod ui;
 
-use app_ctx::{AppCtx, CounterpartyListState, ActListState, InvoiceListState, TaskListState, DocListState, PaymentListState, DEFAULT_COMPANY_ID};
+use app_ctx::{AppCtx, ActListState, CounterpartyListState, DocListState, InvoiceListState, DEFAULT_COMPANY_ID};
 use acta::{config::AppConfig, db, notifications};
 use anyhow::Result;
 use slint::{ModelRc, SharedString, VecModel};
 use sqlx::postgres::PgPoolOptions;
 use std::sync::{Arc, Mutex};
-use ui::helpers::{apply_company_rows, company_display_name, company_subtitle, reset_company_form};
-use ui::companies::{apply_settings_to_ui, prepare_settings_data};
-use ui::counterparties::{apply_counterparties_to_ui, prepare_counterparties_data};
-use ui::acts::{apply_acts_to_ui, prepare_acts_data};
-use ui::invoices::{apply_invoices_to_ui, prepare_invoices_data};
-use ui::tasks::{apply_tasks_to_ui, prepare_tasks_data};
-use ui::payments::{apply_payments_to_ui, prepare_payments_data, prepare_payment_cp_options_data};
-use ui::documents::{apply_documents_to_ui, fetch_doc_cp_filter_data, prepare_documents_data, DocCpFilterData};
+use ui::{
+    acts::{apply_acts_to_ui, prepare_acts_data},
+    companies::{apply_settings_to_ui, prepare_settings_data},
+    counterparties::{apply_counterparties_to_ui, prepare_counterparties_data},
+    documents::{apply_documents_to_ui, fetch_doc_cp_filter_data, prepare_documents_data, DocCpFilterData},
+    helpers::{apply_company_rows, company_display_name, company_subtitle, reset_company_form},
+    invoices::{apply_invoices_to_ui, prepare_invoices_data},
+    payments::{apply_payments_to_ui, prepare_payments_data, prepare_payment_cp_options_data},
+    tasks::{apply_tasks_to_ui, prepare_tasks_data},
+};
 
 /// Розмір сторінки у списку контрагентів.
 pub const COUNTERPARTY_PAGE_SIZE: usize = 10;
@@ -167,9 +169,7 @@ fn main() -> Result<()> {
         counterparty_state: Arc::new(Mutex::new(CounterpartyListState::default())),
         act_state: Arc::new(Mutex::new(ActListState::default())),
         invoice_state: Arc::new(Mutex::new(InvoiceListState::default())),
-        task_state: Arc::new(Mutex::new(TaskListState::default())),
         doc_state: Arc::new(Mutex::new(DocListState::default())),
-        payment_state: Arc::new(Mutex::new(PaymentListState::default())),
     });
 
     // ── Реєстрація callbacks по модулях ──────────────────────────────────────

@@ -22,7 +22,7 @@ pub mod tasks;
 
 #[cfg(test)]
 mod tests {
-    use super::{acts, categories, companies, contracts, counterparties, invoices, payments, tasks};
+    use super::{acts, categories, companies, contracts, counterparties, invoices, ilike_pattern, payments, tasks};
 
     #[test]
     fn db_submodules_are_available() {
@@ -34,5 +34,34 @@ mod tests {
         let _ = invoices::list;
         let _ = payments::list;
         let _ = tasks::list_open;
+    }
+
+    #[test]
+    fn ilike_pattern_wraps_plain_text_with_wildcards() {
+        assert_eq!(ilike_pattern("тест"), "%тест%");
+        assert_eq!(ilike_pattern("ФОП Іваненко"), "%ФОП Іваненко%");
+    }
+
+    #[test]
+    fn ilike_pattern_escapes_percent() {
+        assert_eq!(ilike_pattern("100%"), "%100\\%%");
+        assert_eq!(ilike_pattern("%start"), "%\\%start%");
+    }
+
+    #[test]
+    fn ilike_pattern_escapes_underscore() {
+        assert_eq!(ilike_pattern("foo_bar"), "%foo\\_bar%");
+        assert_eq!(ilike_pattern("_leading"), "%\\_leading%");
+    }
+
+    #[test]
+    fn ilike_pattern_escapes_backslash() {
+        assert_eq!(ilike_pattern("C:\\path"), "%C:\\\\path%");
+        assert_eq!(ilike_pattern("a\\b\\c"), "%a\\\\b\\\\c%");
+    }
+
+    #[test]
+    fn ilike_pattern_empty_input_returns_match_all() {
+        assert_eq!(ilike_pattern(""), "%%");
     }
 }

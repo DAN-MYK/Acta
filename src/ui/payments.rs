@@ -1,6 +1,6 @@
 // ui/payments.rs — колбеки та дані для сторінки Платежі.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use chrono::NaiveDate;
@@ -144,11 +144,14 @@ pub async fn reload_payment_counterparty_options(
 // ═══════════════════════════════════════════════════════════════════════════════
 
 pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
+    // Локальний стан пошуку/фільтру — не потребує доступу з інших модулів.
+    let payment_state = Arc::new(Mutex::new(PaymentListState::default()));
+
     // ── Фільтр напрямку ───────────────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
     let cid_arc = ctx.active_company_id.clone();
-    let state = ctx.payment_state.clone();
+    let state = payment_state.clone();
     ui.on_payment_direction_filter_changed(move |index| {
         use models::payment::PaymentDirection;
         let pool = pool.clone();
@@ -175,7 +178,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
     let cid_arc = ctx.active_company_id.clone();
-    let state = ctx.payment_state.clone();
+    let state = payment_state.clone();
     ui.on_payment_search_changed(move |query| {
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
@@ -196,7 +199,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
     let cid_arc = ctx.active_company_id.clone();
-    let state = ctx.payment_state.clone();
+    let state = payment_state.clone();
     ui.on_payment_reconcile_clicked(move |id_str| {
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
@@ -272,7 +275,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
     let cid_arc = ctx.active_company_id.clone();
-    let state = ctx.payment_state.clone();
+    let state = payment_state.clone();
     ui.on_payment_delete_clicked(move |id| {
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
@@ -303,7 +306,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
     let cid_arc = ctx.active_company_id.clone();
-    let state = ctx.payment_state.clone();
+    let state = payment_state.clone();
     ui.on_payment_form_save(
         move |date, amount, direction, counterparty_id, bank_name, bank_ref, description| {
             let pool = pool.clone();
@@ -376,7 +379,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
     let cid_arc = ctx.active_company_id.clone();
-    let state = ctx.payment_state.clone();
+    let state = payment_state.clone();
     ui.on_payment_form_update(
         move |date, amount, direction, counterparty_id, bank_name, bank_ref, description| {
             let pool = pool.clone();
