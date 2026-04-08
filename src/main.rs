@@ -3604,6 +3604,7 @@ fn main() -> Result<()> {
 // Чому не повертати ModelRc напряму?
 // ModelRc = Rc<dyn Model> — не є Send (не можна передати між потоками).
 // Ці прості Vec є Send і можна безпечно передати в upgrade_in_event_loop.
+#[derive(Clone)]
 struct TableData {
     // Рядки таблиці: зовнішній Vec = рядки, внутрішній = комірки
     rows: Vec<Vec<SharedString>>,
@@ -3721,6 +3722,7 @@ fn collect_form_items(ui: &MainWindow) -> Vec<NewActItem> {
 }
 
 /// Проміжні дані контрагентів — Send-safe (SharedString = Arc, без ModelRc).
+#[derive(Clone)]
 struct CounterpartiesUiData {
     table_data: TableData,
     total_all: i32,
@@ -3826,6 +3828,7 @@ fn total_filtered_pages(total_items: usize) -> usize {
     pages.max(1)
 }
 
+#[derive(Clone)]
 struct ActsUiData {
     act_rows: Vec<ActRow>,
     counts: Vec<i32>,
@@ -3987,6 +3990,7 @@ async fn reload_dashboard(
     Ok(())
 }
 
+#[derive(Clone)]
 struct InvoicesUiData {
     invoice_rows: Vec<InvoiceRow>,
 }
@@ -4043,6 +4047,7 @@ async fn reload_invoices(
         .map_err(anyhow::Error::from)
 }
 
+#[derive(Clone)]
 struct PaymentsUiData {
     payment_rows: Vec<PaymentRow>,
     total_income: SharedString,
@@ -4128,6 +4133,7 @@ async fn reload_payments(
         .map_err(anyhow::Error::from)
 }
 
+#[derive(Clone)]
 struct SettingsUiData {
     company: Option<Company>,
     category_rows: Vec<SettingsCategoryRow>,
@@ -4184,6 +4190,7 @@ async fn reload_settings(
         .map_err(anyhow::Error::from)
 }
 
+#[derive(Clone)]
 struct PaymentCpOptionsUiData {
     names: Vec<SharedString>,
     ids: Vec<SharedString>,
@@ -4432,6 +4439,7 @@ async fn open_counterparty_card(
 /// Завантажити єдиний список документів (акти + накладні) і оновити UI.
 ///
 /// tab: 0=Всі, 1=Акти, 2=Рахунки
+#[derive(Clone)]
 struct DocumentsUiData {
     doc_rows: Vec<DocRow>,
     tab: i32,
@@ -5139,6 +5147,7 @@ fn to_task_rows(tasks: &[Task]) -> Vec<TaskRow> {
         .collect()
 }
 
+#[derive(Clone)]
 struct TasksUiData {
     task_rows: Vec<TaskRow>,
 }
