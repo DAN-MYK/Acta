@@ -1,6 +1,6 @@
 // ui/documents.rs — колбеки та дані для сторінки Документи (акти + накладні).
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
@@ -276,6 +276,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let ui_weak = ui.as_weak();
     let company_id_arc = ctx.active_company_id.clone();
     let state = ctx.doc_state.clone();
+    let search_task: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>> = Arc::new(Mutex::new(None));
     ui.on_doc_search_changed(move |q| {
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
@@ -295,7 +296,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
         if let Some(ui) = ui_weak.upgrade() {
             ui.set_documents_loading(true);
         }
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             if let Err(e) =
                 reload_documents(&pool, ui_weak, cid, tab, &direction, &query, cp_id, df, dt)
                     .await
@@ -303,6 +304,9 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
                 tracing::error!("Помилка пошуку документів: {e}");
             }
         });
+        if let Some(old) = search_task.lock().unwrap().replace(handle) {
+            old.abort();
+        }
     });
 
     // ── Новий акт ─────────────────────────────────────────────────────────────

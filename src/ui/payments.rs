@@ -264,7 +264,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
                             populate_payment_form(&ui, &counterparties, &payment);
                             ui.set_show_payment_form(true);
                         })
-                        .ok();
+                        .warn_if_terminated();
                 }
                 Ok(None) => tracing::warn!("Платіж {payment_id} не знайдено."),
                 Err(e) => {

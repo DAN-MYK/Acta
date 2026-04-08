@@ -8,7 +8,7 @@ use acta::models;
 use anyhow::Result;
 use chrono::{DateTime, Local, NaiveDateTime, TimeZone, Utc};
 use rust_decimal::Decimal;
-use slint::{Model, ModelRc, SharedString, StandardListViewItem, VecModel, Weak};
+use slint::{EventLoopError, Model, ModelRc, SharedString, StandardListViewItem, VecModel, Weak};
 pub use crate::app_ctx::{ActListState, DocListState, InvoiceListState, TaskListState};
 pub use acta::models::{
     ActStatus as ModelActStatus, Company, CompanySummary, NewActItem, NewInvoiceItem,
@@ -466,6 +466,19 @@ pub fn total_filtered_pages(total_items: usize) -> usize {
     pages.max(1)
 }
 
+/// Розширення для Result<(), EventLoopError>: логує попередження замість мовчазного .ok().
+/// Використовується замість .ok() після upgrade_in_event_loop — при закритому вікні видно в логах.
+pub trait WarnIfTerminated {
+    fn warn_if_terminated(self);
+}
+impl WarnIfTerminated for Result<(), EventLoopError> {
+    fn warn_if_terminated(self) {
+        if let Err(e) = self {
+            tracing::warn!("upgrade_in_event_loop: event loop terminated: {e}");
+        }
+    }
+}
+
 /// Показує toast-сповіщення на 3 секунди, потім автоматично прибирає.
 pub fn show_toast(ui_weak: Weak<MainWindow>, message: String, is_error: bool) {
     let msg = SharedString::from(message.as_str());
@@ -474,7 +487,7 @@ pub fn show_toast(ui_weak: Weak<MainWindow>, message: String, is_error: bool) {
             ui.set_toast_message(msg);
             ui.set_toast_is_error(is_error);
         })
-        .ok();
+        .warn_if_terminated();
 
     let clear_handle = ui_weak.clone();
     tokio::spawn(async move {
@@ -483,6 +496,6 @@ pub fn show_toast(ui_weak: Weak<MainWindow>, message: String, is_error: bool) {
             .upgrade_in_event_loop(|ui| {
                 ui.set_toast_message(SharedString::from(""));
             })
-            .ok();
+            .warn_if_terminated();
     });
 }

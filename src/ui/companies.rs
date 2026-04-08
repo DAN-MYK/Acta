@@ -171,7 +171,7 @@ pub fn setup(ui: &MainWindow, ctx: std::sync::Arc<AppCtx>) {
                             ui.set_doc_direction_index(0);
                             ui.set_doc_active_tab(0);
                             ui.set_doc_filter_cp_index(0);
-                        }).ok();
+                        }).warn_if_terminated();
 
                         if let Err(e) = crate::ui::counterparties::reload_counterparties(
                             &pool,
@@ -266,7 +266,7 @@ pub fn setup(ui: &MainWindow, ctx: std::sync::Arc<AppCtx>) {
                             ui.set_company_form_accountant(SharedString::from(c.accountant_name.as_deref().unwrap_or("")));
                             ui.set_company_form_is_vat(c.is_vat_payer);
                             ui.set_show_company_form(true);
-                        }).ok();
+                        }).warn_if_terminated();
                     }
                     Ok(None) => tracing::warn!("Компанію {uuid} не знайдено."),
                     Err(e) => tracing::error!("Помилка завантаження компанії: {e}"),
@@ -303,7 +303,7 @@ pub fn setup(ui: &MainWindow, ctx: std::sync::Arc<AppCtx>) {
                                 ui.set_current_page(6);
                                 ui.set_show_company_form(true);
                             })
-                            .ok();
+                            .warn_if_terminated();
                     }
                     Ok(None) => tracing::warn!("Активну компанію {company_id} не знайдено."),
                     Err(e) => tracing::error!("Помилка відкриття компанії з налаштувань: {e}"),
@@ -362,7 +362,7 @@ pub fn setup(ui: &MainWindow, ctx: std::sync::Arc<AppCtx>) {
                                                 subtitle.as_str(),
                                             ));
                                         })
-                                        .ok();
+                                        .warn_if_terminated();
                                 }
                                 Ok(_) => {
                                     ui_handle
@@ -379,7 +379,7 @@ pub fn setup(ui: &MainWindow, ctx: std::sync::Arc<AppCtx>) {
                                             reset_company_form(&ui);
                                             ui.set_show_company_form(true);
                                         })
-                                        .ok();
+                                        .warn_if_terminated();
                                 }
                                 Err(e) => tracing::error!(
                                     "Помилка пошуку заміни активної компанії після архівації: {e}"
@@ -495,7 +495,7 @@ pub fn setup(ui: &MainWindow, ctx: std::sync::Arc<AppCtx>) {
                                 ui.set_show_company_form(false);
                                 ui.set_current_page(0);
                             })
-                            .ok();
+                            .warn_if_terminated();
                     }
                     Err(e) => {
                         tracing::error!("Помилка створення компанії: {e}");
@@ -565,13 +565,13 @@ pub fn setup(ui: &MainWindow, ctx: std::sync::Arc<AppCtx>) {
                                     ));
                                     ui.set_show_company_form(false);
                                 })
-                                .ok();
+                                .warn_if_terminated();
                         } else {
                             ui_weak
                                 .upgrade_in_event_loop(|ui| {
                                     ui.set_show_company_form(false);
                                 })
-                                .ok();
+                                .warn_if_terminated();
                         }
                     }
                     Ok(None) => tracing::warn!("Компанію {uuid} не знайдено."),

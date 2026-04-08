@@ -5,7 +5,6 @@
 //
 // Транзакційна вставка: create() та update_with_items() відкривають транзакцію,
 // вставляють заголовок + позиції, перераховують total_amount, потім commit.
-#![allow(dead_code)]
 
 use anyhow::{Result, bail};
 use chrono::Datelike;

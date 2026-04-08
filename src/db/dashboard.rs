@@ -2,7 +2,6 @@
 //
 // Використовує runtime-style sqlx::query_as::<_, T>() без макросів
 // щоб не залежати від cargo sqlx prepare при нових запитах.
-#![allow(dead_code)]
 
 use anyhow::Result;
 use chrono::{Datelike, Local};

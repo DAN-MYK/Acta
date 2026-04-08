@@ -2,7 +2,6 @@
 //
 // Використовує runtime-style sqlx::query_as::<_, T>() без compile-time макросів,
 // щоб не залежати від cargo sqlx prepare при нових таблицях.
-#![allow(dead_code)]
 
 use anyhow::Result;
 use sqlx::PgPool;

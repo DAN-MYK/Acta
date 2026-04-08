@@ -179,7 +179,7 @@ pub fn spawn_save_task(
                             ui.set_show_task_form(false);
                             ui.set_current_page(ui.get_task_form_return_page());
                         })
-                        .ok();
+                        .warn_if_terminated();
                 } else {
                     let query = {
                         let state = task_state.lock().unwrap();
@@ -294,7 +294,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
                             ui.set_task_form_return_page(5);
                             ui.set_show_task_form(true);
                         })
-                        .ok();
+                        .warn_if_terminated();
                 }
                 Ok(None) => tracing::warn!("Задачу {uuid} не знайдено."),
                 Err(e) => tracing::error!("Помилка завантаження задачі: {e}"),

@@ -255,13 +255,14 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let ui_weak = ui.as_weak();
     let state = ctx.invoice_state.clone();
     let company_id_arc = ctx.active_company_id.clone();
+    let search_task: Arc<std::sync::Mutex<Option<tokio::task::JoinHandle<()>>>> = Arc::new(std::sync::Mutex::new(None));
     ui.on_invoice_search_changed(move |query| {
         let pool = pool.clone();
         let ui_handle = ui_weak.clone();
         let inv_state = state.clone();
         let cid = *company_id_arc.lock().unwrap();
         let query = query.to_string();
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             let (status_filter, query) = {
                 let mut state = inv_state.lock().unwrap();
                 state.query = query.clone();
@@ -273,6 +274,9 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
                 tracing::error!("Помилка пошуку накладних: {e}");
             }
         });
+        if let Some(old) = search_task.lock().unwrap().replace(handle) {
+            old.abort();
+        }
     });
 
     ui.on_invoice_selected(|_id| {});
@@ -334,7 +338,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
                     )));
                     ui.set_show_invoice_form(true);
                 })
-                .ok();
+                .warn_if_terminated();
         });
     });
 
@@ -473,7 +477,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
                     ui.set_invoice_form_items(ModelRc::new(VecModel::from(form_items)));
                     ui.set_show_invoice_form(true);
                 })
-                .ok();
+                .warn_if_terminated();
         });
     });
 

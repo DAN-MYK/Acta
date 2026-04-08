@@ -402,7 +402,7 @@ async fn populate_act_form(
             ui.set_act_tasks_loading(false);
             ui.set_show_act_form(true);
         })
-        .ok();
+        .warn_if_terminated();
     Ok(())
 }
 
@@ -680,7 +680,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
                     ui.set_act_tasks_loading(false);
                     ui.set_show_act_form(true);
                 })
-                .ok();
+                .warn_if_terminated();
         });
     });
 
@@ -1141,7 +1141,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
                             ui.set_current_page(5);
                             ui.set_show_task_form(true);
                         })
-                        .ok();
+                        .warn_if_terminated();
                 }
                 Ok(None) => tracing::warn!("Задачу {uuid} не знайдено."),
                 Err(e) => tracing::error!("Помилка завантаження задачі: {e}"),

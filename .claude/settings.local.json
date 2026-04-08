@@ -45,7 +45,19 @@
       "Bash(kill %1)",
       "Bash(wait)",
       "Bash(grep \" --> src\\\\\\\\\\\\\\\\main.rs\")",
-      "Bash(scoop info:*)"
+      "Bash(scoop info:*)",
+      "Bash(scoop services:*)",
+      "Bash(xxd -l 20 C:/Users/MykhailoDan/apps/Acta/ui/companies/company_form.slint)",
+      "Bash(xxd)",
+      "Bash(python3)",
+      "Bash(sed -n '34,45p' ui/companies/company_form.slint)",
+      "Bash(sed -n '235,242p' ui/companies/company_form.slint)",
+      "Bash(sed -n '34,50p' ui/companies/company_form.slint)",
+      "Bash(sed -n '28,38p' ui/payments/payment_form.slint)",
+      "Bash(grep \"src\\\\\\\\\\\\\\\\main.rs\")",
+      "Bash(grep:*)",
+      "Read(//c/Users/MYKHAI~1/AppData/Local/Temp/claude/C--Users-MykhailoDan-apps-Acta/e15d98ca-7d29-4f93-8f72-38464903bf78/tasks/**)",
+      "Bash(ls *.ps1 *.md tmp_* temp_*)"
     ]
   },
   "enableAllProjectMcpServers": true,

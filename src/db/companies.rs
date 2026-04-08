@@ -2,7 +2,6 @@
 //
 // Використовує runtime-style sqlx::query_as::<_, Company>() — без макросу query_as!
 // Тому не потребує `cargo sqlx prepare` після змін цього файлу.
-#![allow(dead_code)]
 
 use anyhow::Result;
 use sqlx::PgPool;
@@ -10,10 +9,6 @@ use uuid::Uuid;
 
 use crate::models::company::{Company, CompanySummary, NewCompany, UpdateCompany};
 
-/// SQL для SELECT всіх полів компанії (спільний рядок щоб не дублювати)
-const SELECT_COLS: &str = "id, name, short_name, edrpou, ipn, iban, legal_address, actual_address,
-                phone, email, director_name, accountant_name, tax_system, is_vat_payer,
-                logo_path, notes, is_archived, created_at, updated_at";
 
 /// Всі активні (не архівовані) компанії, відсортовані за назвою.
 /// Використовується для списку вибору активної компанії.

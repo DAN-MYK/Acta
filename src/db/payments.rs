@@ -1,7 +1,6 @@
 // CRUD для платежів.
 //
 // Використовує runtime-style sqlx::query_as::<_, T>() без compile-time макросів.
-#![allow(dead_code)]
 
 use anyhow::Result;
 use sqlx::{PgPool, Row};

@@ -1,6 +1,6 @@
 // ui/counterparties.rs — колбеки та дані для сторінки Контрагенти.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
@@ -278,6 +278,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let ui_weak = ui.as_weak();
     let state = ctx.counterparty_state.clone();
     let company_id_arc = ctx.active_company_id.clone();
+    let search_task: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>> = Arc::new(Mutex::new(None));
     ui.on_counterparty_search_changed(move |query| {
         let pool = pool.clone();
         let ui_handle = ui_weak.clone();
@@ -288,7 +289,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
             s.page = 0;
             (s.query.clone(), s.include_archived)
         };
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             if let Err(e) =
                 reload_counterparties(&pool, ui_handle, cid, query_str, include_archived, 0, false)
                     .await
@@ -296,6 +297,9 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
                 tracing::error!("Помилка пошуку: {e}");
             }
         });
+        if let Some(old) = search_task.lock().unwrap().replace(handle) {
+            old.abort();
+        }
     });
 
     // ── Вибір контрагента — відкрити картку ────────────────────────────────────
@@ -362,7 +366,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
                             ui.set_cp_form_is_edit(true);
                             ui.set_show_cp_form(true);
                         })
-                        .ok();
+                        .warn_if_terminated();
                 }
                 Ok(None) => tracing::warn!("Контрагента {uuid} не знайдено."),
                 Err(e) => tracing::error!("Помилка завантаження контрагента: {e}"),
@@ -423,7 +427,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
                             ui.set_show_counterparty_card(false);
                             ui.set_show_cp_form(true);
                         })
-                        .ok();
+                        .warn_if_terminated();
                 }
                 Ok(None) => tracing::warn!("Контрагента {uuid} не знайдено."),
                 Err(e) => {
