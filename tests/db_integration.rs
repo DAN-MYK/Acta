@@ -128,6 +128,7 @@ async fn acts_create_and_status_flow_in_db() -> Result<()> {
             direction: "outgoing".to_string(),
             date: Utc::now().date_naive(),
             expected_payment_date: None,
+            status: models::ActStatus::Draft,
             notes: Some("integration test".to_string()),
             bas_id: Some(format!("it-act-{suffix}")),
             items: vec![
@@ -368,6 +369,7 @@ async fn tasks_list_by_act_returns_only_related_tasks() -> Result<()> {
             direction: "outgoing".to_string(),
             date: Utc::now().date_naive(),
             expected_payment_date: None,
+            status: models::ActStatus::Draft,
             notes: None,
             bas_id: Some(format!("it-task-act-{suffix}")),
             items: vec![models::NewActItem {
