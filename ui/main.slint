@@ -29,7 +29,7 @@ import { PaymentForm }      from "payments/payment_form.slint";
 import { DocumentList, DocRow } from "documents/document_list.slint";
 import { CounterpartyCard, CounterpartyDocSummary, CounterpartyPaymentSummary, CounterpartyContractSummary, CounterpartyTaskSummary } from "counterparties/counterparty_card.slint";
 import { ActCard, ActCardItemRow, ActCardTaskRow } from "acts/act_card.slint";
-import { SettingsPage, SettingsCategoryRow } from "settings/settings.slint";
+import { SettingsPage, SettingsCategoryRow, SettingsTemplateRow } from "settings/settings.slint";
 
 global MenuIcons {
     out property <image> dashboard:      @image-url("assets/icons/Home.svg");
@@ -348,8 +348,25 @@ export component MainWindow inherits Window {
     in property <string>                settings-company-iban: "";
     in property <string>                settings-company-director: "";
     in property <string>                settings-company-address: "";
-    in property <[SettingsCategoryRow]> settings-category-rows;
+    in property <[SettingsCategoryRow]>  settings-category-rows: [];
+    in property <[SettingsTemplateRow]>   settings-template-rows: [];
+
+    // Template form overlay
+    in property <bool>    show-template-form: false;
+    in property <string> template-form-id: "";
+    in property <string> template-form-name: "";
+    in property <string> template-form-description: "";
+    in property <string> template-form-type: "act";
+    in property <string> template-form-path: "";
+    in property <bool>    template-form-is-default: false;
+
     callback settings-edit-company-clicked();
+    callback template-create-clicked();
+    callback template-edit-clicked(string);
+    callback template-delete-clicked(string);
+    callback template-set-default-clicked(string);
+    callback template-form-save(string, string, string, string, bool, string);
+    callback template-form-cancel();
 
     in property <bool>                           show-counterparty-card: false;
     in property <string>                         counterparty-card-id: "";
@@ -697,8 +714,9 @@ export component MainWindow inherits Window {
                         width: parent.width - 24px;
                         label: "Налаштування";
                         icon: MenuIcons.settings;
-                        active: false;
-                        disabled: true;
+                        active: root.current-page == 9;
+                        disabled: false;
+                        clicked => { root.current-page = 9; }
                     }
                 }
 
@@ -920,6 +938,34 @@ export component MainWindow inherits Window {
                 new-act-clicked  => { root.dashboard-new-act-clicked(); }
                 all-acts-clicked => { root.dashboard-all-acts-clicked(); }
                 add-todo-clicked => { root.dashboard-add-todo-clicked(); }
+            }
+
+            // ── Сторінка 9: Налаштування ───────────────────────────────────────
+            if root.current-page == 9 : SettingsPage {
+                width: parent.width;
+                height: parent.height;
+                company-name:          root.settings-company-name;
+                company-edrpou:        root.settings-company-edrpou;
+                company-iban:           root.settings-company-iban;
+                company-director:       root.settings-company-director;
+                company-address:        root.settings-company-address;
+                category-rows:         root.settings-category-rows;
+                template-rows:          root.settings-template-rows;
+                show-template-form:    root.show-template-form;
+                template-form-id:      root.template-form-id;
+                template-form-name:    root.template-form-name;
+                template-form-description: root.template-form-description;
+                template-form-type:    root.template-form-type;
+                template-form-path:    root.template-form-path;
+                template-form-is-default: root.template-form-is-default;
+
+                edit-company-clicked          => { root.settings-edit-company-clicked(); }
+                template-create-clicked       => { root.template-create-clicked(); }
+                template-edit-clicked(id)     => { root.template-edit-clicked(id); }
+                template-delete-clicked(id)   => { root.template-delete-clicked(id); }
+                template-set-default-clicked(id) => { root.template-set-default-clicked(id); }
+                template-form-save(name, desc, type, path, is_default, form_id) => { root.template-form-save(name, desc, type, path, is_default, form_id); }
+                template-form-cancel          => { root.template-form-cancel(); }
             }
 
             if root.current-page == 3 && !root.show-payment-form : PaymentList {

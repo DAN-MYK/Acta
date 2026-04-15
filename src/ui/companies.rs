@@ -6,9 +6,9 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 use crate::{
     app_ctx::AppCtx,
     ui::helpers::*,
-    MainWindow, SettingsCategoryRow,
+    MainWindow, SettingsCategoryRow, SettingsTemplateRow,
 };
-use acta::{config::AppConfig, db, models::{NewCompany, UpdateCompany}};
+use acta::{config::AppConfig, db, models::{NewCompany, NewDocumentTemplate, UpdateCompany, UpdateDocumentTemplate}};
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ── Проміжні дані (Send-safe) ──────────────────────────────────────────────────
@@ -18,6 +18,7 @@ use acta::{config::AppConfig, db, models::{NewCompany, UpdateCompany}};
 pub struct SettingsUiData {
     pub company: Option<Company>,
     pub category_rows: Vec<SettingsCategoryRow>,
+    pub templates: Vec<SettingsTemplateRow>,
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -28,12 +29,14 @@ pub async fn prepare_settings_data(
     pool: &sqlx::PgPool,
     company_id: uuid::Uuid,
 ) -> Result<SettingsUiData> {
-    let (company_res, categories_res) = tokio::join!(
+    let (company_res, categories_res, templates_res) = tokio::join!(
         db::companies::get_by_id(pool, company_id),
         db::categories::list(pool, company_id),
+        db::document_templates::list(pool, company_id),
     );
     let company = company_res?;
     let categories = categories_res?;
+    let templates = templates_res?;
     let category_rows = categories
         .iter()
         .map(|cat| SettingsCategoryRow {
@@ -42,7 +45,17 @@ pub async fn prepare_settings_data(
             depth: if cat.parent_id.is_some() { 1 } else { 0 },
         })
         .collect();
-    Ok(SettingsUiData { company, category_rows })
+    let template_rows = templates
+        .iter()
+        .map(|t| SettingsTemplateRow {
+            id: SharedString::from(t.id.to_string().as_str()),
+            name: SharedString::from(t.name.as_str()),
+            description: SharedString::from(t.description.as_deref().unwrap_or("")),
+            template_type: SharedString::from(t.template_type.as_str()),
+            is_default: t.is_default,
+        })
+        .collect();
+    Ok(SettingsUiData { company, category_rows, templates: template_rows })
 }
 
 pub fn apply_settings_to_ui(ui: &MainWindow, d: SettingsUiData) {
@@ -62,6 +75,7 @@ pub fn apply_settings_to_ui(ui: &MainWindow, d: SettingsUiData) {
         ));
     }
     ui.set_settings_category_rows(ModelRc::new(VecModel::from(d.category_rows)));
+    ui.set_settings_template_rows(ModelRc::new(VecModel::from(d.templates)));
 }
 
 pub async fn reload_settings(
@@ -592,5 +606,210 @@ pub fn setup(ui: &MainWindow, ctx: std::sync::Arc<AppCtx>) {
                 ui.set_show_company_form(false);
             }
         });
+    }
+
+    // ── Template callbacks ────────────────────────────────────────────────────
+    {
+        let pool = ctx.pool.clone();
+        let ui_weak = ui.as_weak();
+        let ctx_c = ctx.clone();
+
+        // Створити новий шаблон — показати порожню форму
+        {
+            let ui_weak_c = ui_weak.clone();
+            ui.on_template_create_clicked(move || {
+                if let Some(ui) = ui_weak_c.upgrade() {
+                    ui.set_template_form_id(SharedString::from(""));
+                    ui.set_template_form_name(SharedString::from(""));
+                    ui.set_template_form_description(SharedString::from(""));
+                    ui.set_template_form_type(SharedString::from("act"));
+                    ui.set_template_form_path(SharedString::from("templates/act.typ"));
+                    ui.set_template_form_is_default(false);
+                    ui.set_show_template_form(true);
+                }
+            });
+        }
+
+        // Редагувати шаблон — завантажити дані
+        {
+            let pool = pool.clone();
+            let ui_handle = ui_weak.clone();
+            ui.on_template_edit_clicked(move |id_str| {
+                let id_s = id_str.to_string();
+                let pool = pool.clone();
+                let ui_handle = ui_handle.clone();
+
+                tokio::spawn(async move {
+                    let Ok(uuid) = id_s.parse::<uuid::Uuid>() else {
+                        tracing::error!("Некоректний UUID шаблону: {id_s}");
+                        return;
+                    };
+                    match db::document_templates::get_by_id(&pool, uuid).await {
+                        Ok(Some(t)) => {
+                            ui_handle.upgrade_in_event_loop(move |ui| {
+                                ui.set_template_form_id(SharedString::from(t.id.to_string().as_str()));
+                                ui.set_template_form_name(SharedString::from(t.name.as_str()));
+                                ui.set_template_form_description(SharedString::from(t.description.as_deref().unwrap_or("")));
+                                ui.set_template_form_type(SharedString::from(t.template_type.as_str()));
+                                ui.set_template_form_path(SharedString::from(t.template_path.as_str()));
+                                ui.set_template_form_is_default(t.is_default);
+                                ui.set_show_template_form(true);
+                            }).warn_if_terminated();
+                        }
+                        Ok(None) => tracing::warn!("Шаблон {uuid} не знайдено."),
+                        Err(e) => tracing::error!("Помилка завантаження шаблону: {e}"),
+                    }
+                });
+            });
+        }
+
+        // Видалити шаблон
+        {
+            let pool = pool.clone();
+            let ui_handle = ui_weak.clone();
+            let ctx = ctx_c.clone();
+            ui.on_template_delete_clicked(move |id_str| {
+                let pool = pool.clone();
+                let ui_handle = ui_handle.clone();
+                let ctx = ctx.clone();
+                let id_s = id_str.to_string();
+
+                tokio::spawn(async move {
+                    let Ok(uuid) = id_s.parse::<uuid::Uuid>() else {
+                        tracing::error!("Некоректний UUID шаблону: {id_s}");
+                        return;
+                    };
+                    match db::document_templates::delete(&pool, uuid).await {
+                        Ok(()) => {
+                            show_toast(ui_handle.clone(), "Шаблон видалено".to_string(), false);
+                            if let Err(e) = reload_settings(&pool, ui_handle.clone(), ctx.company_id()).await {
+                                tracing::error!("Помилка оновлення налаштувань після видалення шаблону: {e}");
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("Помилка видалення шаблону: {e}");
+                            show_toast(ui_handle, format!("Помилка: {e}"), true);
+                        }
+                    }
+                });
+            });
+        }
+
+        // Встановити дефолтним
+        {
+            let pool = pool.clone();
+            let ui_handle = ui_weak.clone();
+            let ctx = ctx_c.clone();
+            ui.on_template_set_default_clicked(move |id_str| {
+                let pool = pool.clone();
+                let ui_handle = ui_handle.clone();
+                let ctx = ctx.clone();
+                let id_s = id_str.to_string();
+
+                tokio::spawn(async move {
+                    let Ok(uuid) = id_s.parse::<uuid::Uuid>() else {
+                        tracing::error!("Некоректний UUID шаблону: {id_s}");
+                        return;
+                    };
+                    match db::document_templates::update(&pool, uuid, UpdateDocumentTemplate {
+                        is_default: Some(true),
+                        name: None,
+                        description: None,
+                        template_path: None,
+                    }).await {
+                        Ok(_) => {
+                            show_toast(ui_handle.clone(), "Дефолтний шаблон оновлено".to_string(), false);
+                            if let Err(e) = reload_settings(&pool, ui_handle.clone(), ctx.company_id()).await {
+                                tracing::error!("Помилка оновлення налаштувань після зміни дефолтного шаблону: {e}");
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("Помилка встановлення дефолтного шаблону: {e}");
+                            show_toast(ui_handle, format!("Помилка: {e}"), true);
+                        }
+                    }
+                });
+            });
+        }
+
+        // Закрити форму шаблону
+        {
+            let ui_weak = ui_weak.clone();
+            ui.on_template_form_cancel(move || {
+                if let Some(ui) = ui_weak.upgrade() {
+                    ui.set_show_template_form(false);
+                }
+            });
+        }
+
+        // Зберегти шаблон (створити або оновити)
+        {
+            let pool = pool.clone();
+            let ui_weak = ui_weak.clone();
+            let ctx = ctx_c.clone();
+            ui.on_template_form_save(move |name, desc, type_s, path, is_default: bool, form_id: slint::SharedString| {
+                let pool = pool.clone();
+                let ui_weak_c = ui_weak.clone();
+                let ctx = ctx.clone();
+
+                let name_s = name.to_string();
+                let desc_s = desc.to_string();
+                let type_s = type_s.to_string();
+                let path_s = path.to_string();
+                let form_id_s = form_id.to_string();
+
+                tokio::spawn(async move {
+                    if name_s.trim().is_empty() {
+                        show_toast(ui_weak_c.clone(), "Введіть назву шаблону".to_string(), true);
+                        return;
+                    }
+                    if path_s.trim().is_empty() {
+                        show_toast(ui_weak_c.clone(), "Введіть шлях до файлу".to_string(), true);
+                        return;
+                    }
+
+                    let result = if form_id_s.is_empty() {
+                        // Створення нового
+                        let data = NewDocumentTemplate {
+                            name: name_s.clone(),
+                            description: if desc_s.is_empty() { None } else { Some(desc_s) },
+                            template_type: type_s.clone(),
+                            template_path: path_s.clone(),
+                            is_default,
+                        };
+                        db::document_templates::create(&pool, ctx.company_id(), data).await
+                    } else {
+                        // Оновлення існуючого
+                        let Ok(uuid) = form_id_s.parse::<uuid::Uuid>() else {
+                            tracing::error!("Некоректний UUID шаблону: {form_id_s}");
+                            return;
+                        };
+                        let data = UpdateDocumentTemplate {
+                            name: Some(name_s.clone()),
+                            description: if desc_s.is_empty() { None } else { Some(desc_s) },
+                            template_path: Some(path_s.clone()),
+                            is_default: Some(is_default),
+                        };
+                        db::document_templates::update(&pool, uuid, data).await
+                    };
+
+                    match result {
+                        Ok(t) => {
+                            show_toast(ui_weak_c.clone(), format!("Шаблон '{}' збережено", t.name), false);
+                            if let Err(e) = reload_settings(&pool, ui_weak_c.clone(), ctx.company_id()).await {
+                                tracing::error!("Помилка оновлення налаштувань після збереження шаблону: {e}");
+                            }
+                            ui_weak_c.upgrade_in_event_loop(|ui| {
+                                ui.set_show_template_form(false);
+                            }).warn_if_terminated();
+                        }
+                        Err(e) => {
+                            tracing::error!("Помилка збереження шаблону: {e}");
+                            show_toast(ui_weak_c, format!("Помилка: {e}"), true);
+                        }
+                    }
+                });
+            });
+        }
     }
 }

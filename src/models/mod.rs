@@ -5,6 +5,7 @@ pub mod company;
 pub mod contract;
 pub mod counterparty;
 pub mod dashboard;
+pub mod document_template;
 pub mod invoice;
 pub mod payment;
 pub mod task;
@@ -26,6 +27,8 @@ pub use invoice::{
 pub use counterparty::{Counterparty, NewCounterparty, UpdateCounterparty};
 #[allow(unused_imports)]
 pub use task::{NewTask, Task, TaskPriority, TaskStatus};
+#[allow(unused_imports)]
+pub use document_template::{DocumentTemplate, NewDocumentTemplate, TemplateListRow, UpdateDocumentTemplate};
 
 #[cfg(test)]
 mod tests {

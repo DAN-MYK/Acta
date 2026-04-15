@@ -1,10 +1,18 @@
-import { Button } from "std-widgets.slint";
+import { Button, LineEdit, ComboBox, TextEdit } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 
 export struct SettingsCategoryRow {
     name: string,
     kind: string,
     depth: int,
+}
+
+export struct SettingsTemplateRow {
+    id: string,
+    name: string,
+    description: string,
+    template_type: string,  // "act" | "invoice"
+    is_default: bool,
 }
 
 export component SettingsPage {
@@ -14,8 +22,24 @@ export component SettingsPage {
     in property <string> company-director: "";
     in property <string> company-address: "";
     in property <[SettingsCategoryRow]> category-rows: [];
+    in property <[SettingsTemplateRow]> template-rows: [];
+
+    // Template form overlay
+    in-out property <bool>    show-template-form: false;
+    in-out property <string> template-form-id: "";
+    in-out property <string> template-form-name: "";
+    in-out property <string> template-form-description: "";
+    in-out property <string> template-form-type: "act";  // "act" | "invoice"
+    in-out property <string> template-form-path: "";
+    in-out property <bool>    template-form-is-default: false;
 
     callback edit-company-clicked();
+    callback template-create-clicked();
+    callback template-edit-clicked(string);
+    callback template-delete-clicked(string);
+    callback template-set-default-clicked(string);
+    callback template-form-save(string, string, string, string, bool, string);
+    callback template-form-cancel();
 
     private property <int> active-tab: 0;
 
@@ -163,20 +187,255 @@ export component SettingsPage {
                 }
             }
 
-            if root.active-tab == 2 : Rectangle {
-                background: Theme.bg-card;
-                border-width: 1px;
-                border-color: Theme.border;
-                border-radius: 16px;
-                vertical-stretch: 1;
+            if root.active-tab == 2 : VerticalLayout {
+                spacing: 12px;
+
+                // Заголовок + кнопка створити
+                HorizontalLayout {
+                    Text {
+                        text: "Шаблони документів";
+                        font-size: 18px;
+                        font-weight: 700;
+                        color: Theme.text-primary;
+                        vertical-alignment: center;
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                    Button {
+                        text: "+ Створити";
+                        primary: true;
+                        clicked => { root.template-create-clicked(); }
+                    }
+                }
+
+                // Список всіх шаблонів
+                VerticalLayout {
+                    spacing: 6px;
+
+                    for row in root.template-rows : Rectangle {
+                        height: 52px;
+                        border-radius: 10px;
+                        background: row.is_default ? #e8f5e9 : Theme.bg-gray;
+                        border-width: row.is_default ? 1px : 0px;
+                        border-color: row.is_default ? Theme.success : Theme.border;
+
+                        HorizontalLayout {
+                            padding-left: 14px;
+                            padding-right: 10px;
+                            spacing: 10px;
+
+                            // Radio indicator for default
+                            Rectangle {
+                                width: 16px;
+                                height: 16px;
+                                border-radius: 8px;
+                                border-width: 2px;
+                                border-color: row.is_default ? Theme.success : Theme.border;
+                                background: row.is_default ? Theme.success : transparent;
+                                TouchArea {
+                                    clicked => { root.template-set-default-clicked(row.id); }
+                                }
+                            }
+
+                            // Type badge
+                            Rectangle {
+                                width: 60px;
+                                height: 22px;
+                                border-radius: 4px;
+                                background: row.template_type == "act" ? #1976d2 : #7b1fa2;
+                                Text {
+                                    text: row.template_type == "act" ? "Акт" : "Накл.";
+                                    color: white;
+                                    font-size: 11px;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+
+                            VerticalLayout {
+                                horizontal-stretch: 1;
+                                spacing: 0;
+                                Text {
+                                    text: row.name;
+                                    font-size: 13px;
+                                    font-weight: 600;
+                                    color: Theme.text-primary;
+                                }
+                                Text {
+                                    text: row.description == "" ? row.template_type : row.description;
+                                    font-size: 11px;
+                                    color: Theme.text-muted;
+                                }
+                            }
+
+                            Button {
+                                text: "✎";
+                                width: 32px;
+                                height: 28px;
+                                clicked => { root.template-edit-clicked(row.id); }
+                            }
+                            Button {
+                                text: "✕";
+                                width: 32px;
+                                height: 28px;
+                                clicked => { root.template-delete-clicked(row.id); }
+                            }
+                        }
+                    }
+                }
+
+                // Пустий стан
+                if root.template-rows.length == 0 : Rectangle {
+                    height: 80px;
+                    border-radius: 10px;
+                    background: Theme.bg-gray;
+                    Text {
+                        text: "Немає шаблонів. Натисніть \"Створити\".";
+                        font-size: 13px;
+                        color: Theme.text-muted;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Modal overlay: Template Form ─────────────────────────────────────────
+    if root.show-template-form : Rectangle {
+        background: #00000066;
+
+        Rectangle {
+            x: (parent.width - 480px) / 2;
+            y: (parent.height - 380px) / 2;
+            width: 480px;
+            background: Theme.bg-card;
+            border-radius: 16px;
+
+            VerticalLayout {
+                padding: 24px;
+                spacing: 14px;
 
                 Text {
-                    text: "Шаблони документів заплановані для наступної ітерації MVP. Базова навігація і вкладка вже готові.";
-                    color: Theme.text-muted;
-                    font-size: 14px;
-                    wrap: word-wrap;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+                    text: root.template-form-id == "" ? "Новий шаблон" : "Редагувати шаблон";
+                    font-size: 18px;
+                    font-weight: 700;
+                    color: Theme.text-primary;
+                }
+
+                // Назва
+                VerticalLayout {
+                    spacing: 4px;
+                    Text { text: "Назва"; font-size: 12px; color: Theme.text-muted; }
+                    Rectangle {
+                        height: 40px;
+                        border-radius: 8px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        LineEdit {
+                            text: root.template-form-name;
+                            placeholder-text: "Мій шаблон акту";
+                        }
+                    }
+                }
+
+                // Тип
+                VerticalLayout {
+                    spacing: 4px;
+                    Text { text: "Тип документа"; font-size: 12px; color: Theme.text-muted; }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        for label[idx] in ["Акт", "Накладна"]: Rectangle {
+                            width: 100px;
+                            height: 36px;
+                            border-radius: 8px;
+                            border-width: 2px;
+                            border-color: (root.template-form-type == "act" ? idx == 0 : idx == 1) ? Theme.primary : Theme.border;
+                            background: (root.template-form-type == "act" ? idx == 0 : idx == 1) ? #e3f2fd : Theme.bg-card;
+                            TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    root.template-form-type = (idx == 0) ? "act" : "invoice";
+                                    root.template-form-path = (idx == 0) ? "templates/act.typ" : "templates/invoice.typ";
+                                }
+                            }
+                            Text {
+                                text: label;
+                                color: (root.template-form-type == "act" ? idx == 0 : idx == 1) ? Theme.primary : Theme.text-muted;
+                                font-size: 13px;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+
+                // Шлях до файлу
+                VerticalLayout {
+                    spacing: 4px;
+                    Text { text: "Шлях до .typ файлу"; font-size: 12px; color: Theme.text-muted; }
+                    Rectangle {
+                        height: 40px;
+                        border-radius: 8px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        LineEdit {
+                            text: root.template-form-path;
+                            placeholder-text: "templates/act.typ";
+                        }
+                    }
+                }
+
+                // Опис
+                VerticalLayout {
+                    spacing: 4px;
+                    Text { text: "Опис (необов'язково)"; font-size: 12px; color: Theme.text-muted; }
+                    Rectangle {
+                        height: 60px;
+                        border-radius: 8px;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        TextEdit {
+                            text: root.template-form-description;
+                            placeholder-text: "Опис шаблону...";
+                        }
+                    }
+                }
+
+                // Дефолтний
+                HorizontalLayout {
+                    spacing: 8px;
+                    Rectangle {
+                        width: 20px;
+                        height: 20px;
+                        border-radius: 4px;
+                        border-width: 2px;
+                        border-color: Theme.primary;
+                        background: root.template-form-is-default ? Theme.primary : transparent;
+                        TouchArea {
+                            clicked => { root.template-form-is-default = !root.template-form-is-default; }
+                        }
+                    }
+                    Text {
+                        text: "Використовувати як дефолтний для цього типу";
+                        font-size: 13px;
+                        color: Theme.text-primary;
+                        vertical-alignment: center;
+                    }
+                }
+
+                // Кнопки
+                HorizontalLayout {
+                    spacing: 10px;
+                    Rectangle { horizontal-stretch: 1; }
+                    Button {
+                        text: "Скасувати";
+                        clicked => { root.template-form-cancel(); }
+                    }
+                    Button {
+                        text: "Зберегти";
+                        primary: true;
+                        clicked => { root.template-form-save(root.template-form-name, root.template-form-description, root.template-form-type, root.template-form-path, root.template-form-is-default, root.template-form-id); }
+                    }
                 }
             }
         }

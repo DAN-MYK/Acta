@@ -1,7 +1,7 @@
 -- Міграція 003: Акти виконаних робіт
 --
 -- act_status — нативний PostgreSQL ENUM, відображається на ActStatus у Rust.
--- Порядок статусів: draft → issued → signed → paid (лише вперед).
+-- Порядок статусів: draft -> issued -> signed -> paid (лише вперед).
 
 -- DO $$ BEGIN ... EXCEPTION WHEN duplicate_object —
 -- захист від помилки якщо тип вже існує (повторний запуск міграції або dev-середовище).
