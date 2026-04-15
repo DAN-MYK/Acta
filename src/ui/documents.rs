@@ -457,8 +457,10 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
         if let Some(ui) = ui_weak.upgrade() {
             if let Some(act_uuid) = id_s.strip_prefix("act:") {
                 ui.invoke_act_pdf_clicked(SharedString::from(act_uuid));
+            } else if let Some(inv_uuid) = id_s.strip_prefix("inv:") {
+                ui.invoke_invoice_pdf_clicked(SharedString::from(inv_uuid));
             } else {
-                tracing::info!("PDF для накладних ще не реалізовано (id='{id_s}')");
+                tracing::warn!("doc-pdf-clicked: невідомий префікс id='{id_s}'");
             }
         }
     });

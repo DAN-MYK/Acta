@@ -711,4 +711,76 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
             }
         });
     });
+
+    // ── PDF накладної ─────────────────────────────────────────────────────────
+    let pool = ctx.pool.clone();
+    let company_id_arc = ctx.active_company_id.clone();
+    ui.on_invoice_pdf_clicked(move |id| {
+        let pool = pool.clone();
+        let cid = *company_id_arc.lock().unwrap();
+        let id_str = id.to_string();
+        tokio::spawn(async move {
+            let Ok(uuid) = id_str.parse::<uuid::Uuid>() else { return; };
+            let (inv_result, company_result) = tokio::join!(
+                db::invoices::get_by_id(&pool, uuid),
+                db::companies::get_by_id(&pool, cid),
+            );
+            let Some((inv, items)) = (match inv_result {
+                Ok(v) => v,
+                Err(e) => { tracing::error!("PDF накладної: {e}"); return; }
+            }) else { return; };
+            let company = match company_result {
+                Ok(Some(v)) => v,
+                _ => { tracing::warn!("PDF накладної: компанія не знайдена."); return; }
+            };
+            let cp = match db::counterparties::get_by_id(&pool, inv.counterparty_id).await {
+                Ok(Some(v)) => v,
+                _ => { tracing::warn!("PDF накладної: контрагент не знайдено."); return; }
+            };
+            let pdf_items: Vec<acta::pdf::generator::PdfInvoiceItem> = items
+                .iter()
+                .enumerate()
+                .map(|(i, item)| acta::pdf::generator::PdfInvoiceItem {
+                    num: (i + 1) as u32,
+                    name: item.description.clone(),
+                    qty: item.quantity.to_string(),
+                    unit: item.unit.clone().unwrap_or_else(|| "шт".into()),
+                    price: item.price.to_string(),
+                    amount: item.amount.to_string(),
+                })
+                .collect();
+            let data = acta::pdf::generator::PdfInvoiceData {
+                number: inv.number.clone(),
+                date: inv.date.format("%d.%m.%Y").to_string(),
+                company: acta::pdf::generator::PdfCompany {
+                    name: company.name.clone(),
+                    edrpou: company.edrpou.unwrap_or_default(),
+                    iban: company.iban.unwrap_or_default(),
+                    address: company.legal_address.unwrap_or_default(),
+                },
+                client: acta::pdf::generator::PdfCompany {
+                    name: cp.name.clone(),
+                    edrpou: cp.edrpou.unwrap_or_default(),
+                    iban: cp.iban.unwrap_or_default(),
+                    address: cp.address.unwrap_or_default(),
+                },
+                items: pdf_items,
+                total: format!("{:.2}", inv.total_amount),
+                vat_amount: format!("{:.2}", inv.vat_amount),
+                total_words: acta::pdf::generator::amount_to_words(&inv.total_amount),
+                notes: inv.notes.clone().unwrap_or_default(),
+            };
+            let output_path = match acta::pdf::generator::ensure_invoice_output_dir(&inv.number) {
+                Ok(p) => p,
+                Err(e) => { tracing::error!("PDF накладної: директорія: {e}"); return; }
+            };
+            if let Err(e) = acta::pdf::generator::generate_invoice_pdf(&data, &output_path) {
+                tracing::error!("PDF накладної: генерація: {e}"); return;
+            }
+            tracing::info!("PDF '{}' → {}", inv.number, output_path.display());
+            if let Err(e) = open::that(&output_path) {
+                tracing::error!("PDF накладної: відкриття: {e}");
+            }
+        });
+    });
 }
