@@ -43,257 +43,309 @@ export component SettingsPage {
 
     private property <int> active-tab: 0;
 
-    Rectangle {
-        background: Theme.bg-page;
+    min-width: 600px;
+    min-height: 400px;
 
-        VerticalLayout {
-            padding: 24px;
-            spacing: 16px;
+    VerticalLayout {
+        spacing: 0;
 
-            Text {
-                text: "Налаштування";
-                font-size: 24px;
-                font-weight: 700;
-                color: Theme.text-primary;
-            }
+        // ── Topbar (64px, білий, з нижньою межею) ───────────────────────────
+        Rectangle {
+            height: Theme.topbar-height;
+            vertical-stretch: 0;
+            background: Theme.bg-card;
 
             HorizontalLayout {
-                spacing: 8px;
-                for label[i] in ["Компанія", "Категорії", "Шаблони"]: Rectangle {
-                    height: 34px;
-                    width: i == 0 ? 110px : 100px;
-                    border-radius: Theme.radius-md;
-                    background: root.active-tab == i ? Theme.primary : Theme.bg-gray;
+                padding-left: 32px;
+                padding-right: 32px;
+                spacing: 16px;
+                alignment: center;
 
-                    Text {
-                        text: label;
-                        color: root.active-tab == i ? Theme.text-white : Theme.text-second;
-                        font-size: 13px;
-                        font-weight: root.active-tab == i ? 600 : 500;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-
-                    TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => { root.active-tab = i; }
-                    }
+                Text {
+                    text: "Налаштування";
+                    font-size: Theme.font-2xl;
+                    font-weight: 600;
+                    color: Theme.text-primary;
+                    horizontal-stretch: 1;
+                    vertical-alignment: center;
                 }
             }
 
-            if root.active-tab == 0 : Rectangle {
-                background: Theme.bg-card;
-                border-width: 1px;
-                border-color: Theme.border;
-                border-radius: 16px;
-                vertical-stretch: 1;
-
-                VerticalLayout {
-                    padding: 24px;
-                    spacing: 12px;
-
-                    HorizontalLayout {
-                        Text {
-                            text: "Реквізити активної компанії";
-                            font-size: 18px;
-                            font-weight: 700;
-                            color: Theme.text-primary;
-                            horizontal-stretch: 1;
-                        }
-
-                        Button {
-                            text: "Редагувати";
-                            primary: true;
-                            clicked => { root.edit-company-clicked(); }
-                        }
-                    }
-
-                    for item in [
-                        { label: "Назва",     value: root.company-name     },
-                        { label: "ЄДРПОУ",    value: root.company-edrpou   },
-                        { label: "IBAN",      value: root.company-iban     },
-                        { label: "Директор",  value: root.company-director },
-                        { label: "Адреса",    value: root.company-address  }
-                    ]: Rectangle {
-                        height: 42px;
-                        border-radius: 10px;
-                        background: Theme.bg-gray;
-
-                        HorizontalLayout {
-                            padding-left: 14px;
-                            padding-right: 14px;
-                            Text {
-                                text: item.label;
-                                width: 120px;
-                                font-size: 12px;
-                                color: Theme.text-muted;
-                                vertical-alignment: center;
-                            }
-                            Text {
-                                text: item.value == "" ? "—" : item.value;
-                                font-size: 13px;
-                                color: Theme.text-primary;
-                                vertical-alignment: center;
-                            }
-                        }
-                    }
-                }
+            Rectangle {
+                y: parent.height - 1px;
+                height: 1px;
+                background: Theme.border;
             }
+        }
 
-            if root.active-tab == 1 : Rectangle {
-                background: Theme.bg-card;
-                border-width: 1px;
-                border-color: Theme.border;
-                border-radius: 16px;
-                vertical-stretch: 1;
+        // ── Основний контент ─────────────────────────────────────────────────
+        Rectangle {
+            background: Theme.bg-page;
+            vertical-stretch: 1;
 
-                VerticalLayout {
-                    padding: 24px;
-                    spacing: 10px;
+            VerticalLayout {
+                padding-top: 24px;
+                padding-left: 32px;
+                padding-right: 32px;
+                padding-bottom: 24px;
+                spacing: 16px;
 
-                    Text {
-                        text: "Категорії доходів і витрат";
-                        font-size: 18px;
-                        font-weight: 700;
-                        color: Theme.text-primary;
-                    }
-
-                    for row in root.category-rows: Rectangle {
-                        height: 38px;
-                        border-radius: 10px;
-                        background: Theme.bg-gray;
-
-                        HorizontalLayout {
-                            padding-left: 14px + (row.depth * 18px);
-                            padding-right: 14px;
-                            spacing: 12px;
-
-                            Text {
-                                text: row.kind == "income" ? "Дохід" : "Витрата";
-                                width: 70px;
-                                font-size: 11px;
-                                color: row.kind == "income" ? Theme.success : Theme.danger;
-                                vertical-alignment: center;
-                            }
-
-                            Text {
-                                text: row.depth > 0 ? "↳ " + row.name : row.name;
-                                font-size: 13px;
-                                color: Theme.text-primary;
-                                vertical-alignment: center;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if root.active-tab == 2 : VerticalLayout {
-                spacing: 12px;
-
-                // Заголовок + кнопка створити
+                // ── Вкладки ───────────────────────────────────────────────────
                 HorizontalLayout {
-                    Text {
-                        text: "Шаблони документів";
-                        font-size: 18px;
-                        font-weight: 700;
-                        color: Theme.text-primary;
-                        vertical-alignment: center;
-                    }
-                    Rectangle { horizontal-stretch: 1; }
-                    Button {
-                        text: "+ Створити";
-                        primary: true;
-                        clicked => { root.template-create-clicked(); }
+                    spacing: 8px;
+                    vertical-stretch: 0;
+
+                    for label[i] in ["Компанія", "Категорії", "Шаблони"]: Rectangle {
+                        height: Theme.btn-sm-height;
+                        width: i == 0 ? 110px : 100px;
+                        border-radius: Theme.radius-md;
+                        background: root.active-tab == i ? Theme.primary : Theme.bg-gray;
+                        animate background { duration: 120ms; easing: ease; }
+
+                        Text {
+                            text: label;
+                            color: root.active-tab == i ? Theme.text-white : Theme.text-second;
+                            font-size: Theme.font-md;
+                            font-weight: root.active-tab == i ? 600 : 400;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            animate color { duration: 120ms; easing: ease; }
+                        }
+
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.active-tab = i; }
+                        }
                     }
                 }
 
-                // Список всіх шаблонів
-                VerticalLayout {
-                    spacing: 6px;
+                // ── Вкладка «Компанія» ────────────────────────────────────────
+                if root.active-tab == 0 : Rectangle {
+                    background: Theme.bg-card;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    border-radius: Theme.radius-xl;
+                    vertical-stretch: 1;
 
-                    for row in root.template-rows : Rectangle {
-                        height: 52px;
-                        border-radius: 10px;
-                        background: row.is_default ? #e8f5e9 : Theme.bg-gray;
-                        border-width: row.is_default ? 1px : 0px;
-                        border-color: row.is_default ? Theme.success : Theme.border;
+                    VerticalLayout {
+                        padding: 24px;
+                        spacing: 12px;
 
                         HorizontalLayout {
-                            padding-left: 14px;
-                            padding-right: 10px;
-                            spacing: 10px;
-
-                            // Radio indicator for default
-                            Rectangle {
-                                width: 16px;
-                                height: 16px;
-                                border-radius: 8px;
-                                border-width: 2px;
-                                border-color: row.is_default ? Theme.success : Theme.border;
-                                background: row.is_default ? Theme.success : transparent;
-                                TouchArea {
-                                    clicked => { root.template-set-default-clicked(row.id); }
-                                }
+                            Text {
+                                text: "Реквізити активної компанії";
+                                font-size: Theme.font-2xl;
+                                font-weight: 700;
+                                color: Theme.text-primary;
+                                horizontal-stretch: 1;
+                                vertical-alignment: center;
                             }
 
-                            // Type badge
-                            Rectangle {
-                                width: 60px;
-                                height: 22px;
-                                border-radius: 4px;
-                                background: row.template_type == "act" ? #1976d2 : #7b1fa2;
+                            Button {
+                                text: "Редагувати";
+                                primary: true;
+                                height: Theme.btn-md-height;
+                                clicked => { root.edit-company-clicked(); }
+                            }
+                        }
+
+                        for item in [
+                            { label: "Назва",     value: root.company-name     },
+                            { label: "ЄДРПОУ",    value: root.company-edrpou   },
+                            { label: "IBAN",      value: root.company-iban     },
+                            { label: "Директор",  value: root.company-director },
+                            { label: "Адреса",    value: root.company-address  }
+                        ]: Rectangle {
+                            height: 40px;
+                            border-radius: Theme.radius-md;
+                            background: Theme.bg-gray;
+
+                            HorizontalLayout {
+                                padding-left: 14px;
+                                padding-right: 14px;
+
                                 Text {
-                                    text: row.template_type == "act" ? "Акт" : "Накл.";
-                                    color: white;
-                                    font-size: 11px;
-                                    horizontal-alignment: center;
+                                    text: item.label;
+                                    width: 120px;
+                                    font-size: Theme.font-base;
+                                    color: Theme.text-muted;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: item.value == "" ? "—" : item.value;
+                                    font-size: Theme.font-md;
+                                    color: Theme.text-primary;
                                     vertical-alignment: center;
                                 }
                             }
+                        }
+                    }
+                }
 
-                            VerticalLayout {
-                                horizontal-stretch: 1;
-                                spacing: 0;
+                // ── Вкладка «Категорії» ───────────────────────────────────────
+                if root.active-tab == 1 : Rectangle {
+                    background: Theme.bg-card;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    border-radius: Theme.radius-xl;
+                    vertical-stretch: 1;
+
+                    VerticalLayout {
+                        padding: 24px;
+                        spacing: 10px;
+
+                        Text {
+                            text: "Категорії доходів і витрат";
+                            font-size: Theme.font-2xl;
+                            font-weight: 700;
+                            color: Theme.text-primary;
+                        }
+
+                        for row in root.category-rows: Rectangle {
+                            height: 40px;
+                            border-radius: Theme.radius-md;
+                            background: Theme.bg-gray;
+
+                            HorizontalLayout {
+                                padding-left: 14px + (row.depth * 18px);
+                                padding-right: 14px;
+                                spacing: 12px;
+
                                 Text {
-                                    text: row.name;
-                                    font-size: 13px;
-                                    font-weight: 600;
+                                    text: row.kind == "income" ? "Дохід" : "Витрата";
+                                    width: 70px;
+                                    font-size: Theme.font-sm;
+                                    color: row.kind == "income" ? Theme.success : Theme.danger;
+                                    vertical-alignment: center;
+                                }
+
+                                Text {
+                                    text: row.depth > 0 ? "↳ " + row.name : row.name;
+                                    font-size: Theme.font-md;
                                     color: Theme.text-primary;
+                                    vertical-alignment: center;
                                 }
-                                Text {
-                                    text: row.description == "" ? row.template_type : row.description;
-                                    font-size: 11px;
-                                    color: Theme.text-muted;
-                                }
-                            }
-
-                            Button {
-                                text: "✎";
-                                width: 32px;
-                                height: 28px;
-                                clicked => { root.template-edit-clicked(row.id); }
-                            }
-                            Button {
-                                text: "✕";
-                                width: 32px;
-                                height: 28px;
-                                clicked => { root.template-delete-clicked(row.id); }
                             }
                         }
                     }
                 }
 
-                // Пустий стан
-                if root.template-rows.length == 0 : Rectangle {
-                    height: 80px;
-                    border-radius: 10px;
-                    background: Theme.bg-gray;
-                    Text {
-                        text: "Немає шаблонів. Натисніть \"Створити\".";
-                        font-size: 13px;
-                        color: Theme.text-muted;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
+                // ── Вкладка «Шаблони» ────────────────────────────────────────
+                if root.active-tab == 2 : VerticalLayout {
+                    spacing: 12px;
+
+                    // Заголовок + кнопка
+                    HorizontalLayout {
+                        Text {
+                            text: "Шаблони документів";
+                            font-size: Theme.font-2xl;
+                            font-weight: 700;
+                            color: Theme.text-primary;
+                            vertical-alignment: center;
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        Button {
+                            text: "+ Створити";
+                            primary: true;
+                            height: Theme.btn-md-height;
+                            clicked => { root.template-create-clicked(); }
+                        }
+                    }
+
+                    // Список шаблонів
+                    VerticalLayout {
+                        spacing: 6px;
+
+                        for row in root.template-rows : Rectangle {
+                            height: 52px;
+                            border-radius: Theme.radius-md;
+                            background: row.is_default ? Theme.bg-success : Theme.bg-gray;
+                            border-width: row.is_default ? 1px : 0px;
+                            border-color: row.is_default ? Theme.success : Theme.border;
+
+                            HorizontalLayout {
+                                padding-left: 14px;
+                                padding-right: 10px;
+                                spacing: 10px;
+                                alignment: center;
+
+                                // Радіо-індикатор дефолтного
+                                Rectangle {
+                                    width: 16px;
+                                    height: 16px;
+                                    border-radius: 8px;
+                                    border-width: 2px;
+                                    border-color: row.is_default ? Theme.success : Theme.border;
+                                    background: row.is_default ? Theme.success : transparent;
+                                    TouchArea {
+                                        clicked => { root.template-set-default-clicked(row.id); }
+                                    }
+                                }
+
+                                // Бейдж типу
+                                Rectangle {
+                                    width: 60px;
+                                    height: 22px;
+                                    border-radius: Theme.radius-sm;
+                                    background: row.template_type == "act" ? Theme.bg-primary : Theme.bg-purple;
+
+                                    Text {
+                                        text: row.template_type == "act" ? "Акт" : "Накл.";
+                                        color: row.template_type == "act" ? Theme.primary : Theme.purple;
+                                        font-size: Theme.font-sm;
+                                        font-weight: 600;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                }
+
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    spacing: 2px;
+                                    alignment: center;
+
+                                    Text {
+                                        text: row.name;
+                                        font-size: Theme.font-md;
+                                        font-weight: 600;
+                                        color: Theme.text-primary;
+                                    }
+                                    Text {
+                                        text: row.description == "" ? row.template_type : row.description;
+                                        font-size: Theme.font-sm;
+                                        color: Theme.text-muted;
+                                    }
+                                }
+
+                                Button {
+                                    text: "✎";
+                                    width: 32px;
+                                    height: Theme.btn-sm-height;
+                                    clicked => { root.template-edit-clicked(row.id); }
+                                }
+                                Button {
+                                    text: "✕";
+                                    width: 32px;
+                                    height: Theme.btn-sm-height;
+                                    clicked => { root.template-delete-clicked(row.id); }
+                                }
+                            }
+                        }
+                    }
+
+                    // Порожній стан
+                    if root.template-rows.length == 0 : Rectangle {
+                        height: 80px;
+                        border-radius: Theme.radius-md;
+                        background: Theme.bg-gray;
+
+                        Text {
+                            text: "Немає шаблонів. Натисніть «Створити».";
+                            font-size: Theme.font-md;
+                            color: Theme.text-muted;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
                     }
                 }
             }
@@ -302,14 +354,25 @@ export component SettingsPage {
 
     // ── Modal overlay: Template Form ─────────────────────────────────────────
     if root.show-template-form : Rectangle {
-        background: #00000066;
+        background: Theme.overlay;
 
         Rectangle {
             x: (parent.width - 480px) / 2;
-            y: (parent.height - 380px) / 2;
+            y: (parent.height - 400px) / 2;
             width: 480px;
             background: Theme.bg-card;
-            border-radius: 16px;
+            border-radius: Theme.radius-xl;
+            drop-shadow-blur: 40px;
+            drop-shadow-color: rgba(0, 0, 0, 18%);
+            drop-shadow-offset-y: 12px;
+
+            // Акцентна смужка зверху
+            Rectangle {
+                x: 0; y: 0; width: 480px; height: 4px;
+                border-top-left-radius: Theme.radius-xl;
+                border-top-right-radius: Theme.radius-xl;
+                background: Theme.primary;
+            }
 
             VerticalLayout {
                 padding: 24px;
@@ -317,7 +380,7 @@ export component SettingsPage {
 
                 Text {
                     text: root.template-form-id == "" ? "Новий шаблон" : "Редагувати шаблон";
-                    font-size: 18px;
+                    font-size: Theme.font-2xl;
                     font-weight: 700;
                     color: Theme.text-primary;
                 }
@@ -325,10 +388,10 @@ export component SettingsPage {
                 // Назва
                 VerticalLayout {
                     spacing: 4px;
-                    Text { text: "Назва"; font-size: 12px; color: Theme.text-muted; }
+                    Text { text: "Назва"; font-size: Theme.font-base; font-weight: 600; color: Theme.text-second; }
                     Rectangle {
                         height: 40px;
-                        border-radius: 8px;
+                        border-radius: Theme.radius-md;
                         border-width: 1px;
                         border-color: Theme.border;
                         LineEdit {
@@ -341,16 +404,18 @@ export component SettingsPage {
                 // Тип
                 VerticalLayout {
                     spacing: 4px;
-                    Text { text: "Тип документа"; font-size: 12px; color: Theme.text-muted; }
+                    Text { text: "Тип документа"; font-size: Theme.font-base; font-weight: 600; color: Theme.text-second; }
                     HorizontalLayout {
                         spacing: 8px;
                         for label[idx] in ["Акт", "Накладна"]: Rectangle {
                             width: 100px;
-                            height: 36px;
-                            border-radius: 8px;
+                            height: Theme.btn-md-height;
+                            border-radius: Theme.radius-md;
                             border-width: 2px;
                             border-color: (root.template-form-type == "act" ? idx == 0 : idx == 1) ? Theme.primary : Theme.border;
-                            background: (root.template-form-type == "act" ? idx == 0 : idx == 1) ? #e3f2fd : Theme.bg-card;
+                            background: (root.template-form-type == "act" ? idx == 0 : idx == 1) ? Theme.bg-primary : Theme.bg-card;
+                            animate background { duration: 100ms; easing: ease; }
+
                             TouchArea {
                                 mouse-cursor: pointer;
                                 clicked => {
@@ -361,7 +426,7 @@ export component SettingsPage {
                             Text {
                                 text: label;
                                 color: (root.template-form-type == "act" ? idx == 0 : idx == 1) ? Theme.primary : Theme.text-muted;
-                                font-size: 13px;
+                                font-size: Theme.font-md;
                                 horizontal-alignment: center;
                                 vertical-alignment: center;
                             }
@@ -372,10 +437,10 @@ export component SettingsPage {
                 // Шлях до файлу
                 VerticalLayout {
                     spacing: 4px;
-                    Text { text: "Шлях до .typ файлу"; font-size: 12px; color: Theme.text-muted; }
+                    Text { text: "Шлях до .typ файлу"; font-size: Theme.font-base; font-weight: 600; color: Theme.text-second; }
                     Rectangle {
                         height: 40px;
-                        border-radius: 8px;
+                        border-radius: Theme.radius-md;
                         border-width: 1px;
                         border-color: Theme.border;
                         LineEdit {
@@ -388,10 +453,10 @@ export component SettingsPage {
                 // Опис
                 VerticalLayout {
                     spacing: 4px;
-                    Text { text: "Опис (необов'язково)"; font-size: 12px; color: Theme.text-muted; }
+                    Text { text: "Опис (необов'язково)"; font-size: Theme.font-base; font-weight: 600; color: Theme.text-second; }
                     Rectangle {
                         height: 60px;
-                        border-radius: 8px;
+                        border-radius: Theme.radius-md;
                         border-width: 1px;
                         border-color: Theme.border;
                         TextEdit {
@@ -404,20 +469,23 @@ export component SettingsPage {
                 // Дефолтний
                 HorizontalLayout {
                     spacing: 8px;
+                    alignment: center;
+
                     Rectangle {
                         width: 20px;
                         height: 20px;
-                        border-radius: 4px;
+                        border-radius: Theme.radius-sm;
                         border-width: 2px;
                         border-color: Theme.primary;
                         background: root.template-form-is-default ? Theme.primary : transparent;
+
                         TouchArea {
                             clicked => { root.template-form-is-default = !root.template-form-is-default; }
                         }
                     }
                     Text {
                         text: "Використовувати як дефолтний для цього типу";
-                        font-size: 13px;
+                        font-size: Theme.font-md;
                         color: Theme.text-primary;
                         vertical-alignment: center;
                     }
@@ -429,11 +497,13 @@ export component SettingsPage {
                     Rectangle { horizontal-stretch: 1; }
                     Button {
                         text: "Скасувати";
+                        height: Theme.btn-md-height;
                         clicked => { root.template-form-cancel(); }
                     }
                     Button {
                         text: "Зберегти";
                         primary: true;
+                        height: Theme.btn-md-height;
                         clicked => { root.template-form-save(root.template-form-name, root.template-form-description, root.template-form-type, root.template-form-path, root.template-form-is-default, root.template-form-id); }
                     }
                 }

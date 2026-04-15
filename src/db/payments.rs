@@ -85,8 +85,6 @@ pub async fn list(
         }
     }
 
-    let dir_filter = direction.as_ref().map(|d| d.as_str());
-
     let rows = sqlx::query_as::<_, Row>(
         r#"
         SELECT
@@ -107,7 +105,7 @@ pub async fn list(
         "#,
     )
     .bind(company_id)
-    .bind(dir_filter)
+    .bind(direction)
     .fetch_all(pool)
     .await?;
 
@@ -172,7 +170,7 @@ pub async fn create(pool: &PgPool, data: NewPayment) -> Result<Payment> {
     .bind(data.company_id)
     .bind(data.date)
     .bind(data.amount)
-    .bind(data.direction.as_str())
+    .bind(data.direction)
     .bind(data.counterparty_id)
     .bind(data.bank_name)
     .bind(data.bank_ref)
@@ -204,7 +202,7 @@ pub async fn update(pool: &PgPool, id: Uuid, data: UpdatePayment) -> Result<Opti
     .bind(id)
     .bind(data.date)
     .bind(data.amount)
-    .bind(data.direction.as_str())
+    .bind(data.direction)
     .bind(data.counterparty_id)
     .bind(data.bank_name)
     .bind(data.bank_ref)
@@ -323,9 +321,9 @@ pub async fn create_schedule(
     .bind(data.company_id)
     .bind(data.title)
     .bind(data.amount)
-    .bind(data.direction.as_str())
+    .bind(data.direction)
     .bind(data.scheduled_date)
-    .bind(data.recurrence.as_str())
+    .bind(data.recurrence)
     .bind(data.recurrence_end)
     .bind(data.counterparty_id)
     .bind(data.notes)

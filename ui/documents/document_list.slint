@@ -6,7 +6,7 @@
 // Адаптовано з Figma: DocumentsListScreen (nodes 178:2)
 
 import { Theme } from "../theme.slint";
-import { ProgressIndicator, ComboBox } from "std-widgets.slint";
+import { ProgressIndicator, ComboBox, ListView } from "std-widgets.slint";
 import { DocTypeBadge, StatusBadge, ConfirmDeleteDialog } from "../components/shared.slint";
 
 // ── DocRow — рядок уніфікованого списку документів ───────────────────────────
@@ -58,43 +58,25 @@ export component DocumentList {
         spacing: 0;
         padding: 0;
 
-        // ── Topbar ───────────────────────────────────────────────────────────
+        // ── Topbar (64px, білий, з нижньою межею) ───────────────────────────
         Rectangle {
-            height: 64px;
+            height: Theme.topbar-height;
             vertical-stretch: 0;
             background: Theme.bg-card;
-            drop-shadow-blur: 10px;
-            drop-shadow-color: rgba(0,0,0,5%);
-            drop-shadow-offset-y: 1px;
-
-            // Нижня межа
-            Rectangle {
-                x: 0; y: 63px; width: parent.width; height: 1px;
-                background: Theme.border;
-            }
 
             HorizontalLayout {
                 padding-left: 32px;
-                padding-right: 24px;
+                padding-right: 32px;
                 spacing: 16px;
+                alignment: center;
 
-                VerticalLayout {
-                    alignment: center;
+                Text {
+                    text: "Документи";
+                    font-size: Theme.font-2xl;
+                    font-weight: 600;
+                    color: Theme.text-primary;
                     horizontal-stretch: 1;
-
-                    Text {
-                        text: "Документи";
-                        font-size: Theme.font-2xl;
-                        font-weight: 700;
-                        color: Theme.text-primary;
-                    }
-                    Text {
-                        text: root.direction-index == 1
-                            ? "Акти та накладні, отримані від контрагентів"
-                            : "Акти та накладні, виставлені клієнтам";
-                        font-size: Theme.font-md;
-                        color: Theme.text-second;
-                    }
+                    vertical-alignment: center;
                 }
 
                 // Кнопка "+ Новий документ"
@@ -105,7 +87,7 @@ export component DocumentList {
                     background: new-touch.has-hover ? #2D64E3 : Theme.primary;
                     animate background { duration: 120ms; easing: ease; }
                     drop-shadow-blur: 8px;
-                    drop-shadow-color: rgba(0,0,0,15%);
+                    drop-shadow-color: rgba(0, 0, 0, 15%);
                     drop-shadow-offset-y: 2px;
 
                     Text {
@@ -125,11 +107,17 @@ export component DocumentList {
                     }
                 }
             }
+
+            Rectangle {
+                y: parent.height - 1px;
+                height: 1px;
+                background: Theme.border;
+            }
         }
 
         // ── Таби + пошук ─────────────────────────────────────────────────────
         Rectangle {
-            height: 56px;
+            height: 44px;
             vertical-stretch: 0;
             background: Theme.bg-card;
             border-width: 1px;
@@ -345,274 +333,260 @@ export component DocumentList {
             }
         }
 
-        // ── Заголовок таблиці ────────────────────────────────────────────────
-        Rectangle {
-            height: 40px;
-            vertical-stretch: 0;
-            background: Theme.bg-gray-soft;
-            border-width: 1px;
-            border-color: Theme.border;
-
-            HorizontalLayout {
-                padding-left: 32px;
-                padding-right: 32px;
-                spacing: 0;
-
-                Text {
-                    text: "Тип";
-                    font-size: Theme.font-base;
-                    font-weight: 600;
-                    color: Theme.text-second;
-                    vertical-alignment: center;
-                    width: 68px;
-                }
-                Text {
-                    text: "Номер";
-                    font-size: Theme.font-base;
-                    font-weight: 600;
-                    color: Theme.text-second;
-                    vertical-alignment: center;
-                    width: 160px;
-                }
-                Text {
-                    text: "Контрагент";
-                    font-size: Theme.font-base;
-                    font-weight: 600;
-                    color: Theme.text-second;
-                    vertical-alignment: center;
-                    horizontal-stretch: 1;
-                }
-                Text {
-                    text: "Сума ₴";
-                    font-size: Theme.font-base;
-                    font-weight: 600;
-                    color: Theme.text-second;
-                    vertical-alignment: center;
-                    width: 130px;
-                }
-                Text {
-                    text: "Дата";
-                    font-size: Theme.font-base;
-                    font-weight: 600;
-                    color: Theme.text-second;
-                    vertical-alignment: center;
-                    width: 100px;
-                }
-                Text {
-                    text: "Статус";
-                    font-size: Theme.font-base;
-                    font-weight: 600;
-                    color: Theme.text-second;
-                    vertical-alignment: center;
-                    width: 120px;
-                }
-                Text {
-                    text: "Дії";
-                    font-size: Theme.font-base;
-                    font-weight: 600;
-                    color: Theme.text-second;
-                    vertical-alignment: center;
-                    horizontal-alignment: center;
-                    width: 100px;
-                }
-            }
-        }
-
-        // ── Список рядків ────────────────────────────────────────────────────
+        // ── Таблиця ──────────────────────────────────────────────────────────
         if root.loading : ProgressIndicator {
             indeterminate: true;
-            vertical-stretch: 1;
+            vertical-stretch: 0;
         }
 
-        if !root.loading : Rectangle {
+        Rectangle {
             vertical-stretch: 1;
             background: Theme.bg-page;
 
-            // Порожній стан
-            if root.rows.length == 0 : Rectangle {
-                background: Theme.bg-card;
-                border-radius: Theme.radius-lg;
-                height: 120px;
+            VerticalLayout {
+                padding-top: 24px;
+                padding-left: 32px;
+                padding-right: 32px;
+                padding-bottom: 24px;
+                spacing: 0;
 
-                Text {
-                    text: root.direction-index == 1
-                        ? "Вхідних документів не знайдено."
-                        : "Документів не знайдено. Натисніть \"+ Новий документ\" щоб створити перший.";
-                    color: Theme.text-muted;
-                    font-size: Theme.font-md;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    wrap: word-wrap;
-                }
-            }
-
-            if root.rows.length > 0 : VerticalLayout {
-                alignment: start;
-                for row[i] in root.rows: Rectangle {
-                    height: 52px;
-                    background: root.hovered-row == i
-                        ? Theme.bg-hover
-                        : (Math.mod(i, 2) == 0 ? Theme.bg-card : Theme.bg-alt);
+                Rectangle {
+                    vertical-stretch: 1;
+                    border-radius: Theme.radius-md;
                     border-width: 1px;
                     border-color: Theme.border;
-                    animate background { duration: 80ms; easing: ease; }
                     clip: true;
 
-                    // Ліва акцентна смужка при ховері або для першого рядка
-                    if root.hovered-row == i : Rectangle {
-                        x: 0; y: 0; width: 3px; height: 52px;
-                        background: Theme.primary;
-                        border-radius: 1px;
-                    }
-
-                    row-touch := TouchArea {
-                        mouse-cursor: pointer;
-                        pointer-event(e) => {
-                            if e.kind == PointerEventKind.move {
-                                root.hovered-row = i;
-                            }
-                        }
-                        clicked => { root.open-document(row.id); }
-                    }
-
-                    HorizontalLayout {
-                        padding-left: 32px;
-                        padding-right: 32px;
+                    VerticalLayout {
                         spacing: 0;
 
-                        // Тип (DocTypeBadge)
+                        // Заголовок таблиці
                         Rectangle {
-                            width: 68px;
-                            DocTypeBadge {
-                                doc-type: row.doc-type;
-                                y: (52px - self.height) / 2;
+                            height: 40px;
+                            vertical-stretch: 0;
+                            background: Theme.table-header;
+
+                            HorizontalLayout {
+                                padding-left: 16px;
+                                padding-right: 16px;
+                                spacing: 0;
+
+                                Text { text: "Тип";        font-size: Theme.font-base; font-weight: 500; color: Theme.text-second; vertical-alignment: center; width: 68px; }
+                                Text { text: "Номер";      font-size: Theme.font-base; font-weight: 500; color: Theme.text-second; vertical-alignment: center; width: 160px; }
+                                Text { text: "Контрагент"; font-size: Theme.font-base; font-weight: 500; color: Theme.text-second; vertical-alignment: center; horizontal-stretch: 1; }
+                                Text { text: "Сума ₴";     font-size: Theme.font-base; font-weight: 500; color: Theme.text-second; vertical-alignment: center; width: 130px; }
+                                Text { text: "Дата";       font-size: Theme.font-base; font-weight: 500; color: Theme.text-second; vertical-alignment: center; width: 100px; }
+                                Text { text: "Статус";     font-size: Theme.font-base; font-weight: 500; color: Theme.text-second; vertical-alignment: center; width: 120px; }
+                                Text { text: "Дії";        font-size: Theme.font-base; font-weight: 500; color: Theme.text-second; vertical-alignment: center; horizontal-alignment: center; width: 100px; }
                             }
                         }
 
-                        // Номер
-                        Text {
-                            text: row.number;
-                            font-size: Theme.font-md;
-                            font-weight: 600;
-                            color: Theme.primary;
-                            vertical-alignment: center;
-                            overflow: elide;
-                            width: 160px;
-                        }
+                        // Порожній стан
+                        if root.rows.length == 0 : Rectangle {
+                            vertical-stretch: 1;
+                            background: Theme.bg-card;
 
-                        // Контрагент
-                        Text {
-                            text: row.counterparty;
-                            font-size: Theme.font-base;
-                            color: Theme.text-primary;
-                            vertical-alignment: center;
-                            overflow: elide;
-                            horizontal-stretch: 1;
-                        }
-
-                        // Сума
-                        Text {
-                            text: row.amount;
-                            font-size: Theme.font-md;
-                            font-weight: 600;
-                            color: Theme.text-primary;
-                            vertical-alignment: center;
-                            width: 130px;
-                        }
-
-                        // Дата
-                        Text {
-                            text: row.date;
-                            font-size: Theme.font-base;
-                            color: Theme.text-second;
-                            vertical-alignment: center;
-                            width: 100px;
-                        }
-
-                        // Статус
-                        Rectangle {
-                            width: 120px;
-                            StatusBadge {
-                                status: row.status;
-                                y: (52px - self.height) / 2;
-                            }
-                        }
-
-                        // Кнопки дій (показуються при ховері)
-                        HorizontalLayout {
-                            width: 100px;
-                            spacing: 4px;
-                            alignment: center;
-
-                            // PDF
-                            pdf-rect := Rectangle {
-                                width: 34px;
-                                height: 30px;
-                                border-radius: Theme.radius-sm;
-                                background: pdf-touch.has-hover ? Theme.bg-primary : transparent;
-                                animate background { duration: 100ms; easing: ease; }
+                            VerticalLayout {
+                                alignment: center;
+                                spacing: 8px;
 
                                 Text {
-                                    text: "PDF";
-                                    font-size: Theme.font-xs;
-                                    font-weight: 600;
-                                    color: pdf-touch.has-hover ? Theme.primary : Theme.text-muted;
+                                    text: "📄";
+                                    font-size: 32px;
                                     horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                    animate color { duration: 100ms; easing: ease; }
                                 }
-
-                                pdf-touch := TouchArea {
-                                    mouse-cursor: pointer;
-                                    clicked => { root.export-pdf(row.id); }
+                                Text {
+                                    text: root.direction-index == 1
+                                        ? "Вхідних документів не знайдено"
+                                        : "Документів ще немає";
+                                    font-size: 15px;
+                                    font-weight: 500;
+                                    color: Theme.text-second;
+                                    horizontal-alignment: center;
+                                }
+                                Text {
+                                    text: root.direction-index == 1
+                                        ? "Документи від контрагентів з'являться тут"
+                                        : "Натисніть «+ Новий документ» щоб створити перший";
+                                    font-size: Theme.font-md;
+                                    color: Theme.text-muted;
+                                    horizontal-alignment: center;
                                 }
                             }
+                        }
 
-                            // Редагувати
-                            edit-rect := Rectangle {
-                                width: 30px;
-                                height: 30px;
-                                border-radius: Theme.radius-sm;
-                                background: edit-touch.has-hover ? Theme.btn-action-bg : transparent;
-                                animate background { duration: 100ms; easing: ease; }
+                        // Рядки
+                        if root.rows.length > 0 : ListView {
+                            vertical-stretch: 1;
 
-                                Text {
-                                    text: "✎";
-                                    font-size: 14px;
-                                    color: edit-touch.has-hover ? Theme.primary : Theme.text-muted;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                    animate color { duration: 100ms; easing: ease; }
+                            for row[i] in root.rows: Rectangle {
+                                height: Theme.row-height;
+                                background: root.hovered-row == i
+                                    ? Theme.row-hover
+                                    : (Math.mod(i, 2) == 0 ? Theme.bg-card : Theme.row-stripe);
+                                border-width: 1px;
+                                border-color: Theme.border;
+                                animate background { duration: 80ms; easing: ease; }
+                                clip: true;
+
+                                // Ліва акцентна смужка при ховері
+                                if root.hovered-row == i : Rectangle {
+                                    x: 0; y: 0; width: 3px; height: Theme.row-height;
+                                    background: Theme.primary;
+                                    border-radius: 1px;
                                 }
 
-                                edit-touch := TouchArea {
+                                row-touch := TouchArea {
                                     mouse-cursor: pointer;
+                                    pointer-event(e) => {
+                                        if e.kind == PointerEventKind.move {
+                                            root.hovered-row = i;
+                                        }
+                                    }
                                     clicked => { root.open-document(row.id); }
                                 }
-                            }
 
-                            // Видалити
-                            del-rect := Rectangle {
-                                width: 30px;
-                                height: 30px;
-                                border-radius: Theme.radius-sm;
-                                background: del-touch.has-hover ? Theme.bg-danger : transparent;
-                                animate background { duration: 100ms; easing: ease; }
+                                HorizontalLayout {
+                                    padding-left: 16px;
+                                    padding-right: 16px;
+                                    spacing: 0;
 
-                                Text {
-                                    text: "🗑";
-                                    font-size: 13px;
-                                    color: del-touch.has-hover ? Theme.danger : Theme.text-muted;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                    animate color { duration: 100ms; easing: ease; }
-                                }
+                                    // Тип (DocTypeBadge)
+                                    Rectangle {
+                                        width: 68px;
+                                        DocTypeBadge {
+                                            doc-type: row.doc-type;
+                                            y: (Theme.row-height - self.height) / 2;
+                                        }
+                                    }
 
-                                del-touch := TouchArea {
-                                    mouse-cursor: pointer;
-                                    clicked => {
-                                        root.delete-target-id = row.id;
-                                        root.show-delete-dialog = true;
+                                    // Номер
+                                    Text {
+                                        text: row.number;
+                                        font-size: Theme.font-md;
+                                        font-weight: 600;
+                                        color: Theme.primary;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                        width: 160px;
+                                    }
+
+                                    // Контрагент
+                                    Text {
+                                        text: row.counterparty;
+                                        font-size: Theme.font-base;
+                                        color: Theme.text-primary;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                        horizontal-stretch: 1;
+                                    }
+
+                                    // Сума
+                                    Text {
+                                        text: row.amount;
+                                        font-size: Theme.font-md;
+                                        font-weight: 600;
+                                        color: Theme.text-primary;
+                                        vertical-alignment: center;
+                                        width: 130px;
+                                    }
+
+                                    // Дата
+                                    Text {
+                                        text: row.date;
+                                        font-size: Theme.font-base;
+                                        color: Theme.text-second;
+                                        vertical-alignment: center;
+                                        width: 100px;
+                                    }
+
+                                    // Статус
+                                    Rectangle {
+                                        width: 120px;
+                                        StatusBadge {
+                                            status: row.status;
+                                            y: (Theme.row-height - self.height) / 2;
+                                        }
+                                    }
+
+                                    // Кнопки дій
+                                    HorizontalLayout {
+                                        width: 100px;
+                                        spacing: 4px;
+                                        alignment: center;
+
+                                        // PDF
+                                        pdf-rect := Rectangle {
+                                            width: 34px;
+                                            height: 30px;
+                                            border-radius: Theme.radius-sm;
+                                            background: pdf-touch.has-hover ? Theme.bg-primary : transparent;
+                                            animate background { duration: 80ms; easing: ease; }
+
+                                            Text {
+                                                text: "PDF";
+                                                font-size: Theme.font-xs;
+                                                font-weight: 600;
+                                                color: pdf-touch.has-hover ? Theme.primary : Theme.text-muted;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                                animate color { duration: 80ms; easing: ease; }
+                                            }
+
+                                            pdf-touch := TouchArea {
+                                                mouse-cursor: pointer;
+                                                clicked => { root.export-pdf(row.id); }
+                                            }
+                                        }
+
+                                        // Редагувати
+                                        edit-rect := Rectangle {
+                                            width: 30px;
+                                            height: 30px;
+                                            border-radius: Theme.radius-sm;
+                                            background: edit-touch.has-hover ? Theme.btn-action-bg : transparent;
+                                            animate background { duration: 80ms; easing: ease; }
+
+                                            Text {
+                                                text: "✎";
+                                                font-size: 14px;
+                                                color: edit-touch.has-hover ? Theme.primary : Theme.text-muted;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                                animate color { duration: 80ms; easing: ease; }
+                                            }
+
+                                            edit-touch := TouchArea {
+                                                mouse-cursor: pointer;
+                                                clicked => { root.open-document(row.id); }
+                                            }
+                                        }
+
+                                        // Видалити
+                                        del-rect := Rectangle {
+                                            width: 30px;
+                                            height: 30px;
+                                            border-radius: Theme.radius-sm;
+                                            background: del-touch.has-hover ? Theme.bg-danger : transparent;
+                                            animate background { duration: 80ms; easing: ease; }
+
+                                            Text {
+                                                text: "🗑";
+                                                font-size: 13px;
+                                                color: del-touch.has-hover ? Theme.danger : Theme.text-muted;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                                animate color { duration: 80ms; easing: ease; }
+                                            }
+
+                                            del-touch := TouchArea {
+                                                mouse-cursor: pointer;
+                                                clicked => {
+                                                    root.delete-target-id = row.id;
+                                                    root.show-delete-dialog = true;
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }

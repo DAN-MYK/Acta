@@ -5,6 +5,13 @@ use uuid::Uuid;
 
 use crate::models::{NewTask, Task, TaskStatus};
 
+fn normalized_parent_refs(task: &NewTask) -> (Option<Uuid>, Option<Uuid>) {
+    match task.act_id {
+        Some(act_id) => (None, Some(act_id)),
+        None => (task.counterparty_id, None),
+    }
+}
+
 pub async fn list_open(pool: &PgPool) -> Result<Vec<Task>> {
     let rows = sqlx::query_as::<_, Task>(
         r#"
@@ -92,6 +99,8 @@ pub async fn list_by_act(pool: &PgPool, act_id: Uuid) -> Result<Vec<Task>> {
 }
 
 pub async fn create(pool: &PgPool, company_id: Uuid, task: &NewTask) -> Result<Task> {
+    let (counterparty_id, act_id) = normalized_parent_refs(task);
+
     let row = sqlx::query_as::<_, Task>(
         r#"
         INSERT INTO tasks (
@@ -112,8 +121,8 @@ pub async fn create(pool: &PgPool, company_id: Uuid, task: &NewTask) -> Result<T
     .bind(task.priority.clone())
     .bind(task.due_date.clone())
     .bind(task.reminder_at.clone())
-    .bind(task.counterparty_id.clone())
-    .bind(task.act_id.clone())
+    .bind(counterparty_id)
+    .bind(act_id)
     .fetch_one(pool)
     .await?;
 
@@ -121,6 +130,8 @@ pub async fn create(pool: &PgPool, company_id: Uuid, task: &NewTask) -> Result<T
 }
 
 pub async fn update(pool: &PgPool, id: Uuid, task: &NewTask) -> Result<Option<Task>> {
+    let (counterparty_id, act_id) = normalized_parent_refs(task);
+
     let row = sqlx::query_as::<_, Task>(
         r#"
         UPDATE tasks
@@ -129,6 +140,8 @@ pub async fn update(pool: &PgPool, id: Uuid, task: &NewTask) -> Result<Option<Ta
             priority = $4,
             due_date = $5,
             reminder_at = $6,
+            counterparty_id = $7,
+            act_id = $8,
             updated_at = NOW()
         WHERE id = $1
         RETURNING id, title, description,
@@ -144,6 +157,8 @@ pub async fn update(pool: &PgPool, id: Uuid, task: &NewTask) -> Result<Option<Ta
     .bind(task.priority.clone())
     .bind(task.due_date.clone())
     .bind(task.reminder_at.clone())
+    .bind(counterparty_id)
+    .bind(act_id)
     .fetch_optional(pool)
     .await?;
 

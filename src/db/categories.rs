@@ -194,7 +194,17 @@ pub async fn seed_defaults(pool: &PgPool, company_id: Uuid) -> Result<()> {
 
     for name in income_cats {
         sqlx::query(
-            "INSERT INTO categories (name, kind, company_id) VALUES ($1, 'income', $2) ON CONFLICT DO NOTHING",
+            r#"
+            INSERT INTO categories (name, kind, company_id)
+            SELECT $1, 'income', $2
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM categories
+                WHERE company_id = $2
+                  AND kind = 'income'
+                  AND name = $1
+            )
+            "#,
         )
         .bind(name)
         .bind(company_id)
@@ -204,7 +214,17 @@ pub async fn seed_defaults(pool: &PgPool, company_id: Uuid) -> Result<()> {
 
     for name in expense_cats {
         sqlx::query(
-            "INSERT INTO categories (name, kind, company_id) VALUES ($1, 'expense', $2) ON CONFLICT DO NOTHING",
+            r#"
+            INSERT INTO categories (name, kind, company_id)
+            SELECT $1, 'expense', $2
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM categories
+                WHERE company_id = $2
+                  AND kind = 'expense'
+                  AND name = $1
+            )
+            "#,
         )
         .bind(name)
         .bind(company_id)

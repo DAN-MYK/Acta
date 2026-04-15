@@ -4,7 +4,7 @@
 // Кожен рядок: дата | контрагент | призначення | банк | сума | зведено?
 
 import { Theme } from "../theme.slint";
-import { ProgressIndicator, Button, ListView } from "std-widgets.slint";
+import { ProgressIndicator, ListView } from "std-widgets.slint";
 import { PaymentRow } from "../structs.slint";
 
 export component PaymentList {
@@ -37,9 +37,9 @@ export component PaymentList {
         spacing: 0;
         padding: 0;
 
-        // ── Topbar ─────────────────────────────────────────────────────────
+        // ── Topbar (64px, білий, з нижньою межею) ───────────────────────────
         Rectangle {
-            height: 64px;
+            height: Theme.topbar-height;
             vertical-stretch: 0;
             background: Theme.bg-card;
 
@@ -47,6 +47,7 @@ export component PaymentList {
                 padding-left: 32px;
                 padding-right: 32px;
                 spacing: 16px;
+                alignment: center;
 
                 Text {
                     text: "Платежі";
@@ -57,382 +58,443 @@ export component PaymentList {
                     horizontal-stretch: 1;
                 }
 
-                Button {
-                    text: "+ Додати";
-                    primary: true;
-                    height: Theme.btn-md-height;
-                    clicked => { root.create-clicked(); }
-                }
-            }
-        }
-
-        // ── KPI-рядок: Доходи / Витрати ────────────────────────────────────
-        Rectangle {
-            height: 56px;
-            vertical-stretch: 0;
-            background: Theme.bg-alt;
-
-            HorizontalLayout {
-                padding-left: 32px;
-                padding-right: 32px;
-                spacing: 24px;
-
-                HorizontalLayout {
-                    spacing: 8px;
-                    alignment: center;
-
-                    Rectangle {
-                        width: 8px;
-                        height: 8px;
-                        border-radius: 4px;
-                        background: Theme.success;
-                    }
-                    Text {
-                        text: "Надходження:";
-                        font-size: Theme.font-md;
-                        color: Theme.text-second;
-                        vertical-alignment: center;
-                    }
-                    Text {
-                        text: root.total-income + " ₴";
-                        font-size: Theme.font-md;
-                        font-weight: 700;
-                        color: Theme.success;
-                        vertical-alignment: center;
-                    }
-                }
-
-                HorizontalLayout {
-                    spacing: 8px;
-                    alignment: center;
-
-                    Rectangle {
-                        width: 8px;
-                        height: 8px;
-                        border-radius: 4px;
-                        background: Theme.danger;
-                    }
-                    Text {
-                        text: "Витрати:";
-                        font-size: Theme.font-md;
-                        color: Theme.text-second;
-                        vertical-alignment: center;
-                    }
-                    Text {
-                        text: root.total-expense + " ₴";
-                        font-size: Theme.font-md;
-                        font-weight: 700;
-                        color: Theme.danger;
-                        vertical-alignment: center;
-                    }
-                }
-
-                Rectangle { horizontal-stretch: 1; }
-            }
-        }
-
-        // ── Панель пошуку та фільтру ────────────────────────────────────────
-        Rectangle {
-            height: 56px;
-            vertical-stretch: 0;
-            background: Theme.bg-card;
-            border-width: 1px;
-            border-color: Theme.border;
-
-            HorizontalLayout {
-                padding-left: 32px;
-                padding-right: 32px;
-                spacing: 12px;
-
-                // Пошук
-                Rectangle {
-                    horizontal-stretch: 1;
-                    height: 36px;
-                    background: Theme.bg-gray;
+                new-btn := Rectangle {
+                    background: new-touch.has-hover ? #2D64E3 : Theme.primary;
                     border-radius: Theme.radius-md;
+                    height: Theme.btn-md-height;
+                    width: 140px;
+                    animate background { duration: 120ms; easing: ease; }
+                    drop-shadow-blur: 8px;
+                    drop-shadow-color: rgba(0, 0, 0, 15%);
+                    drop-shadow-offset-y: 2px;
 
-                    HorizontalLayout {
-                        padding-left: 12px;
-                        padding-right: 8px;
-                        spacing: 8px;
-
-                        Text {
-                            text: "🔍";
-                            font-size: 13px;
-                            color: Theme.text-muted;
-                            vertical-alignment: center;
-                        }
-                        search-edit := TextInput {
-                            font-size: Theme.font-md;
-                            color: Theme.text-primary;
-                            horizontal-stretch: 1;
-                            vertical-alignment: center;
-                            edited => { root.search-changed(self.text); }
-                        }
+                    Text {
+                        text: "+ Додати";
+                        color: Theme.text-white;
+                        font-size: Theme.font-md;
+                        font-weight: 600;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
                     }
-                }
 
-                // Фільтр напрямку — три кнопки-піль
-                HorizontalLayout {
-                    spacing: 4px;
-
-                    for lbl[i] in ["Усі", "Доходи", "Витрати"]: Rectangle {
-                        width: 80px;
-                        height: 32px;
-                        border-radius: Theme.radius-full;
-                        background: root.active-filter == i ? Theme.primary : Theme.bg-gray;
-                        animate background { duration: 100ms; easing: ease; }
-
-                        Text {
-                            text: lbl;
-                            font-size: Theme.font-base;
-                            color: root.active-filter == i ? Theme.text-white : Theme.text-second;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                            animate color { duration: 100ms; easing: ease; }
-                        }
-
-                        TouchArea {
-                            clicked => {
-                                root.active-filter = i;
-                                root.direction-filter-changed(i);
-                            }
-                        }
+                    new-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.create-clicked(); }
                     }
                 }
             }
+
+            Rectangle {
+                y: parent.height - 1px;
+                height: 1px;
+                background: Theme.border;
+            }
         }
 
-        // ── Заголовок таблиці ───────────────────────────────────────────────
+        // ── Основний контент ─────────────────────────────────────────────────
         Rectangle {
-            height: 36px;
-            vertical-stretch: 0;
-            background: Theme.table-header;
-            border-width: 1px;
-            border-color: Theme.border;
+            background: Theme.bg-page;
+            vertical-stretch: 1;
 
-            HorizontalLayout {
+            VerticalLayout {
+                padding-top: 24px;
                 padding-left: 32px;
                 padding-right: 32px;
-                spacing: 8px;
+                padding-bottom: 24px;
+                spacing: 16px;
 
-                Text {
-                    text: "Дата";
-                    font-size: Theme.font-sm;
-                    font-weight: 600;
-                    color: Theme.text-second;
-                    vertical-alignment: center;
-                    width: 100px;
-                }
-                Text {
-                    text: "Контрагент";
-                    font-size: Theme.font-sm;
-                    font-weight: 600;
-                    color: Theme.text-second;
-                    vertical-alignment: center;
-                    horizontal-stretch: 1;
-                }
-                Text {
-                    text: "Призначення";
-                    font-size: Theme.font-sm;
-                    font-weight: 600;
-                    color: Theme.text-second;
-                    vertical-alignment: center;
-                    horizontal-stretch: 2;
-                }
-                Text {
-                    text: "Банк";
-                    font-size: Theme.font-sm;
-                    font-weight: 600;
-                    color: Theme.text-second;
-                    vertical-alignment: center;
-                    width: 100px;
-                }
-                Text {
-                    text: "Сума";
-                    font-size: Theme.font-sm;
-                    font-weight: 600;
-                    color: Theme.text-second;
-                    horizontal-alignment: right;
-                    vertical-alignment: center;
-                    width: 110px;
-                }
-                Text {
-                    text: "Зведено";
-                    font-size: Theme.font-sm;
-                    font-weight: 600;
-                    color: Theme.text-second;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    width: 64px;
-                }
-                Rectangle { width: 72px; }
-            }
-        }
+                // ── KPI: Надходження / Витрати ────────────────────────────────
+                HorizontalLayout {
+                    height: 52px;
+                    spacing: 0;
+                    vertical-stretch: 0;
 
-        // ── Список рядків ───────────────────────────────────────────────────
-        if root.loading : ProgressIndicator {
-            indeterminate: true;
-            vertical-stretch: 1;
-        }
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        height: 52px;
+                        border-radius: Theme.radius-lg;
+                        background: Theme.bg-card;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        drop-shadow-blur: 10px;
+                        drop-shadow-color: rgba(0, 0, 0, 5%);
+                        drop-shadow-offset-y: 1px;
 
-        if !root.loading : Rectangle {
-            vertical-stretch: 1;
-            background: Theme.bg-page;
-
-            if root.rows.length == 0 : Rectangle {
-                background: Theme.bg-card;
-                border-radius: Theme.radius-lg;
-                height: 120px;
-
-                Text {
-                    text: "Платежів не знайдено. Натисніть \"+ Додати\" щоб додати перший.";
-                    color: Theme.text-muted;
-                    font-size: Theme.font-md;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
-            }
-
-            if root.rows.length > 0 : ListView {
-                vertical-stretch: 1;
-                for row[i] in root.rows: Rectangle {
-                    height: 48px;
-                    background: root.selected-row == i
-                        ? Theme.row-selected
-                        : (Math.mod(i, 2) == 0 ? Theme.bg-card : Theme.row-stripe);
-                    border-width: 1px;
-                    border-color: Theme.border;
-                    animate background { duration: 80ms; easing: ease; }
-
-                    row-touch := TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => {
-                            root.selected-row = i;
-                            root.selected-id = row.id;
-                        }
-                    }
-
-                    HorizontalLayout {
-                        padding-left: 32px;
-                        padding-right: 32px;
-                        spacing: 8px;
-
-                        // Кольорова смужка напрямку
+                        // Верхня акцентна смужка
                         Rectangle {
-                            width: 3px;
-                            height: 28px;
-                            border-radius: 2px;
-                            background: row.direction == "income"
-                                ? Theme.success : Theme.danger;
+                            x: 0; y: 0; width: parent.width; height: 3px;
+                            border-top-left-radius: Theme.radius-lg;
+                            border-top-right-radius: Theme.radius-lg;
+                            background: Theme.success;
                         }
 
-                        Text {
-                            text: row.date;
-                            font-size: Theme.font-md;
-                            color: Theme.text-second;
-                            vertical-alignment: center;
-                            width: 97px;
-                        }
-                        Text {
-                            text: row.counterparty == "" ? "—" : row.counterparty;
-                            font-size: Theme.font-md;
-                            color: Theme.text-primary;
-                            vertical-alignment: center;
-                            overflow: elide;
-                            horizontal-stretch: 1;
-                        }
-                        Text {
-                            text: row.description == "" ? "—" : row.description;
-                            font-size: Theme.font-md;
-                            color: Theme.text-second;
-                            vertical-alignment: center;
-                            overflow: elide;
-                            horizontal-stretch: 2;
-                        }
-                        Text {
-                            text: row.bank == "" ? "—" : row.bank;
-                            font-size: Theme.font-sm;
-                            color: Theme.text-muted;
-                            vertical-alignment: center;
-                            overflow: elide;
-                            width: 100px;
-                        }
+                        HorizontalLayout {
+                            padding-left: 16px;
+                            padding-right: 16px;
+                            spacing: 8px;
+                            alignment: center;
 
-                        // Сума з кольором
-                        Text {
-                            text: (row.direction == "income" ? "+" : "−") + row.amount + " ₴";
-                            font-size: Theme.font-md;
-                            font-weight: 700;
-                            color: row.direction == "income" ? Theme.success : Theme.danger;
-                            horizontal-alignment: right;
-                            vertical-alignment: center;
-                            width: 110px;
-                        }
-
-                        // Прапорець зведення
-                        Rectangle {
-                            width: 64px;
-                            height: 24px;
-
+                            Rectangle {
+                                width: 8px; height: 8px;
+                                border-radius: 4px;
+                                background: Theme.success;
+                            }
                             Text {
-                                text: row.reconciled ? "✓" : "—";
+                                text: "Надходження:";
                                 font-size: Theme.font-md;
-                                color: row.reconciled ? Theme.success : Theme.text-disabled;
-                                horizontal-alignment: center;
+                                color: Theme.text-second;
+                                vertical-alignment: center;
+                            }
+                            Text {
+                                text: root.total-income + " ₴";
+                                font-size: Theme.font-md;
+                                font-weight: 700;
+                                color: Theme.success;
                                 vertical-alignment: center;
                             }
                         }
+                    }
 
-                        // Кнопки дій
+                    Rectangle { width: 12px; }
+
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        height: 52px;
+                        border-radius: Theme.radius-lg;
+                        background: Theme.bg-card;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        drop-shadow-blur: 10px;
+                        drop-shadow-color: rgba(0, 0, 0, 5%);
+                        drop-shadow-offset-y: 1px;
+
+                        // Верхня акцентна смужка
+                        Rectangle {
+                            x: 0; y: 0; width: parent.width; height: 3px;
+                            border-top-left-radius: Theme.radius-lg;
+                            border-top-right-radius: Theme.radius-lg;
+                            background: Theme.danger;
+                        }
+
                         HorizontalLayout {
-                            width: 72px;
-                            spacing: 4px;
+                            padding-left: 16px;
+                            padding-right: 16px;
+                            spacing: 8px;
                             alignment: center;
 
-                            // Зведення
-                            if !row.reconciled : rec-rect := Rectangle {
-                                width: 30px;
-                                height: 30px;
-                                border-radius: Theme.radius-sm;
-                                background: rec-touch.has-hover ? Theme.bg-success : transparent;
-                                animate background { duration: 100ms; easing: ease; }
+                            Rectangle {
+                                width: 8px; height: 8px;
+                                border-radius: 4px;
+                                background: Theme.danger;
+                            }
+                            Text {
+                                text: "Витрати:";
+                                font-size: Theme.font-md;
+                                color: Theme.text-second;
+                                vertical-alignment: center;
+                            }
+                            Text {
+                                text: root.total-expense + " ₴";
+                                font-size: Theme.font-md;
+                                font-weight: 700;
+                                color: Theme.danger;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
 
-                                Text {
-                                    text: "✓";
-                                    font-size: 14px;
-                                    color: rec-touch.has-hover ? Theme.success : Theme.text-muted;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                    animate color { duration: 100ms; easing: ease; }
-                                }
+                // ── Пошук + фільтр напрямку ───────────────────────────────────
+                HorizontalLayout {
+                    height: 40px;
+                    spacing: 12px;
+                    vertical-stretch: 0;
 
-                                rec-touch := TouchArea {
-                                    mouse-cursor: pointer;
-                                    clicked => { root.reconcile-clicked(row.id); }
-                                }
+                    search-rect := Rectangle {
+                        background: Theme.bg-card;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        horizontal-stretch: 1;
+                        clip: true;
+
+                        HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 12px;
+                            spacing: 8px;
+
+                            Text {
+                                text: "🔍";
+                                font-size: 13px;
+                                color: Theme.text-muted;
+                                vertical-alignment: center;
+                            }
+                            search-edit := TextInput {
+                                font-size: Theme.font-md;
+                                color: Theme.text-primary;
+                                horizontal-stretch: 1;
+                                vertical-alignment: center;
+                                edited => { root.search-changed(self.text); }
+                            }
+                        }
+
+                        if search-edit.text == "" : Text {
+                            x: 36px;
+                            height: parent.height;
+                            width: parent.width - 48px;
+                            text: "Пошук за контрагентом або призначенням...";
+                            color: Theme.text-muted;
+                            font-size: Theme.font-md;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    // Фільтр напрямку — три pill-кнопки
+                    HorizontalLayout {
+                        spacing: 4px;
+                        alignment: center;
+
+                        for lbl[i] in ["Усі", "Доходи", "Витрати"]: Rectangle {
+                            width: 80px;
+                            height: Theme.btn-sm-height;
+                            border-radius: Theme.radius-sm;
+                            background: root.active-filter == i ? Theme.primary : Theme.bg-gray;
+                            animate background { duration: 120ms; easing: ease; }
+
+                            Text {
+                                text: lbl;
+                                font-size: Theme.font-base;
+                                font-weight: root.active-filter == i ? 600 : 400;
+                                color: root.active-filter == i ? Theme.text-white : Theme.text-second;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                                animate color { duration: 120ms; easing: ease; }
                             }
 
-                            // Редагування
-                            edit-rect := Rectangle {
-                                width: 30px;
-                                height: 30px;
-                                border-radius: Theme.radius-sm;
-                                background: edit-touch.has-hover ? Theme.btn-action-bg : transparent;
-                                animate background { duration: 100ms; easing: ease; }
+                            TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    root.active-filter = i;
+                                    root.direction-filter-changed(i);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if root.loading : ProgressIndicator {
+                    indeterminate: true;
+                    vertical-stretch: 0;
+                }
+
+                // ── Таблиця ──────────────────────────────────────────────────
+                Rectangle {
+                    vertical-stretch: 1;
+                    border-radius: Theme.radius-md;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    clip: true;
+
+                    VerticalLayout {
+                        spacing: 0;
+
+                        // Заголовок таблиці
+                        Rectangle {
+                            height: 40px;
+                            vertical-stretch: 0;
+                            background: Theme.table-header;
+
+                            HorizontalLayout {
+                                padding-left: 16px;
+                                padding-right: 16px;
+                                spacing: 8px;
+
+                                Text { text: "Дата";        font-size: Theme.font-base; font-weight: 500; color: Theme.text-second; vertical-alignment: center; width: 100px; }
+                                Text { text: "Контрагент";  font-size: Theme.font-base; font-weight: 500; color: Theme.text-second; vertical-alignment: center; horizontal-stretch: 1; }
+                                Text { text: "Призначення"; font-size: Theme.font-base; font-weight: 500; color: Theme.text-second; vertical-alignment: center; horizontal-stretch: 2; }
+                                Text { text: "Банк";        font-size: Theme.font-base; font-weight: 500; color: Theme.text-second; vertical-alignment: center; width: 100px; }
+                                Text { text: "Сума";        font-size: Theme.font-base; font-weight: 500; color: Theme.text-second; horizontal-alignment: right; vertical-alignment: center; width: 110px; }
+                                Text { text: "Зведено";     font-size: Theme.font-base; font-weight: 500; color: Theme.text-second; horizontal-alignment: center; vertical-alignment: center; width: 64px; }
+                                Rectangle { width: 72px; }
+                            }
+                        }
+
+                        // Порожній стан
+                        if !root.loading && root.rows.length == 0 : Rectangle {
+                            vertical-stretch: 1;
+                            background: Theme.bg-card;
+
+                            VerticalLayout {
+                                alignment: center;
+                                spacing: 8px;
 
                                 Text {
-                                    text: "✎";
-                                    font-size: 14px;
-                                    color: edit-touch.has-hover ? Theme.primary : Theme.text-muted;
+                                    text: "💳";
+                                    font-size: 32px;
                                     horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                    animate color { duration: 100ms; easing: ease; }
+                                }
+                                Text {
+                                    text: "Платежів ще немає";
+                                    font-size: 15px;
+                                    font-weight: 500;
+                                    color: Theme.text-second;
+                                    horizontal-alignment: center;
+                                }
+                                Text {
+                                    text: "Натисніть «+ Додати» щоб додати перший";
+                                    font-size: Theme.font-md;
+                                    color: Theme.text-muted;
+                                    horizontal-alignment: center;
+                                }
+                            }
+                        }
+
+                        // Рядки
+                        if !root.loading && root.rows.length > 0 : ListView {
+                            vertical-stretch: 1;
+
+                            for row[i] in root.rows: Rectangle {
+                                height: Theme.row-height;
+                                background: root.selected-row == i
+                                    ? Theme.row-selected
+                                    : (row-touch.has-hover
+                                        ? Theme.row-hover
+                                        : (Math.mod(i, 2) == 0 ? Theme.bg-card : Theme.row-stripe));
+                                border-width: 1px;
+                                border-color: Theme.border;
+                                animate background { duration: 80ms; easing: ease; }
+
+                                row-touch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => {
+                                        root.selected-row = i;
+                                        root.selected-id = row.id;
+                                    }
                                 }
 
-                                edit-touch := TouchArea {
-                                    mouse-cursor: pointer;
-                                    clicked => { root.edit-clicked(row.id); }
+                                HorizontalLayout {
+                                    padding-left: 16px;
+                                    padding-right: 16px;
+                                    spacing: 8px;
+
+                                    // Кольорова смужка напрямку
+                                    Rectangle {
+                                        width: 3px;
+                                        height: 28px;
+                                        border-radius: 2px;
+                                        background: row.direction == "income"
+                                            ? Theme.success : Theme.danger;
+                                    }
+
+                                    Text {
+                                        text: row.date;
+                                        font-size: Theme.font-md;
+                                        color: Theme.text-second;
+                                        vertical-alignment: center;
+                                        width: 97px;
+                                    }
+                                    Text {
+                                        text: row.counterparty == "" ? "—" : row.counterparty;
+                                        font-size: Theme.font-md;
+                                        color: Theme.text-primary;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                        horizontal-stretch: 1;
+                                    }
+                                    Text {
+                                        text: row.description == "" ? "—" : row.description;
+                                        font-size: Theme.font-md;
+                                        color: Theme.text-second;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                        horizontal-stretch: 2;
+                                    }
+                                    Text {
+                                        text: row.bank == "" ? "—" : row.bank;
+                                        font-size: Theme.font-sm;
+                                        color: Theme.text-muted;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                        width: 100px;
+                                    }
+
+                                    // Сума з кольором
+                                    Text {
+                                        text: (row.direction == "income" ? "+" : "−") + row.amount + " ₴";
+                                        font-size: Theme.font-md;
+                                        font-weight: 700;
+                                        color: row.direction == "income" ? Theme.success : Theme.danger;
+                                        horizontal-alignment: right;
+                                        vertical-alignment: center;
+                                        width: 110px;
+                                    }
+
+                                    // Прапорець зведення
+                                    Rectangle {
+                                        width: 64px;
+                                        height: 24px;
+
+                                        Text {
+                                            text: row.reconciled ? "✓" : "—";
+                                            font-size: Theme.font-md;
+                                            color: row.reconciled ? Theme.success : Theme.text-disabled;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+
+                                    // Кнопки дій
+                                    HorizontalLayout {
+                                        width: 72px;
+                                        spacing: 4px;
+                                        alignment: center;
+
+                                        // Зведення
+                                        if !row.reconciled : rec-rect := Rectangle {
+                                            width: 30px;
+                                            height: 30px;
+                                            border-radius: Theme.radius-sm;
+                                            background: rec-touch.has-hover ? Theme.bg-success : transparent;
+                                            animate background { duration: 80ms; easing: ease; }
+
+                                            Text {
+                                                text: "✓";
+                                                font-size: 14px;
+                                                color: rec-touch.has-hover ? Theme.success : Theme.text-muted;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                                animate color { duration: 80ms; easing: ease; }
+                                            }
+
+                                            rec-touch := TouchArea {
+                                                mouse-cursor: pointer;
+                                                clicked => { root.reconcile-clicked(row.id); }
+                                            }
+                                        }
+
+                                        // Редагування
+                                        edit-rect := Rectangle {
+                                            width: 30px;
+                                            height: 30px;
+                                            border-radius: Theme.radius-sm;
+                                            background: edit-touch.has-hover ? Theme.btn-action-bg : transparent;
+                                            animate background { duration: 80ms; easing: ease; }
+
+                                            Text {
+                                                text: "✎";
+                                                font-size: 14px;
+                                                color: edit-touch.has-hover ? Theme.primary : Theme.text-muted;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                                animate color { duration: 80ms; easing: ease; }
+                                            }
+
+                                            edit-touch := TouchArea {
+                                                mouse-cursor: pointer;
+                                                clicked => { root.edit-clicked(row.id); }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }

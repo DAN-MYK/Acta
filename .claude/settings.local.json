@@ -57,7 +57,9 @@
       "Bash(grep \"src\\\\\\\\\\\\\\\\main.rs\")",
       "Bash(grep:*)",
       "Read(//c/Users/MYKHAI~1/AppData/Local/Temp/claude/C--Users-MykhailoDan-apps-Acta/e15d98ca-7d29-4f93-8f72-38464903bf78/tasks/**)",
-      "Bash(ls *.ps1 *.md tmp_* temp_*)"
+      "Bash(ls *.ps1 *.md tmp_* temp_*)",
+      "Bash(pg_ctl status:*)",
+      "Bash(ls \"$\\(scoop prefix postgresql\\)/\")"
     ]
   },
   "enableAllProjectMcpServers": true,

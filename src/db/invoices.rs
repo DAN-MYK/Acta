@@ -349,20 +349,18 @@ pub async fn change_status(
     id: Uuid,
     new_status: InvoiceStatus,
 ) -> Result<Option<Invoice>> {
-    use sqlx::Row;
-
-    let row = sqlx::query("SELECT status FROM invoices WHERE id = $1")
+    let current = sqlx::query_scalar::<_, InvoiceStatus>(
+        "SELECT status FROM invoices WHERE id = $1",
+    )
         .bind(id)
         .fetch_optional(pool)
         .await?;
 
-    let Some(row) = row else {
+    let Some(current) = current else {
         return Ok(None);
     };
 
     // Декодуємо статус вручну — runtime query не підтримує `AS "field: Type"` синтаксис
-    let current_str: String = row.try_get("status")?;
-    let current = parse_status(&current_str)?;
 
     if current.next().as_ref() != Some(&new_status) {
         bail!(
@@ -395,19 +393,16 @@ pub async fn change_status(
 
 /// Перевести накладну до наступного статусу (зручна обгортка над `change_status`).
 pub async fn advance_status(pool: &PgPool, id: Uuid) -> Result<Option<Invoice>> {
-    use sqlx::Row;
-
-    let row = sqlx::query("SELECT status FROM invoices WHERE id = $1")
+    let current = sqlx::query_scalar::<_, InvoiceStatus>(
+        "SELECT status FROM invoices WHERE id = $1",
+    )
         .bind(id)
         .fetch_optional(pool)
         .await?;
 
-    let Some(row) = row else {
+    let Some(current) = current else {
         return Ok(None);
     };
-
-    let current_str: String = row.try_get("status")?;
-    let current = parse_status(&current_str)?;
 
     let Some(next) = current.next() else {
         bail!("Накладна вже в фінальному статусі '{}'", current);
@@ -417,6 +412,7 @@ pub async fn advance_status(pool: &PgPool, id: Uuid) -> Result<Option<Invoice>> 
 }
 
 /// Допоміжна функція: парсинг рядка статусу з БД в InvoiceStatus.
+#[cfg(test)]
 fn parse_status(s: &str) -> Result<InvoiceStatus> {
     match s {
         "draft" => Ok(InvoiceStatus::Draft),
