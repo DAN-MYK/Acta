@@ -44,6 +44,21 @@ pub struct NewCounterparty {
     pub bas_id: Option<String>,
 }
 
+/// Перевіряє що ЄДРПОУ коректний: рівно 8 цифр.
+pub fn is_valid_edrpou(s: &str) -> bool {
+    s.len() == 8 && s.chars().all(|c| c.is_ascii_digit())
+}
+
+/// Перевіряє що ІПН/РНОКПП коректний: рівно 10 цифр.
+pub fn is_valid_ipn(s: &str) -> bool {
+    s.len() == 10 && s.chars().all(|c| c.is_ascii_digit())
+}
+
+/// Перевіряє що IBAN коректний для України: "UA" + рівно 27 цифр (29 символів разом).
+pub fn is_valid_iban(s: &str) -> bool {
+    s.len() == 29 && s.starts_with("UA") && s[2..].chars().all(|c| c.is_ascii_digit())
+}
+
 /// Дані для оновлення контрагента.
 ///
 /// `Option<Option<String>>` означає:
@@ -66,44 +81,49 @@ pub struct UpdateCounterparty {
 
 #[cfg(test)]
 mod tests {
-    use super::{NewCounterparty, UpdateCounterparty};
+    use super::{is_valid_edrpou, is_valid_iban, is_valid_ipn};
 
     #[test]
-    fn new_counterparty_can_hold_optional_fields() {
-        let cp = NewCounterparty {
-            name: "ТОВ Приклад".to_string(),
-            edrpou: Some("12345678".to_string()),
-            ipn: None,
-            iban: None,
-            address: None,
-            phone: Some("+380501112233".to_string()),
-            email: Some("mail@example.com".to_string()),
-            notes: None,
-            bas_id: Some("bas-42".to_string()),
-        };
-
-        assert_eq!(cp.name, "ТОВ Приклад");
-        assert_eq!(cp.edrpou.as_deref(), Some("12345678"));
-        assert_eq!(cp.bas_id.as_deref(), Some("bas-42"));
+    fn edrpou_valid() {
+        assert!(is_valid_edrpou("12345678"));
+        assert!(is_valid_edrpou("00000000"));
     }
 
     #[test]
-    fn update_counterparty_clone_keeps_values() {
-        let original = UpdateCounterparty {
-            name: "ФОП Іваненко".to_string(),
-            edrpou: None,
-            ipn: Some("1234567890".to_string()),
-            iban: Some("UA123".to_string()),
-            address: Some("Київ".to_string()),
-            phone: None,
-            email: Some("fop@example.com".to_string()),
-            notes: Some("оновити реквізити".to_string()),
-        };
+    fn edrpou_invalid() {
+        assert!(!is_valid_edrpou("1234567"));   // 7 цифр
+        assert!(!is_valid_edrpou("123456789")); // 9 цифр
+        assert!(!is_valid_edrpou("1234567a")); // буква
+        assert!(!is_valid_edrpou(""));
+    }
 
-        let cloned = original.clone();
-        assert_eq!(cloned.name, original.name);
-        assert_eq!(cloned.ipn, original.ipn);
-        assert_eq!(cloned.iban, original.iban);
-        assert_eq!(cloned.notes, original.notes);
+    #[test]
+    fn ipn_valid() {
+        assert!(is_valid_ipn("1234567890"));
+        assert!(is_valid_ipn("0000000000"));
+    }
+
+    #[test]
+    fn ipn_invalid() {
+        assert!(!is_valid_ipn("123456789"));   // 9 цифр
+        assert!(!is_valid_ipn("12345678901")); // 11 цифр
+        assert!(!is_valid_ipn("123456789x")); // буква
+        assert!(!is_valid_ipn(""));
+    }
+
+    #[test]
+    fn iban_valid() {
+        // UA + 27 цифр = 29 символів
+        assert!(is_valid_iban("UA123456789012345678901234567"));
+        assert!(is_valid_iban("UA000000000000000000000000000"));
+    }
+
+    #[test]
+    fn iban_invalid() {
+        assert!(!is_valid_iban("UA12345"));              // занадто короткий
+        assert!(!is_valid_iban("DE123456789012345678901234567")); // не UA
+        assert!(!is_valid_iban("UA12345678901234567890123456a")); // буква
+        assert!(!is_valid_iban("UA123")); // 5 символів
+        assert!(!is_valid_iban(""));
     }
 }

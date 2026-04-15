@@ -9,8 +9,8 @@ use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 
+use acta::app_ctx::AppCtx;
 use crate::{
-    app_ctx::AppCtx,
     ui::helpers::*,
     DashboardActRow, DashboardPaymentRow, MainWindow,
 };

@@ -5,10 +5,9 @@
 // ВАЖЛИВО: має бути на рівні модуля — не всередині функції.
 slint::include_modules!();
 
-mod app_ctx;
 mod ui;
 
-use app_ctx::{AppCtx, ActListState, CounterpartyListState, DocListState, InvoiceListState, TaskListState, PaymentListState};
+use acta::app_ctx::{AppCtx, ActListState, CounterpartyListState, DocListState, InvoiceListState, TaskListState, PaymentListState};
 use acta::{config::AppConfig, db, notifications};
 use anyhow::Result;
 use slint::{ModelRc, SharedString, VecModel};
@@ -424,6 +423,7 @@ mod tests {
 
     #[test]
     fn slint_callback_harness_covers_callbacks_and_properties() {
+        i_slint_backend_testing::init_no_event_loop();
         let ui = MainWindow::new().expect("MainWindow should be constructible in tests");
         let received_query = Arc::new(Mutex::new(None::<String>));
         let query_capture = Arc::clone(&received_query);
@@ -455,5 +455,230 @@ mod tests {
         assert!(ui.get_show_company_picker());
         assert_eq!(ui.get_toast_message().as_str(), "Збережено");
         assert_eq!(ui.get_task_form_title().as_str(), "Передзвонити клієнту");
+    }
+
+    // ── Tokio runtime ─────────────────────────────────────────────────────────
+    // Тестуємо що main() зможе збудувати runtime та паралельно виконувати задачі.
+    // Ці тести не потребують БД і не відкривають вікно.
+
+    #[test]
+    fn tokio_runtime_multi_thread_builds_and_runs_async_tasks() {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime повинен будуватись без помилок");
+
+        // block_on виконує Future на головному потоці
+        let result = rt.block_on(async { 6u32 + 7 });
+        assert_eq!(result, 13);
+
+        // tokio::spawn виконує задачу на пулі потоків
+        let spawned = rt.block_on(async {
+            tokio::spawn(async { "spawn_ok" })
+                .await
+                .expect("spawn не повинен панікувати")
+        });
+        assert_eq!(spawned, "spawn_ok");
+    }
+
+    #[test]
+    fn tokio_runtime_join_runs_two_futures_in_parallel() {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+
+        // tokio::join! — паттерн що використовується в main() для початкового завантаження
+        let (a, b) = rt.block_on(async { tokio::join!(async { 1u32 }, async { 2u32 }) });
+        assert_eq!(a + b, 3);
+    }
+
+    // ── Shared state: Arc<Mutex<Uuid>> ────────────────────────────────────────
+    // active_company_id у main() — Arc<Mutex<Uuid>>. Nil UUID = компанія не обрана.
+
+    #[test]
+    fn active_company_id_starts_as_nil_and_updates_after_selection() {
+        let company_id: Arc<Mutex<Uuid>> = Arc::new(Mutex::new(Uuid::nil()));
+
+        // До вибору компанії — nil
+        assert!(company_id.lock().unwrap().is_nil(), "до вибору — nil UUID");
+
+        let selected = Uuid::new_v4();
+        *company_id.lock().unwrap() = selected;
+
+        assert_eq!(*company_id.lock().unwrap(), selected, "після вибору — реальний UUID");
+        assert!(!company_id.lock().unwrap().is_nil());
+    }
+
+    #[test]
+    fn active_company_id_clones_share_the_same_mutex() {
+        // Arc::clone передає той самий Mutex між callbacks — зміна в одному видима в іншому
+        let id: Arc<Mutex<Uuid>> = Arc::new(Mutex::new(Uuid::nil()));
+        let id_in_callback = Arc::clone(&id);
+
+        let new_id = Uuid::new_v4();
+        *id_in_callback.lock().unwrap() = new_id;
+
+        assert_eq!(*id.lock().unwrap(), new_id, "оригінал відображає зміну зробленою в клоні");
+    }
+
+    // ── DocListState defaults ─────────────────────────────────────────────────
+    // DocListState::default() визначає початковий вигляд сторінки Документи.
+
+    #[test]
+    fn doc_list_state_default_is_outgoing_direction_and_all_docs_tab() {
+        use acta::app_ctx::DocListState;
+        let s = DocListState::default();
+
+        assert_eq!(s.direction, "outgoing", "початковий напрям — вихідні документи");
+        assert_eq!(s.tab, 0, "початкова вкладка — Всі (0=всі, 1=акти, 2=накладні)");
+        assert_eq!(s.counterparty_index, 0, "0 = всі контрагенти");
+        assert!(s.query.is_empty());
+        assert!(s.counterparty_id.is_none());
+        assert!(s.date_from.is_none());
+        assert!(s.date_to.is_none());
+    }
+
+    // ── Slint: додаткові callback bindings ────────────────────────────────────
+    // on_*(handler) реєструє обробник; invoke_*() доставляє подію синхронно.
+
+    #[test]
+    fn callback_counterparty_search_changed_captures_query_string() {
+        i_slint_backend_testing::init_no_event_loop();
+        let ui = MainWindow::new().expect("MainWindow");
+        let captured = Arc::new(Mutex::new(String::new()));
+        let cap = Arc::clone(&captured);
+
+        ui.on_counterparty_search_changed(move |q| *cap.lock().unwrap() = q.to_string());
+        ui.invoke_counterparty_search_changed(SharedString::from("іваненко"));
+
+        assert_eq!(captured.lock().unwrap().as_str(), "іваненко");
+    }
+
+    #[test]
+    fn callback_act_status_filter_changed_captures_int_index() {
+        i_slint_backend_testing::init_no_event_loop();
+        let ui = MainWindow::new().expect("MainWindow");
+        let captured = Arc::new(Mutex::new(-1i32));
+        let cap = Arc::clone(&captured);
+
+        // 0=всі, 1=чернетка, 2=виставлено, 3=підписано, 4=оплачено
+        ui.on_act_status_filter_changed(move |idx| *cap.lock().unwrap() = idx);
+        ui.invoke_act_status_filter_changed(2);
+
+        assert_eq!(*captured.lock().unwrap(), 2);
+    }
+
+    #[test]
+    fn callback_payment_direction_filter_changed_captures_int_index() {
+        i_slint_backend_testing::init_no_event_loop();
+        let ui = MainWindow::new().expect("MainWindow");
+        let captured = Arc::new(Mutex::new(0i32));
+        let cap = Arc::clone(&captured);
+
+        // 0=всі, 1=incoming, 2=outgoing
+        ui.on_payment_direction_filter_changed(move |idx| *cap.lock().unwrap() = idx);
+        ui.invoke_payment_direction_filter_changed(1);
+
+        assert_eq!(*captured.lock().unwrap(), 1);
+    }
+
+    #[test]
+    fn callbacks_invoice_search_and_doc_search_fire_independently() {
+        i_slint_backend_testing::init_no_event_loop();
+        let ui = MainWindow::new().expect("MainWindow");
+
+        let inv_q = Arc::new(Mutex::new(String::new()));
+        let doc_q = Arc::new(Mutex::new(String::new()));
+
+        {
+            let c = Arc::clone(&inv_q);
+            ui.on_invoice_search_changed(move |q| *c.lock().unwrap() = q.to_string());
+        }
+        {
+            let c = Arc::clone(&doc_q);
+            ui.on_doc_search_changed(move |q| *c.lock().unwrap() = q.to_string());
+        }
+
+        ui.invoke_invoice_search_changed(SharedString::from("ФОП"));
+        ui.invoke_doc_search_changed(SharedString::from("2026"));
+
+        assert_eq!(inv_q.lock().unwrap().as_str(), "ФОП");
+        assert_eq!(doc_q.lock().unwrap().as_str(), "2026");
+        // Переконуємось що invoice callback не змінив doc і навпаки
+        assert_ne!(inv_q.lock().unwrap().as_str(), doc_q.lock().unwrap().as_str());
+    }
+
+    #[test]
+    fn callback_click_handlers_count_invocations_correctly() {
+        i_slint_backend_testing::init_no_event_loop();
+        let ui = MainWindow::new().expect("MainWindow");
+
+        let act_count = Arc::new(Mutex::new(0u32));
+        let cp_count = Arc::new(Mutex::new(0u32));
+
+        {
+            let c = Arc::clone(&act_count);
+            ui.on_act_create_clicked(move || *c.lock().unwrap() += 1);
+        }
+        {
+            let c = Arc::clone(&cp_count);
+            ui.on_counterparty_create_clicked(move || *c.lock().unwrap() += 1);
+        }
+
+        ui.invoke_act_create_clicked();
+        ui.invoke_act_create_clicked();
+        ui.invoke_act_create_clicked();
+        ui.invoke_counterparty_create_clicked();
+
+        assert_eq!(*act_count.lock().unwrap(), 3, "act-create-clicked спрацював 3 рази");
+        assert_eq!(*cp_count.lock().unwrap(), 1, "counterparty-create-clicked спрацював 1 раз");
+    }
+
+    // ── Slint: property roundtrips ────────────────────────────────────────────
+
+    #[test]
+    fn properties_form_flags_toggle_correctly() {
+        i_slint_backend_testing::init_no_event_loop();
+        let ui = MainWindow::new().expect("MainWindow");
+
+        ui.set_show_act_form(true);
+        assert!(ui.get_show_act_form());
+        ui.set_show_act_form(false);
+        assert!(!ui.get_show_act_form());
+
+        ui.set_show_cp_form(true);
+        assert!(ui.get_show_cp_form());
+
+        ui.set_show_company_form(true);
+        assert!(ui.get_show_company_form());
+    }
+
+    #[test]
+    fn properties_active_company_fields_roundtrip() {
+        i_slint_backend_testing::init_no_event_loop();
+        let ui = MainWindow::new().expect("MainWindow");
+
+        let cid = Uuid::new_v4();
+        ui.set_active_company_name(SharedString::from("ТОВ Приклад"));
+        ui.set_active_company_id(SharedString::from(cid.to_string().as_str()));
+        ui.set_active_company_subtitle(SharedString::from("ЄДРПОУ: 12345678"));
+
+        assert_eq!(ui.get_active_company_name().as_str(), "ТОВ Приклад");
+        assert_eq!(ui.get_active_company_id().as_str(), cid.to_string().as_str());
+        assert_eq!(ui.get_active_company_subtitle().as_str(), "ЄДРПОУ: 12345678");
+    }
+
+    #[test]
+    fn property_current_page_navigates_across_all_main_sections() {
+        i_slint_backend_testing::init_no_event_loop();
+        let ui = MainWindow::new().expect("MainWindow");
+
+        // Нумерація з main.slint: 0=Контрагенти, 1=Документи, 3=Платежі,
+        //                          5=To-Do, 6=Компанії, 8=Dashboard
+        for page in [0i32, 1, 3, 5, 6, 8] {
+            ui.set_current_page(page);
+            assert_eq!(ui.get_current_page(), page, "перехід на сторінку {page}");
+        }
     }
 }

@@ -9,7 +9,7 @@ use anyhow::Result;
 use chrono::{DateTime, Local, NaiveDateTime, TimeZone, Utc};
 use rust_decimal::Decimal;
 use slint::{EventLoopError, Model, ModelRc, SharedString, StandardListViewItem, VecModel, Weak};
-pub use crate::app_ctx::{ActListState, DocListState, InvoiceListState, TaskListState};
+pub use acta::app_ctx::{ActListState, DocListState, InvoiceListState, TaskListState};
 pub use acta::models::{
     ActStatus as ModelActStatus, Company, CompanySummary, NewActItem, NewInvoiceItem,
     Task, TaskPriority,
@@ -498,4 +498,434 @@ pub fn show_toast(ui_weak: Weak<MainWindow>, message: String, is_error: bool) {
             })
             .warn_if_terminated();
     });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ── Тести ─────────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Тести що потребують MainWindow (Slint headless backend).
+    //
+    // ВАЖЛИВО: init_no_event_loop() можна викликати лише ОДИН РАЗ у тестовому
+    // бінарнику. Тому всі Slint-тести зібрані в одну #[test] функцію, де
+    // кожен підтест — окрема fn без атрибуту.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn ui_helpers_with_window() {
+        i_slint_backend_testing::init_no_event_loop();
+
+        act_status_conversion();
+        recalculate_invoice_total_sums();
+        recalculate_invoice_total_empty_model();
+        recalculate_invoice_total_invalid_price_treated_as_zero();
+        collect_form_items_parses_rows();
+        collect_form_items_skips_invalid_rows();
+        populate_payment_form_sets_fields();
+        populate_payment_form_no_counterparty();
+    }
+
+    // ── act_status_from_ui ───────────────────────────────────────────────
+
+    fn act_status_conversion() {
+        use crate::ActStatus;
+
+        assert!(matches!(
+            act_status_from_ui(ActStatus::Draft),
+            ModelActStatus::Draft
+        ));
+        assert!(matches!(
+            act_status_from_ui(ActStatus::Issued),
+            ModelActStatus::Issued
+        ));
+        assert!(matches!(
+            act_status_from_ui(ActStatus::Signed),
+            ModelActStatus::Signed
+        ));
+        assert!(matches!(
+            act_status_from_ui(ActStatus::Paid),
+            ModelActStatus::Paid
+        ));
+    }
+
+    // ── recalculate_invoice_total ────────────────────────────────────────
+
+    fn recalculate_invoice_total_sums() {
+        use crate::MainWindow;
+        use slint::{ModelRc, VecModel};
+
+        let ui = MainWindow::new().unwrap();
+
+        // Встановлюємо дві позиції: 3 × 100.00 = 300.00, 2.5 × 80.00 = 200.00
+        // Total = 500.00
+        let rows = vec![
+            FormItemRow {
+                description: "Послуга А".into(),
+                quantity: "3".into(),
+                unit: "шт".into(),
+                price: "100.00".into(),
+                amount: "".into(),
+            },
+            FormItemRow {
+                description: "Послуга Б".into(),
+                quantity: "2.5".into(),
+                unit: "год".into(),
+                price: "80.00".into(),
+                amount: "".into(),
+            },
+        ];
+        ui.set_invoice_form_items(ModelRc::new(VecModel::from(rows)));
+
+        recalculate_invoice_total(&ui);
+
+        assert_eq!(
+            ui.get_invoice_form_total().as_str(),
+            "500.00",
+            "recalculate_invoice_total: сума не збігається"
+        );
+
+        // Перевіряємо що amount у позиціях також оновлено
+        let model = ui.get_invoice_form_items();
+        let first = model.row_data(0).unwrap();
+        let second = model.row_data(1).unwrap();
+        assert_eq!(first.amount.as_str(), "300.00", "позиція 0: amount");
+        assert_eq!(second.amount.as_str(), "200.00", "позиція 1: amount");
+    }
+
+    fn recalculate_invoice_total_empty_model() {
+        use crate::MainWindow;
+        use slint::{ModelRc, VecModel};
+
+        let ui = MainWindow::new().unwrap();
+        ui.set_invoice_form_items(ModelRc::new(VecModel::from(vec![])));
+
+        recalculate_invoice_total(&ui);
+
+        assert_eq!(
+            ui.get_invoice_form_total().as_str(),
+            "0.00",
+            "порожня модель → total = 0.00"
+        );
+    }
+
+    fn recalculate_invoice_total_invalid_price_treated_as_zero() {
+        use crate::MainWindow;
+        use slint::{ModelRc, VecModel};
+
+        let ui = MainWindow::new().unwrap();
+        let rows = vec![FormItemRow {
+            description: "Тест".into(),
+            quantity: "abc".into(), // невалідне число → 0
+            unit: "шт".into(),
+            price: "50.00".into(),
+            amount: "".into(),
+        }];
+        ui.set_invoice_form_items(ModelRc::new(VecModel::from(rows)));
+
+        recalculate_invoice_total(&ui);
+
+        assert_eq!(
+            ui.get_invoice_form_total().as_str(),
+            "0.00",
+            "невалідна кількість → total = 0.00"
+        );
+    }
+
+    // ── collect_form_items ───────────────────────────────────────────────
+
+    fn collect_form_items_parses_rows() {
+        use crate::MainWindow;
+        use rust_decimal_macros::dec;
+        use slint::{ModelRc, VecModel};
+
+        let ui = MainWindow::new().unwrap();
+
+        // Дві валідні позиції
+        let rows = vec![
+            FormItemRow {
+                description: "Розробка".into(),
+                quantity: "8".into(),
+                unit: "год".into(),
+                price: "1500.00".into(),
+                amount: "12000.00".into(),
+            },
+            FormItemRow {
+                description: "Консультація".into(),
+                quantity: "1.5".into(),
+                unit: "год".into(),
+                price: "2000.00".into(),
+                amount: "3000.00".into(),
+            },
+        ];
+        ui.set_act_form_items(ModelRc::new(VecModel::from(rows)));
+
+        let items = collect_form_items(&ui);
+
+        assert_eq!(items.len(), 2, "collect_form_items: кількість позицій");
+        assert_eq!(items[0].description, "Розробка");
+        assert_eq!(items[0].quantity,  dec!(8));
+        assert_eq!(items[0].unit,      "год");
+        assert_eq!(items[0].unit_price, dec!(1500.00));
+        assert_eq!(items[1].description, "Консультація");
+        assert_eq!(items[1].quantity,  dec!(1.5));
+        assert_eq!(items[1].unit_price, dec!(2000.00));
+    }
+
+    fn collect_form_items_skips_invalid_rows() {
+        use crate::MainWindow;
+        use slint::{ModelRc, VecModel};
+
+        let ui = MainWindow::new().unwrap();
+
+        // Перша позиція: валідна. Друга: невалідна кількість → відфільтровується.
+        let rows = vec![
+            FormItemRow {
+                description: "Ок".into(),
+                quantity: "1".into(),
+                unit: "шт".into(),
+                price: "100.00".into(),
+                amount: "100.00".into(),
+            },
+            FormItemRow {
+                description: "Зламана".into(),
+                quantity: "не число".into(),
+                unit: "шт".into(),
+                price: "50.00".into(),
+                amount: "".into(),
+            },
+        ];
+        ui.set_act_form_items(ModelRc::new(VecModel::from(rows)));
+
+        let items = collect_form_items(&ui);
+
+        assert_eq!(items.len(), 1, "невалідна позиція повинна бути відфільтрована");
+        assert_eq!(items[0].description, "Ок");
+    }
+
+    // ── populate_payment_form ────────────────────────────────────────────
+
+    fn populate_payment_form_sets_fields() {
+        use crate::MainWindow;
+        use acta::models::counterparty::Counterparty;
+        use acta::models::payment::{Payment, PaymentDirection};
+        use chrono::NaiveDate;
+        use rust_decimal_macros::dec;
+        use uuid::Uuid;
+
+        let ui = MainWindow::new().unwrap();
+
+        let cp_id = Uuid::new_v4();
+        let pay_id = Uuid::new_v4();
+
+        let counterparties = vec![Counterparty {
+            id: cp_id,
+            name: "ТОВ Ромашка".to_string(),
+            edrpou: None,
+            ipn: None,
+            iban: None,
+            address: None,
+            email: None,
+            phone: None,
+            notes: None,
+            is_archived: false,
+            bas_id: None,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        }];
+
+        let payment = Payment {
+            id: pay_id,
+            company_id: Uuid::new_v4(),
+            date: NaiveDate::from_ymd_opt(2026, 4, 15).unwrap(),
+            amount: dec!(2500.00),
+            direction: PaymentDirection::Income,
+            counterparty_id: Some(cp_id),
+            bank_name: Some("ПриватБанк".to_string()),
+            bank_ref: Some("REF-001".to_string()),
+            description: Some("оплата за квітень".to_string()),
+            is_reconciled: false,
+            bas_id: None,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+
+        populate_payment_form(&ui, &counterparties, &payment);
+
+        assert!(ui.get_payment_form_is_edit(), "is_edit повинен бути true");
+        assert_eq!(
+            ui.get_payment_form_edit_id().as_str(),
+            pay_id.to_string(),
+            "edit_id"
+        );
+        assert_eq!(ui.get_payment_form_date().as_str(), "15.04.2026", "date");
+        assert_eq!(ui.get_payment_form_amount().as_str(), "2500.00", "amount");
+        // Income → direction_index = 0
+        assert_eq!(ui.get_payment_form_direction_index(), 0, "direction income=0");
+        // Контрагент знайдений → index 1 (перший після "Без контрагента")
+        assert_eq!(ui.get_payment_form_counterparty_index(), 1, "counterparty index");
+        assert_eq!(
+            ui.get_payment_form_bank_name().as_str(),
+            "ПриватБанк",
+            "bank_name"
+        );
+        assert_eq!(
+            ui.get_payment_form_bank_ref().as_str(),
+            "REF-001",
+            "bank_ref"
+        );
+        assert_eq!(
+            ui.get_payment_form_description().as_str(),
+            "оплата за квітень",
+            "description"
+        );
+    }
+
+    fn populate_payment_form_no_counterparty() {
+        use crate::MainWindow;
+        use acta::models::payment::{Payment, PaymentDirection};
+        use chrono::NaiveDate;
+        use rust_decimal_macros::dec;
+        use uuid::Uuid;
+
+        let ui = MainWindow::new().unwrap();
+
+        let payment = Payment {
+            id: Uuid::new_v4(),
+            company_id: Uuid::new_v4(),
+            date: NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
+            amount: dec!(100.00),
+            direction: PaymentDirection::Expense,
+            counterparty_id: None, // без контрагента
+            bank_name: None,
+            bank_ref: None,
+            description: None,
+            is_reconciled: false,
+            bas_id: None,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+
+        populate_payment_form(&ui, &[], &payment);
+
+        // Без контрагента → index = 0 ("Без контрагента")
+        assert_eq!(ui.get_payment_form_counterparty_index(), 0, "no cp → index 0");
+        // Expense → direction_index = 1
+        assert_eq!(ui.get_payment_form_direction_index(), 1, "direction expense=1");
+        assert_eq!(ui.get_payment_form_bank_name().as_str(), "", "bank_name empty");
+        assert_eq!(ui.get_payment_form_description().as_str(), "", "description empty");
+    }
+
+    // ── doc_direction_from_index ─────────────────────────────────────────────
+
+    #[test]
+    fn doc_direction_from_index_incoming() {
+        assert_eq!(doc_direction_from_index(1), "incoming");
+    }
+
+    #[test]
+    fn doc_direction_from_index_outgoing_zero() {
+        assert_eq!(doc_direction_from_index(0), "outgoing");
+    }
+
+    #[test]
+    fn doc_direction_from_index_other_defaults_to_outgoing() {
+        assert_eq!(doc_direction_from_index(2), "outgoing");
+        assert_eq!(doc_direction_from_index(-1), "outgoing");
+    }
+
+    // ── doc_direction_index ──────────────────────────────────────────────────
+
+    #[test]
+    fn doc_direction_index_incoming() {
+        assert_eq!(doc_direction_index("incoming"), 1);
+    }
+
+    #[test]
+    fn doc_direction_index_outgoing() {
+        assert_eq!(doc_direction_index("outgoing"), 0);
+    }
+
+    #[test]
+    fn doc_direction_index_unknown_defaults_to_zero() {
+        assert_eq!(doc_direction_index(""), 0);
+        assert_eq!(doc_direction_index("Incoming"), 0); // регістр — без збігу
+    }
+
+    // ── optional_text ────────────────────────────────────────────────────────
+
+    #[test]
+    fn optional_text_empty_is_none() {
+        assert_eq!(optional_text(""), None);
+    }
+
+    #[test]
+    fn optional_text_whitespace_is_none() {
+        assert_eq!(optional_text("   "), None);
+        assert_eq!(optional_text("\t"), None);
+    }
+
+    #[test]
+    fn optional_text_value_is_trimmed_some() {
+        assert_eq!(optional_text("привіт"), Some("привіт".to_string()));
+        assert_eq!(optional_text("  привіт  "), Some("привіт".to_string()));
+    }
+
+    // ── parse_optional_uuid ──────────────────────────────────────────────────
+
+    #[test]
+    fn parse_optional_uuid_empty_is_none() {
+        assert_eq!(parse_optional_uuid(""), None);
+    }
+
+    #[test]
+    fn parse_optional_uuid_whitespace_is_none() {
+        assert_eq!(parse_optional_uuid("   "), None);
+    }
+
+    #[test]
+    fn parse_optional_uuid_invalid_is_none() {
+        assert_eq!(parse_optional_uuid("не-uuid"), None);
+        assert_eq!(parse_optional_uuid("12345678"), None);
+    }
+
+    #[test]
+    fn parse_optional_uuid_valid_round_trips() {
+        let id = uuid::Uuid::new_v4();
+        assert_eq!(parse_optional_uuid(&id.to_string()), Some(id));
+    }
+
+    #[test]
+    fn parse_optional_uuid_valid_with_padding() {
+        let id = uuid::Uuid::new_v4();
+        let padded = format!("  {}  ", id);
+        assert_eq!(parse_optional_uuid(&padded), Some(id));
+    }
+
+    // ── total_filtered_pages ─────────────────────────────────────────────────
+    // COUNTERPARTY_PAGE_SIZE = 10
+
+    #[test]
+    fn total_filtered_pages_zero_gives_one() {
+        assert_eq!(total_filtered_pages(0), 1);
+    }
+
+    #[test]
+    fn total_filtered_pages_exact_multiples() {
+        assert_eq!(total_filtered_pages(10), 1);
+        assert_eq!(total_filtered_pages(20), 2);
+        assert_eq!(total_filtered_pages(30), 3);
+    }
+
+    #[test]
+    fn total_filtered_pages_partial_page_rounds_up() {
+        assert_eq!(total_filtered_pages(1), 1);
+        assert_eq!(total_filtered_pages(9), 1);
+        assert_eq!(total_filtered_pages(11), 2);
+        assert_eq!(total_filtered_pages(25), 3);
+    }
 }

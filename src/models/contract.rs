@@ -97,3 +97,46 @@ pub struct ContractSelectItem {
     pub number: String,
     pub subject: Option<String>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::ContractStatus;
+
+    #[test]
+    fn contract_status_as_str_matches_db_values() {
+        assert_eq!(ContractStatus::Active.as_str(),     "active");
+        assert_eq!(ContractStatus::Expired.as_str(),    "expired");
+        assert_eq!(ContractStatus::Terminated.as_str(), "terminated");
+    }
+
+    #[test]
+    fn contract_status_label_ua_is_ukrainian() {
+        assert_eq!(ContractStatus::Active.label_ua(),     "Активний");
+        assert_eq!(ContractStatus::Expired.label_ua(),    "Прострочений");
+        assert_eq!(ContractStatus::Terminated.label_ua(), "Розірваний");
+    }
+
+    #[test]
+    fn contract_status_as_str_and_label_ua_cover_all_variants() {
+        // Якщо додадуть новий варіант — компілятор вимагатиме оновити match,
+        // а цей тест нагадає дописати перевірку.
+        let variants = [
+            ContractStatus::Active,
+            ContractStatus::Expired,
+            ContractStatus::Terminated,
+        ];
+        for v in &variants {
+            assert!(!v.as_str().is_empty(),   "{v:?}: as_str() не має бути порожнім");
+            assert!(!v.label_ua().is_empty(), "{v:?}: label_ua() не має бути порожнім");
+        }
+    }
+
+    #[test]
+    fn contract_status_as_str_is_lowercase_ascii() {
+        for v in [ContractStatus::Active, ContractStatus::Expired, ContractStatus::Terminated] {
+            let s = v.as_str();
+            assert!(s.chars().all(|c| c.is_ascii_lowercase() || c == '_'),
+                "{v:?}: as_str() повинен бути snake_case ASCII, отримано '{s}'");
+        }
+    }
+}

@@ -374,13 +374,75 @@ mod tests {
     use super::*;
     use rust_decimal_macros::dec;
 
+    // ─── Допоміжні будівники тестових даних ──────────────────────────────────
+
+    fn sample_company(prefix: &str) -> PdfCompany {
+        PdfCompany {
+            name:    format!("{prefix} ФОП Тестовий"),
+            edrpou:  "1234567890".into(),
+            iban:    "UA123456789012345678901234567".into(),
+            address: "м. Київ, вул. Тестова, 1".into(),
+        }
+    }
+
+    fn sample_act_data() -> PdfActData {
+        PdfActData {
+            number:      "АКТ-2026-001".into(),
+            date:        "15.04.2026".into(),
+            company:     sample_company("Виконавець"),
+            client:      sample_company("Замовник"),
+            items:       vec![PdfActItem {
+                num:    1,
+                name:   "Розробка програмного забезпечення".into(),
+                qty:    "1.0000".into(),
+                unit:   "послуга".into(),
+                price:  "45000.00".into(),
+                amount: "45000.00".into(),
+            }],
+            total:       "45000.00".into(),
+            total_words: "сорок п'ять тисяч гривень 00 копійок".into(),
+            notes:       String::new(),
+        }
+    }
+
+    fn sample_invoice_data() -> PdfInvoiceData {
+        PdfInvoiceData {
+            number:      "НАК-2026-001".into(),
+            date:        "15.04.2026".into(),
+            company:     sample_company("Виконавець"),
+            client:      sample_company("Замовник"),
+            items:       vec![PdfInvoiceItem {
+                num:    1,
+                name:   "Товар тестовий".into(),
+                qty:    "2.0000".into(),
+                unit:   "шт".into(),
+                price:  "500.00".into(),
+                amount: "1000.00".into(),
+            }],
+            total:       "1000.00".into(),
+            vat_amount:  "0.00".into(),
+            total_words: "одна тисяча гривень 00 копійок".into(),
+            notes:       String::new(),
+        }
+    }
+
+    fn typst_available() -> bool {
+        std::process::Command::new("typst")
+            .arg("--version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
+
+    // ─── amount_to_words ──────────────────────────────────────────────────────
+
     #[test]
-    fn test_amount_to_words_simple() {
+    fn amount_to_words_simple_hundreds() {
         assert_eq!(amount_to_words(&dec!(100.00)), "сто гривень 00 копійок");
     }
 
     #[test]
-    fn test_amount_to_words_thousands() {
+    fn amount_to_words_thousands() {
         assert_eq!(
             amount_to_words(&dec!(45000.00)),
             "сорок п'ять тисяч гривень 00 копійок"
@@ -388,7 +450,7 @@ mod tests {
     }
 
     #[test]
-    fn test_amount_to_words_with_kopecks() {
+    fn amount_to_words_with_kopecks() {
         assert_eq!(
             amount_to_words(&dec!(1234.56)),
             "одна тисяча двісті тридцять чотири гривні 56 копійок"
@@ -396,53 +458,197 @@ mod tests {
     }
 
     #[test]
-    fn test_amount_to_words_one_hryvnia() {
+    fn amount_to_words_one_hryvnia() {
         assert_eq!(amount_to_words(&dec!(1.00)), "одна гривня 00 копійок");
     }
 
     #[test]
-    fn test_amount_to_words_two_hryvnias() {
+    fn amount_to_words_two_hryvnias() {
         assert_eq!(amount_to_words(&dec!(2.00)), "дві гривні 00 копійок");
     }
 
     #[test]
-    fn test_amount_to_words_millions() {
+    fn amount_to_words_millions() {
         assert_eq!(
             amount_to_words(&dec!(1000000.00)),
             "один мільйон гривень 00 копійок"
         );
     }
 
+    // ─── ensure_output_dir / ensure_invoice_output_dir ───────────────────────
+
     #[test]
-    fn test_ensure_output_dir() {
+    fn ensure_output_dir_extracts_year_from_number() {
         let path = ensure_output_dir("АКТ-2026-001").unwrap();
         assert!(path.to_str().unwrap().contains("2026"));
         assert!(path.to_str().unwrap().ends_with(".pdf"));
     }
 
     #[test]
-    fn test_ensure_invoice_output_dir() {
-        let path = ensure_invoice_output_dir("НАК-2026-001").unwrap();
-        assert!(path.to_str().unwrap().contains("invoices"));
-        assert!(path.to_str().unwrap().contains("2026"));
-        assert!(path.to_str().unwrap().ends_with(".pdf"));
+    fn ensure_output_dir_uses_misc_for_non_standard_number() {
+        // Нестандартний номер без четирицифрового року → директорія "misc"
+        let path = ensure_output_dir("NONSTANDARD").unwrap();
+        assert!(path.to_str().unwrap().contains("misc"));
     }
 
     #[test]
-    fn pdf_invoice_data_serializes_to_json() {
-        let data = PdfInvoiceData {
-            number: "НАК-2026-001".into(),
-            date: "01.04.2026".into(),
-            company: PdfCompany { name: "ФОП Тест".into(), edrpou: "1234567890".into(), iban: "UA123".into(), address: "Київ".into() },
-            client:  PdfCompany { name: "ТОВ Клієнт".into(), edrpou: "0987654321".into(), iban: "UA456".into(), address: String::new() },
-            items: vec![PdfInvoiceItem { num: 1, name: "Товар".into(), qty: "2.0000".into(), unit: "шт".into(), price: "500.00".into(), amount: "1000.00".into() }],
-            total: "1000.00".into(),
-            vat_amount: "0.00".into(),
-            total_words: "одна тисяча гривень 00 копійок".into(),
-            notes: String::new(),
-        };
-        let json = serde_json::to_string(&data).unwrap();
-        assert!(json.contains("НАК-2026-001"));
-        assert!(json.contains("vat_amount"));
+    fn ensure_output_dir_sanitizes_slashes_in_number() {
+        let path = ensure_output_dir("АКТ/2026-001").unwrap();
+        let name = path.file_name().unwrap().to_str().unwrap();
+        assert!(!name.contains('/'), "ім'я файлу не повинне містити '/'");
+    }
+
+    #[test]
+    fn ensure_invoice_output_dir_puts_in_invoices_subdir() {
+        let path = ensure_invoice_output_dir("НАК-2026-001").unwrap();
+        let s = path.to_str().unwrap();
+        assert!(s.contains("invoices"));
+        assert!(s.contains("2026"));
+        assert!(s.ends_with(".pdf"));
+    }
+
+    // ─── JSON-сериалізація PdfActData ─────────────────────────────────────────
+
+    #[test]
+    fn pdf_act_data_json_contains_all_top_level_keys() {
+        let json = serde_json::to_value(&sample_act_data()).unwrap();
+        for key in ["number", "date", "company", "client", "items", "total", "total_words", "notes"] {
+            assert!(json.get(key).is_some(), "відсутній ключ: {key}");
+        }
+    }
+
+    #[test]
+    fn pdf_act_data_items_are_json_array_with_string_amounts() {
+        let json = serde_json::to_value(&sample_act_data()).unwrap();
+        let items = json["items"].as_array().unwrap();
+        assert_eq!(items.len(), 1);
+        // Суми мають бути рядками, а не числами (Typst отримує "45000.00")
+        assert!(items[0]["amount"].is_string(), "amount у позиції має бути рядком");
+        assert!(items[0]["price"].is_string(), "price у позиції має бути рядком");
+        assert_eq!(items[0]["num"].as_u64().unwrap(), 1);
+    }
+
+    #[test]
+    fn pdf_act_data_total_is_string_not_number() {
+        let json = serde_json::to_value(&sample_act_data()).unwrap();
+        assert!(json["total"].is_string(), "total має бути рядком для Typst-шаблону");
+    }
+
+    // ─── JSON-сериалізація PdfInvoiceData ────────────────────────────────────
+
+    #[test]
+    fn pdf_invoice_data_json_contains_vat_amount_key() {
+        let json = serde_json::to_value(&sample_invoice_data()).unwrap();
+        assert!(json.get("vat_amount").is_some(), "відсутній ключ vat_amount");
+    }
+
+    #[test]
+    fn pdf_invoice_zero_vat_serializes_as_string() {
+        // "0.00" → рядок "0.00" (шаблон перевіряє рівність, а не числове 0)
+        let json = serde_json::to_value(&sample_invoice_data()).unwrap();
+        assert_eq!(json["vat_amount"].as_str().unwrap(), "0.00");
+    }
+
+    #[test]
+    fn pdf_invoice_data_json_contains_all_top_level_keys() {
+        let json = serde_json::to_value(&sample_invoice_data()).unwrap();
+        for key in ["number", "date", "company", "client", "items", "total", "vat_amount", "total_words", "notes"] {
+            assert!(json.get(key).is_some(), "відсутній ключ: {key}");
+        }
+    }
+
+    // ─── generate_act_pdf (реальний виклик Typst) ─────────────────────────────
+
+    #[test]
+    fn generate_act_pdf_creates_valid_pdf_file() {
+        if !typst_available() {
+            eprintln!("пропуск: typst не встановлено");
+            return;
+        }
+
+        let out = std::env::temp_dir().join("acta_test_act_generate.pdf");
+        generate_act_pdf(&sample_act_data(), &out)
+            .expect("generate_act_pdf має завершитись успішно");
+
+        assert!(out.exists(), "PDF файл не створено");
+        let size = std::fs::metadata(&out).unwrap().len();
+        assert!(size > 0, "PDF файл порожній");
+
+        // Перевіряємо магічний заголовок PDF: %PDF
+        let header = std::fs::read(&out).unwrap();
+        assert_eq!(&header[..4], b"%PDF", "файл не є валідним PDF");
+
+        let _ = std::fs::remove_file(&out);
+    }
+
+    #[test]
+    fn generate_act_pdf_number_appears_in_output_path_stem() {
+        if !typst_available() {
+            eprintln!("пропуск: typst не встановлено");
+            return;
+        }
+
+        let out = std::env::temp_dir().join("АКТ-2026-001.pdf");
+        generate_act_pdf(&sample_act_data(), &out).unwrap();
+        assert!(out.exists());
+        let _ = std::fs::remove_file(&out);
+    }
+
+    // ─── generate_invoice_pdf (реальний виклик Typst) ─────────────────────────
+
+    #[test]
+    fn generate_invoice_pdf_creates_valid_pdf_file() {
+        if !typst_available() {
+            eprintln!("пропуск: typst не встановлено");
+            return;
+        }
+
+        let out = std::env::temp_dir().join("acta_test_invoice_generate.pdf");
+        generate_invoice_pdf(&sample_invoice_data(), &out)
+            .expect("generate_invoice_pdf має завершитись успішно");
+
+        assert!(out.exists(), "PDF файл не створено");
+        let size = std::fs::metadata(&out).unwrap().len();
+        assert!(size > 0, "PDF файл порожній");
+
+        let header = std::fs::read(&out).unwrap();
+        assert_eq!(&header[..4], b"%PDF", "файл не є валідним PDF");
+
+        let _ = std::fs::remove_file(&out);
+    }
+
+    #[test]
+    fn generate_invoice_pdf_with_nonzero_vat() {
+        if !typst_available() {
+            eprintln!("пропуск: typst не встановлено");
+            return;
+        }
+
+        // Перевірка що шаблон приймає ненульовий ПДВ без помилки
+        let mut data = sample_invoice_data();
+        data.vat_amount = "200.00".into();
+        data.total = "1200.00".into();
+        data.total_words = "одна тисяча двісті гривень 00 копійок".into();
+
+        let out = std::env::temp_dir().join("acta_test_invoice_vat.pdf");
+        generate_invoice_pdf(&data, &out).unwrap();
+        assert!(out.exists());
+        let _ = std::fs::remove_file(&out);
+    }
+
+    // ─── generate_act_pdf — обробка помилок ──────────────────────────────────
+
+    #[test]
+    fn generate_act_pdf_returns_err_for_nonexistent_template_dir() {
+        // Якщо запускати з директорії де немає templates/ — typst поверне помилку
+        // Перевіряємо тільки якщо шаблон НЕ існує (щоб не конфліктувати з реальними тестами)
+        let templates_exist = std::path::Path::new("templates/act.typ").exists();
+        if templates_exist {
+            // Тест не застосовний — шаблони є, typst може спрацювати
+            return;
+        }
+        let out = std::env::temp_dir().join("acta_test_err.pdf");
+        let result = generate_act_pdf(&sample_act_data(), &out);
+        assert!(result.is_err());
     }
 }

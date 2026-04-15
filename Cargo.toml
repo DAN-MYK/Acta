@@ -83,5 +83,11 @@ dirs = "5"
 # Відкриття файлів у системному переглядачі (крос-платформно)
 open = "5"
 
+[dev-dependencies]
+# Headless Slint backend for unit tests (no display required)
+i-slint-backend-testing = "=1.15.1"
+# tokio::time::advance / #[tokio::test(start_paused = true)]
+tokio = { version = "1", features = ["test-util"] }
+
 [build-dependencies]
 slint-build = "1.15"

@@ -108,6 +108,196 @@ impl BankStatementParser for SenseBankCsvParser {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::NaiveDate;
+    use rust_decimal_macros::dec;
+
+    // ─── parse_decimal ────────────────────────────────────────────────────────
+
+    #[test]
+    fn parse_decimal_standard_dot() {
+        assert_eq!(parse_decimal("1200.50").unwrap(), dec!(1200.50));
+    }
+
+    #[test]
+    fn parse_decimal_european_space_comma() {
+        // Типовий банківський формат: "1 200,50" — пробіл-тисячник, кома-десяткова
+        assert_eq!(parse_decimal("1 200,50").unwrap(), dec!(1200.50));
+    }
+
+    #[test]
+    fn parse_decimal_space_thousands_dot() {
+        assert_eq!(parse_decimal("1 200.50").unwrap(), dec!(1200.50));
+    }
+
+    #[test]
+    fn parse_decimal_trims_whitespace() {
+        assert_eq!(parse_decimal("  500.00  ").unwrap(), dec!(500.00));
+    }
+
+    #[test]
+    fn parse_decimal_negative() {
+        assert_eq!(parse_decimal("-100.00").unwrap(), dec!(-100.00));
+    }
+
+    #[test]
+    fn parse_decimal_integer_only() {
+        assert_eq!(parse_decimal("1000").unwrap(), dec!(1000));
+    }
+
+    #[test]
+    fn parse_decimal_invalid_returns_err() {
+        assert!(parse_decimal("abc").is_err());
+    }
+
+    #[test]
+    fn parse_decimal_empty_returns_err() {
+        assert!(parse_decimal("").is_err());
+    }
+
+    // ─── parse_date ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn parse_date_dd_mm_yyyy() {
+        let d = parse_date("03.04.2026").unwrap();
+        assert_eq!(d, NaiveDate::from_ymd_opt(2026, 4, 3).unwrap());
+    }
+
+    #[test]
+    fn parse_date_iso_yyyy_mm_dd() {
+        let d = parse_date("2026-04-15").unwrap();
+        assert_eq!(d, NaiveDate::from_ymd_opt(2026, 4, 15).unwrap());
+    }
+
+    #[test]
+    fn parse_date_trims_whitespace() {
+        let d = parse_date("  03.04.2026  ").unwrap();
+        assert_eq!(d, NaiveDate::from_ymd_opt(2026, 4, 3).unwrap());
+    }
+
+    #[test]
+    fn parse_date_invalid_returns_err() {
+        assert!(parse_date("99.99.9999").is_err());
+    }
+
+    #[test]
+    fn parse_date_empty_returns_err() {
+        assert!(parse_date("").is_err());
+    }
+
+    #[test]
+    fn parse_date_slash_format_not_supported() {
+        // "03/04/2026" — формат не підтримується парсером
+        assert!(parse_date("03/04/2026").is_err());
+    }
+
+    // ─── UkrgasbankCsvParser ──────────────────────────────────────────────────
+
+    #[test]
+    fn ukrgasbank_bank_name() {
+        assert_eq!(UkrgasbankCsvParser.bank_name(), "Укргазбанк");
+    }
+
+    #[test]
+    fn ukrgasbank_parses_full_row() {
+        let csv = "date,amount,description,direction,reference\n\
+                   15.04.2026,5000.00,Оплата послуг,income,REF-001\n";
+        let rows = UkrgasbankCsvParser.parse(csv).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].date, NaiveDate::from_ymd_opt(2026, 4, 15).unwrap());
+        assert_eq!(rows[0].amount, dec!(5000.00));
+        assert_eq!(rows[0].description, "Оплата послуг");
+        assert_eq!(rows[0].direction, PaymentDirection::Income);
+        assert_eq!(rows[0].bank_ref.as_deref(), Some("REF-001"));
+        assert_eq!(rows[0].bank_name, "Укргазбанк");
+    }
+
+    #[test]
+    fn ukrgasbank_parses_european_amount_quoted() {
+        // CSV-поле в лапках: "1 500,75" → 1500.75
+        let csv = "date,amount,description,direction\n\
+                   01.04.2026,\"1 500,75\",Витрати,expense\n";
+        let rows = UkrgasbankCsvParser.parse(csv).unwrap();
+        assert_eq!(rows[0].amount, dec!(1500.75));
+        assert_eq!(rows[0].direction, PaymentDirection::Expense);
+    }
+
+    #[test]
+    fn ukrgasbank_parses_multiple_rows() {
+        let csv = "date,amount,description,direction\n\
+                   01.04.2026,1000.00,Надходження,income\n\
+                   02.04.2026,500.00,Витрата,expense\n";
+        let rows = UkrgasbankCsvParser.parse(csv).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].direction, PaymentDirection::Income);
+        assert_eq!(rows[1].direction, PaymentDirection::Expense);
+    }
+
+    #[test]
+    fn ukrgasbank_unknown_direction_returns_err() {
+        let csv = "date,amount,description,direction\n\
+                   01.04.2026,1000.00,Тест,unknown\n";
+        assert!(UkrgasbankCsvParser.parse(csv).is_err());
+    }
+
+    #[test]
+    fn ukrgasbank_empty_reference_gives_none_bank_ref() {
+        // reference стовпець є, але значення порожнє → bank_ref = None
+        let csv = "date,amount,description,direction,reference\n\
+                   03.04.2026,200.00,Тест,in,\n";
+        let rows = UkrgasbankCsvParser.parse(csv).unwrap();
+        assert!(rows[0].bank_ref.is_none());
+    }
+
+    // ─── OschadbankCsvParser ──────────────────────────────────────────────────
+
+    #[test]
+    fn oschadbank_bank_name() {
+        assert_eq!(OschadbankCsvParser.bank_name(), "Ощадбанк");
+    }
+
+    #[test]
+    fn oschadbank_parses_ukrainian_directions() {
+        // Ощадбанк використовує українські назви напрямку платежу
+        let csv = "date,amount,description,direction\n\
+                   10.03.2026,3000.00,Зарахування,надходження\n\
+                   11.03.2026,750.00,Списання,витрата\n";
+        let rows = OschadbankCsvParser.parse(csv).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].direction, PaymentDirection::Income);
+        assert_eq!(rows[1].direction, PaymentDirection::Expense);
+    }
+
+    #[test]
+    fn oschadbank_no_reference_column_gives_none_bank_ref() {
+        let csv = "date,amount,description,direction\n\
+                   05.04.2026,2500.00,Тест,in\n";
+        let rows = OschadbankCsvParser.parse(csv).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].bank_ref.is_none());
+        assert_eq!(rows[0].bank_name, "Ощадбанк");
+    }
+
+    #[test]
+    fn oschadbank_iso_date_format() {
+        // Ощадбанк може видавати дати у форматі ISO 8601
+        let csv = "date,amount,description,direction\n\
+                   2026-04-15,100.00,Тест ISO,out\n";
+        let rows = OschadbankCsvParser.parse(csv).unwrap();
+        assert_eq!(rows[0].date, NaiveDate::from_ymd_opt(2026, 4, 15).unwrap());
+        assert_eq!(rows[0].direction, PaymentDirection::Expense);
+    }
+
+    #[test]
+    fn oschadbank_headers_are_case_insensitive() {
+        // CSV з великими буквами у заголовках
+        let csv = "Date,Amount,Description,Direction\n\
+                   01.04.2026,800.00,Тест,Income\n";
+        let rows = OschadbankCsvParser.parse(csv).unwrap();
+        assert_eq!(rows[0].amount, dec!(800.00));
+        assert_eq!(rows[0].direction, PaymentDirection::Income);
+    }
+
+    // ─── SenseBankCsvParser (існуючий тест) ──────────────────────────────────
 
     #[test]
     fn generic_parser_parses_minimal_statement() {

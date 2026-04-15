@@ -17,13 +17,13 @@ pub struct CounterpartyListState {
 #[derive(Clone, Default)]
 pub struct ActListState {
     pub query: String,
-    pub status_filter: Option<acta::models::ActStatus>,
+    pub status_filter: Option<crate::models::ActStatus>,
 }
 
 #[derive(Clone, Default)]
 pub struct InvoiceListState {
     pub query: String,
-    pub status_filter: Option<acta::models::InvoiceStatus>,
+    pub status_filter: Option<crate::models::InvoiceStatus>,
 }
 
 #[derive(Clone)]
@@ -59,7 +59,7 @@ pub struct TaskListState {
 #[derive(Clone, Default)]
 pub struct PaymentListState {
     pub query: String,
-    pub direction_filter: Option<acta::models::payment::PaymentDirection>,
+    pub direction_filter: Option<crate::models::payment::PaymentDirection>,
 }
 
 /// Спільний контекст додатку — передається через Arc у всі модулі UI.
@@ -95,5 +95,65 @@ impl AppCtx {
     /// Встановлює UUID активної компанії. Безпечний при отруєному mutex.
     pub fn set_company_id(&self, id: uuid::Uuid) {
         *self.active_company_id.lock().unwrap_or_else(|e| e.into_inner()) = id;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uuid::Uuid;
+
+    // connect_lazy є sync, але потребує активного tokio runtime.
+    // Повертаємо Runtime разом з AppCtx щоб він залишався живим під час тесту.
+    fn make_ctx() -> (AppCtx, tokio::runtime::Runtime) {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let pool = rt.block_on(async {
+            sqlx::PgPool::connect_lazy("postgres://test:test@localhost/test").unwrap()
+        });
+        (
+            AppCtx {
+                pool,
+                active_company_id: Arc::new(Mutex::new(Uuid::nil())),
+                doc_cp_ids: Arc::new(Mutex::new(vec![])),
+                counterparty_state: Arc::new(Mutex::new(Default::default())),
+                act_state: Arc::new(Mutex::new(Default::default())),
+                invoice_state: Arc::new(Mutex::new(Default::default())),
+                doc_state: Arc::new(Mutex::new(Default::default())),
+                task_state: Arc::new(Mutex::new(Default::default())),
+                payment_state: Arc::new(Mutex::new(Default::default())),
+            },
+            rt,
+        )
+    }
+
+    #[test]
+    fn company_id_roundtrip() {
+        let (ctx, _rt) = make_ctx();
+        let id = Uuid::new_v4();
+        ctx.set_company_id(id);
+        assert_eq!(ctx.company_id(), id);
+    }
+
+    #[test]
+    fn company_id_initial_is_nil() {
+        let (ctx, _rt) = make_ctx();
+        assert!(ctx.company_id().is_nil());
+    }
+
+    #[test]
+    fn company_id_opt_nil_returns_none() {
+        let (ctx, _rt) = make_ctx();
+        assert!(ctx.company_id_opt().is_none());
+    }
+
+    #[test]
+    fn company_id_opt_set_returns_some() {
+        let (ctx, _rt) = make_ctx();
+        let id = Uuid::new_v4();
+        ctx.set_company_id(id);
+        assert_eq!(ctx.company_id_opt(), Some(id));
     }
 }

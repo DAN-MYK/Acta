@@ -55,3 +55,40 @@ impl DocumentTemplate {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+
+    fn make_template(template_type: &str) -> DocumentTemplate {
+        DocumentTemplate {
+            id: Uuid::new_v4(),
+            company_id: Uuid::new_v4(),
+            name: "Тест".into(),
+            description: None,
+            template_type: template_type.into(),
+            template_path: "templates/test.typ".into(),
+            is_default: false,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    #[test]
+    fn act_повертає_акт() {
+        assert_eq!(make_template("act").template_type_label(), "Акт");
+    }
+
+    #[test]
+    fn invoice_повертає_накладна() {
+        assert_eq!(make_template("invoice").template_type_label(), "Накладна");
+    }
+
+    #[test]
+    fn невідомий_тип_повертає_невідомо() {
+        assert_eq!(make_template("contract").template_type_label(), "Невідомо");
+        assert_eq!(make_template("").template_type_label(), "Невідомо");
+        assert_eq!(make_template("ACT").template_type_label(), "Невідомо"); // case-sensitive
+    }
+}

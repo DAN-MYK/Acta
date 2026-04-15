@@ -5,8 +5,8 @@ use std::sync::{Arc, Mutex};
 use anyhow::Result;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 
+use acta::app_ctx::AppCtx;
 use crate::{
-    app_ctx::AppCtx,
     ui::helpers::*,
     MainWindow,
 };
