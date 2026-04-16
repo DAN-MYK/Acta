@@ -105,4 +105,51 @@ mod tests {
         let _ = std::fs::remove_file(&path);
         assert!(cfg.last_company_id.is_none());
     }
+
+    #[test]
+    fn load_from_valid_toml_without_company_id_returns_none() {
+        let path = std::env::temp_dir().join("acta_config_missing_field_xyz.toml");
+        let _ = std::fs::write(&path, b"");
+        let cfg = AppConfig::load_from(&path);
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(cfg.last_company_id, None);
+    }
+
+    #[test]
+    fn invalid_uuid_in_toml_falls_back_to_default() {
+        let path = std::env::temp_dir().join("acta_config_invalid_uuid_xyz.toml");
+        let _ = std::fs::write(&path, br#"last_company_id = "not-a-valid-uuid""#);
+        let cfg = AppConfig::load_from(&path);
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(cfg.last_company_id, None);
+        assert_eq!(cfg.last_company_id, AppConfig::default().last_company_id);
+    }
+
+    #[test]
+    fn save_to_creates_missing_parent_directories() {
+        let id = Uuid::new_v4();
+        let cfg = AppConfig { last_company_id: Some(id) };
+        let base = std::env::temp_dir().join(format!("acta_config_nested_{id}"));
+        let path = base.join("nested").join("config.toml");
+
+        cfg.save_to(&path);
+        let loaded = AppConfig::load_from(&path);
+
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir_all(&base);
+
+        assert_eq!(loaded.last_company_id, Some(id));
+    }
+
+    #[test]
+    fn save_and_load_roundtrip_with_none_company_id() {
+        let cfg = AppConfig { last_company_id: None };
+
+        let path = std::env::temp_dir().join("acta_config_none_roundtrip.toml");
+        cfg.save_to(&path);
+        let loaded = AppConfig::load_from(&path);
+        let _ = std::fs::remove_file(&path);
+
+        assert_eq!(loaded.last_company_id, None);
+    }
 }

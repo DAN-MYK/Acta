@@ -409,7 +409,7 @@ pub async fn change_status(pool: &PgPool, id: Uuid, new_status: ActStatus) -> Re
     };
 
     // Перевіряємо що новий статус — наступний дозволений
-    if row.status.next().as_ref() != Some(&new_status) {
+    if !row.status.can_transition_to(&new_status) {
         bail!(
             "Недопустимий перехід статусу: '{}' → '{}'. Очікувалось: '{}'",
             row.status,

@@ -21,6 +21,18 @@ pub enum ActStatus {
 }
 
 impl ActStatus {
+    /// Чи дозволено перейти з поточного статусу до `next`.
+    ///
+    /// Бізнес-правило зберігається в доменній моделі, а не в DB/UI шарі.
+    pub fn can_transition_to(&self, next: &ActStatus) -> bool {
+        match (self, next) {
+            (ActStatus::Draft, ActStatus::Issued) => true,
+            (ActStatus::Issued, ActStatus::Signed) => true,
+            (ActStatus::Signed, ActStatus::Paid) => true,
+            _ => false,
+        }
+    }
+
     /// Наступний статус у циклі. `None` — якщо вже фінальний (Paid).
     pub fn next(&self) -> Option<ActStatus> {
         match self {
@@ -158,6 +170,33 @@ mod tests {
         assert_eq!(ActStatus::Issued.next(), Some(ActStatus::Signed));
         assert_eq!(ActStatus::Signed.next(), Some(ActStatus::Paid));
         assert_eq!(ActStatus::Paid.next(), None);
+    }
+
+    #[test]
+    fn act_status_can_transition_to_allows_only_adjacent_forward_step() {
+        assert!(ActStatus::Draft.can_transition_to(&ActStatus::Issued));
+        assert!(ActStatus::Issued.can_transition_to(&ActStatus::Signed));
+        assert!(ActStatus::Signed.can_transition_to(&ActStatus::Paid));
+    }
+
+    #[test]
+    fn act_status_can_transition_to_rejects_skips_backwards_and_same_state() {
+        assert!(!ActStatus::Draft.can_transition_to(&ActStatus::Draft));
+        assert!(!ActStatus::Draft.can_transition_to(&ActStatus::Signed));
+        assert!(!ActStatus::Issued.can_transition_to(&ActStatus::Draft));
+        assert!(!ActStatus::Signed.can_transition_to(&ActStatus::Issued));
+    }
+
+    #[test]
+    fn act_status_paid_is_terminal_state() {
+        for next in [
+            ActStatus::Draft,
+            ActStatus::Issued,
+            ActStatus::Signed,
+            ActStatus::Paid,
+        ] {
+            assert!(!ActStatus::Paid.can_transition_to(&next));
+        }
     }
 
     #[test]

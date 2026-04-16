@@ -15,13 +15,14 @@ use sqlx::postgres::PgPoolOptions;
 use std::sync::{Arc, Mutex};
 use ui::{
     acts::{apply_acts_to_ui, prepare_acts_data},
-    companies::{apply_settings_to_ui, prepare_settings_data},
-    counterparties::{apply_counterparties_to_ui, prepare_counterparties_data},
-    documents::{apply_documents_to_ui, fetch_doc_cp_filter_data, prepare_documents_data, DocCpFilterData},
+    companies::{apply_settings_to_ui, prepare_settings_data, reload_companies, reload_settings},
+    counterparties::{apply_counterparties_to_ui, prepare_counterparties_data, reload_counterparties},
+    dashboard::reload_dashboard,
+    documents::{apply_documents_to_ui, fetch_doc_cp_filter_data, prepare_documents_data, reload_documents, DocCpFilterData},
     helpers::{apply_company_rows, company_display_name, company_subtitle, reset_company_form},
     invoices::{apply_invoices_to_ui, prepare_invoices_data},
-    payments::{apply_payments_to_ui, prepare_payments_data, prepare_payment_cp_options_data},
-    tasks::{apply_tasks_to_ui, prepare_tasks_data},
+    payments::{apply_payments_to_ui, prepare_payments_data, prepare_payment_cp_options_data, reload_payments},
+    tasks::{apply_tasks_to_ui, prepare_tasks_data, reload_tasks},
 };
 
 /// Розмір сторінки у списку контрагентів.
@@ -56,9 +57,13 @@ fn main() -> Result<()> {
     tokio::spawn(notifications::reminder_loop(Arc::new(pool.clone())));
 
     // ── Створення вікна ──────────────────────────────────────────────────────
-    // MainWindow — тип згенерований з ui/main.slint
+    // MainWindow — тип згенерований з ui/app.slint
     let ui = MainWindow::new()?;
     ui.set_counterparty_show_archived(false);
+
+    // Toast та current-page зараз синхронізуються напряму через MainWindow
+    // properties, без старого Rust API до Slint global.
+    let ui_weak = ui.as_weak();
 
     // ── Активна компанія та стани списків — спільні між усіма callbacks ──────
     // Nil UUID = компанія ще не обрана. DB-запити з nil UUID повернуть порожній результат.
@@ -178,6 +183,58 @@ fn main() -> Result<()> {
         task_state: Arc::new(Mutex::new(TaskListState::default())),
         payment_state: Arc::new(Mutex::new(PaymentListState::default())),
     });
+
+    // ── navigate(feature, page) — навігація з перезавантаженням даних ───────────
+    // Викликається з Slint коли користувач клікає NavItem у sidebar.
+    // current-page зберігаємо напряму в MainWindow, а не через старий global API.
+    // Реєструється ПІСЛЯ ctx — щоб мати доступ до pool та active_company_id.
+    {
+        let pool = ctx.pool.clone();
+        let cid_arc = ctx.active_company_id.clone();
+        let weak = ui_weak.clone();
+        ui.on_navigate(move |feature, page| {
+            if let Some(ui) = weak.upgrade() {
+                ui.set_current_page(page);
+            }
+            let cid = *cid_arc.lock().unwrap();
+            if cid.is_nil() {
+                return; // компанія ще не обрана — нічого не завантажувати
+            }
+            let pool = pool.clone();
+            let weak2 = weak.clone();
+            let feat = feature.to_string();
+            tokio::spawn(async move {
+                let result = match feat.as_str() {
+                    "dashboard" => {
+                        reload_dashboard(&pool, weak2, cid).await
+                    }
+                    "counterparties" => {
+                        reload_counterparties(&pool, weak2, cid, String::new(), false, 0, false).await
+                    }
+                    "documents" => {
+                        reload_documents(&pool, weak2, cid, 0, "outgoing", "", None, None, None).await
+                    }
+                    "payments" => {
+                        reload_payments(&pool, weak2, cid, None, "").await
+                    }
+                    "tasks" => {
+                        reload_tasks(&pool, weak2, String::new(), false).await
+                    }
+                    "companies" => {
+                        reload_companies(&pool, weak2, cid).await
+                    }
+                    "settings" => {
+                        reload_settings(&pool, weak2, cid).await
+                    }
+                    // "reports", "calendar" — заглушки, даних нема
+                    _ => Ok(()),
+                };
+                if let Err(e) = result {
+                    tracing::error!("Помилка завантаження при навігації до '{feat}': {e:#}");
+                }
+            });
+        });
+    }
 
     // ── Реєстрація callbacks по модулях ──────────────────────────────────────
     ui::counterparties::setup(&ui, ctx.clone());
@@ -674,7 +731,7 @@ mod tests {
         i_slint_backend_testing::init_no_event_loop();
         let ui = MainWindow::new().expect("MainWindow");
 
-        // Нумерація з main.slint: 0=Контрагенти, 1=Документи, 3=Платежі,
+        // Нумерація з app.slint: 0=Контрагенти, 1=Документи, 3=Платежі,
         //                          5=To-Do, 6=Компанії, 8=Dashboard
         for page in [0i32, 1, 3, 5, 6, 8] {
             ui.set_current_page(page);

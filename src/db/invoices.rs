@@ -362,7 +362,7 @@ pub async fn change_status(
 
     // Декодуємо статус вручну — runtime query не підтримує `AS "field: Type"` синтаксис
 
-    if current.next().as_ref() != Some(&new_status) {
+    if !current.can_transition_to(&new_status) {
         bail!(
             "Недопустимий перехід статусу: '{}' → '{}'. Очікувалось: '{}'",
             current,

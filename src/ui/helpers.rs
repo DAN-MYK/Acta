@@ -7,7 +7,7 @@ use crate::MainWindow;
 use acta::models;
 use anyhow::Result;
 use chrono::{DateTime, Local, NaiveDateTime, TimeZone, Utc};
-use rust_decimal::Decimal;
+use rust_decimal::{Decimal, RoundingStrategy};
 use slint::{EventLoopError, Model, ModelRc, SharedString, StandardListViewItem, VecModel, Weak};
 pub use acta::app_ctx::{ActListState, DocListState, InvoiceListState, TaskListState};
 pub use acta::models::{
@@ -411,7 +411,10 @@ pub fn to_task_rows(tasks: &[Task]) -> Vec<TaskRow> {
 
 /// Форматує суму в українському вигляді: "78\u{00A0}000,00 ₴".
 pub fn format_amount_ua(amount: Decimal) -> String {
-    let s = format!("{:.2}", amount.abs());
+    let rounded = amount
+        .abs()
+        .round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero);
+    let s = format!("{rounded:.2}");
     let (int_part, dec_part) = s.split_once('.').unwrap_or((&s, "00"));
     let len = int_part.len();
     let mut result = String::with_capacity(len + len / 3 + 8);
@@ -507,6 +510,7 @@ pub fn show_toast(ui_weak: Weak<MainWindow>, message: String, is_error: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rust_decimal_macros::dec;
 
     // ═══════════════════════════════════════════════════════════════════════
     // Тести що потребують MainWindow (Slint headless backend).
@@ -927,5 +931,86 @@ mod tests {
         assert_eq!(total_filtered_pages(9), 1);
         assert_eq!(total_filtered_pages(11), 2);
         assert_eq!(total_filtered_pages(25), 3);
+    }
+
+    fn company_summary_fixture(name: &str, short_name: Option<&str>) -> CompanySummary {
+        CompanySummary {
+            id: uuid::Uuid::new_v4(),
+            name: name.to_string(),
+            short_name: short_name.map(str::to_string),
+            edrpou: None,
+            is_vat_payer: false,
+            act_count: 0,
+            total_amount: dec!(0),
+        }
+    }
+
+    #[test]
+    fn format_amount_ua_formats_zero() {
+        assert_eq!(format_amount_ua(dec!(0)), "0,00 ₴");
+    }
+
+    #[test]
+    fn format_amount_ua_formats_thousands_with_nbsp() {
+        assert_eq!(format_amount_ua(dec!(1000)), format!("1{}000,00 ₴", '\u{00A0}'));
+    }
+
+    #[test]
+    fn format_amount_ua_uses_absolute_value_for_negative_amounts() {
+        assert_eq!(format_amount_ua(dec!(-500)), "500,00 ₴");
+    }
+
+    #[test]
+    fn format_amount_ua_rounds_fractional_values() {
+        assert_eq!(format_amount_ua(dec!(0.005)), "0,01 ₴");
+    }
+
+    #[test]
+    fn format_amount_ua_formats_millions_with_grouping() {
+        assert_eq!(
+            format_amount_ua(dec!(1000000)),
+            format!("1{}000{}000,00 ₴", '\u{00A0}', '\u{00A0}')
+        );
+    }
+
+    #[test]
+    fn company_initials_uses_first_letters_of_two_words() {
+        let company = company_summary_fixture("ТОВ Ромашка", None);
+        assert_eq!(company_initials(&company), "ТР");
+    }
+
+    #[test]
+    fn company_initials_uses_first_two_letters_for_single_word() {
+        let company = company_summary_fixture("Ромашка", None);
+        assert_eq!(company_initials(&company), "Р");
+    }
+
+    #[test]
+    fn company_initials_falls_back_to_default_for_empty_name() {
+        let company = company_summary_fixture("", None);
+        assert_eq!(company_initials(&company), "К");
+    }
+
+    #[test]
+    fn company_initials_ignores_extra_whitespace() {
+        let company = company_summary_fixture("  ТОВ  Ромашка  ", None);
+        assert_eq!(company_initials(&company), "ТР");
+    }
+
+    #[test]
+    fn company_initials_splits_hyphenated_names() {
+        let company = company_summary_fixture("Іванов-Петренко", None);
+        assert_eq!(company_initials(&company), "ІП");
+    }
+
+    #[test]
+    fn parse_task_datetime_treats_input_as_utc() {
+        let result = parse_task_datetime("15.04.2024 14:30").unwrap();
+        assert_eq!(result.unwrap().to_rfc3339(), "2024-04-15T14:30:00+00:00");
+    }
+
+    #[test]
+    fn format_company_total_keeps_plain_decimal_style_without_grouping() {
+        assert_eq!(format_company_total(&dec!(78000)), "78000 грн");
     }
 }

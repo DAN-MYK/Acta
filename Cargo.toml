@@ -3,6 +3,7 @@ name = "acta"
 version = "0.1.0"
 edition = "2021"
 default-run = "acta"
+doctest = false
 
 [[bin]]
 name = "acta"
@@ -18,7 +19,7 @@ path = "src/bin/reseed.rs"
 
 [dependencies]
 # UI
-slint = "1.15"
+slint = { version = "1.15", features = ["serde"] }
 
 # БД
 sqlx = { version = "0.8", features = [

@@ -3,6 +3,7 @@ use std::env;
 use acta::{db, models};
 use anyhow::Result;
 use chrono::{Datelike, Duration, Utc};
+use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use uuid::Uuid;
@@ -178,6 +179,283 @@ async fn acts_create_and_status_flow_in_db() -> Result<()> {
         .bind(cp.id)
         .execute(&pool)
         .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn acts_change_status_rejects_skipping_forward_transition() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let suffix = unique_suffix();
+    let cp = db::counterparties::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewCounterparty {
+            name: format!("ІТ Акт Skip Контрагент {suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("it-act-skip-cp-{suffix}")),
+        },
+    )
+    .await?;
+
+    let act = db::acts::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewAct {
+            number: format!("IT-ACT-SKIP-{suffix}"),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: "outgoing".to_string(),
+            date: Utc::now().date_naive(),
+            expected_payment_date: None,
+            status: models::ActStatus::Draft,
+            notes: None,
+            bas_id: Some(format!("it-act-skip-{suffix}")),
+            items: vec![models::NewActItem {
+                description: "Послуга".to_string(),
+                quantity: dec!(1.0000),
+                unit: "год".to_string(),
+                unit_price: dec!(1000.00),
+            }],
+        },
+    )
+    .await?;
+
+    let result = db::acts::change_status(&pool, act.id, models::ActStatus::Paid).await;
+    assert!(result.is_err());
+
+    sqlx::query("DELETE FROM acts WHERE id = $1")
+        .bind(act.id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn acts_change_status_rejects_same_status_transition() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let suffix = unique_suffix();
+    let cp = db::counterparties::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewCounterparty {
+            name: format!("ІТ Акт Same Контрагент {suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("it-act-same-cp-{suffix}")),
+        },
+    )
+    .await?;
+
+    let act = db::acts::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewAct {
+            number: format!("IT-ACT-SAME-{suffix}"),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: "outgoing".to_string(),
+            date: Utc::now().date_naive(),
+            expected_payment_date: None,
+            status: models::ActStatus::Draft,
+            notes: None,
+            bas_id: Some(format!("it-act-same-{suffix}")),
+            items: vec![models::NewActItem {
+                description: "Послуга".to_string(),
+                quantity: dec!(1.0000),
+                unit: "год".to_string(),
+                unit_price: dec!(800.00),
+            }],
+        },
+    )
+    .await?;
+
+    let result = db::acts::change_status(&pool, act.id, models::ActStatus::Draft).await;
+    assert!(result.is_err());
+
+    sqlx::query("DELETE FROM acts WHERE id = $1")
+        .bind(act.id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn acts_change_status_rejects_transition_from_paid() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let suffix = unique_suffix();
+    let cp = db::counterparties::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewCounterparty {
+            name: format!("ІТ Акт Paid Контрагент {suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("it-act-paid-cp-{suffix}")),
+        },
+    )
+    .await?;
+
+    let act = db::acts::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewAct {
+            number: format!("IT-ACT-PAID-{suffix}"),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: "outgoing".to_string(),
+            date: Utc::now().date_naive(),
+            expected_payment_date: None,
+            status: models::ActStatus::Draft,
+            notes: None,
+            bas_id: Some(format!("it-act-paid-{suffix}")),
+            items: vec![models::NewActItem {
+                description: "Послуга".to_string(),
+                quantity: dec!(1.0000),
+                unit: "год".to_string(),
+                unit_price: dec!(1200.00),
+            }],
+        },
+    )
+    .await?;
+
+    db::acts::change_status(&pool, act.id, models::ActStatus::Issued).await?;
+    db::acts::change_status(&pool, act.id, models::ActStatus::Signed).await?;
+    db::acts::change_status(&pool, act.id, models::ActStatus::Paid).await?;
+
+    let result = db::acts::change_status(&pool, act.id, models::ActStatus::Issued).await;
+    assert!(result.is_err());
+
+    sqlx::query("DELETE FROM acts WHERE id = $1")
+        .bind(act.id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn acts_advance_status_on_paid_returns_error() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let suffix = unique_suffix();
+    let cp = db::counterparties::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewCounterparty {
+            name: format!("ІТ Акт Advance Контрагент {suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("it-act-advance-cp-{suffix}")),
+        },
+    )
+    .await?;
+
+    let act = db::acts::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewAct {
+            number: format!("IT-ACT-ADV-{suffix}"),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: "outgoing".to_string(),
+            date: Utc::now().date_naive(),
+            expected_payment_date: None,
+            status: models::ActStatus::Draft,
+            notes: None,
+            bas_id: Some(format!("it-act-advance-{suffix}")),
+            items: vec![models::NewActItem {
+                description: "Послуга".to_string(),
+                quantity: dec!(1.0000),
+                unit: "год".to_string(),
+                unit_price: dec!(1400.00),
+            }],
+        },
+    )
+    .await?;
+
+    db::acts::change_status(&pool, act.id, models::ActStatus::Issued).await?;
+    db::acts::change_status(&pool, act.id, models::ActStatus::Signed).await?;
+    db::acts::change_status(&pool, act.id, models::ActStatus::Paid).await?;
+
+    let result = db::acts::advance_status(&pool, act.id).await;
+    assert!(result.is_err());
+
+    sqlx::query("DELETE FROM acts WHERE id = $1")
+        .bind(act.id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn acts_status_functions_return_none_for_missing_id() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let missing_id = Uuid::new_v4();
+
+    let change_result = db::acts::change_status(&pool, missing_id, models::ActStatus::Issued).await?;
+    assert!(matches!(change_result, None));
+
+    let advance_result = db::acts::advance_status(&pool, missing_id).await?;
+    assert!(matches!(advance_result, None));
 
     Ok(())
 }
@@ -619,6 +897,228 @@ async fn companies_create_update_archive_and_summary_in_db() -> Result<()> {
 }
 
 #[tokio::test]
+async fn companies_summary_counts_real_acts_in_db() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let suffix = unique_suffix();
+    let company = db::companies::create(
+        &pool,
+        &models::NewCompany {
+            name: format!("ІТ Summary Компанія {suffix}"),
+            short_name: Some(format!("SUM-{suffix}")),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: Some(format!("4{}", &suffix[..9])),
+            iban: Some("UA888888888888888888888888888".to_string()),
+            legal_address: Some("м. Київ, вул. Агрегаційна, 2".to_string()),
+            director_name: Some("Тестовий Керівник".to_string()),
+            tax_system: Some("general".to_string()),
+            is_vat_payer: true,
+        },
+    )
+    .await?;
+
+    let cp = db::counterparties::create(
+        &pool,
+        company.id,
+        &models::NewCounterparty {
+            name: format!("ІТ Summary Контрагент {suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("it-summary-cp-{suffix}")),
+        },
+    )
+    .await?;
+
+    let act_one = db::acts::create(
+        &pool,
+        company.id,
+        &models::NewAct {
+            number: format!("SUM-ACT-1-{suffix}"),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: "outgoing".to_string(),
+            date: Utc::now().date_naive(),
+            expected_payment_date: None,
+            status: models::ActStatus::Draft,
+            notes: None,
+            bas_id: Some(format!("it-summary-act-1-{suffix}")),
+            items: vec![models::NewActItem {
+                description: "Послуга 1".to_string(),
+                quantity: dec!(2.0000),
+                unit: "год".to_string(),
+                unit_price: dec!(1000.00),
+            }],
+        },
+    )
+    .await?;
+
+    let act_two = db::acts::create(
+        &pool,
+        company.id,
+        &models::NewAct {
+            number: format!("SUM-ACT-2-{suffix}"),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: "outgoing".to_string(),
+            date: Utc::now().date_naive(),
+            expected_payment_date: None,
+            status: models::ActStatus::Issued,
+            notes: None,
+            bas_id: Some(format!("it-summary-act-2-{suffix}")),
+            items: vec![models::NewActItem {
+                description: "Послуга 2".to_string(),
+                quantity: dec!(3.0000),
+                unit: "год".to_string(),
+                unit_price: dec!(500.00),
+            }],
+        },
+    )
+    .await?;
+
+    let summaries = db::companies::list_with_summary(&pool).await?;
+    let summary = summaries
+        .iter()
+        .find(|c| c.id == company.id)
+        .expect("company summary exists");
+
+    assert_eq!(summary.act_count, 2);
+    assert_eq!(summary.total_amount, dec!(3500.00));
+
+    sqlx::query("DELETE FROM acts WHERE id = $1 OR id = $2")
+        .bind(act_one.id)
+        .bind(act_two.id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM companies WHERE id = $1")
+        .bind(company.id)
+        .execute(&pool)
+        .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn companies_get_by_id_missing_returns_none() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let missing = db::companies::get_by_id(&pool, Uuid::new_v4()).await?;
+    assert!(missing.is_none());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn companies_archive_missing_returns_false() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let archived = db::companies::archive(&pool, Uuid::new_v4()).await?;
+    assert!(!archived);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn companies_update_missing_returns_none() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let updated = db::companies::update(
+        &pool,
+        Uuid::new_v4(),
+        &models::UpdateCompany {
+            name: "Неіснуюча компанія".to_string(),
+            short_name: Some("НК".to_string()),
+            edrpou: Some("12345678".to_string()),
+            iban: Some("UA123456789012345678901234567".to_string()),
+            legal_address: Some("м. Київ".to_string()),
+            director_name: Some("Тестовий Директор".to_string()),
+            accountant_name: Some("Тестовий Бухгалтер".to_string()),
+            tax_system: Some("general".to_string()),
+            is_vat_payer: false,
+            logo_path: None,
+        },
+    )
+    .await?;
+
+    assert!(updated.is_none());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn companies_list_is_sorted_by_name() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let suffix = unique_suffix();
+    let names = ["Яблуко", "Абрикос", "Малина"];
+    let mut created_ids = Vec::new();
+
+    for (index, name) in names.iter().enumerate() {
+        let company = db::companies::create(
+            &pool,
+            &models::NewCompany {
+                name: format!("{name} {suffix}"),
+                short_name: Some(format!("SORT-{index}-{suffix}")),
+                edrpou: Some(format!("{:08}", 10_000_000 + index)),
+                ipn: Some(format!("5{:09}", index)),
+                iban: Some(format!("UA{:027}", index + 1)),
+                legal_address: None,
+                director_name: None,
+                tax_system: Some("general".to_string()),
+                is_vat_payer: false,
+            },
+        )
+        .await?;
+        created_ids.push(company.id);
+    }
+
+    let listed_names: Vec<String> = db::companies::list(&pool)
+        .await?
+        .into_iter()
+        .filter(|c| created_ids.contains(&c.id))
+        .map(|c| c.name)
+        .collect();
+
+    for id in &created_ids {
+        sqlx::query("DELETE FROM companies WHERE id = $1")
+            .bind(*id)
+            .execute(&pool)
+            .await?;
+    }
+
+    assert_eq!(
+        listed_names,
+        vec![
+            format!("Абрикос {suffix}"),
+            format!("Малина {suffix}"),
+            format!("Яблуко {suffix}")
+        ]
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn invoices_create_update_and_status_flow_in_db() -> Result<()> {
     let Some(pool) = test_pool().await? else {
         return Ok(());
@@ -747,6 +1247,347 @@ async fn invoices_create_update_and_status_flow_in_db() -> Result<()> {
         .await?
         .expect("invoice signed");
     assert_eq!(signed.status, models::InvoiceStatus::Signed);
+
+    sqlx::query("DELETE FROM invoices WHERE id = $1")
+        .bind(invoice.id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn invoices_change_status_rejects_skipping_forward_transition() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let suffix = unique_suffix();
+    let cp = db::counterparties::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewCounterparty {
+            name: format!("ІТ Invoice Skip Контрагент {suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("it-invoice-skip-cp-{suffix}")),
+        },
+    )
+    .await?;
+
+    let invoice = db::invoices::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewInvoice {
+            number: format!("IT-INV-SKIP-{suffix}"),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: "outgoing".to_string(),
+            date: Utc::now().date_naive(),
+            expected_payment_date: None,
+            notes: None,
+            bas_id: Some(format!("it-invoice-skip-{suffix}")),
+            items: vec![models::NewInvoiceItem {
+                position: 1,
+                description: "Товар".to_string(),
+                unit: Some("шт".to_string()),
+                quantity: dec!(1.0000),
+                price: dec!(1000.00),
+            }],
+        },
+    )
+    .await?;
+
+    let result = db::invoices::change_status(&pool, invoice.id, models::InvoiceStatus::Paid).await;
+    assert!(result.is_err());
+
+    sqlx::query("DELETE FROM invoices WHERE id = $1")
+        .bind(invoice.id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn invoices_change_status_rejects_same_status_transition() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let suffix = unique_suffix();
+    let cp = db::counterparties::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewCounterparty {
+            name: format!("ІТ Invoice Same Контрагент {suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("it-invoice-same-cp-{suffix}")),
+        },
+    )
+    .await?;
+
+    let invoice = db::invoices::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewInvoice {
+            number: format!("IT-INV-SAME-{suffix}"),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: "outgoing".to_string(),
+            date: Utc::now().date_naive(),
+            expected_payment_date: None,
+            notes: None,
+            bas_id: Some(format!("it-invoice-same-{suffix}")),
+            items: vec![models::NewInvoiceItem {
+                position: 1,
+                description: "Товар".to_string(),
+                unit: Some("шт".to_string()),
+                quantity: dec!(1.0000),
+                price: dec!(800.00),
+            }],
+        },
+    )
+    .await?;
+
+    let result = db::invoices::change_status(&pool, invoice.id, models::InvoiceStatus::Draft).await;
+    assert!(result.is_err());
+
+    sqlx::query("DELETE FROM invoices WHERE id = $1")
+        .bind(invoice.id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn invoices_change_status_rejects_transition_from_paid() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let suffix = unique_suffix();
+    let cp = db::counterparties::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewCounterparty {
+            name: format!("ІТ Invoice Paid Контрагент {suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("it-invoice-paid-cp-{suffix}")),
+        },
+    )
+    .await?;
+
+    let invoice = db::invoices::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewInvoice {
+            number: format!("IT-INV-PAID-{suffix}"),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: "outgoing".to_string(),
+            date: Utc::now().date_naive(),
+            expected_payment_date: None,
+            notes: None,
+            bas_id: Some(format!("it-invoice-paid-{suffix}")),
+            items: vec![models::NewInvoiceItem {
+                position: 1,
+                description: "Товар".to_string(),
+                unit: Some("шт".to_string()),
+                quantity: dec!(1.0000),
+                price: dec!(1200.00),
+            }],
+        },
+    )
+    .await?;
+
+    db::invoices::change_status(&pool, invoice.id, models::InvoiceStatus::Issued).await?;
+    db::invoices::change_status(&pool, invoice.id, models::InvoiceStatus::Signed).await?;
+    db::invoices::change_status(&pool, invoice.id, models::InvoiceStatus::Paid).await?;
+
+    let result = db::invoices::change_status(&pool, invoice.id, models::InvoiceStatus::Issued).await;
+    assert!(result.is_err());
+
+    sqlx::query("DELETE FROM invoices WHERE id = $1")
+        .bind(invoice.id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn invoices_advance_status_on_paid_returns_error() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let suffix = unique_suffix();
+    let cp = db::counterparties::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewCounterparty {
+            name: format!("ІТ Invoice Advance Контрагент {suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("it-invoice-advance-cp-{suffix}")),
+        },
+    )
+    .await?;
+
+    let invoice = db::invoices::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewInvoice {
+            number: format!("IT-INV-ADV-{suffix}"),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: "outgoing".to_string(),
+            date: Utc::now().date_naive(),
+            expected_payment_date: None,
+            notes: None,
+            bas_id: Some(format!("it-invoice-advance-{suffix}")),
+            items: vec![models::NewInvoiceItem {
+                position: 1,
+                description: "Товар".to_string(),
+                unit: Some("шт".to_string()),
+                quantity: dec!(1.0000),
+                price: dec!(1400.00),
+            }],
+        },
+    )
+    .await?;
+
+    db::invoices::change_status(&pool, invoice.id, models::InvoiceStatus::Issued).await?;
+    db::invoices::change_status(&pool, invoice.id, models::InvoiceStatus::Signed).await?;
+    db::invoices::change_status(&pool, invoice.id, models::InvoiceStatus::Paid).await?;
+
+    let result = db::invoices::advance_status(&pool, invoice.id).await;
+    assert!(result.is_err());
+
+    sqlx::query("DELETE FROM invoices WHERE id = $1")
+        .bind(invoice.id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn invoices_status_functions_return_none_for_missing_id() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let missing_id = Uuid::new_v4();
+
+    let change_result =
+        db::invoices::change_status(&pool, missing_id, models::InvoiceStatus::Issued).await?;
+    assert!(matches!(change_result, None));
+
+    let advance_result = db::invoices::advance_status(&pool, missing_id).await?;
+    assert!(matches!(advance_result, None));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn invoices_create_keeps_vat_amount_zero_by_current_contract() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let suffix = unique_suffix();
+    let cp = db::counterparties::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewCounterparty {
+            name: format!("ІТ Invoice VAT Контрагент {suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("it-invoice-vat-cp-{suffix}")),
+        },
+    )
+    .await?;
+
+    let invoice = db::invoices::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewInvoice {
+            number: format!("IT-INV-VAT-{suffix}"),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: "outgoing".to_string(),
+            date: Utc::now().date_naive(),
+            expected_payment_date: None,
+            notes: None,
+            bas_id: Some(format!("it-invoice-vat-{suffix}")),
+            items: vec![models::NewInvoiceItem {
+                position: 1,
+                description: "Товар з ПДВ-кейсом".to_string(),
+                unit: Some("шт".to_string()),
+                quantity: dec!(3.0000),
+                price: dec!(1000.00),
+            }],
+        },
+    )
+    .await?;
+
+    assert_eq!(invoice.total_amount, dec!(3000.00));
+    assert_eq!(invoice.vat_amount, dec!(0.00));
 
     sqlx::query("DELETE FROM invoices WHERE id = $1")
         .bind(invoice.id)
@@ -1526,6 +2367,70 @@ async fn payments_schedule_create_complete_and_list_upcoming_in_db() -> Result<(
 
 /// Створює компанію + контрагента для одного dashboard тесту.
 /// Повертає (company_id, counterparty_id).
+#[tokio::test]
+async fn payments_upcoming_schedule_excludes_past_entries() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let suffix = unique_suffix();
+    let past = db::payments::create_schedule(
+        &pool,
+        models::payment::NewPaymentSchedule {
+            company_id:      DEFAULT_COMPANY_ID,
+            title:           format!("Past schedule {suffix}"),
+            amount:          Some(dec!(500.00)),
+            direction:       models::payment::PaymentDirection::Expense,
+            scheduled_date:  (Utc::now() - Duration::days(1)).date_naive(),
+            recurrence:      models::payment::ScheduleRecurrence::None,
+            recurrence_end:  None,
+            counterparty_id: None,
+            notes:           Some("past".to_string()),
+        },
+    )
+    .await?;
+
+    let future = db::payments::create_schedule(
+        &pool,
+        models::payment::NewPaymentSchedule {
+            company_id:      DEFAULT_COMPANY_ID,
+            title:           format!("Future schedule {suffix}"),
+            amount:          Some(dec!(700.00)),
+            direction:       models::payment::PaymentDirection::Expense,
+            scheduled_date:  (Utc::now() + Duration::days(3)).date_naive(),
+            recurrence:      models::payment::ScheduleRecurrence::None,
+            recurrence_end:  None,
+            counterparty_id: None,
+            notes:           Some("future".to_string()),
+        },
+    )
+    .await?;
+
+    let upcoming = db::payments::list_upcoming_schedule(&pool, DEFAULT_COMPANY_ID, 100).await?;
+
+    assert!(!upcoming.iter().any(|row| row.id == past.id));
+    assert!(upcoming.iter().any(|row| row.id == future.id));
+
+    sqlx::query("DELETE FROM payment_schedule WHERE id = $1 OR id = $2")
+        .bind(past.id)
+        .bind(future.id)
+        .execute(&pool)
+        .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn payments_mark_reconciled_missing_id_is_noop() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    db::payments::mark_reconciled(&pool, Uuid::new_v4()).await?;
+
+    Ok(())
+}
+
 async fn dashboard_test_setup(pool: &PgPool, suffix: &str) -> Result<(Uuid, Uuid)> {
     let company = db::companies::create(
         pool,
@@ -1822,6 +2727,140 @@ async fn dashboard_get_recent_acts_returns_latest_first() -> Result<()> {
     let limited = db::dashboard::get_recent_acts(&pool, company_id, 1).await?;
     assert_eq!(limited.len(), 1);
     assert_eq!(limited[0].num, format!("IT-DASH-R2-{suffix}"));
+
+    dashboard_test_cleanup(&pool, company_id).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn dashboard_company_isolation_applies_to_kpi_and_revenue() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let suffix = unique_suffix();
+    let (company_a, cp_a) = dashboard_test_setup(&pool, &format!("{suffix}-A")).await?;
+    let (company_b, cp_b) = dashboard_test_setup(&pool, &format!("{suffix}-B")).await?;
+
+    let act_a = make_act(&pool, company_a, cp_a, &format!("{suffix}-A"), "ISO-A", dec!(1111.00), None).await?;
+    db::acts::change_status(&pool, act_a, models::ActStatus::Issued).await?;
+    sqlx::query("UPDATE acts SET status = 'paid' WHERE id = $1")
+        .bind(act_a)
+        .execute(&pool)
+        .await?;
+
+    let act_b = make_act(&pool, company_b, cp_b, &format!("{suffix}-B"), "ISO-B", dec!(9999.00), None).await?;
+    db::acts::change_status(&pool, act_b, models::ActStatus::Issued).await?;
+    sqlx::query("UPDATE acts SET status = 'paid' WHERE id = $1")
+        .bind(act_b)
+        .execute(&pool)
+        .await?;
+
+    let kpi_a = db::dashboard::get_kpi_summary(&pool, company_a).await?;
+    assert_eq!(kpi_a.revenue_this_month, dec!(1111.00));
+    assert_eq!(kpi_a.unpaid_total, dec!(0));
+    assert_eq!(kpi_a.active_counterparties, 1);
+
+    let revenue_a = db::dashboard::revenue_by_month(&pool, company_a, 3).await?;
+    let total_a: Decimal = revenue_a.iter().map(|row| row.amount).sum();
+    assert_eq!(total_a, dec!(1111.00), "ряд доходу не повинен бачити іншу компанію");
+
+    dashboard_test_cleanup(&pool, company_a).await?;
+    dashboard_test_cleanup(&pool, company_b).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn dashboard_upcoming_payments_includes_only_issued_and_signed() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let suffix = unique_suffix();
+    let (company_id, cp_id) = dashboard_test_setup(&pool, &suffix).await?;
+    let due_date = (Utc::now() + Duration::days(7)).date_naive();
+
+    let draft_id = make_act(&pool, company_id, cp_id, &suffix, "UP-DRAFT", dec!(100.00), Some(due_date)).await?;
+
+    let issued_id = make_act(&pool, company_id, cp_id, &suffix, "UP-ISSUED", dec!(200.00), Some(due_date)).await?;
+    db::acts::change_status(&pool, issued_id, models::ActStatus::Issued).await?;
+
+    let signed_id = make_act(&pool, company_id, cp_id, &suffix, "UP-SIGNED", dec!(300.00), Some(due_date)).await?;
+    db::acts::change_status(&pool, signed_id, models::ActStatus::Issued).await?;
+    db::acts::advance_status(&pool, signed_id).await?;
+
+    let paid_id = make_act(&pool, company_id, cp_id, &suffix, "UP-PAID", dec!(400.00), Some(due_date)).await?;
+    db::acts::change_status(&pool, paid_id, models::ActStatus::Issued).await?;
+    sqlx::query("UPDATE acts SET status = 'paid' WHERE id = $1")
+        .bind(paid_id)
+        .execute(&pool)
+        .await?;
+
+    let upcoming = db::dashboard::upcoming_payments(&pool, company_id, 10).await?;
+    let amounts: Vec<Decimal> = upcoming.iter().map(|row| row.amount).collect();
+
+    assert_eq!(upcoming.len(), 2, "тільки issued і signed мають потрапити в upcoming");
+    assert!(amounts.contains(&dec!(200.00)));
+    assert!(amounts.contains(&dec!(300.00)));
+    assert!(!amounts.contains(&dec!(100.00)), "draft не має потрапляти в upcoming");
+    assert!(!amounts.contains(&dec!(400.00)), "paid не має потрапляти в upcoming");
+
+    // suppress unused warnings for ids that intentionally stay only in DB rows
+    let _ = draft_id;
+
+    dashboard_test_cleanup(&pool, company_id).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn dashboard_empty_company_returns_zeroed_metrics() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let suffix = unique_suffix();
+    let (company_id, _cp_id) = dashboard_test_setup(&pool, &suffix).await?;
+
+    let kpi = db::dashboard::get_kpi_summary(&pool, company_id).await?;
+    assert_eq!(kpi.revenue_this_month, dec!(0));
+    assert_eq!(kpi.unpaid_total, dec!(0));
+    assert_eq!(kpi.acts_this_month, 0);
+    assert_eq!(kpi.active_counterparties, 1, "setup створює одного активного контрагента");
+
+    let revenue = db::dashboard::revenue_by_month(&pool, company_id, 4).await?;
+    assert_eq!(revenue.len(), 4);
+    assert!(revenue.iter().all(|row| row.amount == dec!(0)));
+
+    let status = db::dashboard::acts_status_distribution(&pool, company_id).await?;
+    assert!(status.is_empty());
+
+    let upcoming = db::dashboard::upcoming_payments(&pool, company_id, 5).await?;
+    assert!(upcoming.is_empty());
+
+    let recent = db::dashboard::get_recent_acts(&pool, company_id, 5).await?;
+    assert!(recent.is_empty());
+
+    dashboard_test_cleanup(&pool, company_id).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn dashboard_recent_acts_respects_limit() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let suffix = unique_suffix();
+    let (company_id, cp_id) = dashboard_test_setup(&pool, &suffix).await?;
+
+    make_act(&pool, company_id, cp_id, &suffix, "L1", dec!(100.00), None).await?;
+    make_act(&pool, company_id, cp_id, &suffix, "L2", dec!(200.00), None).await?;
+    make_act(&pool, company_id, cp_id, &suffix, "L3", dec!(300.00), None).await?;
+
+    let recent = db::dashboard::get_recent_acts(&pool, company_id, 2).await?;
+    assert_eq!(recent.len(), 2);
+    assert_eq!(recent[0].num, format!("IT-DASH-L3-{suffix}"));
+    assert_eq!(recent[1].num, format!("IT-DASH-L2-{suffix}"));
 
     dashboard_test_cleanup(&pool, company_id).await?;
     Ok(())

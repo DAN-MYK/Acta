@@ -12,6 +12,7 @@
 
 import { Button, ListView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { AppState } from "globals.slint";
 import { ActRow, InvoiceRow, TaskRow, PaymentRow, FormItemRow, ActStatus } from "structs.slint";
 import { DashboardPage, DashboardActRow, DashboardPaymentRow } from "dashboard/dashboard.slint";
 import { CounterpartyList } from "counterparties/counterparty_list.slint";
@@ -30,6 +31,7 @@ import { DocumentList, DocRow } from "documents/document_list.slint";
 import { CounterpartyCard, CounterpartyDocSummary, CounterpartyPaymentSummary, CounterpartyContractSummary, CounterpartyTaskSummary } from "counterparties/counterparty_card.slint";
 import { ActCard, ActCardItemRow, ActCardTaskRow } from "acts/act_card.slint";
 import { SettingsPage, SettingsCategoryRow, SettingsTemplateRow } from "settings/settings.slint";
+import { Toast } from "components/toast.slint";
 
 global MenuIcons {
     out property <image> dashboard:      @image-url("assets/icons/Home.svg");
@@ -41,6 +43,7 @@ global MenuIcons {
     out property <image> todo:           @image-url("assets/icons/To-Do.svg");
     out property <image> calendar:       @image-url("assets/icons/Calendar.svg");
     out property <image> settings:       @image-url("assets/icons/Settings.svg");
+    out property <image> companies:      @image-url("assets/icons/Chart-Line.svg");
 }
 
 // ── NavItem — елемент бічної навігації ──────────────────────────────────────
@@ -128,7 +131,8 @@ export component MainWindow inherits Window {
     // ── Стан навігації ───────────────────────────────────────────────────────
     // 0=Контрагенти | 1=Документи (акти+накладні) | 3=Платежі | 4=Звіти (заглушка)
     // 5=To-Do | 6=Компанії | 7=Календар (заглушка) | 8=Dashboard  |  сторінка 2 не використовується
-    in-out property <int> current-page: 8;
+    // AppState — єдине джерело правди; MainWindow лише синхронізується через <=>.
+    in-out property <int> current-page <=> AppState.current-page;
 
     // ── Дані Dashboard ───────────────────────────────────────────────────────
     in property <string> dashboard-kpi-revenue:        "0 ₴";
@@ -158,6 +162,7 @@ export component MainWindow inherits Window {
     callback dashboard-new-act-clicked();
     callback dashboard-all-acts-clicked();
     callback dashboard-add-todo-clicked();
+    callback navigate(string, int);
 
     // ── Дані контрагентів ────────────────────────────────────────────────────
     in property <[[StandardListViewItem]]> counterparty-rows;
@@ -477,10 +482,9 @@ export component MainWindow inherits Window {
     callback company-form-cancel();
 
     // ── Toast-сповіщення ─────────────────────────────────────────────────────
-    // Rust встановлює message → toast з'являється, через 3с Rust очищає.
-    // in-out: Slint може прибрати кнопкою ×, Rust може теж.
-    in-out property <string> toast-message: "";
-    in property <bool>       toast-is-error: false;
+    // Прив'язані до AppState — єдине джерело правди.
+    in-out property <string> toast-message  <=> AppState.toast-message;
+    in-out property <bool>   toast-is-error <=> AppState.toast-is-error;
 
     // ── Розмітка ─────────────────────────────────────────────────────────────
     // Rectangle-обгортка потрібна щоб накладати toast overlay поверх layout.
@@ -618,34 +622,31 @@ export component MainWindow inherits Window {
                         label: "Головна";
                         icon: MenuIcons.dashboard;
                         active: root.current-page == 8;
-                        clicked => {
-                            root.current-page = 8;
-                            root.dashboard-refresh();
-                        }
+                clicked => { root.navigate("dashboard", 8); }
                     }
                     NavItem {
                         label: "Документи";
                         icon: MenuIcons.acts;
                         active: root.current-page == 1;
-                        clicked => { root.current-page = 1; }
+                clicked => { root.navigate("documents", 1); }
                     }
                     NavItem {
                         label: "Контрагенти";
                         icon: MenuIcons.counterparties;
                         active: root.current-page == 0;
-                        clicked => { root.current-page = 0; }
+                clicked => { root.navigate("counterparties", 0); }
                     }
                     NavItem {
                         label: "Платежі";
                         icon: MenuIcons.payments;
                         active: root.current-page == 3;
-                        clicked => { root.current-page = 3; }
+                clicked => { root.navigate("payments", 3); }
                     }
                     NavItem {
                         label: "Звіти";
                         icon: MenuIcons.reports;
                         active: root.current-page == 4;
-                        clicked => { root.current-page = 4; }
+                clicked => { root.navigate("reports", 4); }
                     }
                 }
 
@@ -681,13 +682,19 @@ export component MainWindow inherits Window {
                         label: "To-Do";
                         icon: MenuIcons.todo;
                         active: root.current-page == 5;
-                        clicked => { root.current-page = 5; }
+                clicked => { root.navigate("tasks", 5); }
+                    }
+                    NavItem {
+                        label: "Компанії";
+                        icon: MenuIcons.companies;
+                        active: root.current-page == 6;
+                clicked => { root.navigate("companies", 6); }
                     }
                     NavItem {
                         label: "Календар платежів";
                         icon: MenuIcons.calendar;
                         active: root.current-page == 7;
-                        clicked => { root.current-page = 7; }
+                clicked => { root.navigate("calendar", 7); }
                     }
                 }
 
@@ -717,7 +724,7 @@ export component MainWindow inherits Window {
                         icon: MenuIcons.settings;
                         active: root.current-page == 9;
                         disabled: false;
-                        clicked => { root.current-page = 9; }
+                clicked => { root.navigate("settings", 9); }
                     }
                 }
 
@@ -1321,68 +1328,11 @@ export component MainWindow inherits Window {
     }
 
     // ── Toast overlay (fixed bottom-right) ───────────────────────────────────
-    // Слухає toast-message: якщо не порожній — показує повідомлення.
-    // Rust встановлює через set_toast_message(), очищає через таймер (~3с).
-    if root.toast-message != "" : Rectangle {
-        x: parent.width - self.width - 24px;
-        y: parent.height - self.height - 24px;
-        width: 340px;
-        height: 56px;
-        border-radius: 10px;
-        background: root.toast-is-error ? #FEF2F2 : #ECFDF5;
-        border-width: 1px;
-        border-color: root.toast-is-error ? #FECACA : #A7F3D0;
-
-        // Іконка та текст
-        HorizontalLayout {
-            padding-left: 16px;
-            padding-right: 8px;
-            spacing: 10px;
-
-            Text {
-                text: root.toast-is-error ? "✕" : "✓";
-                color: root.toast-is-error ? #DC2626 : #16A34A;
-                font-size: 14px;
-                font-weight: 700;
-                vertical-alignment: center;
-                width: 18px;
-            }
-
-            Text {
-                text: root.toast-message;
-                color: root.toast-is-error ? #991B1B : #166534;
-                font-size: 13px;
-                font-weight: 500;
-                vertical-alignment: center;
-                horizontal-stretch: 1;
-                overflow: elide;
-            }
-
-            // Кнопка ×
-            Rectangle {
-                width: 28px;
-                height: 28px;
-                border-radius: 6px;
-                background: close-touch.has-hover
-                    ? (root.toast-is-error ? #FECACA : #A7F3D0)
-                    : transparent;
-                y: (parent.height - self.height) / 2;
-                animate background { duration: 100ms; easing: ease; }
-
-                Text {
-                    text: "×";
-                    color: root.toast-is-error ? #DC2626 : #16A34A;
-                    font-size: 16px;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
-
-                close-touch := TouchArea {
-                    mouse-cursor: pointer;
-                    clicked => { root.toast-message = ""; }
-                }
-            }
-        }
+    // Toast читає AppState напряму. Завжди рендериться — opacity керує видимістю.
+    // «lift from below» анімація: slide up 16px + fade 200ms при появі.
+    Toast {
+        host-width: root.width;
+        host-height: root.height;
     }
     }
 }

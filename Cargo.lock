@@ -2457,6 +2457,7 @@ dependencies = [
  "rgb",
  "scoped-tls-hkt",
  "scopeguard",
+ "serde",
  "skrifa 0.37.0",
  "slab",
  "strum",

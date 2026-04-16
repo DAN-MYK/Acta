@@ -1,0 +1,90 @@
+import { AppState } from "../globals.slint";
+import { Theme } from "../theme.slint";
+
+export component Toast {
+    in property <length> host-width;
+    in property <length> host-height;
+
+    x: self.host-width - self.width - 24px;
+    width: 340px;
+    height: 56px;
+
+    property <bool> shown: AppState.toast-message != "";
+
+    states [
+        visible when self.shown : {
+            opacity: 1.0;
+            y: self.host-height - self.height - 24px;
+        }
+        hidden when !self.shown : {
+            opacity: 0.0;
+            y: self.host-height - self.height - 8px;
+        }
+    ]
+
+    animate y { duration: 250ms; easing: ease-out; }
+    animate opacity { duration: 200ms; easing: ease; }
+
+    Rectangle {
+        width: parent.width;
+        height: parent.height;
+        border-radius: 10px;
+        background: AppState.toast-is-error ? Theme.bg-danger : Theme.bg-success;
+        border-width: 1px;
+        border-color: AppState.toast-is-error ? Theme.danger-border : #A7F3D0;
+
+        HorizontalLayout {
+            padding-left: 16px;
+            padding-right: 8px;
+            spacing: 10px;
+            alignment: center;
+
+            Text {
+                text: AppState.toast-is-error ? "x" : "v";
+                color: AppState.toast-is-error ? Theme.danger : Theme.success;
+                font-size: Theme.font-lg;
+                font-weight: 700;
+                vertical-alignment: center;
+                width: 18px;
+            }
+
+            Text {
+                text: AppState.toast-message;
+                color: AppState.toast-is-error ? #991B1B : #166534;
+                font-size: Theme.font-md;
+                font-weight: 500;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+                overflow: elide;
+            }
+
+            Rectangle {
+                width: 28px;
+                height: 28px;
+                border-radius: 6px;
+                y: (parent.height - self.height) / 2;
+                background: close-ta.has-hover
+                    ? (AppState.toast-is-error ? Theme.danger-border : #A7F3D0)
+                    : transparent;
+
+                animate background { duration: 100ms; easing: ease; }
+
+                Text {
+                    text: "x";
+                    color: AppState.toast-is-error ? Theme.danger : Theme.success;
+                    font-size: 16px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+                close-ta := TouchArea {
+                    enabled: AppState.toast-message != "";
+                    mouse-cursor: pointer;
+                    clicked => {
+                        AppState.toast-message = "";
+                    }
+                }
+            }
+        }
+    }
+}

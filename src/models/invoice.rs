@@ -20,6 +20,18 @@ pub enum InvoiceStatus {
 }
 
 impl InvoiceStatus {
+    /// Чи дозволено перейти з поточного статусу до `next`.
+    ///
+    /// Бізнес-правило зберігається в доменній моделі, а не в DB/UI шарі.
+    pub fn can_transition_to(&self, next: &InvoiceStatus) -> bool {
+        match (self, next) {
+            (InvoiceStatus::Draft, InvoiceStatus::Issued) => true,
+            (InvoiceStatus::Issued, InvoiceStatus::Signed) => true,
+            (InvoiceStatus::Signed, InvoiceStatus::Paid) => true,
+            _ => false,
+        }
+    }
+
     /// Наступний статус у циклі. `None` — якщо вже фінальний (Paid).
     pub fn next(&self) -> Option<InvoiceStatus> {
         match self {
@@ -158,6 +170,33 @@ mod tests {
         assert_eq!(InvoiceStatus::Issued.next(), Some(InvoiceStatus::Signed));
         assert_eq!(InvoiceStatus::Signed.next(), Some(InvoiceStatus::Paid));
         assert_eq!(InvoiceStatus::Paid.next(), None);
+    }
+
+    #[test]
+    fn invoice_status_can_transition_to_allows_only_adjacent_forward_step() {
+        assert!(InvoiceStatus::Draft.can_transition_to(&InvoiceStatus::Issued));
+        assert!(InvoiceStatus::Issued.can_transition_to(&InvoiceStatus::Signed));
+        assert!(InvoiceStatus::Signed.can_transition_to(&InvoiceStatus::Paid));
+    }
+
+    #[test]
+    fn invoice_status_can_transition_to_rejects_skips_backwards_and_same_state() {
+        assert!(!InvoiceStatus::Draft.can_transition_to(&InvoiceStatus::Draft));
+        assert!(!InvoiceStatus::Draft.can_transition_to(&InvoiceStatus::Signed));
+        assert!(!InvoiceStatus::Issued.can_transition_to(&InvoiceStatus::Draft));
+        assert!(!InvoiceStatus::Signed.can_transition_to(&InvoiceStatus::Issued));
+    }
+
+    #[test]
+    fn invoice_status_paid_is_terminal_state() {
+        for next in [
+            InvoiceStatus::Draft,
+            InvoiceStatus::Issued,
+            InvoiceStatus::Signed,
+            InvoiceStatus::Paid,
+        ] {
+            assert!(!InvoiceStatus::Paid.can_transition_to(&next));
+        }
     }
 
     #[test]

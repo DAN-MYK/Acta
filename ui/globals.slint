@@ -1,0 +1,121 @@
+// ui/globals.slint — Глобальний стан програми Acta
+//
+// Singleton, доступний з будь-якого .slint файлу через `AppState.property`.
+// Rust читає/пише через `ui.global::<AppState>().set_*()` / `get_*()`,
+//                       та `ui.global::<AppState>().on_*(|args| { ... })`.
+//
+// AppState — єдине джерело правди (single source of truth) для:
+//   навігація, активна компанія, підсумки, KPI, toast, confirm-dialog.
+//
+// У app.slint просто прив'язати:
+//   current-page <=> AppState.current-page;
+//
+// Нумерація сторінок (current-page):
+//   0 = Контрагенти | 1 = Документи | 3 = Платежі | 4 = Звіти
+//   5 = Задачі      | 6 = Компанії  | 7 = Календар | 8 = Дашборд
+//   Сторінка 2 не використовується.
+
+export global AppState {
+
+    // ── Навігація ────────────────────────────────────────────────────────────
+    in-out property <int>    current-page:    8;
+    // Ідентифікатор активного розділу, напр. "dashboard", "acts", "counterparties"
+    // Зручний для умовної логіки в .slint; не локалізується — лише ASCII.
+    in-out property <string> current-feature: "dashboard";
+
+    // ── Оформлення ───────────────────────────────────────────────────────────
+    // Зарезервовано — тема наразі завжди світла. Перемикач для майбутньої темної теми.
+    in-out property <bool>   dark-mode: false;
+
+    // ── Активна компанія ─────────────────────────────────────────────────────
+    // UUID активної компанії (порожній рядок = не обрано)
+    in-out property <string> active-company-id:       "";
+    in-out property <string> active-company-name:     "Оберіть компанію";
+    in-out property <string> active-company-subtitle: "";
+    // true = picker-overlay відкрито; in-out: закривається і з Rust, і з кнопки ×
+    in-out property <bool>   show-company-picker:     false;
+
+    // ── Підсумкові лічильники (оновлюються після кожного reload) ─────────────
+    in-out property <int>    total-acts:             0;
+    in-out property <int>    total-invoices:         0;
+    in-out property <int>    total-counterparties:   0;
+    in-out property <int>    total-payments:         0;
+    in-out property <int>    total-tasks:            0;
+    // Відкриті задачі — для badge у навігації
+    in-out property <int>    open-tasks-count:       0;
+
+    // ── KPI (форматовані рядки — Rust форматує Decimal, UI лише відображає) ──
+    // Фінансові суми — ЗАВЖДИ рядки, ніколи float (rust_decimal::Decimal → String)
+    in-out property <string> kpi-revenue:  "0 ₴";   // дохід за поточний місяць
+    in-out property <string> kpi-unpaid:   "0 ₴";   // несплачено за актами
+    in-out property <int>    kpi-overdue:  0;        // к-сть прострочених актів
+
+    // ── Стан завантаження ────────────────────────────────────────────────────
+    // Глобальний спінер — перекриває контент під час ініціалізації / імпорту.
+    in-out property <bool>   app-loading:   false;
+    in-out property <string> loading-label: "";
+
+    // ── Toast-сповіщення ─────────────────────────────────────────────────────
+    // Rust → show-toast("...", false) → UI рендерить. Rust очищає через ~3с.
+    // in-out: і Rust, і Slint-кнопка × можуть прибрати повідомлення.
+    in-out property <string> toast-message:  "";
+    in-out property <bool>   toast-is-error: false;
+
+    // ── Підтверджувальний діалог ─────────────────────────────────────────────
+    // Rust: set_show_confirm_dialog(true) + set_confirm_title + set_confirm_message
+    //       → підписується на on_confirm_accepted / on_confirm_rejected
+    in-out property <bool>   show-confirm-dialog: false;
+    in-out property <string> confirm-title:        "";
+    in-out property <string> confirm-message:      "";
+
+    // ════════════════════════════════════════════════════════════════════════
+    // Callbacks
+    // ════════════════════════════════════════════════════════════════════════
+
+    // ── Навігація ─────────────────────────────────────────────────────────────
+    // feature = ASCII-ідентифікатор розділу, page = номер сторінки
+    // Rust: ui.global::<AppState>().on_navigate(|feature, page| { ... });
+    callback navigate(/* feature */ string, /* page */ int);
+    callback switch-company();           // відкрити picker вибору компанії
+
+    // ── Toast ────────────────────────────────────────────────────────────────
+    // show-toast — викликається з Rust або Slint для показу повідомлення
+    callback show-toast(/* message */ string, /* is-error */ bool);
+    callback hide-toast();               // кнопка × або таймер (hide, бо тост ховається, не «закривається»)
+
+    // ── Confirm dialog ───────────────────────────────────────────────────────
+    callback confirm-ok();               // користувач натиснув «Так»
+    callback confirm-cancel();           // користувач натиснув «Скасувати» / ×
+
+    // ── Глобальне оновлення ───────────────────────────────────────────────────
+    // Примусово перезавантажити дані поточного розділу (напр. після імпорту)
+    callback refresh-current-view();
+
+    // ── Акти ─────────────────────────────────────────────────────────────────
+    callback add-act();
+    callback open-act(/* id */ string);
+    callback delete-act(/* id */ string);
+    callback generate-act-pdf(/* id */ string);
+
+    // ── Накладні ─────────────────────────────────────────────────────────────
+    callback add-invoice();
+    callback open-invoice(/* id */ string);
+    callback delete-invoice(/* id */ string);
+    callback generate-invoice-pdf(/* id */ string);
+
+    // ── Контрагенти ───────────────────────────────────────────────────────────
+    callback add-counterparty();
+    callback open-counterparty(/* id */ string);
+    callback archive-counterparty(/* id */ string);
+
+    // ── Платежі ───────────────────────────────────────────────────────────────
+    callback add-payment();
+    callback open-payment(/* id */ string);
+    callback delete-payment(/* id */ string);
+
+    // ── Задачі ────────────────────────────────────────────────────────────────
+    callback add-task();
+    callback open-task(/* id */ string);
+    callback toggle-task-status(/* id */ string);
+    callback delete-task(/* id */ string);
+}
