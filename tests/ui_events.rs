@@ -135,18 +135,59 @@ fn act_form() {
         assert_eq!(got[0], "АКТ-2026-001", "act-form: save number");
         assert_eq!(got[1], "01.04.2026",   "act-form: save date");
         assert_eq!(got[2], "cp-uuid",      "act-form: save cp_id");
+        assert_eq!(got[3], "примітка",     "act-form: save notes");
+        assert_eq!(got[4], "cat-uuid",     "act-form: save cat_id");
+        assert_eq!(got[5], "con-uuid",     "act-form: save con_id");
         assert_eq!(got[6], "30.04.2026",   "act-form: save exp_date");
     }
 
-    // save-draft
-    let fired = Rc::new(Cell::new(false));
-    let f = fired.clone();
-    ui.on_act_form_save_draft(move |_, _, _, _, _, _, _| f.set(true));
-    ui.invoke_act_form_save_draft(
-        "АКТ-2026-002".into(), "02.04.2026".into(), "cp-id".into(),
-        "".into(), "".into(), "".into(), "".into(),
+    // update(number, date, cp_id, notes, cat_id, con_id, exp_date)
+    let args: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(vec![]));
+    let a = args.clone();
+    ui.on_act_form_update(move |num, date, cp, notes, cat, con, exp| {
+        *a.borrow_mut() = vec![
+            num.into(), date.into(), cp.into(), notes.into(),
+            cat.into(), con.into(), exp.into(),
+        ];
+    });
+    ui.invoke_act_form_update(
+        "АКТ-2026-003".into(), "03.04.2026".into(), "cp-update".into(),
+        "оновлена примітка".into(), "cat-update".into(), "con-update".into(), "10.05.2026".into(),
     );
-    assert!(fired.get(), "act-form: save-draft");
+    {
+        let got = args.borrow();
+        assert_eq!(got[0], "АКТ-2026-003",      "act-form: update number");
+        assert_eq!(got[1], "03.04.2026",        "act-form: update date");
+        assert_eq!(got[2], "cp-update",         "act-form: update cp_id");
+        assert_eq!(got[3], "оновлена примітка", "act-form: update notes");
+        assert_eq!(got[4], "cat-update",        "act-form: update cat_id");
+        assert_eq!(got[5], "con-update",        "act-form: update con_id");
+        assert_eq!(got[6], "10.05.2026",        "act-form: update exp_date");
+    }
+
+    // save-draft
+    let args: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(vec![]));
+    let a = args.clone();
+    ui.on_act_form_save_draft(move |num, date, cp, notes, cat, con, exp| {
+        *a.borrow_mut() = vec![
+            num.into(), date.into(), cp.into(), notes.into(),
+            cat.into(), con.into(), exp.into(),
+        ];
+    });
+    ui.invoke_act_form_save_draft(
+        "АКТ-2026-002".into(), "02.04.2026".into(), "cp-draft".into(),
+        "чернетка".into(), "cat-draft".into(), "con-draft".into(), "15.05.2026".into(),
+    );
+    {
+        let got = args.borrow();
+        assert_eq!(got[0], "АКТ-2026-002", "act-form: save-draft number");
+        assert_eq!(got[1], "02.04.2026",   "act-form: save-draft date");
+        assert_eq!(got[2], "cp-draft",     "act-form: save-draft cp_id");
+        assert_eq!(got[3], "чернетка",     "act-form: save-draft notes");
+        assert_eq!(got[4], "cat-draft",    "act-form: save-draft cat_id");
+        assert_eq!(got[5], "con-draft",    "act-form: save-draft con_id");
+        assert_eq!(got[6], "15.05.2026",   "act-form: save-draft exp_date");
+    }
 
     // add-item
     let fired = Rc::new(Cell::new(false));
@@ -221,6 +262,54 @@ fn invoice_form() {
     ui.on_invoice_form_cancel(move || f.set(true));
     ui.invoke_invoice_form_cancel();
     assert!(fired.get(), "invoice-form: cancel");
+
+    // save(number, date, cp_id, notes, cat_id, con_id, exp_date)
+    let args: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(vec![]));
+    let a = args.clone();
+    ui.on_invoice_form_save(move |num, date, cp, notes, cat, con, exp| {
+        *a.borrow_mut() = vec![
+            num.into(), date.into(), cp.into(), notes.into(),
+            cat.into(), con.into(), exp.into(),
+        ];
+    });
+    ui.invoke_invoice_form_save(
+        "ВН-2026-001".into(), "05.04.2026".into(), "cp-uuid".into(),
+        "коментар".into(), "cat-uuid".into(), "con-uuid".into(), "20.04.2026".into(),
+    );
+    {
+        let got = args.borrow();
+        assert_eq!(got[0], "ВН-2026-001", "invoice-form: save number");
+        assert_eq!(got[1], "05.04.2026",  "invoice-form: save date");
+        assert_eq!(got[2], "cp-uuid",     "invoice-form: save cp_id");
+        assert_eq!(got[3], "коментар",    "invoice-form: save notes");
+        assert_eq!(got[4], "cat-uuid",    "invoice-form: save cat_id");
+        assert_eq!(got[5], "con-uuid",    "invoice-form: save con_id");
+        assert_eq!(got[6], "20.04.2026",  "invoice-form: save exp_date");
+    }
+
+    // update(number, date, cp_id, notes, cat_id, con_id, exp_date)
+    let args: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(vec![]));
+    let a = args.clone();
+    ui.on_invoice_form_update(move |num, date, cp, notes, cat, con, exp| {
+        *a.borrow_mut() = vec![
+            num.into(), date.into(), cp.into(), notes.into(),
+            cat.into(), con.into(), exp.into(),
+        ];
+    });
+    ui.invoke_invoice_form_update(
+        "ВН-2026-002".into(), "06.04.2026".into(), "cp-update".into(),
+        "оновлений коментар".into(), "cat-update".into(), "con-update".into(), "21.04.2026".into(),
+    );
+    {
+        let got = args.borrow();
+        assert_eq!(got[0], "ВН-2026-002",        "invoice-form: update number");
+        assert_eq!(got[1], "06.04.2026",         "invoice-form: update date");
+        assert_eq!(got[2], "cp-update",          "invoice-form: update cp_id");
+        assert_eq!(got[3], "оновлений коментар", "invoice-form: update notes");
+        assert_eq!(got[4], "cat-update",         "invoice-form: update cat_id");
+        assert_eq!(got[5], "con-update",         "invoice-form: update con_id");
+        assert_eq!(got[6], "21.04.2026",         "invoice-form: update exp_date");
+    }
 
     let fired = Rc::new(Cell::new(false));
     let f = fired.clone();
@@ -309,30 +398,78 @@ fn payment_form() {
     assert!(fired.get(), "payment-form: cancel");
 
     // save(date, amount, direction_idx, cp_id, bank_name, bank_ref, description)
-    let got_dir  = Rc::new(Cell::new(-1i32));
-    let got_date = Rc::new(RefCell::new(String::new()));
-    let d  = got_dir.clone();
-    let dt = got_date.clone();
-    ui.on_payment_form_save(move |date: SharedString, _amount, dir, _cp, _bank, _ref, _desc| {
-        d.set(dir);
-        *dt.borrow_mut() = date.to_string();
+    let got = Rc::new(RefCell::new((
+        String::new(),
+        String::new(),
+        -1i32,
+        String::new(),
+        String::new(),
+        String::new(),
+        String::new(),
+    )));
+    let g = got.clone();
+    ui.on_payment_form_save(move |date: SharedString, amount, dir, cp, bank, bank_ref, desc| {
+        *g.borrow_mut() = (
+            date.to_string(),
+            amount.to_string(),
+            dir,
+            cp.to_string(),
+            bank.to_string(),
+            bank_ref.to_string(),
+            desc.to_string(),
+        );
     });
     ui.invoke_payment_form_save(
-        "15.04.2026".into(), "2500.00".into(), 1,
-        "cp-id".into(), "ПриватБанк".into(), "REF123".into(), "оплата за послуги".into(),
+        "15.04.2026".into(), "5000.00".into(), 0,
+        "cp-uuid".into(), "ПриватБанк".into(), "REF-001".into(), "оплата за акт".into(),
     );
-    assert_eq!(got_dir.get(), 1,             "payment-form: save direction");
-    assert_eq!(got_date.borrow().as_str(), "15.04.2026", "payment-form: save date");
+    {
+        let got = got.borrow();
+        assert_eq!(got.0, "15.04.2026",    "payment-form: save date");
+        assert_eq!(got.1, "5000.00",       "payment-form: save amount");
+        assert_eq!(got.2, 0,               "payment-form: save direction");
+        assert_eq!(got.3, "cp-uuid",       "payment-form: save cp_id");
+        assert_eq!(got.4, "ПриватБанк",    "payment-form: save bank_name");
+        assert_eq!(got.5, "REF-001",       "payment-form: save bank_ref");
+        assert_eq!(got.6, "оплата за акт", "payment-form: save description");
+    }
 
     // update
-    let fired = Rc::new(Cell::new(false));
-    let f = fired.clone();
-    ui.on_payment_form_update(move |_, _, _, _, _, _, _| f.set(true));
+    let got = Rc::new(RefCell::new((
+        String::new(),
+        String::new(),
+        -1i32,
+        String::new(),
+        String::new(),
+        String::new(),
+        String::new(),
+    )));
+    let g = got.clone();
+    ui.on_payment_form_update(move |date: SharedString, amount, dir, cp, bank, bank_ref, desc| {
+        *g.borrow_mut() = (
+            date.to_string(),
+            amount.to_string(),
+            dir,
+            cp.to_string(),
+            bank.to_string(),
+            bank_ref.to_string(),
+            desc.to_string(),
+        );
+    });
     ui.invoke_payment_form_update(
-        "15.04.2026".into(), "1000.00".into(), 2,
-        "cp-id".into(), "Монобанк".into(), "".into(), "".into(),
+        "16.04.2026".into(), "7000.00".into(), 2,
+        "cp-update".into(), "Монобанк".into(), "REF-777".into(), "оновлення платежу".into(),
     );
-    assert!(fired.get(), "payment-form: update");
+    {
+        let got = got.borrow();
+        assert_eq!(got.0, "16.04.2026",         "payment-form: update date");
+        assert_eq!(got.1, "7000.00",            "payment-form: update amount");
+        assert_eq!(got.2, 2,                    "payment-form: update direction");
+        assert_eq!(got.3, "cp-update",          "payment-form: update cp_id");
+        assert_eq!(got.4, "Монобанк",           "payment-form: update bank_name");
+        assert_eq!(got.5, "REF-777",            "payment-form: update bank_ref");
+        assert_eq!(got.6, "оновлення платежу",  "payment-form: update description");
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -380,21 +517,67 @@ fn task_form() {
     ui.invoke_task_form_cancel();
     assert!(fired.get(), "task-form: cancel");
 
-    // save(title, due_date, priority_idx, act_id, notes)
-    let got_title = Rc::new(RefCell::new(String::new()));
-    let got_prio  = Rc::new(Cell::new(-1i32));
-    let t = got_title.clone();
-    let p = got_prio.clone();
-    ui.on_task_form_save(move |title: SharedString, _due, prio, _act_id, _notes| {
-        *t.borrow_mut() = title.to_string();
-        p.set(prio);
+    // save(title, description, priority_idx, due_date, reminder_at)
+    let got = Rc::new(RefCell::new((
+        String::new(),
+        String::new(),
+        -1i32,
+        String::new(),
+        String::new(),
+    )));
+    let g = got.clone();
+    ui.on_task_form_save(move |title: SharedString, description, prio, due, reminder| {
+        *g.borrow_mut() = (
+            title.to_string(),
+            description.to_string(),
+            prio,
+            due.to_string(),
+            reminder.to_string(),
+        );
     });
     ui.invoke_task_form_save(
-        "Підписати договір".into(), "30.04.2026".into(),
-        1, "act-id-xyz".into(), "терміново".into(),
+        "Підписати договір".into(), "терміново".into(),
+        1, "30.04.2026".into(), "29.04.2026 10:00".into(),
     );
-    assert_eq!(got_title.borrow().as_str(), "Підписати договір", "task-form: save title");
-    assert_eq!(got_prio.get(), 1, "task-form: save priority");
+    {
+        let got = got.borrow();
+        assert_eq!(got.0, "Підписати договір", "task-form: save title");
+        assert_eq!(got.1, "терміново",         "task-form: save description");
+        assert_eq!(got.2, 1,                   "task-form: save priority");
+        assert_eq!(got.3, "30.04.2026",        "task-form: save due_date");
+        assert_eq!(got.4, "29.04.2026 10:00",  "task-form: save reminder_at");
+    }
+
+    // update(title, description, priority_idx, due_date, reminder_at)
+    let got = Rc::new(RefCell::new((
+        String::new(),
+        String::new(),
+        -1i32,
+        String::new(),
+        String::new(),
+    )));
+    let g = got.clone();
+    ui.on_task_form_update(move |title: SharedString, description, prio, due, reminder| {
+        *g.borrow_mut() = (
+            title.to_string(),
+            description.to_string(),
+            prio,
+            due.to_string(),
+            reminder.to_string(),
+        );
+    });
+    ui.invoke_task_form_update(
+        "Оновити акт".into(), "зв'язатися з клієнтом".into(),
+        2, "01.05.2026".into(), "30.04.2026 09:30".into(),
+    );
+    {
+        let got = got.borrow();
+        assert_eq!(got.0, "Оновити акт",           "task-form: update title");
+        assert_eq!(got.1, "зв'язатися з клієнтом", "task-form: update description");
+        assert_eq!(got.2, 2,                       "task-form: update priority");
+        assert_eq!(got.3, "01.05.2026",            "task-form: update due_date");
+        assert_eq!(got.4, "30.04.2026 09:30",      "task-form: update reminder_at");
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -454,19 +637,93 @@ fn cp_form() {
     assert!(fired.get(), "cp-form: cancel");
 
     // save(name, edrpou, ipn, iban, address, email, phone, notes)
-    let got_name = Rc::new(RefCell::new(String::new()));
-    let n = got_name.clone();
+    let got = Rc::new(RefCell::new((
+        String::new(),
+        String::new(),
+        String::new(),
+        String::new(),
+        String::new(),
+        String::new(),
+        String::new(),
+        String::new(),
+    )));
+    let g = got.clone();
     ui.on_cp_form_save(
-        move |name: SharedString, _edrp, _ipn, _iban, _addr, _email, _phone, _notes| {
-            *n.borrow_mut() = name.to_string();
+        move |name, edrpou, ipn, iban, address, email, phone, notes| {
+            *g.borrow_mut() = (
+                name.to_string(),
+                edrpou.to_string(),
+                ipn.to_string(),
+                iban.to_string(),
+                address.to_string(),
+                email.to_string(),
+                phone.to_string(),
+                notes.to_string(),
+            );
         },
     );
     ui.invoke_cp_form_save(
-        "ТОВ Ромашка".into(), "12345678".into(), "".into(),
+        "ТОВ Ромашка".into(), "12345678".into(), "1234567890".into(),
         "UA12345678901234567890123456789".into(),
-        "м. Київ".into(), "info@romashka.ua".into(), "+380441234567".into(), "".into(),
+        "м. Київ".into(), "info@romashka.ua".into(), "+380441234567".into(), "нотатка".into(),
     );
-    assert_eq!(got_name.borrow().as_str(), "ТОВ Ромашка", "cp-form: save name");
+    {
+        let got = got.borrow();
+        assert_eq!(got.0, "ТОВ Ромашка",                    "cp-form: save name");
+        assert_eq!(got.1, "12345678",                       "cp-form: save edrpou");
+        assert_eq!(got.2, "1234567890",                     "cp-form: save ipn");
+        assert_eq!(got.3, "UA12345678901234567890123456789","cp-form: save iban");
+        assert_eq!(got.4, "м. Київ",                        "cp-form: save address");
+        assert_eq!(got.5, "info@romashka.ua",               "cp-form: save email");
+        assert_eq!(got.6, "+380441234567",                  "cp-form: save phone");
+        assert_eq!(got.7, "нотатка",                        "cp-form: save notes");
+    }
+
+    // update(name, edrpou, ipn, iban, phone, email, address, notes)
+    let got = Rc::new(RefCell::new((
+        String::new(),
+        String::new(),
+        String::new(),
+        String::new(),
+        String::new(),
+        String::new(),
+        String::new(),
+        String::new(),
+    )));
+    let g = got.clone();
+    ui.on_cp_form_update(move |name, edrpou, ipn, iban, phone, email, address, notes| {
+        *g.borrow_mut() = (
+            name.to_string(),
+            edrpou.to_string(),
+            ipn.to_string(),
+            iban.to_string(),
+            phone.to_string(),
+            email.to_string(),
+            address.to_string(),
+            notes.to_string(),
+        );
+    });
+    ui.invoke_cp_form_update(
+        "ТОВ Тест".into(),
+        "12345678".into(),
+        "1234567890".into(),
+        "UA123456789".into(),
+        "+380991234567".into(),
+        "test@test.com".into(),
+        "вул. Хрещатик 1".into(),
+        "нотатка".into(),
+    );
+    {
+        let got = got.borrow();
+        assert_eq!(got.0, "ТОВ Тест",         "cp-form: update name");
+        assert_eq!(got.1, "12345678",         "cp-form: update edrpou");
+        assert_eq!(got.2, "1234567890",       "cp-form: update ipn");
+        assert_eq!(got.3, "UA123456789",      "cp-form: update iban");
+        assert_eq!(got.4, "+380991234567",    "cp-form: update phone");
+        assert_eq!(got.5, "test@test.com",    "cp-form: update email");
+        assert_eq!(got.6, "вул. Хрещатик 1",  "cp-form: update address");
+        assert_eq!(got.7, "нотатка",          "cp-form: update notes");
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

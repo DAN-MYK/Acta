@@ -32,93 +32,8 @@ import { CounterpartyCard, CounterpartyDocSummary, CounterpartyPaymentSummary, C
 import { ActCard, ActCardItemRow, ActCardTaskRow } from "acts/act_card.slint";
 import { SettingsPage, SettingsCategoryRow, SettingsTemplateRow } from "settings/settings.slint";
 import { Toast } from "components/toast.slint";
-
-global MenuIcons {
-    out property <image> dashboard:      @image-url("assets/icons/Home.svg");
-    out property <image> acts:           @image-url("assets/icons/Documents.svg");
-    out property <image> invoices:       @image-url("assets/icons/Outgoing.svg");
-    out property <image> counterparties: @image-url("assets/icons/Counterparties.svg");
-    out property <image> payments:       @image-url("assets/icons/Payments.svg");
-    out property <image> reports:        @image-url("assets/icons/Chart-Bar.svg");
-    out property <image> todo:           @image-url("assets/icons/To-Do.svg");
-    out property <image> calendar:       @image-url("assets/icons/Calendar.svg");
-    out property <image> settings:       @image-url("assets/icons/Settings.svg");
-    out property <image> companies:      @image-url("assets/icons/Chart-Line.svg");
-}
-
-// ── NavItem — елемент бічної навігації ──────────────────────────────────────
-//
-// active: bool — підсвічує активний розділ синім фоном + білою лівою смужкою.
-// label: string — включає emoji, наприклад "📄  Акти"
-component NavItem {
-    in property <string> label;
-    in property <image>  icon;
-    in property <bool>   active: false;
-    in property <bool>   disabled: false;
-    callback clicked;
-
-    height: 36px;
-    min-width: 0;
-
-    rect := Rectangle {
-        border-radius: Theme.radius-md;
-        background: root.active
-            ? Theme.sidebar-active
-            : ((nav-touch.has-hover && !root.disabled) ? Theme.sidebar-hover : transparent);
-        animate background { duration: 120ms; easing: ease; }
-
-        // Ліва акцентна смужка — біла, 3px × 24px, видно лише для активного
-        // Позиціонована x=-3 щоб виходити за лівий край rect (sidebar не кліпає)
-        if root.active : Rectangle {
-            x: -3px;
-            y: (parent.height - 22px) / 2;
-            width: 3px;
-            height: 22px;
-            border-radius: 2px;
-            background: Theme.sidebar-active-bar;
-        }
-
-        HorizontalLayout {
-            padding-left: 10px;
-            padding-right: 12px;
-            spacing: 8px;
-            alignment: start;
-
-            Rectangle {
-                width: 18px;
-                height: 18px;
-                y: (parent.height - self.height) / 2;
-                background: transparent;
-                opacity: root.disabled ? 0.45 : 1.0;
-
-                Image {
-                    width: parent.width;
-                    height: parent.height;
-                    source: root.icon;
-                    image-fit: contain;
-                    colorize: root.active ? Theme.sidebar-active-icon : Theme.sidebar-icon;
-                }
-            }
-
-            Text {
-                text: root.label;
-                font-size: Theme.font-md;
-                font-weight: root.active ? 600 : 400;
-                color: root.active ? Theme.text-white
-                    : (root.disabled ? Theme.sidebar-label : Theme.sidebar-text);
-                vertical-alignment: center;
-                horizontal-stretch: 1;
-                animate color { duration: 150ms; easing: ease; }
-            }
-        }
-
-        nav-touch := TouchArea {
-            enabled: !root.disabled;
-            mouse-cursor: root.disabled ? default : pointer;
-            clicked => { root.clicked(); }
-        }
-    }
-}
+import { Sidebar } from "components/sidebar.slint";
+import { PageFade } from "components/shared.slint";
 
 // ── MainWindow — головне вікно ───────────────────────────────────────────────
 export component MainWindow inherits Window {
@@ -162,7 +77,6 @@ export component MainWindow inherits Window {
     callback dashboard-new-act-clicked();
     callback dashboard-all-acts-clicked();
     callback dashboard-add-todo-clicked();
-    callback navigate(string, int);
 
     // ── Дані контрагентів ────────────────────────────────────────────────────
     in property <[[StandardListViewItem]]> counterparty-rows;
@@ -452,6 +366,7 @@ export component MainWindow inherits Window {
     in property <string>          active-company-id: "";
     in property <string>          active-company-subtitle: "Оберіть компанію для роботи";
     in-out property <bool>        show-company-picker: false;
+    callback navigate(string, int);
     callback switch-company();
 
     // ── Дані сторінки компаній ───────────────────────────────────────────────
@@ -495,241 +410,11 @@ export component MainWindow inherits Window {
     HorizontalLayout {
 
 
-        // ══ Бічна панель навігації (220px) ══════════════════════════════════
-        Rectangle {
-            width: 220px;
-            background: Theme.sidebar-bg;
-            border-width: 1px;
-            border-color: Theme.sidebar-border;
-
-            VerticalLayout {
-                spacing: 0;
-                padding: 0;
-
-                // ── Логотип + switcher блок ────────────────────────────────
-                Rectangle {
-                    height: 56px;
-
-                    // Логотип-марка (36×36 синій квадрат з «A»)
-                    Rectangle {
-                        x: 14px; y: 12px;
-                        width: 32px; height: 32px;
-                        border-radius: Theme.radius-md;
-                        background: Theme.primary;
-                        Text {
-                            x: 0; y: 6px; width: 32px;
-                            horizontal-alignment: center;
-                            text: "A"; font-size: 16px; font-weight: 700; color: Theme.text-white;
-                        }
-                    }
-
-                    Text {
-                        x: 54px;
-                        y: 18px;
-                        text: "Acta";
-                        font-size: Theme.font-xl;
-                        font-weight: 700;
-                        color: Theme.text-white;
-                    }
-                }
-
-                // ── Перемикач активної компанії ────────────────────────────
-                Rectangle {
-                    height: 44px;
-                    vertical-stretch: 0;
-
-                    company-touch := TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => { root.switch-company(); }
-
-                        HorizontalLayout {
-                            padding-left: 14px;
-                            padding-right: 36px;
-                            spacing: 8px;
-                            alignment: start;
-
-                            // Кольорова крапка
-                            Rectangle {
-                                width: 8px;
-                                height: 8px;
-                                border-radius: 4px;
-                                background: Theme.primary;
-                                y: (parent.height - self.height) / 2;
-                            }
-
-                            // Назва + ЄДРПОУ
-                            VerticalLayout {
-                                horizontal-stretch: 1;
-                                spacing: 2px;
-                                alignment: center;
-
-                                Text {
-                                    text: root.active-company-name;
-                                    font-size: 12px;
-                                    font-weight: 500;
-                                    color: #D8E4FF;
-                                    overflow: elide;
-                                }
-                                Text {
-                                    text: root.active-company-subtitle;
-                                    font-size: 10px;
-                                    color: Theme.sidebar-text-muted;
-                                    overflow: elide;
-                                }
-                            }
-                        }
-
-                        // Стрілка вниз — абсолютне позиціонування
-                        Image {
-                            width: 14px;
-                            height: 14px;
-                            source: @image-url("assets/icons/Chevron-Down.svg");
-                            colorize: Theme.sidebar-text-muted;
-                            x: parent.width - 14px - 10px;
-                            y: (parent.height - self.height) / 2;
-                        }
-                    }
-                }
-
-                Rectangle {
-                    height: 1px;
-                    x: 20px;
-                    width: 180px;
-                    background: Theme.sidebar-divider;
-                    vertical-stretch: 0;
-                }
-
-                // ── Навігаційні пункти (з відступами 12px з боків, 8px між) ──
-                HorizontalLayout {
-                    padding-left: 20px;
-                    height: 22px;
-                    Text {
-                        text: "МЕНЮ";
-                        font-size: Theme.font-xs;
-                        font-weight: 600;
-                        color: Theme.sidebar-label;
-                        vertical-alignment: center;
-                    }
-                }
-
-                VerticalLayout {
-                    padding-left: 12px;
-                    padding-right: 12px;
-                    spacing: 6px;
-                    vertical-stretch: 0;
-
-                    NavItem {
-                        label: "Головна";
-                        icon: MenuIcons.dashboard;
-                        active: root.current-page == 8;
-                clicked => { root.navigate("dashboard", 8); }
-                    }
-                    NavItem {
-                        label: "Документи";
-                        icon: MenuIcons.acts;
-                        active: root.current-page == 1;
-                clicked => { root.navigate("documents", 1); }
-                    }
-                    NavItem {
-                        label: "Контрагенти";
-                        icon: MenuIcons.counterparties;
-                        active: root.current-page == 0;
-                clicked => { root.navigate("counterparties", 0); }
-                    }
-                    NavItem {
-                        label: "Платежі";
-                        icon: MenuIcons.payments;
-                        active: root.current-page == 3;
-                clicked => { root.navigate("payments", 3); }
-                    }
-                    NavItem {
-                        label: "Звіти";
-                        icon: MenuIcons.reports;
-                        active: root.current-page == 4;
-                clicked => { root.navigate("reports", 4); }
-                    }
-                }
-
-                HorizontalLayout {
-                    padding-left: 20px;
-                    padding-right: 20px;
-                    height: 1px;
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        background: Theme.sidebar-divider;
-                    }
-                }
-
-                HorizontalLayout {
-                    padding-left: 20px;
-                    height: 22px;
-                    Text {
-                        text: "УТИЛІТИ";
-                        font-size: Theme.font-xs;
-                        font-weight: 600;
-                        color: Theme.sidebar-label;
-                        vertical-alignment: center;
-                    }
-                }
-
-                VerticalLayout {
-                    padding-left: 12px;
-                    padding-right: 12px;
-                    spacing: 6px;
-                    vertical-stretch: 0;
-
-                    NavItem {
-                        label: "To-Do";
-                        icon: MenuIcons.todo;
-                        active: root.current-page == 5;
-                clicked => { root.navigate("tasks", 5); }
-                    }
-                    NavItem {
-                        label: "Компанії";
-                        icon: MenuIcons.companies;
-                        active: root.current-page == 6;
-                clicked => { root.navigate("companies", 6); }
-                    }
-                    NavItem {
-                        label: "Календар платежів";
-                        icon: MenuIcons.calendar;
-                        active: root.current-page == 7;
-                clicked => { root.navigate("calendar", 7); }
-                    }
-                }
-
-                Rectangle { vertical-stretch: 1; }
-
-                // ── Нижня секція: розділювач + Налаштування ──────────────────
-                // HorizontalLayout для вирівняного розділювача (x=20, ширина 180px)
-                HorizontalLayout {
-                    height: 1px;
-                    padding-left: 20px;
-                    padding-right: 20px;
-                    vertical-stretch: 0;
-
-                    Rectangle {
-                        background: Theme.sidebar-divider;
-                    }
-                }
-
-                Rectangle {
-                    height: 40px;
-                    vertical-stretch: 0;
-
-                    NavItem {
-                        x: 12px;
-                        width: parent.width - 24px;
-                        label: "Налаштування";
-                        icon: MenuIcons.settings;
-                        active: root.current-page == 9;
-                        disabled: false;
-                clicked => { root.navigate("settings", 9); }
-                    }
-                }
-
-                Rectangle { height: 12px; vertical-stretch: 0; }
-            }
+        // ══ Бічна панель навігації ════════════════════════════════════════════
+        Sidebar {
+            active-company-name:     root.active-company-name;
+            active-company-subtitle: root.active-company-subtitle;
+            switch-company => { root.switch-company(); }
         }
 
         // ══ Область контенту ════════════════════════════════════════════════
@@ -737,55 +422,60 @@ export component MainWindow inherits Window {
             horizontal-stretch: 1;
             vertical-stretch: 1;
             background: Theme.bg-page;
+            clip: true;
 
             // ── Сторінка 0: Контрагенти — список ────────────────────────────
-            if root.current-page == 0 && !root.show-cp-form : CounterpartyList {
-                width: parent.width;
-                height: parent.height;
-                rows:             root.counterparty-rows;
-                row-ids:          root.counterparty-ids;
-                row-archived:     root.counterparty-archived;
-                loading:          root.counterparties-loading;
-                total-count:      root.counterparty-total-count;
-                active-count:     root.counterparty-active-count;
-                archived-count:   root.counterparty-archived-count;
-                pagination-text:  root.counterparty-pagination-text;
-                show-archived:    root.counterparty-show-archived;
-                current-page:     root.counterparty-current-page;
-                total-pages:      root.counterparty-total-pages;
+            if root.current-page == 0 && !root.show-cp-form : PageFade {
+                CounterpartyList {
+                    width: parent.width;
+                    height: parent.height;
+                    rows:             root.counterparty-rows;
+                    row-ids:          root.counterparty-ids;
+                    row-archived:     root.counterparty-archived;
+                    loading:          root.counterparties-loading;
+                    total-count:      root.counterparty-total-count;
+                    active-count:     root.counterparty-active-count;
+                    archived-count:   root.counterparty-archived-count;
+                    pagination-text:  root.counterparty-pagination-text;
+                    show-archived:    root.counterparty-show-archived;
+                    current-page:     root.counterparty-current-page;
+                    total-pages:      root.counterparty-total-pages;
 
-                search-changed(q)   => { root.counterparty-search-changed(q); }
-                row-selected(id)    => { root.counterparty-selected(id); }
-                edit-clicked(id)    => { root.counterparty-edit-clicked(id); }
-                create-clicked      => { root.counterparty-create-clicked(); }
-                archive-clicked(id) => { root.counterparty-archive-clicked(id); }
-                filter-clicked      => { root.counterparty-filter-clicked(); }
-                prev-page-clicked   => { root.counterparty-prev-page-clicked(); }
-                next-page-clicked   => { root.counterparty-next-page-clicked(); }
+                    search-changed(q)   => { root.counterparty-search-changed(q); }
+                    row-selected(id)    => { root.counterparty-selected(id); }
+                    edit-clicked(id)    => { root.counterparty-edit-clicked(id); }
+                    create-clicked      => { root.counterparty-create-clicked(); }
+                    archive-clicked(id) => { root.counterparty-archive-clicked(id); }
+                    filter-clicked      => { root.counterparty-filter-clicked(); }
+                    prev-page-clicked   => { root.counterparty-prev-page-clicked(); }
+                    next-page-clicked   => { root.counterparty-next-page-clicked(); }
+                }
             }
 
             // ── Сторінка 1: Документи — список ────────────────────────────────
-            if root.current-page == 1 && !root.show-act-form && !root.show-invoice-form : DocumentList {
-                width: parent.width;
-                height: parent.height;
-                rows:                   root.document-rows;
-                loading:                root.documents-loading;
-                direction-index:        root.doc-direction-index;
-                active-tab:             root.doc-active-tab;
-                filter-counterparty-names: root.doc-filter-cp-names;
-                filter-counterparty-index: root.doc-filter-cp-index;
+            if root.current-page == 1 && !root.show-act-form && !root.show-invoice-form : PageFade {
+                DocumentList {
+                    width: parent.width;
+                    height: parent.height;
+                    rows:                   root.document-rows;
+                    loading:                root.documents-loading;
+                    direction-index:        root.doc-direction-index;
+                    active-tab:             root.doc-active-tab;
+                    filter-counterparty-names: root.doc-filter-cp-names;
+                    filter-counterparty-index: root.doc-filter-cp-index;
 
-                new-document-act        => { root.doc-new-act-clicked(); }
-                new-document-invoice    => { root.doc-new-invoice-clicked(); }
-                open-document(id)       => { root.doc-open-clicked(id); }
-                delete-document(id)     => { root.doc-delete-clicked(id); }
-                export-pdf(id)          => { root.doc-pdf-clicked(id); }
-                direction-changed(i)    => { root.doc-direction-changed(i); }
-                tab-changed(i)          => { root.doc-tab-changed(i); }
-                search-changed(q)       => { root.doc-search-changed(q); }
-                counterparty-filter-changed(i) => { root.doc-cp-filter-changed(i); }
-                date-from-changed(s)    => { root.doc-date-from-changed(s); }
-                date-to-changed(s)      => { root.doc-date-to-changed(s); }
+                    new-document-act        => { root.doc-new-act-clicked(); }
+                    new-document-invoice    => { root.doc-new-invoice-clicked(); }
+                    open-document(id)       => { root.doc-open-clicked(id); }
+                    delete-document(id)     => { root.doc-delete-clicked(id); }
+                    export-pdf(id)          => { root.doc-pdf-clicked(id); }
+                    direction-changed(i)    => { root.doc-direction-changed(i); }
+                    tab-changed(i)          => { root.doc-tab-changed(i); }
+                    search-changed(q)       => { root.doc-search-changed(q); }
+                    counterparty-filter-changed(i) => { root.doc-cp-filter-changed(i); }
+                    date-from-changed(s)    => { root.doc-date-from-changed(s); }
+                    date-to-changed(s)      => { root.doc-date-to-changed(s); }
+                }
             }
 
             // ── Сторінка 1: Акти — форма ─────────────────────────────────────
@@ -826,18 +516,20 @@ export component MainWindow inherits Window {
             }
 
             // ── Сторінка 5: To-Do — список ────────────────────────────────
-            if root.current-page == 5 && !root.show-task-form : TaskList {
-                width: parent.width;
-                height: parent.height;
-                rows:    root.task-rows;
-                loading: root.tasks-loading;
+            if root.current-page == 5 && !root.show-task-form : PageFade {
+                TaskList {
+                    width: parent.width;
+                    height: parent.height;
+                    rows:    root.task-rows;
+                    loading: root.tasks-loading;
 
-                search-changed(q)         => { root.task-search-changed(q); }
-                row-selected(id)          => { root.task-selected(id); }
-                create-clicked            => { root.task-create-clicked(); }
-                toggle-status-clicked(id) => { root.task-toggle-status-clicked(id); }
-                delete-clicked(id)        => { root.task-delete-clicked(id); }
-                edit-clicked(id)          => { root.task-edit-clicked(id); }
+                    search-changed(q)         => { root.task-search-changed(q); }
+                    row-selected(id)          => { root.task-selected(id); }
+                    create-clicked            => { root.task-create-clicked(); }
+                    toggle-status-clicked(id) => { root.task-toggle-status-clicked(id); }
+                    delete-clicked(id)        => { root.task-delete-clicked(id); }
+                    edit-clicked(id)          => { root.task-edit-clicked(id); }
+                }
             }
 
             // ── Сторінка 5: To-Do — форма ─────────────────────────────────
@@ -921,75 +613,81 @@ export component MainWindow inherits Window {
             }
 
             // ── Сторінка 8: Dashboard ────────────────────────────────────────
-            if root.current-page == 8 : DashboardPage {
-                width: parent.width;
-                height: parent.height;
-                kpi-revenue:             root.dashboard-kpi-revenue;
-                kpi-revenue-trend:       root.dashboard-kpi-revenue-trend;
-                kpi-unpaid:              root.dashboard-kpi-unpaid;
-                kpi-unpaid-trend:        root.dashboard-kpi-unpaid-trend;
-                kpi-acts-month:          root.dashboard-kpi-acts-month;
-                kpi-acts-trend:          root.dashboard-kpi-acts-trend;
-                kpi-counterparties:      root.dashboard-kpi-counterparties;
-                kpi-cp-trend:            root.dashboard-kpi-cp-trend;
-                current-month-label:     root.dashboard-month-label;
-                chart-bar-labels:        root.dashboard-chart-bar-labels;
-                chart-bar-value-labels:  root.dashboard-chart-bar-value-labels;
-                chart-bar-fractions:     root.dashboard-chart-bar-fractions;
-                status-paid:             root.dashboard-status-paid;
-                status-issued:           root.dashboard-status-issued;
-                status-signed:           root.dashboard-status-signed;
-                status-draft:            root.dashboard-status-draft;
-                recent-acts:             root.dashboard-recent-acts;
-                upcoming-payments:       root.dashboard-upcoming-payments;
+            if root.current-page == 8 : PageFade {
+                DashboardPage {
+                    width: parent.width;
+                    height: parent.height;
+                    kpi-revenue:             root.dashboard-kpi-revenue;
+                    kpi-revenue-trend:       root.dashboard-kpi-revenue-trend;
+                    kpi-unpaid:              root.dashboard-kpi-unpaid;
+                    kpi-unpaid-trend:        root.dashboard-kpi-unpaid-trend;
+                    kpi-acts-month:          root.dashboard-kpi-acts-month;
+                    kpi-acts-trend:          root.dashboard-kpi-acts-trend;
+                    kpi-counterparties:      root.dashboard-kpi-counterparties;
+                    kpi-cp-trend:            root.dashboard-kpi-cp-trend;
+                    current-month-label:     root.dashboard-month-label;
+                    chart-bar-labels:        root.dashboard-chart-bar-labels;
+                    chart-bar-value-labels:  root.dashboard-chart-bar-value-labels;
+                    chart-bar-fractions:     root.dashboard-chart-bar-fractions;
+                    status-paid:             root.dashboard-status-paid;
+                    status-issued:           root.dashboard-status-issued;
+                    status-signed:           root.dashboard-status-signed;
+                    status-draft:            root.dashboard-status-draft;
+                    recent-acts:             root.dashboard-recent-acts;
+                    upcoming-payments:       root.dashboard-upcoming-payments;
 
-                new-act-clicked  => { root.dashboard-new-act-clicked(); }
-                all-acts-clicked => { root.dashboard-all-acts-clicked(); }
-                add-todo-clicked => { root.dashboard-add-todo-clicked(); }
+                    new-act-clicked  => { root.dashboard-new-act-clicked(); }
+                    all-acts-clicked => { root.dashboard-all-acts-clicked(); }
+                    add-todo-clicked => { root.dashboard-add-todo-clicked(); }
+                }
             }
 
             // ── Сторінка 9: Налаштування ───────────────────────────────────────
-            if root.current-page == 9 : SettingsPage {
-                width: parent.width;
-                height: parent.height;
-                company-name:          root.settings-company-name;
-                company-edrpou:        root.settings-company-edrpou;
-                company-iban:           root.settings-company-iban;
-                company-director:       root.settings-company-director;
-                company-address:        root.settings-company-address;
-                category-rows:         root.settings-category-rows;
-                template-rows:          root.settings-template-rows;
-                show-template-form:    root.show-template-form;
-                template-form-id:      root.template-form-id;
-                template-form-name:    root.template-form-name;
-                template-form-description: root.template-form-description;
-                template-form-type:    root.template-form-type;
-                template-form-path:    root.template-form-path;
-                template-form-is-default: root.template-form-is-default;
+            if root.current-page == 9 : PageFade {
+                SettingsPage {
+                    width: parent.width;
+                    height: parent.height;
+                    company-name:          root.settings-company-name;
+                    company-edrpou:        root.settings-company-edrpou;
+                    company-iban:           root.settings-company-iban;
+                    company-director:       root.settings-company-director;
+                    company-address:        root.settings-company-address;
+                    category-rows:         root.settings-category-rows;
+                    template-rows:          root.settings-template-rows;
+                    show-template-form:    root.show-template-form;
+                    template-form-id:      root.template-form-id;
+                    template-form-name:    root.template-form-name;
+                    template-form-description: root.template-form-description;
+                    template-form-type:    root.template-form-type;
+                    template-form-path:    root.template-form-path;
+                    template-form-is-default: root.template-form-is-default;
 
-                edit-company-clicked          => { root.settings-edit-company-clicked(); }
-                template-create-clicked       => { root.template-create-clicked(); }
-                template-edit-clicked(id)     => { root.template-edit-clicked(id); }
-                template-delete-clicked(id)   => { root.template-delete-clicked(id); }
-                template-set-default-clicked(id) => { root.template-set-default-clicked(id); }
-                template-form-save(name, desc, type, path, is_default, form_id) => { root.template-form-save(name, desc, type, path, is_default, form_id); }
-                template-form-cancel          => { root.template-form-cancel(); }
+                    edit-company-clicked          => { root.settings-edit-company-clicked(); }
+                    template-create-clicked       => { root.template-create-clicked(); }
+                    template-edit-clicked(id)     => { root.template-edit-clicked(id); }
+                    template-delete-clicked(id)   => { root.template-delete-clicked(id); }
+                    template-set-default-clicked(id) => { root.template-set-default-clicked(id); }
+                    template-form-save(name, desc, type, path, is_default, form_id) => { root.template-form-save(name, desc, type, path, is_default, form_id); }
+                    template-form-cancel          => { root.template-form-cancel(); }
+                }
             }
 
-            if root.current-page == 3 && !root.show-payment-form : PaymentList {
-                width: parent.width;
-                height: parent.height;
-                rows:         root.payment-rows;
-                loading:      root.payments-loading;
-                total-income: root.payment-total-income;
-                total-expense: root.payment-total-expense;
+            if root.current-page == 3 && !root.show-payment-form : PageFade {
+                PaymentList {
+                    width: parent.width;
+                    height: parent.height;
+                    rows:         root.payment-rows;
+                    loading:      root.payments-loading;
+                    total-income: root.payment-total-income;
+                    total-expense: root.payment-total-expense;
 
-                direction-filter-changed(i) => { root.payment-direction-filter-changed(i); }
-                search-changed(q)           => { root.payment-search-changed(q); }
-                create-clicked              => { root.payment-create-clicked(); }
-                edit-clicked(id)            => { root.payment-edit-clicked(id); }
-                delete-clicked(id)          => { root.payment-delete-clicked(id); }
-                reconcile-clicked(id)       => { root.payment-reconcile-clicked(id); }
+                    direction-filter-changed(i) => { root.payment-direction-filter-changed(i); }
+                    search-changed(q)           => { root.payment-search-changed(q); }
+                    create-clicked              => { root.payment-create-clicked(); }
+                    edit-clicked(id)            => { root.payment-edit-clicked(id); }
+                    delete-clicked(id)          => { root.payment-delete-clicked(id); }
+                    reconcile-clicked(id)       => { root.payment-reconcile-clicked(id); }
+                }
             }
 
             if root.current-page == 3 && root.show-payment-form : PaymentForm {

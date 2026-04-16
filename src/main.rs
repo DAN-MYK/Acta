@@ -192,6 +192,7 @@ fn main() -> Result<()> {
         let pool = ctx.pool.clone();
         let cid_arc = ctx.active_company_id.clone();
         let weak = ui_weak.clone();
+        // MainWindow.navigate — єдиний канал. Sidebar форвардить подію в root.navigate.
         ui.on_navigate(move |feature, page| {
             if let Some(ui) = weak.upgrade() {
                 ui.set_current_page(page);

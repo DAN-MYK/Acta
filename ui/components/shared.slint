@@ -352,6 +352,19 @@ export component KpiCard inherits Rectangle {
     Text { x: 68px; y: 60px; text: root.trend; font-size: Theme.font-sm;  color: trend-color; }
 }
 
+// ── PAGE FADE ────────────────────────────────────────────────
+// Обгортка сторінки з плавним fade-in при появі.
+// Використовується з if: `if condition : PageFade { Content { ... } }`
+// @children — розміщує дочірній елемент всередині.
+export component PageFade {
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    animate opacity { duration: 180ms; easing: ease-out; }
+    states [ s when true : { opacity: 1; } ]
+    @children
+}
+
 // ── CONFIRM DELETE DIALOG ────────────────────────────────────
 export component ConfirmDeleteDialog inherits Rectangle {
     in property <string> title:         "Видалити?";
