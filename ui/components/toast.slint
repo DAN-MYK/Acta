@@ -31,12 +31,12 @@ export component Toast {
         border-radius: 10px;
         background: AppState.toast-is-error ? Theme.bg-danger : Theme.bg-success;
         border-width: 1px;
-        border-color: AppState.toast-is-error ? Theme.danger-border : #A7F3D0;
+        border-color: AppState.toast-is-error ? Theme.danger-border : Theme.toast-success-border;
 
         HorizontalLayout {
             padding-left: 16px;
             padding-right: 8px;
-            spacing: 10px;
+            spacing: Theme.space-3;
             alignment: center;
 
             Text {
@@ -50,7 +50,7 @@ export component Toast {
 
             Text {
                 text: AppState.toast-message;
-                color: AppState.toast-is-error ? #991B1B : #166534;
+                color: AppState.toast-is-error ? Theme.toast-error-text : Theme.toast-success-text;
                 font-size: Theme.font-md;
                 font-weight: 500;
                 vertical-alignment: center;
@@ -64,7 +64,7 @@ export component Toast {
                 border-radius: 6px;
                 y: (parent.height - self.height) / 2;
                 background: close-ta.has-hover
-                    ? (AppState.toast-is-error ? Theme.danger-border : #A7F3D0)
+                    ? (AppState.toast-is-error ? Theme.danger-border : Theme.toast-success-border)
                     : transparent;
 
                 animate background { duration: 100ms; easing: ease; }

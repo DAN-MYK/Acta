@@ -66,15 +66,15 @@ export component CounterpartyCard {
             background: Theme.bg-page;
 
             VerticalLayout {
-                padding: 24px;
-                spacing: 16px;
+                padding: Theme.space-6;
+                spacing: Theme.space-4;
 
                 HorizontalLayout {
-                    spacing: 12px;
+                    spacing: Theme.space-3;
 
                     VerticalLayout {
                         horizontal-stretch: 1;
-                        spacing: 4px;
+                        spacing: Theme.space-1;
 
                         Text {
                             text: root.cp-name;
@@ -117,7 +117,7 @@ export component CounterpartyCard {
                         width: 96px;
                         height: 36px;
                         border-radius: Theme.radius-md;
-                        background: close-touch.has-hover ? #2D64E3 : Theme.primary;
+                        background: close-touch.has-hover ? Theme.primary-hover : Theme.primary;
 
                         Text {
                             text: "Закрити";
@@ -135,7 +135,7 @@ export component CounterpartyCard {
                 }
 
                 HorizontalLayout {
-                    spacing: 12px;
+                    spacing: Theme.space-3;
                     for stat in [
                         { label: "Акти",     value: root.stat-acts      },
                         { label: "Рахунки",  value: root.stat-invoices  },
@@ -150,7 +150,7 @@ export component CounterpartyCard {
                         border-color: Theme.border;
 
                         VerticalLayout {
-                            padding: 14px;
+                            padding: Theme.space-4;
                             Text {
                                 text: stat.label;
                                 font-size: 12px;
@@ -174,11 +174,11 @@ export component CounterpartyCard {
                     vertical-stretch: 1;
 
                     VerticalLayout {
-                        padding: 24px;
-                        spacing: 14px;
+                        padding: Theme.space-6;
+                        spacing: Theme.space-4;
 
                         HorizontalLayout {
-                            spacing: 8px;
+                            spacing: Theme.space-2;
                             for label[i] in ["Акти", "Рахунки", "Платежі", "Договори", "Інформація", "To-Do"]: Rectangle {
                                 height: 34px;
                                 width: i == 4 ? 110px : 92px;
@@ -202,7 +202,7 @@ export component CounterpartyCard {
                         }
 
                         if root.active-tab == 0 : VerticalLayout {
-                            spacing: 8px;
+                            spacing: Theme.space-2;
                             for row in root.acts: Rectangle {
                                 height: 38px;
                                 border-radius: 10px;
@@ -219,7 +219,7 @@ export component CounterpartyCard {
                         }
 
                         if root.active-tab == 1 : VerticalLayout {
-                            spacing: 8px;
+                            spacing: Theme.space-2;
                             for row in root.invoices: Rectangle {
                                 height: 38px;
                                 border-radius: 10px;
@@ -236,7 +236,7 @@ export component CounterpartyCard {
                         }
 
                         if root.active-tab == 2 : VerticalLayout {
-                            spacing: 8px;
+                            spacing: Theme.space-2;
                             for row in root.payments: Rectangle {
                                 height: 38px;
                                 border-radius: 10px;
@@ -253,7 +253,7 @@ export component CounterpartyCard {
                         }
 
                         if root.active-tab == 3 : VerticalLayout {
-                            spacing: 8px;
+                            spacing: Theme.space-2;
                             for row in root.contracts: Rectangle {
                                 height: 38px;
                                 border-radius: 10px;
@@ -270,7 +270,7 @@ export component CounterpartyCard {
                         }
 
                         if root.active-tab == 4 : VerticalLayout {
-                            spacing: 10px;
+                            spacing: Theme.space-3;
                             for item in [
                                 { label: "IBAN",    value: root.cp-iban    },
                                 { label: "Телефон", value: root.cp-phone   },
@@ -290,7 +290,7 @@ export component CounterpartyCard {
                         }
 
                         if root.active-tab == 5 : VerticalLayout {
-                            spacing: 8px;
+                            spacing: Theme.space-2;
                             for row in root.tasks: Rectangle {
                                 height: 38px;
                                 border-radius: 10px;

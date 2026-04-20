@@ -8,6 +8,7 @@
 import { Theme } from "../theme.slint";
 import { ProgressIndicator, ComboBox, ListView } from "std-widgets.slint";
 import { DocTypeBadge, StatusBadge, ConfirmDeleteDialog } from "../components/shared.slint";
+import { Icons } from "../components/icons.slint";
 
 // ── DocRow — рядок уніфікованого списку документів ───────────────────────────
 export struct DocRow {
@@ -65,9 +66,9 @@ export component DocumentList {
             background: Theme.bg-card;
 
             HorizontalLayout {
-                padding-left: 32px;
-                padding-right: 32px;
-                spacing: 16px;
+                padding-left: Theme.page-padding-x;
+                padding-right: Theme.page-padding-x;
+                spacing: Theme.space-4;
                 alignment: center;
 
                 Text {
@@ -84,11 +85,8 @@ export component DocumentList {
                     width: 160px;
                     height: Theme.btn-md-height;
                     border-radius: Theme.radius-md;
-                    background: new-touch.has-hover ? #2D64E3 : Theme.primary;
+                    background: new-touch.has-hover ? Theme.primary-hover : Theme.primary;
                     animate background { duration: 120ms; easing: ease; }
-                    drop-shadow-blur: 8px;
-                    drop-shadow-color: rgba(0, 0, 0, 15%);
-                    drop-shadow-offset-y: 2px;
 
                     Text {
                         x: 0; y: 0;
@@ -124,9 +122,9 @@ export component DocumentList {
             border-color: Theme.border;
 
             HorizontalLayout {
-                padding-left: 32px;
-                padding-right: 32px;
-                spacing: 8px;
+                padding-left: Theme.page-padding-x;
+                padding-right: Theme.page-padding-x;
+                spacing: Theme.space-2;
 
                 // Таби напрямку документів
                 for dir-label[i] in ["Вихідні", "Вхідні"]: Rectangle {
@@ -204,12 +202,14 @@ export component DocumentList {
                     HorizontalLayout {
                         padding-left: 10px;
                         padding-right: 8px;
-                        spacing: 6px;
+                        spacing: Theme.space-2;
 
-                        Text {
-                            text: "🔍";
-                            font-size: 12px;
-                            color: Theme.text-disabled;
+                        Image {
+                            width: 16px;
+                            height: 16px;
+                            source: Icons.search;
+                            image-fit: contain;
+                            colorize: Theme.text-disabled;
                             vertical-alignment: center;
                         }
 
@@ -234,9 +234,9 @@ export component DocumentList {
             border-color: Theme.border;
 
             HorizontalLayout {
-                padding-left: 32px;
-                padding-right: 32px;
-                spacing: 8px;
+                padding-left: Theme.page-padding-x;
+                padding-right: Theme.page-padding-x;
+                spacing: Theme.space-2;
                 alignment: center;
 
                 Text {
@@ -344,10 +344,10 @@ export component DocumentList {
             background: Theme.bg-page;
 
             VerticalLayout {
-                padding-top: 24px;
-                padding-left: 32px;
-                padding-right: 32px;
-                padding-bottom: 24px;
+                padding-top: Theme.page-padding-y;
+                padding-left: Theme.page-padding-x;
+                padding-right: Theme.page-padding-x;
+                padding-bottom: Theme.page-padding-y;
                 spacing: 0;
 
                 Rectangle {
@@ -388,18 +388,30 @@ export component DocumentList {
 
                             VerticalLayout {
                                 alignment: center;
-                                spacing: 8px;
+                                spacing: Theme.space-2;
 
-                                Text {
-                                    text: "📄";
-                                    font-size: 32px;
-                                    horizontal-alignment: center;
+                                HorizontalLayout {
+                                    alignment: center;
+
+                                    Rectangle {
+                                        width: 56px; height: 56px;
+                                        border-radius: 28px;
+                                        background: Theme.bg-gray;
+
+                                        Image {
+                                            x: 10px; y: 10px;
+                                            width: 36px; height: 36px;
+                                            source: Icons.documents;
+                                            image-fit: contain;
+                                            colorize: Theme.text-muted;
+                                        }
+                                    }
                                 }
                                 Text {
                                     text: root.direction-index == 1
                                         ? "Вхідних документів не знайдено"
                                         : "Документів ще немає";
-                                    font-size: 15px;
+                                    font-size: Theme.font-xl;
                                     font-weight: 500;
                                     color: Theme.text-second;
                                     horizontal-alignment: center;
@@ -512,25 +524,24 @@ export component DocumentList {
                                     // Кнопки дій
                                     HorizontalLayout {
                                         width: 100px;
-                                        spacing: 4px;
+                                        spacing: Theme.space-1;
                                         alignment: center;
 
                                         // PDF
                                         pdf-rect := Rectangle {
-                                            width: 34px;
+                                            width: 30px;
                                             height: 30px;
                                             border-radius: Theme.radius-sm;
                                             background: pdf-touch.has-hover ? Theme.bg-primary : transparent;
                                             animate background { duration: 80ms; easing: ease; }
 
-                                            Text {
-                                                text: "PDF";
-                                                font-size: Theme.font-xs;
-                                                font-weight: 600;
-                                                color: pdf-touch.has-hover ? Theme.primary : Theme.text-muted;
-                                                horizontal-alignment: center;
-                                                vertical-alignment: center;
-                                                animate color { duration: 80ms; easing: ease; }
+                                            Image {
+                                                x: 8px; y: 8px;
+                                                width: 14px; height: 14px;
+                                                source: Icons.pdf;
+                                                image-fit: contain;
+                                                colorize: pdf-touch.has-hover ? Theme.primary : Theme.text-muted;
+                                                animate colorize { duration: 80ms; easing: ease; }
                                             }
 
                                             pdf-touch := TouchArea {
@@ -547,13 +558,13 @@ export component DocumentList {
                                             background: edit-touch.has-hover ? Theme.btn-action-bg : transparent;
                                             animate background { duration: 80ms; easing: ease; }
 
-                                            Text {
-                                                text: "✎";
-                                                font-size: 14px;
-                                                color: edit-touch.has-hover ? Theme.primary : Theme.text-muted;
-                                                horizontal-alignment: center;
-                                                vertical-alignment: center;
-                                                animate color { duration: 80ms; easing: ease; }
+                                            Image {
+                                                x: 8px; y: 8px;
+                                                width: 14px; height: 14px;
+                                                source: Icons.edit;
+                                                image-fit: contain;
+                                                colorize: edit-touch.has-hover ? Theme.primary : Theme.text-muted;
+                                                animate colorize { duration: 80ms; easing: ease; }
                                             }
 
                                             edit-touch := TouchArea {
@@ -570,13 +581,13 @@ export component DocumentList {
                                             background: del-touch.has-hover ? Theme.bg-danger : transparent;
                                             animate background { duration: 80ms; easing: ease; }
 
-                                            Text {
-                                                text: "🗑";
-                                                font-size: 13px;
-                                                color: del-touch.has-hover ? Theme.danger : Theme.text-muted;
-                                                horizontal-alignment: center;
-                                                vertical-alignment: center;
-                                                animate color { duration: 80ms; easing: ease; }
+                                            Image {
+                                                x: 8px; y: 8px;
+                                                width: 14px; height: 14px;
+                                                source: Icons.delete;
+                                                image-fit: contain;
+                                                colorize: del-touch.has-hover ? Theme.danger : Theme.text-muted;
+                                                animate colorize { duration: 80ms; easing: ease; }
                                             }
 
                                             del-touch := TouchArea {
@@ -615,7 +626,7 @@ export component DocumentList {
             border-radius: Theme.radius-xl;
             background: Theme.bg-card;
             drop-shadow-blur: 40px;
-            drop-shadow-color: rgba(0, 0, 0, 18%);
+            drop-shadow-color: Theme.shadow-lg;
             drop-shadow-offset-y: 12px;
 
             // Поглинаємо кліки щоб не закривати через backdrop

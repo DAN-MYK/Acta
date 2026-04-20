@@ -179,4 +179,18 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
             ui.set_current_page(5);
         }
     });
+
+    // Дія у режимі "Вхідні" — навігація до відповідного розділу
+    let ui_weak = ui.as_weak();
+    ui.on_dashboard_inbox_action_clicked(move |_id, item_type| {
+        if let Some(ui) = ui_weak.upgrade() {
+            let feature = match item_type.as_str() {
+                "overdue" | "unsigned" | "act_needed" | "draft" => "acts",
+                "unmatched" => "payments",
+                "waybill_needed" => "waybills",
+                _ => return,
+            };
+            ui.set_current_feature(slint::SharedString::from(feature));
+        }
+    });
 }

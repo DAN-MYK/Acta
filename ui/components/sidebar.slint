@@ -1,17 +1,5 @@
 import { Theme } from "../theme.slint";
-
-global SidebarIcons {
-    out property <image> dashboard:      @image-url("../assets/icons/Home.svg");
-    out property <image> documents:      @image-url("../assets/icons/Documents.svg");
-    out property <image> counterparties: @image-url("../assets/icons/Counterparties.svg");
-    out property <image> payments:       @image-url("../assets/icons/Payments.svg");
-    out property <image> reports:        @image-url("../assets/icons/Chart-Bar.svg");
-    out property <image> todo:           @image-url("../assets/icons/To-Do.svg");
-    out property <image> calendar:       @image-url("../assets/icons/Calendar.svg");
-    out property <image> settings:       @image-url("../assets/icons/Settings.svg");
-    out property <image> companies:      @image-url("../assets/icons/Chart-Line.svg");
-    out property <image> chevron-down:   @image-url("../assets/icons/Chevron-Down.svg");
-}
+import { Icons } from "icons.slint";
 
 component NavItem {
     in property <string> label;
@@ -22,37 +10,40 @@ component NavItem {
     in property <length> indent: 0px;
     callback clicked;
 
-    height: 36px;
+    height: 32px;
     min-width: 0;
 
     Rectangle {
         border-radius: Theme.radius-md;
+        border-width: root.active ? 1px : 0px;
+        border-color: Theme.border;
         background: root.active
             ? Theme.sidebar-active
             : (ta.has-hover && !root.disabled ? Theme.sidebar-hover : transparent);
-        animate background { duration: 120ms; easing: ease; }
+        animate background { duration: 100ms; easing: ease; }
 
+        // accent bar on left edge when active
         if root.active : Rectangle {
-            x: -3px;
-            y: (parent.height - 22px) / 2;
+            x: 0px;
+            y: (parent.height - 20px) / 2;
             width: 3px;
-            height: 22px;
+            height: 20px;
             border-radius: 2px;
             background: Theme.sidebar-active-bar;
         }
 
         HorizontalLayout {
             padding-left: 10px + root.indent;
-            padding-right: 12px;
-            spacing: 8px;
+            padding-right: 10px;
+            spacing: Theme.space-2;
             alignment: start;
 
             Rectangle {
-                width: 18px;
-                height: 18px;
+                width: 16px;
+                height: 16px;
                 y: (parent.height - self.height) / 2;
                 background: transparent;
-                opacity: root.disabled ? 0.45 : 1.0;
+                opacity: root.disabled ? 0.4 : 1.0;
 
                 Image {
                     width: parent.width;
@@ -67,25 +58,26 @@ component NavItem {
                 text: root.label;
                 font-size: Theme.font-md;
                 font-weight: root.active ? 600 : 400;
-                color: root.active ? Theme.text-white
+                color: root.active ? Theme.text-primary
                     : (root.disabled ? Theme.sidebar-label : Theme.sidebar-text);
                 vertical-alignment: center;
                 horizontal-stretch: 1;
-                animate color { duration: 150ms; easing: ease; }
+                overflow: elide;
+                animate color { duration: 100ms; easing: ease; }
             }
 
             if root.badge > 0 : Rectangle {
-                width: max(20px, badge-text.preferred-width + 10px);
-                height: 18px;
-                border-radius: 9px;
-                background: Theme.danger;
+                width: max(Theme.space-5, badge-text.preferred-width + Theme.space-2);
+                height: Theme.badge-sm-height;
+                border-radius: Theme.radius-sm;
+                background: Theme.bg-primary;
                 y: (parent.height - self.height) / 2;
 
                 badge-text := Text {
                     text: root.badge > 99 ? "99+" : "\{root.badge}";
-                    color: Theme.text-white;
+                    color: Theme.primary;
                     font-size: Theme.font-xs;
-                    font-weight: 700;
+                    font-weight: 600;
                     horizontal-alignment: center;
                     vertical-alignment: center;
                     width: parent.width;
@@ -104,16 +96,18 @@ component NavItem {
 
 component SectionLabel {
     in property <string> text;
-    height: 22px;
+    height: Theme.space-6;
 
     HorizontalLayout {
-        padding-left: 20px;
+        padding-left: Theme.space-2;
+        padding-right: Theme.space-2;
         alignment: start;
 
         Text {
             text: root.text;
             font-size: Theme.font-xs;
             font-weight: 600;
+            letter-spacing: 1.2px;
             color: Theme.sidebar-label;
             vertical-alignment: center;
         }
@@ -130,152 +124,140 @@ export component Sidebar {
     callback navigate(string);
     callback switch-company();
 
-    width: 220px;
+    width: Theme.sidebar-width;
 
     Rectangle {
         width: parent.width;
         height: parent.height;
         background: Theme.sidebar-bg;
-        border-width: 1px;
-        border-color: Theme.sidebar-border;
+
+        // right border
+        Rectangle {
+            x: parent.width - 1px;
+            y: 0;
+            width: 1px;
+            height: parent.height;
+            background: Theme.border;
+        }
 
         VerticalLayout {
             spacing: 0;
             padding: 0;
 
+            // ── Company switcher ─────────────────────────────────────────────
             Rectangle {
-                height: 56px;
-
-                Rectangle {
-                    x: 14px;
-                    y: 12px;
-                    width: 32px;
-                    height: 32px;
-                    border-radius: Theme.radius-md;
-                    background: Theme.primary;
-
-                    Text {
-                        x: 0;
-                        y: 6px;
-                        width: 32px;
-                        horizontal-alignment: center;
-                        text: "A";
-                        font-size: 16px;
-                        font-weight: 700;
-                        color: Theme.text-white;
-                    }
-                }
-
-                Text {
-                    x: 54px;
-                    y: 18px;
-                    text: "Acta";
-                    font-size: Theme.font-xl;
-                    font-weight: 700;
-                    color: Theme.text-white;
-                }
-            }
-
-            Rectangle {
-                height: 44px;
+                height: 60px;
                 vertical-stretch: 0;
                 background: switch-touch.has-hover ? Theme.sidebar-switcher-hover : transparent;
-                animate background { duration: 120ms; easing: ease; }
+                animate background { duration: 100ms; easing: ease; }
 
                 switch-touch := TouchArea {
                     mouse-cursor: pointer;
                     clicked => { root.switch-company(); }
 
                     HorizontalLayout {
-                        padding-left: 14px;
-                        padding-right: 36px;
-                        spacing: 8px;
+                        padding-left: Theme.space-3;
+                        padding-right: Theme.space-3;
+                        padding-top: Theme.space-2;
+                        padding-bottom: Theme.space-2;
+                        spacing: Theme.space-2;
                         alignment: start;
 
+                        // Acta logo square
                         Rectangle {
-                            width: 8px;
-                            height: 8px;
-                            border-radius: 4px;
+                            width: 28px;
+                            height: 28px;
+                            border-radius: Theme.radius-md;
                             background: Theme.primary;
                             y: (parent.height - self.height) / 2;
+
+                            Image {
+                                x: 4px; y: 4px;
+                                width: 20px;
+                                height: 20px;
+                                source: Icons.sidebar-logo;
+                                image-fit: contain;
+                                colorize: Theme.text-white;
+                            }
                         }
 
                         VerticalLayout {
                             horizontal-stretch: 1;
-                            spacing: 2px;
+                            spacing: Theme.space-1;
                             alignment: center;
 
                             Text {
                                 text: root.active-company-name;
-                                font-size: 12px;
+                                font-size: Theme.font-md;
                                 font-weight: 500;
-                                color: #D8E4FF;
+                                color: Theme.text-primary;
                                 overflow: elide;
                             }
 
                             Text {
-                                text: root.active-company-subtitle;
-                                font-size: 10px;
-                                color: Theme.sidebar-text-muted;
+                                text: root.active-company-subtitle != "" ? root.active-company-subtitle : "Acta · упр. облік";
+                                font-size: Theme.font-xs;
+                                color: Theme.text-muted;
                                 overflow: elide;
                             }
                         }
-                    }
 
-                    Image {
-                        width: 14px;
-                        height: 14px;
-                        source: SidebarIcons.chevron-down;
-                        colorize: Theme.sidebar-text-muted;
-                        x: parent.width - 24px;
-                        y: (parent.height - self.height) / 2;
+                        Image {
+                            width: 13px;
+                            height: 13px;
+                            source: Icons.chevron-down;
+                            colorize: Theme.text-muted;
+                            y: (parent.height - self.height) / 2;
+                        }
                     }
                 }
             }
 
+            // ── Divider ──────────────────────────────────────────────────────
             Rectangle {
                 height: 1px;
-                x: 20px;
-                width: 180px;
                 background: Theme.sidebar-divider;
                 vertical-stretch: 0;
             }
 
-            SectionLabel { text: "МЕНЮ"; }
+            // ── Nav ──────────────────────────────────────────────────────────
+            Rectangle { height: Theme.space-2; vertical-stretch: 0; }
 
             VerticalLayout {
-                padding-left: 12px;
-                padding-right: 12px;
-                spacing: 6px;
+                padding-left: Theme.space-2;
+                padding-right: Theme.space-2;
+                spacing: Theme.space-1 / 2;
                 vertical-stretch: 0;
 
                 NavItem {
                     label: "Головна";
-                    icon: SidebarIcons.dashboard;
+                    icon: Icons.home;
                     active: root.current-feature == "dashboard";
                     clicked => { root.navigate("dashboard"); }
                 }
+
+                // Documents group with expand toggle
                 Rectangle {
-                    height: 36px;
+                    height: 32px;
                     vertical-stretch: 0;
                     border-radius: Theme.radius-md;
                     background: docs-ta.has-hover ? Theme.sidebar-hover : transparent;
-                    animate background { duration: 120ms; easing: ease; }
+                    animate background { duration: 100ms; easing: ease; }
 
                     HorizontalLayout {
-                        padding-left: 10px;
-                        padding-right: 12px;
-                        spacing: 8px;
+                        padding-left: Theme.space-2;
+                        padding-right: Theme.space-2;
+                        spacing: Theme.space-2;
                         alignment: start;
 
                         Rectangle {
-                            width: 18px;
-                            height: 18px;
+                            width: 16px;
+                            height: 16px;
                             y: (parent.height - self.height) / 2;
                             Image {
                                 width: parent.width;
                                 height: parent.height;
-                                source: SidebarIcons.documents;
+                                source: Icons.documents;
                                 image-fit: contain;
                                 colorize: Theme.sidebar-icon;
                             }
@@ -284,7 +266,7 @@ export component Sidebar {
                         Text {
                             text: "Документи";
                             font-size: Theme.font-md;
-                            font-weight: 500;
+                            font-weight: 400;
                             color: Theme.sidebar-text;
                             vertical-alignment: center;
                             horizontal-stretch: 1;
@@ -293,7 +275,7 @@ export component Sidebar {
                         Image {
                             width: 10px;
                             height: 10px;
-                            source: SidebarIcons.chevron-down;
+                            source: Icons.chevron-down;
                             colorize: Theme.sidebar-icon;
                             y: (parent.height - self.height) / 2;
                             transform-rotation: root.docs-expanded ? 0deg : -90deg;
@@ -306,82 +288,84 @@ export component Sidebar {
                         clicked => { root.docs-expanded = !root.docs-expanded; }
                     }
                 }
+
                 if root.docs-expanded : NavItem {
                     label: "Акти виконаних робіт";
-                    icon: SidebarIcons.documents;
+                    icon: Icons.documents;
                     active: root.current-feature == "acts";
-                    indent: 10px;
+                    indent: 8px;
                     clicked => { root.navigate("acts"); }
                 }
                 if root.docs-expanded : NavItem {
                     label: "Рахунки";
-                    icon: SidebarIcons.documents;
+                    icon: Icons.documents;
                     active: root.current-feature == "invoices";
-                    indent: 10px;
+                    indent: 8px;
                     clicked => { root.navigate("invoices"); }
                 }
                 if root.docs-expanded : NavItem {
-                    label: "Накладні";
-                    icon: SidebarIcons.documents;
+                    label: "Видаткові накладні";
+                    icon: Icons.documents;
                     active: root.current-feature == "waybills";
-                    indent: 10px;
+                    indent: 8px;
                     clicked => { root.navigate("waybills"); }
                 }
+
                 NavItem {
                     label: "Контрагенти";
-                    icon: SidebarIcons.counterparties;
+                    icon: Icons.counterparties;
                     active: root.current-feature == "counterparties";
                     clicked => { root.navigate("counterparties"); }
                 }
                 NavItem {
                     label: "Платежі";
-                    icon: SidebarIcons.payments;
+                    icon: Icons.payments;
                     active: root.current-feature == "payments";
                     clicked => { root.navigate("payments"); }
                 }
                 NavItem {
                     label: "Звіти";
-                    icon: SidebarIcons.reports;
+                    icon: Icons.reports;
                     active: root.current-feature == "reports";
                     clicked => { root.navigate("reports"); }
                 }
             }
 
-            HorizontalLayout {
-                padding-left: 20px;
-                padding-right: 20px;
-                height: 1px;
+            // ── Divider + Utilities ──────────────────────────────────────────
+            Rectangle { height: Theme.space-2; vertical-stretch: 0; }
 
-                Rectangle {
-                    horizontal-stretch: 1;
-                    background: Theme.sidebar-divider;
-                }
+            Rectangle {
+                height: 1px;
+                background: Theme.sidebar-divider;
+                vertical-stretch: 0;
             }
+
+            Rectangle { height: Theme.space-2; vertical-stretch: 0; }
 
             SectionLabel { text: "УТИЛІТИ"; }
 
             VerticalLayout {
-                padding-left: 12px;
-                padding-right: 12px;
-                spacing: 6px;
+                padding-left: Theme.space-2;
+                padding-right: Theme.space-2;
+                spacing: Theme.space-1 / 2;
                 vertical-stretch: 0;
 
                 NavItem {
-                    label: "To-Do";
-                    icon: SidebarIcons.todo;
+                    label: "Задачі";
+                    icon: Icons.tasks;
                     active: root.current-feature == "tasks";
                     badge: root.open-tasks-count;
                     clicked => { root.navigate("tasks"); }
                 }
                 NavItem {
                     label: "Компанії";
-                    icon: SidebarIcons.companies;
+                    icon: Icons.companies;
                     active: root.current-feature == "companies";
                     clicked => { root.navigate("companies"); }
                 }
                 NavItem {
                     label: "Календар платежів";
-                    icon: SidebarIcons.calendar;
+                    icon: Icons.calendar;
                     active: root.current-feature == "calendar";
                     clicked => { root.navigate("calendar"); }
                 }
@@ -389,35 +373,29 @@ export component Sidebar {
 
             Rectangle { vertical-stretch: 1; }
 
-            HorizontalLayout {
+            // ── Divider + Settings ───────────────────────────────────────────
+            Rectangle {
                 height: 1px;
-                padding-left: 20px;
-                padding-right: 20px;
+                background: Theme.sidebar-divider;
                 vertical-stretch: 0;
-
-                Rectangle {
-                    background: Theme.sidebar-divider;
-                }
             }
 
-            Rectangle {
-                height: 40px;
+            Rectangle { height: Theme.space-2; vertical-stretch: 0; }
+
+            VerticalLayout {
+                padding-left: Theme.space-2;
+                padding-right: Theme.space-2;
                 vertical-stretch: 0;
 
                 NavItem {
-                    x: 12px;
-                    width: parent.width - 24px;
                     label: "Налаштування";
-                    icon: SidebarIcons.settings;
+                    icon: Icons.settings;
                     active: root.current-feature == "settings";
                     clicked => { root.navigate("settings"); }
                 }
             }
 
-            Rectangle {
-                height: 12px;
-                vertical-stretch: 0;
-            }
+            Rectangle { height: Theme.space-2; vertical-stretch: 0; }
         }
     }
 }

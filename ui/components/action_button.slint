@@ -1,0 +1,51 @@
+import { Theme } from "../theme.slint";
+
+export component ActionButton inherits Rectangle {
+    in property <string> text;
+    in property <image>  icon;
+    in property <bool>   primary:  false;
+    in property <bool>   disabled: false;
+    callback clicked();
+
+    height: 36px;
+    border-radius: 8px;
+    background: disabled
+        ? Theme.border
+        : (primary ? Theme.primary : Theme.bg-card);
+    border-width: primary ? 0px : 1px;
+    border-color: Theme.border;
+
+    property <color> content-color:
+        disabled ? Theme.text-muted : (primary ? Theme.text-white : Theme.text-primary);
+
+    HorizontalLayout {
+        alignment: center;
+        spacing: Theme.space-1;
+        padding-left: 10px;
+        padding-right: 10px;
+
+        if root.icon.width > 0 : Image {
+            width: 14px;
+            height: 14px;
+            source: root.icon;
+            image-fit: contain;
+            colorize: content-color;
+            vertical-alignment: center;
+        }
+
+        Text {
+            text: root.text;
+            color: content-color;
+            font-size: 13px;
+            font-weight: 500;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    TouchArea {
+        mouse-cursor: self.enabled ? pointer : default;
+        enabled: !root.disabled;
+        clicked => { root.clicked(); }
+    }
+}

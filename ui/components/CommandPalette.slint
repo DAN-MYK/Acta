@@ -1,0 +1,268 @@
+// CommandPalette.slint — глобальна командна палітра (Ctrl+K)
+//
+// Повноекранний overlay з пошуковим полем та списком результатів.
+// Клавіатурна навігація: ↑↓ Enter Esc.
+// Групи: НАВІГАЦІЯ | СТВОРИТИ | ДОКУМЕНТИ | КОНТРАГЕНТИ
+//
+// Використання в app.slint:
+//   if root.show-command-palette : CommandPalette {
+//       items: root.command-palette-items;
+//       search-changed(q)     => { root.command-palette-search-changed(q); }
+//       item-selected(a, id)  => { root.command-palette-item-selected(a, id); }
+//       closed                => { root.show-command-palette = false; ... }
+//   }
+
+import { ScrollView } from "std-widgets.slint";
+import { Theme }      from "../theme.slint";
+import { Icons }      from "./icons.slint";
+import { CommandPaletteItem } from "../structs.slint";
+
+export component CommandPalette {
+    in property <[CommandPaletteItem]> items;
+
+    callback search-changed(/* query */ string);
+    callback item-selected(/* action */ string, /* id */ string);
+    callback closed();
+
+    private property <int> selected-index: -1;
+
+    // ── Фон-підкладка ────────────────────────────────────────────────────────
+    Rectangle {
+        background: Theme.overlay;
+
+        backdrop-ta := TouchArea {
+            clicked => { root.closed(); }
+        }
+    }
+
+    // ── Модальна панель ───────────────────────────────────────────────────────
+    Rectangle {
+        width:  min(parent.width - 80px, 640px);
+        height: min(parent.height - 120px, 500px);
+        x: (parent.width  - self.width)  / 2;
+        y: 80px;
+        border-radius: Theme.radius-xl;
+        background:    Theme.bg-card;
+        border-width:  1px;
+        border-color:  Theme.border;
+        drop-shadow-blur:  28px;
+        drop-shadow-color: Theme.shadow-lg;
+        clip: true;
+
+        // Блокує кліки що могли б дійти до підкладки
+        panel-block := TouchArea { }
+
+        VerticalLayout {
+            spacing: 0;
+
+            // ── Рядок пошуку ─────────────────────────────────────────────────
+            Rectangle {
+                height: 52px;
+                vertical-stretch: 0;
+                background: Theme.bg-card;
+
+                HorizontalLayout {
+                    padding-left:  14px;
+                    padding-right: 10px;
+                    spacing:       10px;
+                    alignment:     center;
+
+                    Image {
+                        width: 16px; height: 16px;
+                        source:     Icons.search;
+                        image-fit:  contain;
+                        colorize:   Theme.text-muted;
+                    }
+
+                    search-input := TextInput {
+                        horizontal-stretch: 1;
+                        vertical-alignment: center;
+                        font-size: Theme.font-lg;
+                        color:     Theme.text-primary;
+
+                        edited => {
+                            root.selected-index = -1;
+                            root.search-changed(self.text);
+                        }
+
+                        key-pressed(e) => {
+                            if e.text == Key.DownArrow {
+                                if root.selected-index == -1 {
+                                    if root.items.length > 0 {
+                                        root.selected-index = 0;
+                                        if root.items[0].kind == "header" && root.items.length > 1 {
+                                            root.selected-index = 1;
+                                        }
+                                    }
+                                } else if root.selected-index < root.items.length - 1 {
+                                    root.selected-index = root.selected-index + 1;
+                                    if root.items[root.selected-index].kind == "header" && root.selected-index < root.items.length - 1 {
+                                        root.selected-index = root.selected-index + 1;
+                                    }
+                                }
+                                accept
+                            } else if e.text == Key.UpArrow {
+                                if root.selected-index > 0 {
+                                    root.selected-index = root.selected-index - 1;
+                                    if root.selected-index >= 0 && root.items[root.selected-index].kind == "header" && root.selected-index > 0 {
+                                        root.selected-index = root.selected-index - 1;
+                                    }
+                                }
+                                accept
+                            } else if e.text == Key.Return {
+                                if root.selected-index >= 0 && root.selected-index < root.items.length {
+                                    if root.items[root.selected-index].kind == "item" {
+                                        root.item-selected(root.items[root.selected-index].action, root.items[root.selected-index].id);
+                                    }
+                                }
+                                accept
+                            } else if e.text == Key.Escape {
+                                root.closed();
+                                accept
+                            } else {
+                                reject
+                            }
+                        }
+                    }
+
+                    // Підказка Ctrl+K
+                    Rectangle {
+                        width: 56px; height: 22px;
+                        border-radius: Theme.radius-sm;
+                        border-width:  1px;
+                        border-color:  Theme.border;
+                        background:    Theme.bg-gray-soft;
+
+                        Text {
+                            text: "Ctrl+K";
+                            font-size: Theme.font-xs;
+                            color: Theme.text-muted;
+                            horizontal-alignment: center;
+                            vertical-alignment:   center;
+                        }
+                    }
+
+                    // Кнопка ×
+                    close-rect := Rectangle {
+                        width: 26px; height: 26px;
+                        border-radius: Theme.radius-sm;
+                        background: close-ta.has-hover ? Theme.bg-hover : transparent;
+                        animate background { duration: 80ms; easing: ease; }
+
+                        Image {
+                            x: 6px; y: 6px;
+                            width: 14px; height: 14px;
+                            source:    Icons.close;
+                            image-fit: contain;
+                            colorize:  Theme.text-muted;
+                        }
+
+                        close-ta := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.closed(); }
+                        }
+                    }
+                }
+            }
+
+            // ── Роздільник ───────────────────────────────────────────────────
+            Rectangle {
+                height: 1px;
+                background: Theme.border;
+                vertical-stretch: 0;
+            }
+
+            // ── Список результатів ───────────────────────────────────────────
+            if root.items.length == 0 : Rectangle {
+                vertical-stretch: 1;
+                background: Theme.bg-card;
+
+                Text {
+                    text: "Нічого не знайдено";
+                    font-size: Theme.font-md;
+                    color: Theme.text-muted;
+                    horizontal-alignment: center;
+                    vertical-alignment:   center;
+                }
+            }
+
+            if root.items.length > 0 : ScrollView {
+                vertical-stretch: 1;
+
+                VerticalLayout {
+                    padding: 6px;
+                    spacing: 2px;
+
+                    for item[idx] in root.items : Rectangle {
+                        height: item.kind == "header" ? 28px : 42px;
+                        border-radius: item.kind == "header" ? 0 : Theme.radius-md;
+                        background:
+                            item.kind == "header"        ? transparent :
+                            idx == root.selected-index   ? Theme.row-selected :
+                            row-ta.has-hover             ? Theme.bg-hover :
+                            transparent;
+
+                        animate background { duration: 80ms; easing: ease; }
+
+                        // Заголовок категорії
+                        if item.kind == "header" : Text {
+                            x: 8px;
+                            y: (parent.height - self.preferred-height) / 2;
+                            width: parent.width - 16px;
+                            text:        item.title;
+                            font-size:   Theme.font-xs;
+                            font-weight: 700;
+                            color:       Theme.text-muted;
+                        }
+
+                        // Рядок елемента
+                        if item.kind == "item" : HorizontalLayout {
+                            padding-left:  10px;
+                            padding-right: 12px;
+                            spacing:        8px;
+                            alignment:      center;
+
+                            VerticalLayout {
+                                horizontal-stretch: 1;
+                                alignment: center;
+                                spacing:   2px;
+
+                                Text {
+                                    text:       item.title;
+                                    font-size:  Theme.font-md;
+                                    font-weight: idx == root.selected-index ? 600 : 400;
+                                    color:      idx == root.selected-index ? Theme.primary : Theme.text-primary;
+                                    overflow:   elide;
+                                }
+
+                                if item.subtitle != "" : Text {
+                                    text:      item.subtitle;
+                                    font-size: Theme.font-sm;
+                                    color:     Theme.text-muted;
+                                    overflow:  elide;
+                                }
+                            }
+
+                            if item.shortcut != "" : Text {
+                                text:      item.shortcut;
+                                font-size: Theme.font-xs;
+                                color:     Theme.text-disabled;
+                            }
+                        }
+
+                        row-ta := TouchArea {
+                            enabled:      item.kind == "item";
+                            mouse-cursor: self.enabled ? pointer : default;
+                            clicked => {
+                                root.item-selected(item.action, item.id);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Авто-фокус поля пошуку при відкритті
+    init => { search-input.focus(); }
+}

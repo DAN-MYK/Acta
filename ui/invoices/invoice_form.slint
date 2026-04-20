@@ -88,12 +88,12 @@ export component InvoiceForm inherits Rectangle {
                 }
 
                 HorizontalLayout {
-                    padding-left: 32px;
-                    padding-right: 32px;
-                    spacing: 8px;
+                    padding-left: Theme.page-padding-x;
+                    padding-right: Theme.page-padding-x;
+                    spacing: Theme.space-2;
 
                     HorizontalLayout {
-                        spacing: 6px;
+                        spacing: Theme.space-2;
                         horizontal-stretch: 1;
                         alignment: start;
 
@@ -150,7 +150,7 @@ export component InvoiceForm inherits Rectangle {
                         height: 36px;
                         y: (parent.height - self.height) / 2;
                         border-radius: 8px;
-                        background: inv-save-touch.has-hover ? #2D64E3 : Theme.primary;
+                        background: inv-save-touch.has-hover ? Theme.primary-hover : Theme.primary;
                         animate background { duration: 80ms; }
 
                         Text {
@@ -199,13 +199,13 @@ export component InvoiceForm inherits Rectangle {
 
             // ── Контент форми ──────────────────────────────────────────────
             VerticalLayout {
-                padding: 24px;
-                spacing: 16px;
+                padding: Theme.space-6;
+                spacing: Theme.space-4;
                 vertical-stretch: 1;
 
             // ── Поля форми ─────────────────────────────────────────────────
             GridLayout {
-                spacing: 12px;
+                spacing: Theme.space-3;
                 vertical-stretch: 0;
 
                 Row {
@@ -221,8 +221,8 @@ export component InvoiceForm inherits Rectangle {
                         background: Theme.bg-card;
                         border-width: 1px;
                         border-color: Theme.border;
-                        border-radius: 8px;
-                        height: 40px;
+                        border-radius: Theme.radius-lg;
+                        height: Theme.input-height;
                         number-field := LineEdit {
                             text: root.invoice-number;
                             placeholder-text: "НАК-001";
@@ -243,8 +243,8 @@ export component InvoiceForm inherits Rectangle {
                         background: Theme.bg-card;
                         border-width: 1px;
                         border-color: Theme.border;
-                        border-radius: 8px;
-                        height: 40px;
+                        border-radius: Theme.radius-lg;
+                        height: Theme.input-height;
                         date-field := LineEdit {
                             text: root.invoice-date;
                             placeholder-text: "ДД.ММ.РРРР";
@@ -397,7 +397,7 @@ export component InvoiceForm inherits Rectangle {
                 HorizontalLayout {
                     padding-left: 12px;
                     padding-right: 4px;
-                    spacing: 8px;
+                    spacing: Theme.space-2;
 
                     Text {
                         text: "Найменування";
@@ -466,7 +466,7 @@ export component InvoiceForm inherits Rectangle {
                                 padding-right: 4px;
                                 padding-top: 4px;
                                 padding-bottom: 4px;
-                                spacing: 8px;
+                                spacing: Theme.space-2;
 
                                 LineEdit {
                                     text: item.description;

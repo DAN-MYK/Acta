@@ -36,11 +36,11 @@ export component StatCard inherits Rectangle {
         padding-left: Theme.space-4;
         padding-right: Theme.space-4;
         padding-bottom: Theme.space-2;
-        spacing: 2px;
+        spacing: Theme.space-1;
 
         Text {
             text: root.value;
-            font-size: 20px; // навмисно між font-xl(16) і font-2xl(18) — не замінювати
+            font-size: Theme.font-stat;
             font-weight: 700;
             color: Theme.text-primary;
             overflow: elide;

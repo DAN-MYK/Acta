@@ -27,43 +27,56 @@ export component StatusOption inherits Rectangle {
     border-width: selected ? 2px : 1px;
     border-color: selected ? accent : Theme.border;
     background: selected
-        ? accent.with-alpha(0.08)
+        ? accent.with-alpha(8%)
         : (opt-touch.has-hover ? Theme.bg-hover : Theme.bg-card);
     animate background   { duration: 80ms; easing: ease; }
     animate border-color { duration: 80ms; easing: ease; }
 
-    // Коло радіо-кнопки (геометрія: width=16, тому radius=8 — не токен)
-    Rectangle {
-        x: 12px;
-        y: (parent.height - self.height) / 2;
-        width: 16px;
-        height: 16px;
-        border-radius: 8px;
-        border-width: 2px;
-        border-color: root.selected ? root.accent : Theme.border;
-        background: root.selected ? root.accent : transparent;
+    HorizontalLayout {
+        padding-left: Theme.space-3;
+        padding-right: Theme.space-3;
+        spacing: Theme.space-2;
+        alignment: start;
 
-        if root.selected : Rectangle {
-            x: 5px; y: 5px;
-            width: 6px; height: 6px;
-            border-radius: 3px;
-            background: white;
+        // Коло радіо-кнопки (геометрія: 16×16 → radius=8, внутрішня крапка 6×6)
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 16px;
+                height: 16px;
+                border-radius: self.width / 2;
+                border-width: 2px;
+                border-color: root.selected ? root.accent : Theme.border;
+                background: root.selected ? root.accent : transparent;
+
+                if root.selected : Rectangle {
+                    width: 6px;
+                    height: 6px;
+                    border-radius: self.width / 2;
+                    background: white;
+                }
+            }
         }
-    }
 
-    Text {
-        x: 36px; y: 9px;
-        text: root.title;
-        font-size: Theme.font-md;
-        font-weight: 600;
-        color: root.selected ? root.accent : Theme.text-primary;
-    }
+        // Текстовий блок: назва + підпис
+        VerticalLayout {
+            alignment: center;
+            spacing: Theme.space-1;
+            horizontal-stretch: 1;
 
-    Text {
-        x: 36px; y: 28px;
-        text: root.subtitle;
-        font-size: Theme.font-sm;
-        color: Theme.text-second;
+            Text {
+                text: root.title;
+                font-size: Theme.font-md;
+                font-weight: 600;
+                color: root.selected ? root.accent : Theme.text-primary;
+            }
+
+            Text {
+                text: root.subtitle;
+                font-size: Theme.font-sm;
+                color: Theme.text-second;
+            }
+        }
     }
 
     opt-touch := TouchArea {

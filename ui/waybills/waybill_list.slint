@@ -1,61 +1,28 @@
-// Компонент: список видаткових накладних
-//
-// Структура аналогічна InvoiceList:
-//   - Topbar 64px (заголовок + кнопка створення)
-//   - Вкладки статусів (44px) з лічильниками
-//   - KPI картки (84px) — цього місяця, доставлено, непідписано, прострочено
-//   - Рядок пошуку
-//   - Таблиця зі status badge та панеллю дій
-
 import { Theme } from "../theme.slint";
 import { ProgressIndicator, ListView } from "std-widgets.slint";
-import { StatCard } from "../components/stat_card.slint";
+import { PageHeader } from "../components/page_header.slint";
+import { MetricStrip } from "../components/MetricStrip.slint";
+import { EmptyState } from "../components/EmptyState.slint";
+import { StatusTabBar } from "../components/StatusTabBar.slint";
 import { StatusBadge } from "../components/status_badge.slint";
+import { ActionButton } from "../components/action_button.slint";
+import { Icons } from "../components/icons.slint";
 import { WaybillRow } from "../structs.slint";
-
-component ActionButton inherits Rectangle {
-    in property <string> text;
-    in property <bool> primary: false;
-    in property <bool> disabled: false;
-    callback clicked();
-
-    height: 36px;
-    border-radius: 8px;
-    background: disabled
-        ? Theme.border
-        : (primary ? Theme.primary : Theme.bg-card);
-    border-width: primary ? 0px : 1px;
-    border-color: Theme.border;
-
-    Text {
-        text: root.text;
-        color: disabled ? Theme.text-muted : (primary ? Theme.text-white : Theme.text-primary);
-        font-size: 13px;
-        font-weight: 500;
-        horizontal-alignment: center;
-        vertical-alignment: center;
-    }
-
-    TouchArea {
-        mouse-cursor: disabled ? default : pointer;
-        clicked => { if (!root.disabled) { root.clicked(); } }
-    }
-}
 
 export component WaybillList {
 
-    // ── Вхідні дані ────────────────────────────────────────────────────────
+    // ── Вхідні дані (Rust → Slint) ─────────────────────────────────────────
     in property <[WaybillRow]> rows;
-    in property <bool>         loading: false;
+    in property <bool>         loading:       false;
     in property <[int]>        status-counts: [0, 0, 0, 0, 0];
 
-    // ── KPI дані ─────────────────────────────────────────────────────────────
-    in property <int>    kpi-month: 0;
+    // ── KPI ─────────────────────────────────────────────────────────────────
+    in property <int>    kpi-waybills-month: 0;
     in property <string> kpi-delivered: "0 ₴";
-    in property <string> kpi-unsigned: "0 ₴";
-    in property <int>    kpi-overdue: 0;
+    in property <string> kpi-unsigned:  "0 ₴";
+    in property <int>    kpi-overdue:   0;
 
-    // ── Колбеки ─────────────────────────────────────────────────────────────
+    // ── Колбеки (Slint → Rust) ──────────────────────────────────────────────
     // 0=Усі, 1=Чернетки, 2=Виставлені, 3=Підписані, 4=Доставлені
     callback status-filter-changed(int);
     callback search-changed(string);
@@ -66,11 +33,11 @@ export component WaybillList {
     callback pdf-clicked(string);
 
     // ── Внутрішній стан ─────────────────────────────────────────────────────
-    private property <int>    selected-row: -1;
-    private property <string> selected-id: "";
+    private property <int>    selected-row:    -1;
+    private property <string> selected-id:     "";
     private property <string> selected-status: "";
     private property <string> selected-number: "";
-    private property <int>    active-tab: 0;
+    property <int>            active-tab:      0;
 
     min-width: 600px;
     min-height: 400px;
@@ -79,195 +46,81 @@ export component WaybillList {
         spacing: 0;
         padding: 0;
 
-        // ── Topbar ─────────────────────────────────────────────────────────
-        Rectangle {
-            height: 64px;
-            vertical-stretch: 0;
-            background: Theme.bg-card;
-
-            HorizontalLayout {
-                padding-left: 32px;
-                padding-right: 32px;
-                spacing: 16px;
-                alignment: center;
-
-                Text {
-                    text: "Накладні";
-                    font-size: 18px;
-                    font-weight: 600;
-                    color: Theme.text-primary;
-                    vertical-alignment: center;
-                    horizontal-stretch: 1;
-                }
-
-                new-btn := Rectangle {
-                    background: Theme.primary;
-                    border-radius: 8px;
-                    height: 36px;
-                    width: 165px;
-
-                    Text {
-                        text: "+ Нова накладна";
-                        color: Theme.text-white;
-                        font-size: 13px;
-                        font-weight: 500;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-
-                    TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => { root.create-clicked(); }
-                    }
-                }
-            }
-
-            Rectangle {
-                y: parent.height - 1px;
-                height: 1px;
-                background: Theme.border;
-            }
+        PageHeader {
+            title: "Накладні";
+            button-text: "+ Нова накладна";
+            button-clicked => { root.create-clicked(); }
         }
 
-        // ── Вкладки статусів (44px) ──────────────────────────────────────────
-        Rectangle {
-            height: 44px;
-            vertical-stretch: 0;
-            background: Theme.bg-card;
-
-            private property <[string]> tab-names: ["Всі", "Чернетки", "Виставлені", "Підписані", "Доставлені"];
-
-            HorizontalLayout {
-                alignment: start;
-                padding-left: 32px;
-                spacing: 0;
-
-                for tab-name[ti] in tab-names : Rectangle {
-                    property <bool> is-active: root.active-tab == ti;
-                    property <int>  tab-count: ti < root.status-counts.length
-                        ? root.status-counts[ti] : 0;
-
-                    if is-active : Rectangle {
-                        y: parent.height - 2px;
-                        height: 2px;
-                        background: Theme.primary;
-                    }
-
-                    HorizontalLayout {
-                        alignment: center;
-                        spacing: 4px;
-                        padding-left: 12px;
-                        padding-right: 12px;
-
-                        Text {
-                            text: tab-count > 0
-                                ? tab-name + " (" + tab-count + ")"
-                                : tab-name;
-                            font-size: 13px;
-                            font-weight: is-active ? 600 : 400;
-                            color: is-active ? Theme.primary : Theme.text-second;
-                            vertical-alignment: center;
-                        }
-                    }
-
-                    TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => {
-                            root.active-tab = ti;
-                            root.status-filter-changed(ti);
-                        }
-                    }
-                }
-            }
-
-            Rectangle {
-                y: parent.height - 1px;
-                height: 1px;
-                background: Theme.border;
-            }
+        StatusTabBar {
+            tab-names: ["Всі", "Чернетки", "Виставлені", "Підписані", "Доставлені"];
+            tab-counts: root.status-counts;
+            active-tab <=> root.active-tab;
+            tab-changed(i) => { root.status-filter-changed(i); }
         }
 
-        // ── Основний контент ─────────────────────────────────────────────────
         Rectangle {
             background: Theme.bg-page;
             vertical-stretch: 1;
 
             VerticalLayout {
-                padding-top: 24px;
-                padding-left: 32px;
-                padding-right: 32px;
-                padding-bottom: 24px;
-                spacing: 16px;
+                padding-top: Theme.space-6;
+                padding-left: Theme.space-8;
+                padding-right: Theme.space-8;
+                padding-bottom: Theme.space-6;
+                spacing: Theme.space-4;
 
-                // ── KPI картки ───────────────────────────────────────────────
-                HorizontalLayout {
-                    height: 84px;
-                    spacing: 12px;
+                // ── MetricStrip ──────────────────────────────────────────────
+                MetricStrip {
                     vertical-stretch: 0;
-
-                    StatCard {
-                        accent: Theme.primary;
-                        value: root.kpi-month + "";
-                        label: "Накладних за місяць";
-                        secondary: "поточний місяць";
-                    }
-
-                    StatCard {
-                        accent: Theme.success;
-                        value: root.kpi-delivered;
-                        label: "Відвантажено";
-                        secondary: "доставлені цього місяця";
-                    }
-
-                    StatCard {
-                        accent: Theme.warning;
-                        value: root.kpi-unsigned;
-                        label: "Непідписаних";
-                        secondary: "виставлені та підписані";
-                    }
-
-                    StatCard {
-                        accent: root.kpi-overdue > 0 ? Theme.danger : Theme.text-muted;
-                        value: root.kpi-overdue + "";
-                        label: "Прострочено";
-                        secondary: "більше 30 днів";
-                    }
+                    items: [
+                        { label: "Накладних за місяць", value: root.kpi-waybills-month + "", subtext: "поточний місяць",        accent: Theme.primary },
+                        { label: "Відвантажено",         value: root.kpi-delivered,            subtext: "доставлені цього місяця", accent: Theme.success },
+                        { label: "Непідписаних",         value: root.kpi-unsigned,             subtext: "виставлені та підписані",accent: Theme.warning },
+                        { label: "Прострочено",          value: root.kpi-overdue + "",         subtext: "більше 30 днів",         accent: root.kpi-overdue > 0 ? Theme.danger : Theme.text-muted },
+                    ];
                 }
 
                 // ── Пошук ────────────────────────────────────────────────────
-                HorizontalLayout {
-                    height: 40px;
+                Rectangle {
+                    height: Theme.input-height;
                     vertical-stretch: 0;
+                    background: Theme.bg-card;
+                    border-radius: Theme.radius-md;
+                    border-width: 1px;
+                    border-color: Theme.border;
+                    clip: true;
 
-                    search-rect := Rectangle {
-                        background: Theme.bg-card;
-                        border-radius: 8px;
-                        border-width: 1px;
-                        border-color: Theme.border;
-                        horizontal-stretch: 1;
-                        clip: true;
+                    Image {
+                        x: 12px;
+                        y: (parent.height - 16px) / 2;
+                        width: 16px;
+                        height: 16px;
+                        source: Icons.search;
+                        image-fit: contain;
+                        colorize: Theme.text-muted;
+                    }
 
-                        HorizontalLayout {
-                            padding-left: 12px;
-                            padding-right: 12px;
+                    HorizontalLayout {
+                        padding-left: 36px;
+                        padding-right: Theme.space-3;
 
-                            search-input := TextInput {
-                                vertical-alignment: center;
-                                font-size: 13px;
-                                color: Theme.text-primary;
-                                edited => { root.search-changed(search-input.text); }
-                            }
-                        }
-
-                        if search-input.text == "" : Text {
-                            x: 12px;
-                            height: parent.height;
-                            width: parent.width - 24px;
-                            text: "🔎  Пошук за номером або контрагентом...";
-                            color: Theme.text-muted;
-                            font-size: 13px;
+                        search-input := TextInput {
                             vertical-alignment: center;
+                            font-size: Theme.font-md;
+                            color: Theme.text-primary;
+                            edited => { root.search-changed(search-input.text); }
                         }
+                    }
+
+                    if search-input.text == "" : Text {
+                        x: 36px;
+                        height: parent.height;
+                        width: parent.width - 44px;
+                        text: "Пошук за номером або контрагентом...";
+                        color: Theme.text-muted;
+                        font-size: Theme.font-md;
+                        vertical-alignment: center;
                     }
                 }
 
@@ -279,7 +132,7 @@ export component WaybillList {
                 // ── Таблиця ──────────────────────────────────────────────────
                 Rectangle {
                     vertical-stretch: 1;
-                    border-radius: 8px;
+                    border-radius: Theme.radius-md;
                     border-width: 1px;
                     border-color: Theme.border;
                     clip: true;
@@ -287,72 +140,53 @@ export component WaybillList {
                     VerticalLayout {
                         spacing: 0;
 
-                        // Заголовок
+                        // Заголовок таблиці
                         Rectangle {
                             height: 40px;
                             vertical-stretch: 0;
                             background: Theme.table-header;
 
                             HorizontalLayout {
-                                padding-left: 16px;
-                                padding-right: 16px;
+                                padding-left: Theme.space-4;
+                                padding-right: Theme.space-4;
 
-                                Text { text: "Номер";      color: Theme.text-second; font-size: 12px; font-weight: 500; horizontal-stretch: 2; vertical-alignment: center; }
-                                Text { text: "Дата";       color: Theme.text-second; font-size: 12px; font-weight: 500; horizontal-stretch: 1; vertical-alignment: center; }
-                                Text { text: "Контрагент"; color: Theme.text-second; font-size: 12px; font-weight: 500; horizontal-stretch: 3; vertical-alignment: center; }
-                                Text { text: "Сума, ₴";    color: Theme.text-second; font-size: 12px; font-weight: 500; horizontal-stretch: 1; vertical-alignment: center; }
-                                Text { text: "Статус";     color: Theme.text-second; font-size: 12px; font-weight: 500; width: 110px; vertical-alignment: center; }
+                                Text { text: "Номер";      color: Theme.text-second; font-size: Theme.font-base; font-weight: 500; horizontal-stretch: 2; vertical-alignment: center; }
+                                Text { text: "Дата";       color: Theme.text-second; font-size: Theme.font-base; font-weight: 500; horizontal-stretch: 1; vertical-alignment: center; }
+                                Text { text: "Контрагент"; color: Theme.text-second; font-size: Theme.font-base; font-weight: 500; horizontal-stretch: 3; vertical-alignment: center; }
+                                Text { text: "Сума, ₴";    color: Theme.text-second; font-size: Theme.font-base; font-weight: 500; horizontal-stretch: 1; vertical-alignment: center; }
+                                Text { text: "Статус";     color: Theme.text-second; font-size: Theme.font-base; font-weight: 500; width: 110px;           vertical-alignment: center; }
                             }
                         }
 
-                        // Порожній стан
-                        if !root.loading && root.rows.length == 0 : Rectangle {
-                            vertical-stretch: 1;
-                            background: Theme.bg-card;
-
-                            VerticalLayout {
-                                alignment: center;
-                                spacing: 8px;
-
-                                Text {
-                                    text: "📦";
-                                    font-size: 32px;
-                                    horizontal-alignment: center;
-                                }
-                                Text {
-                                    text: "Накладних ще немає";
-                                    font-size: 15px;
-                                    font-weight: 500;
-                                    color: Theme.text-second;
-                                    horizontal-alignment: center;
-                                }
-                                Text {
-                                    text: "Натисніть «+ Нова накладна» щоб створити першу";
-                                    font-size: 13px;
-                                    color: Theme.text-muted;
-                                    horizontal-alignment: center;
-                                }
-                            }
+                        if !root.loading && root.rows.length == 0 : EmptyState {
+                            icon: Icons.documents;
+                            title: "Накладних ще немає";
+                            description: "Натисніть «+ Нова накладна» щоб створити першу";
                         }
 
-                        // Рядки
+                        // Рядки керуються через Rc<VecModel<WaybillRow>> на стороні Rust.
+                        // search-changed / status-filter-changed → Rust фільтрує і замінює VecModel.
                         ListView {
                             vertical-stretch: 1;
 
                             for row[i] in root.rows : Rectangle {
-                                property <string> raw-status: row.status;
                                 property <color> badge-color:
-                                    raw-status == "delivered" ? Theme.success  :
-                                    raw-status == "signed"    ? Theme.primary  :
-                                    raw-status == "issued"    ? Theme.warning  :
+                                    row.status == "delivered" ? Theme.success :
+                                    row.status == "signed"    ? Theme.primary :
+                                    row.status == "issued"    ? Theme.warning :
                                     Theme.text-muted;
                                 property <color> badge-bg:
-                                    raw-status == "delivered" ? #1EB16E1F :
-                                    raw-status == "signed"    ? #3D75F41A :
-                                    raw-status == "issued"    ? #F4A31E1F :
-                                    #ABABB71F;
+                                    row.status == "delivered" ? Theme.success.with-alpha(12%) :
+                                    row.status == "signed"    ? Theme.primary.with-alpha(10%) :
+                                    row.status == "issued"    ? Theme.warning.with-alpha(12%) :
+                                    Theme.text-muted.with-alpha(12%);
+                                property <image> badge-icon:
+                                    row.status == "delivered" ? Icons.paid   :
+                                    row.status == "signed"    ? Icons.signed :
+                                    row.status == "issued"    ? Icons.issued :
+                                    Icons.draft;
 
-                                height: 52px;
+                                height: Theme.row-height;
                                 background: root.selected-row == i
                                     ? Theme.row-selected
                                     : (row-touch.has-hover
@@ -363,13 +197,13 @@ export component WaybillList {
                                 animate background { duration: 80ms; easing: ease; }
 
                                 HorizontalLayout {
-                                    padding-left: 15px;
-                                    padding-right: 15px;
+                                    padding-left: Theme.space-4;
+                                    padding-right: Theme.space-4;
 
                                     Text {
                                         text: row.num;
                                         color: Theme.text-primary;
-                                        font-size: 13px;
+                                        font-size: Theme.font-md;
                                         font-weight: 500;
                                         horizontal-stretch: 2;
                                         vertical-alignment: center;
@@ -378,7 +212,7 @@ export component WaybillList {
                                     Text {
                                         text: row.date;
                                         color: Theme.text-second;
-                                        font-size: 13px;
+                                        font-size: Theme.font-md;
                                         horizontal-stretch: 1;
                                         vertical-alignment: center;
                                         overflow: elide;
@@ -386,7 +220,7 @@ export component WaybillList {
                                     Text {
                                         text: row.counterparty;
                                         color: Theme.text-second;
-                                        font-size: 13px;
+                                        font-size: Theme.font-md;
                                         horizontal-stretch: 3;
                                         vertical-alignment: center;
                                         overflow: elide;
@@ -394,7 +228,7 @@ export component WaybillList {
                                     Text {
                                         text: row.amount;
                                         color: Theme.text-primary;
-                                        font-size: 13px;
+                                        font-size: Theme.font-md;
                                         font-weight: 600;
                                         horizontal-stretch: 1;
                                         vertical-alignment: center;
@@ -403,10 +237,10 @@ export component WaybillList {
                                     Rectangle {
                                         width: 110px;
                                         StatusBadge {
-                                            y: (parent.height - self.height) / 2;
                                             label: row.status-label;
                                             badge-color: badge-color;
                                             badge-bg: badge-bg;
+                                            icon: badge-icon;
                                         }
                                     }
                                 }
@@ -426,16 +260,17 @@ export component WaybillList {
                     }
                 }
 
-                // ── Панель дій ──────────────────────────────────────────────
+                // ── Панель дій (з'являється при виборі рядка) ───────────────
                 if root.selected-row >= 0 : HorizontalLayout {
                     height: 48px;
-                    spacing: 8px;
+                    spacing: Theme.space-2;
                     vertical-stretch: 0;
+                    alignment: center;
 
                     Text {
                         text: root.selected-number;
                         color: Theme.text-second;
-                        font-size: 13px;
+                        font-size: Theme.font-md;
                         font-weight: 500;
                         vertical-alignment: center;
                         horizontal-stretch: 1;
@@ -443,8 +278,9 @@ export component WaybillList {
                     }
 
                     ActionButton {
-                        text: "✎  Редагувати";
                         width: 130px;
+                        icon: Icons.edit;
+                        text: "Редагувати";
                         clicked => {
                             if (root.selected-id != "") {
                                 root.edit-clicked(root.selected-id);
@@ -453,8 +289,9 @@ export component WaybillList {
                     }
 
                     ActionButton {
-                        text: "PDF";
                         width: 80px;
+                        icon: Icons.pdf;
+                        text: "PDF";
                         clicked => {
                             if (root.selected-id != "") {
                                 root.pdf-clicked(root.selected-id);
@@ -463,12 +300,13 @@ export component WaybillList {
                     }
 
                     ActionButton {
-                        text: "Наступний статус ▶";
                         width: 180px;
-                        primary: root.selected-status != "delivered";
+                        icon: Icons.arrow-right;
+                        text: "Наступний статус";
+                        primary: true;
                         disabled: root.selected-status == "delivered";
                         clicked => {
-                            if (root.selected-id != "" && root.selected-status != "delivered") {
+                            if (root.selected-id != "") {
                                 root.advance-status-clicked(root.selected-id);
                                 root.selected-row    = -1;
                                 root.selected-id     = "";

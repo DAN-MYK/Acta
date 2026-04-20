@@ -50,13 +50,13 @@ export component CompanyForm inherits Rectangle {
             }
 
             HorizontalLayout {
-                padding-left: 32px;
-                padding-right: Theme.space-8;
-                spacing: 8px;
+                padding-left: Theme.page-padding-x;
+                padding-right: Theme.page-padding-x;
+                spacing: Theme.space-2;
                 alignment: center;
 
                 HorizontalLayout {
-                    spacing: 6px;
+                    spacing: Theme.space-2;
                     horizontal-stretch: 1;
                     alignment: start;
 
@@ -112,7 +112,7 @@ export component CompanyForm inherits Rectangle {
                     width: 112px;
                     height: Theme.btn-md-height;
                     border-radius: Theme.radius-md;
-                    background: co-save-touch.has-hover ? #2D64E3 : Theme.primary;
+                    background: co-save-touch.has-hover ? Theme.primary-hover : Theme.primary;
                     animate background { duration: 80ms; }
 
                     Text {
@@ -152,11 +152,11 @@ export component CompanyForm inherits Rectangle {
 
                 VerticalLayout {
                     padding: Theme.space-8;
-                    spacing: 12px;
+                    spacing: Theme.space-3;
 
                     // Назва (обов'язково)
                     VerticalLayout {
-                        spacing: 4px;
+                        spacing: Theme.space-1;
                         Text { text: "Назва *"; font-size: Theme.font-base; color: Theme.text-second; }
                         name-edit := LineEdit {
                             text: root.form-name;
@@ -166,7 +166,7 @@ export component CompanyForm inherits Rectangle {
 
                     // ЄДРПОУ
                     VerticalLayout {
-                        spacing: 4px;
+                        spacing: Theme.space-1;
                         Text { text: "ЄДРПОУ"; font-size: Theme.font-base; color: Theme.text-second; }
                         edrpou-edit := LineEdit {
                             text: root.form-edrpou;
@@ -176,7 +176,7 @@ export component CompanyForm inherits Rectangle {
 
                     // IBAN
                     VerticalLayout {
-                        spacing: 4px;
+                        spacing: Theme.space-1;
                         Text { text: "IBAN"; font-size: Theme.font-base; color: Theme.text-second; }
                         iban-edit := LineEdit {
                             text: root.form-iban;
@@ -186,7 +186,7 @@ export component CompanyForm inherits Rectangle {
 
                     // Юридична адреса
                     VerticalLayout {
-                        spacing: 4px;
+                        spacing: Theme.space-1;
                         Text { text: "Юридична адреса"; font-size: Theme.font-base; color: Theme.text-second; }
                         address-edit := LineEdit {
                             text: root.form-legal-address;
@@ -196,7 +196,7 @@ export component CompanyForm inherits Rectangle {
 
                     // Директор
                     VerticalLayout {
-                        spacing: 4px;
+                        spacing: Theme.space-1;
                         Text { text: "Директор (ПІБ)"; font-size: Theme.font-base; color: Theme.text-second; }
                         director-edit := LineEdit {
                             text: root.form-director-name;
@@ -206,7 +206,7 @@ export component CompanyForm inherits Rectangle {
 
                     // Бухгалтер
                     VerticalLayout {
-                        spacing: 4px;
+                        spacing: Theme.space-1;
                         Text { text: "Бухгалтер (ПІБ)"; font-size: Theme.font-base; color: Theme.text-second; }
                         accountant-edit := LineEdit {
                             text: root.form-accountant-name;
@@ -216,7 +216,7 @@ export component CompanyForm inherits Rectangle {
 
                     // Платник ПДВ
                     HorizontalLayout {
-                        spacing: 8px;
+                        spacing: Theme.space-2;
                         alignment: start;
                         vat-check := CheckBox {
                             text: "Платник ПДВ";

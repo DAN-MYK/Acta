@@ -10,6 +10,7 @@ use crate::{
     ui::helpers::*,
     MainWindow, TaskRow,
 };
+use chrono::Datelike;
 use acta::{db, models::{NewTask, TaskStatus}};
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -18,23 +19,54 @@ use acta::{db, models::{NewTask, TaskStatus}};
 
 #[derive(Clone)]
 pub struct TasksUiData {
-    pub task_rows: Vec<TaskRow>,
+    pub task_rows:   Vec<TaskRow>,
+    pub open_count:  i32,
+    pub done_count:  i32,
+    pub today_label: SharedString,
 }
 
 pub async fn prepare_tasks_data(
     pool: &sqlx::PgPool,
     query: String,
 ) -> Result<TasksUiData> {
-    let tasks = db::tasks::list_open(pool).await?;
+    let tasks = db::tasks::list_all(pool).await?;
+    let norm = normalized_query(&query);
     let filtered: Vec<acta::models::Task> = tasks
         .into_iter()
-        .filter(|task| task_matches_query(task, normalized_query(&query)))
+        .filter(|task| task_matches_query(task, norm.clone()))
         .collect();
-    Ok(TasksUiData { task_rows: to_task_rows(&filtered) })
+
+    let open_count = filtered.iter()
+        .filter(|t| matches!(t.status, acta::models::TaskStatus::Open | acta::models::TaskStatus::InProgress))
+        .count() as i32;
+    let done_count = filtered.iter()
+        .filter(|t| matches!(t.status, acta::models::TaskStatus::Done))
+        .count() as i32;
+
+    let today = chrono::Local::now();
+    let month_ua = match today.month() {
+        1 => "січня", 2 => "лютого", 3 => "березня", 4 => "квітня",
+        5 => "травня", 6 => "червня", 7 => "липня", 8 => "серпня",
+        9 => "вересня", 10 => "жовтня", 11 => "листопада", 12 => "грудня",
+        _ => "",
+    };
+    let today_label = SharedString::from(
+        format!("Сьогодні, {} {} {}", today.day(), month_ua, today.year())
+    );
+
+    Ok(TasksUiData {
+        task_rows: to_task_rows(&filtered),
+        open_count,
+        done_count,
+        today_label,
+    })
 }
 
 pub fn apply_tasks_to_ui(ui: &MainWindow, d: TasksUiData, close_form: bool) {
     ui.set_task_rows(ModelRc::new(VecModel::from(d.task_rows)));
+    ui.set_task_open_count(d.open_count);
+    ui.set_task_done_count(d.done_count);
+    ui.set_task_today_label(d.today_label);
     ui.set_tasks_loading(false);
     if close_form {
         ui.set_show_task_form(false);

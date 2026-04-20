@@ -39,6 +39,38 @@ pub async fn list_open(pool: &PgPool) -> Result<Vec<Task>> {
     Ok(rows)
 }
 
+pub async fn list_all(pool: &PgPool) -> Result<Vec<Task>> {
+    let rows = sqlx::query_as::<_, Task>(
+        r#"
+        SELECT id, title, description,
+               status, priority,
+               due_date, reminder_at,
+               counterparty_id, act_id,
+               created_at, updated_at
+        FROM tasks
+        ORDER BY
+            CASE status
+                WHEN 'open' THEN 1
+                WHEN 'in_progress' THEN 2
+                WHEN 'done' THEN 3
+                ELSE 4
+            END,
+            CASE priority
+                WHEN 'critical' THEN 1
+                WHEN 'high' THEN 2
+                WHEN 'normal' THEN 3
+                WHEN 'low' THEN 4
+                ELSE 5
+            END,
+            due_date ASC NULLS LAST,
+            created_at DESC
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
 pub async fn list_by_counterparty(pool: &PgPool, counterparty_id: Uuid) -> Result<Vec<Task>> {
     let rows = sqlx::query_as::<_, Task>(
         r#"

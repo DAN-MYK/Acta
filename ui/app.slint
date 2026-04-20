@@ -13,7 +13,8 @@
 import { Button, ListView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { AppState } from "globals.slint";
-import { ActRow, InvoiceRow, WaybillRow, TaskRow, PaymentRow, FormItemRow, ActStatus } from "structs.slint";
+import { ActRow, InvoiceRow, WaybillRow, TaskRow, PaymentRow, FormItemRow, ActStatus, InboxItem,
+         CounterpartyActivityItem, ChainStep, CommandPaletteItem } from "structs.slint";
 import { DashboardPage, DashboardActRow, DashboardPaymentRow } from "dashboard/dashboard.slint";
 import { CounterpartyList } from "counterparties/counterparty_list.slint";
 import { CounterpartyForm } from "counterparties/counterparty_form.slint";
@@ -36,6 +37,7 @@ import { SettingsPage, SettingsCategoryRow, SettingsTemplateRow } from "settings
 import { Toast } from "components/toast.slint";
 import { Sidebar } from "components/sidebar.slint";
 import { PageFade } from "components/shared.slint";
+import { CommandPalette } from "components/CommandPalette.slint";
 
 // ── MainWindow — головне вікно ───────────────────────────────────────────────
 export component MainWindow inherits Window {
@@ -75,12 +77,14 @@ export component MainWindow inherits Window {
 
     in property <[DashboardActRow]>     dashboard-recent-acts;
     in property <[DashboardPaymentRow]> dashboard-upcoming-payments;
+    in property <[InboxItem]>           dashboard-inbox-items;
 
     // ── Колбеки Dashboard ────────────────────────────────────────────────────
     callback dashboard-refresh();
     callback dashboard-new-act-clicked();
     callback dashboard-all-acts-clicked();
     callback dashboard-add-todo-clicked();
+    callback dashboard-inbox-action-clicked(string, string);
 
     // ── Дані контрагентів ────────────────────────────────────────────────────
     in property <[[StandardListViewItem]]> counterparty-rows;
@@ -172,7 +176,10 @@ export component MainWindow inherits Window {
 
     // ── Дані задач ─────────────────────────────────────────────────────────
     in property <[TaskRow]> task-rows;
-    in property <bool>                     tasks-loading: false;
+    in property <bool>   tasks-loading: false;
+    in property <int>    task-open-count: 0;
+    in property <int>    task-done-count: 0;
+    in property <string> task-today-label: "Сьогодні";
 
     // ── Стан форми задачі ──────────────────────────────────────────────────
     in property <bool>   show-task-form: false;
@@ -247,7 +254,7 @@ export component MainWindow inherits Window {
     in property <[WaybillRow]> waybill-rows;
     in property <bool>         waybills-loading: false;
     in property <[int]>        waybill-status-counts: [0, 0, 0, 0, 0];
-    in property <int>          waybill-kpi-month: 0;
+    in property <int>          waybill-kpi-waybills-month: 0;
     in property <string>       waybill-kpi-delivered: "0 ₴";
     in property <string>       waybill-kpi-unsigned: "0 ₴";
     in property <int>          waybill-kpi-overdue: 0;
@@ -363,6 +370,9 @@ export component MainWindow inherits Window {
     in property <[CounterpartyTaskSummary]>     counterparty-card-tasks;
     callback counterparty-card-close-clicked();
     callback counterparty-card-edit-clicked(string);
+    in property <[CounterpartyActivityItem]> counterparty-card-activity: [];
+    in property <[ChainStep]>                counterparty-card-chain: [];
+    callback counterparty-chain-create-next(string);
 
     // ── Картка акту ───────────────────────────────────────────────────────────
     in property <bool>              show-act-card: false;
@@ -455,11 +465,32 @@ export component MainWindow inherits Window {
     in-out property <string> toast-message  <=> AppState.toast-message;
     in-out property <bool>   toast-is-error <=> AppState.toast-is-error;
 
+    // ── Command Palette (Ctrl+K) ──────────────────────────────────────────────
+    in-out property <bool>                    show-command-palette: false;
+    in property    <[CommandPaletteItem]>     command-palette-items;
+    callback command-palette-search-changed(string);
+    callback command-palette-item-selected(/* action */ string, /* id */ string);
+
     // ── Розмітка ─────────────────────────────────────────────────────────────
     // Rectangle-обгортка потрібна щоб накладати toast overlay поверх layout.
     Rectangle {
         width: parent.width;
         height: parent.height;
+
+    // ── Глобальний обробник клавіш ───────────────────────────────────────────
+    // FocusScope отримує фокус при старті та перехоплює Ctrl+K де б не був курсор.
+    fs-global := FocusScope {
+        width:  parent.width;
+        height: parent.height;
+        init => { self.focus(); }
+        key-pressed(e) => {
+            if e.modifiers.control && e.text == "k" {
+                root.show-command-palette = true;
+                accept
+            } else {
+                reject
+            }
+        }
 
     HorizontalLayout {
 
@@ -498,14 +529,34 @@ export component MainWindow inherits Window {
                     current-page:     root.counterparty-current-page;
                     total-pages:      root.counterparty-total-pages;
 
-                    search-changed(q)   => { root.counterparty-search-changed(q); }
-                    row-selected(id)    => { root.counterparty-selected(id); }
-                    edit-clicked(id)    => { root.counterparty-edit-clicked(id); }
-                    create-clicked      => { root.counterparty-create-clicked(); }
-                    archive-clicked(id) => { root.counterparty-archive-clicked(id); }
-                    filter-clicked      => { root.counterparty-filter-clicked(); }
-                    prev-page-clicked   => { root.counterparty-prev-page-clicked(); }
-                    next-page-clicked   => { root.counterparty-next-page-clicked(); }
+                    detail-name:          root.counterparty-card-name;
+                    detail-edrpou:        root.counterparty-card-edrpou;
+                    detail-ipn:           root.counterparty-card-ipn;
+                    detail-iban:          root.counterparty-card-iban;
+                    detail-phone:         root.counterparty-card-phone;
+                    detail-email:         root.counterparty-card-email;
+                    detail-address:       root.counterparty-card-address;
+                    detail-stat-acts:     root.counterparty-card-stat-acts;
+                    detail-stat-invoices: root.counterparty-card-stat-invoices;
+                    detail-stat-payments: root.counterparty-card-stat-payments;
+                    detail-stat-contracts:root.counterparty-card-stat-contracts;
+                    detail-acts:          root.counterparty-card-acts;
+                    detail-invoices:      root.counterparty-card-invoices;
+                    detail-payments:      root.counterparty-card-payments;
+                    detail-contracts:     root.counterparty-card-contracts;
+                    detail-tasks:         root.counterparty-card-tasks;
+                    detail-activity:      root.counterparty-card-activity;
+                    detail-chain:         root.counterparty-card-chain;
+
+                    search-changed(q)    => { root.counterparty-search-changed(q); }
+                    row-selected(id)     => { root.counterparty-selected(id); }
+                    edit-clicked(id)     => { root.counterparty-edit-clicked(id); }
+                    create-clicked       => { root.counterparty-create-clicked(); }
+                    archive-clicked(id)  => { root.counterparty-archive-clicked(id); }
+                    filter-clicked       => { root.counterparty-filter-clicked(); }
+                    prev-page-clicked    => { root.counterparty-prev-page-clicked(); }
+                    next-page-clicked    => { root.counterparty-next-page-clicked(); }
+                    chain-create-next(t) => { root.counterparty-chain-create-next(t); }
                 }
             }
 
@@ -636,8 +687,11 @@ export component MainWindow inherits Window {
                 TaskList {
                     width: parent.width;
                     height: parent.height;
-                    rows:    root.task-rows;
-                    loading: root.tasks-loading;
+                    rows:        root.task-rows;
+                    loading:     root.tasks-loading;
+                    open-count:  root.task-open-count;
+                    done-count:  root.task-done-count;
+                    today-label: root.task-today-label;
 
                     search-changed(q)         => { root.task-search-changed(q); }
                     row-selected(id)          => { root.task-selected(id); }
@@ -803,10 +857,12 @@ export component MainWindow inherits Window {
                     status-draft:            root.dashboard-status-draft;
                     recent-acts:             root.dashboard-recent-acts;
                     upcoming-payments:       root.dashboard-upcoming-payments;
+                    inbox-items:             root.dashboard-inbox-items;
 
                     new-act-clicked  => { root.dashboard-new-act-clicked(); }
                     all-acts-clicked => { root.dashboard-all-acts-clicked(); }
                     add-todo-clicked => { root.dashboard-add-todo-clicked(); }
+                    inbox-action-clicked(id, t) => { root.dashboard-inbox-action-clicked(id, t); }
                 }
             }
 
@@ -912,7 +968,7 @@ export component MainWindow inherits Window {
                     rows:           root.waybill-rows;
                     loading:        root.waybills-loading;
                     status-counts:  root.waybill-status-counts;
-                    kpi-month:      root.waybill-kpi-month;
+                    kpi-waybills-month: root.waybill-kpi-waybills-month;
                     kpi-delivered:  root.waybill-kpi-delivered;
                     kpi-unsigned:   root.waybill-kpi-unsigned;
                     kpi-overdue:    root.waybill-kpi-overdue;
@@ -956,6 +1012,7 @@ export component MainWindow inherits Window {
             }
         }
     }
+    }  // closes fs-global FocusScope
 
     // ── Company Picker overlay ──────────────────────────────────────────────────
     // Показується при старті якщо компаній > 1 і не відомо яку обрати.
@@ -1084,14 +1141,14 @@ export component MainWindow inherits Window {
             border-width: 1px;
             border-color: Theme.border;
             drop-shadow-blur: 32px;
-            drop-shadow-color: #00000033;
+            drop-shadow-color: Theme.shadow-xl;
 
             VerticalLayout {
-                padding: 32px;
-                spacing: 16px;
+                padding: Theme.space-8;
+                spacing: Theme.space-4;
 
                 VerticalLayout {
-                    spacing: 2px;
+                    spacing: Theme.space-1;
                     Text {
                         text: "Acta";
                         font-size: 32px;
@@ -1108,7 +1165,7 @@ export component MainWindow inherits Window {
                 }
 
                 VerticalLayout {
-                    spacing: 4px;
+                    spacing: Theme.space-1;
                     Text {
                         text: "Оберіть компанію";
                         font-size: 24px;
@@ -1163,7 +1220,7 @@ export component MainWindow inherits Window {
                             HorizontalLayout {
                                 padding-left: 12px;
                                 padding-right: 16px;
-                                spacing: 12px;
+                                spacing: Theme.space-3;
                                 alignment: start;
 
                                 Rectangle {
@@ -1185,7 +1242,7 @@ export component MainWindow inherits Window {
                                 VerticalLayout {
                                     horizontal-stretch: 1;
                                     alignment: center;
-                                    spacing: 2px;
+                                    spacing: Theme.space-1;
                                     Text {
                                         text: c.name;
                                         font-size: 14px;
@@ -1241,6 +1298,23 @@ export component MainWindow inherits Window {
                     }
                 }
             }
+        }
+    }
+
+    // ── Command Palette overlay (Ctrl+K) ─────────────────────────────────────
+    if root.show-command-palette : CommandPalette {
+        width:  parent.width;
+        height: parent.height;
+        items: root.command-palette-items;
+        search-changed(q) => { root.command-palette-search-changed(q); }
+        item-selected(action, id) => {
+            root.show-command-palette = false;
+            fs-global.focus();
+            root.command-palette-item-selected(action, id);
+        }
+        closed => {
+            root.show-command-palette = false;
+            fs-global.focus();
         }
     }
 

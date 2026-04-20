@@ -1,22 +1,20 @@
-// Компонент: список задач
-//
-// Патерн аналогічний іншим спискам у проєкті:
-//   - Topbar з кнопкою створення
-//   - Пошук по заголовку/опису
-//   - Таблиця з рядками
-//   - Панель дій для вибраної задачі
+// Компонент: список задач з вкладками Open/Done/All + calendar sidebar
 
 import { Theme } from "../theme.slint";
 import { ProgressIndicator, ListView } from "std-widgets.slint";
+import { Icons } from "../components/icons.slint";
 import { TaskRow } from "../structs.slint";
 
 export component TaskList {
 
-    // ── Вхідні дані (Rust → Slint) ─────────────────────────────────────────
+    // ── Вхідні дані ──────────────────────────────────────────────────────────
     in property <[TaskRow]> rows;
-    in property <bool>                     loading: false;
+    in property <bool>      loading:     false;
+    in property <int>       open-count:  0;
+    in property <int>       done-count:  0;
+    in property <string>    today-label: "Сьогодні";
 
-    // ── Колбеки (Slint → Rust) ──────────────────────────────────────────────
+    // ── Колбеки ───────────────────────────────────────────────────────────────
     callback search-changed(string);
     callback row-selected(string);
     callback create-clicked();
@@ -24,412 +22,683 @@ export component TaskList {
     callback delete-clicked(string);
     callback edit-clicked(string);
 
-    // ── Внутрішній стан ─────────────────────────────────────────────────────
+    // ── Внутрішній стан ──────────────────────────────────────────────────────
     private property <int>    selected-row: -1;
     private property <string> selected-id: "";
     private property <string> selected-status: "";
     private property <string> selected-title: "";
     private property <string> selected-priority: "";
     private property <bool>   delete-confirm-armed: false;
+    private property <int>    active-tab: 0;   // 0=Відкриті, 1=Виконані, 2=Всі
 
-    min-width: 600px;
+    min-width: 700px;
     min-height: 400px;
 
-    VerticalLayout {
+    HorizontalLayout {
         spacing: 0;
-        padding: 0;
 
-        Rectangle {
-            height: 64px;
-            vertical-stretch: 0;
-            background: Theme.bg-card;
+        // ════════════════════════════════════════════════════════════════════
+        // ОСНОВНИЙ КОНТЕНТ
+        // ════════════════════════════════════════════════════════════════════
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 0;
 
-            HorizontalLayout {
-                padding-left: 32px;
-                padding-right: 32px;
-                spacing: 16px;
-
-                Text {
-                    text: "Завдання";
-                    font-size: 18px;
-                    font-weight: 600;
-                    color: Theme.text-primary;
-                    vertical-alignment: center;
-                    horizontal-stretch: 1;
-                }
-
-                if root.rows.length > 0 : Text {
-                    text: root.rows.length + " записів";
-                    color: Theme.text-muted;
-                    font-size: 12px;
-                    vertical-alignment: center;
-                }
-
-                new-btn := Rectangle {
-                    background: Theme.primary;
-                    border-radius: 8px;
-                    height: 36px;
-                    width: 144px;
-                    y: (parent.height - self.height) / 2;
-
-                    Text {
-                        text: "+ Нова задача";
-                        color: Theme.text-white;
-                        font-size: 13px;
-                        font-weight: 500;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-
-                    TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => { root.create-clicked(); }
-                    }
-                }
-            }
-
+            // ── Topbar ────────────────────────────────────────────────────
             Rectangle {
-                y: parent.height - 1px;
-                height: 1px;
-                background: Theme.border;
-            }
-        }
-
-        Rectangle {
-            background: Theme.bg-page;
-            vertical-stretch: 1;
-
-            VerticalLayout {
-                padding-top: 24px;
-                padding-left: 32px;
-                padding-right: 32px;
-                padding-bottom: 24px;
-                spacing: 16px;
+                height: Theme.topbar-height;
+                vertical-stretch: 0;
+                background: Theme.bg-card;
 
                 HorizontalLayout {
-                    height: 40px;
-                    spacing: 12px;
-                    vertical-stretch: 0;
+                    padding-left: Theme.page-padding-x;
+                    padding-right: Theme.page-padding-x;
+                    spacing: Theme.space-4;
 
-                    search-rect := Rectangle {
-                        background: Theme.bg-card;
-                        border-radius: 8px;
-                        border-width: 1px;
-                        border-color: Theme.border;
+                    Text {
+                        text: "Завдання";
+                        font-size: Theme.font-2xl;
+                        font-weight: 600;
+                        color: Theme.text-primary;
+                        vertical-alignment: center;
                         horizontal-stretch: 1;
-                        clip: true;
+                    }
+
+                    Rectangle {
+                        width: 144px;
+                        height: 34px;
+                        border-radius: Theme.radius-md;
+                        background: new-ta.has-hover ? Theme.primary-hover : Theme.primary;
+                        y: (parent.height - self.height) / 2;
+                        animate background { duration: 120ms; easing: ease; }
 
                         HorizontalLayout {
-                            padding-left: 12px;
-                            padding-right: 12px;
+                            alignment: center;
+                            spacing: Theme.space-2;
+                            Image {
+                                width: 13px; height: 13px;
+                                source: Icons.new-doc;
+                                image-fit: contain;
+                                colorize: Theme.text-white;
+                                vertical-alignment: center;
+                            }
+                            Text {
+                                text: "Нова задача";
+                                color: Theme.text-white;
+                                font-size: Theme.font-sm;
+                                font-weight: 500;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        new-ta := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.create-clicked(); }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    y: parent.height - 1px;
+                    height: 1px;
+                    background: Theme.border;
+                }
+            }
+
+            // ── Tabs + Search ─────────────────────────────────────────────
+            Rectangle {
+                height: 44px;
+                vertical-stretch: 0;
+                background: Theme.bg-card;
+
+                HorizontalLayout {
+                    padding-left: Theme.page-padding-x;
+                    padding-right: Theme.page-padding-x;
+                    spacing: 0;
+                    alignment: center;
+
+                    // Вкладки underline
+                    for tab[i] in [
+                        { label: "Відкриті", cnt: root.open-count },
+                        { label: "Виконані", cnt: root.done-count },
+                        { label: "Всі",      cnt: root.rows.length },
+                    ]: Rectangle {
+                        width: max(72px, tab-lbl.preferred-width + 28px);
+                        height: 44px;
+
+                        if root.active-tab == i : Rectangle {
+                            x: 0; y: parent.height - 2px;
+                            width: parent.width; height: 2px;
+                            background: Theme.primary;
+                        }
+
+                        HorizontalLayout {
+                            alignment: center;
+                            spacing: Theme.space-1;
+                            padding-left: 8px;
+                            padding-right: 8px;
+
+                            tab-lbl := Text {
+                                text: tab.label;
+                                font-size: Theme.font-base;
+                                font-weight: root.active-tab == i ? 600 : 400;
+                                color: root.active-tab == i ? Theme.primary : Theme.text-second;
+                                vertical-alignment: center;
+                            }
+
+                            Rectangle {
+                                width: 22px; height: 16px;
+                                border-radius: 8px;
+                                background: root.active-tab == i ? Theme.primary : Theme.bg-gray;
+                                y: (parent.height - self.height) / 2;
+
+                                Text {
+                                    x: 0; y: 0;
+                                    width: parent.width; height: parent.height;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                    text: tab.cnt + "";
+                                    font-size: Theme.font-xs;
+                                    font-weight: 600;
+                                    color: root.active-tab == i ? Theme.text-white : Theme.text-muted;
+                                }
+                            }
+                        }
+
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.active-tab = i; }
+                        }
+                    }
+
+                    Rectangle { horizontal-stretch: 1; }
+
+                    // Пошук
+                    Rectangle {
+                        width: 210px;
+                        height: 30px;
+                        border-radius: Theme.radius-sm;
+                        background: Theme.bg-page;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        clip: true;
+                        y: (parent.height - self.height) / 2;
+
+                        Image {
+                            x: 8px;
+                            y: (parent.height - 13px) / 2;
+                            width: 13px; height: 13px;
+                            source: Icons.search;
+                            image-fit: contain;
+                            colorize: Theme.text-muted;
+                        }
+
+                        HorizontalLayout {
+                            padding-left: 26px;
+                            padding-right: 8px;
 
                             search-input := TextInput {
                                 vertical-alignment: center;
-                                font-size: 13px;
+                                font-size: Theme.font-sm;
                                 color: Theme.text-primary;
                                 edited => { root.search-changed(search-input.text); }
                             }
                         }
 
                         if search-input.text == "" : Text {
-                            x: 12px;
+                            x: 26px;
                             height: parent.height;
-                            width: parent.width - 24px;
-                            text: "🔎  Пошук за назвою або описом...";
+                            width: parent.width - 34px;
+                            text: "Пошук...";
                             color: Theme.text-muted;
-                            font-size: 13px;
+                            font-size: Theme.font-sm;
                             vertical-alignment: center;
                         }
                     }
-                }
-
-                if root.loading : ProgressIndicator {
-                    indeterminate: true;
-                    vertical-stretch: 0;
                 }
 
                 Rectangle {
-                    vertical-stretch: 1;
-                    border-radius: 8px;
-                    border-width: 1px;
-                    border-color: Theme.border;
-                    clip: true;
+                    y: parent.height - 1px;
+                    height: 1px;
+                    background: Theme.border;
+                }
+            }
 
-                    VerticalLayout {
-                        spacing: 0;
+            // ── Контент ───────────────────────────────────────────────────
+            Rectangle {
+                background: Theme.bg-page;
+                vertical-stretch: 1;
 
-                        Rectangle {
-                            height: 40px;
-                            vertical-stretch: 0;
-                            background: Theme.table-header;
+                VerticalLayout {
+                    padding-top: Theme.page-padding-y;
+                    padding-left: Theme.page-padding-x;
+                    padding-right: Theme.page-padding-x;
+                    padding-bottom: Theme.page-padding-y;
+                    spacing: Theme.space-3;
 
-                            HorizontalLayout {
-                                padding-left: 16px;
-                                padding-right: 16px;
+                    if root.loading : ProgressIndicator {
+                        indeterminate: true;
+                        vertical-stretch: 0;
+                    }
 
-                                Text { text: "Задача";      color: Theme.text-second; font-size: 12px; font-weight: 500; horizontal-stretch: 3; vertical-alignment: center; }
-                                Text { text: "Пріоритет";   color: Theme.text-second; font-size: 12px; font-weight: 500; width: 110px; vertical-alignment: center; }
-                                Text { text: "Дедлайн";     color: Theme.text-second; font-size: 12px; font-weight: 500; width: 160px; vertical-alignment: center; }
-                                Text { text: "Нагадування"; color: Theme.text-second; font-size: 12px; font-weight: 500; width: 160px; vertical-alignment: center; }
-                                Text { text: "Статус";      color: Theme.text-second; font-size: 12px; font-weight: 500; width: 100px; vertical-alignment: center; }
-                            }
-                        }
+                    // Таблиця
+                    Rectangle {
+                        vertical-stretch: 1;
+                        border-radius: Theme.radius-md;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        clip: true;
 
-                        if !root.loading && root.rows.length == 0 : Rectangle {
-                            vertical-stretch: 1;
-                            background: Theme.bg-card;
+                        VerticalLayout {
+                            spacing: 0;
 
-                            VerticalLayout {
-                                alignment: center;
-                                spacing: 8px;
-
-                                Text {
-                                    text: "📝";
-                                    font-size: 32px;
-                                    horizontal-alignment: center;
-                                }
-                                Text {
-                                    text: "Завдань ще немає";
-                                    font-size: 15px;
-                                    font-weight: 500;
-                                    color: Theme.text-second;
-                                    horizontal-alignment: center;
-                                }
-                                Text {
-                                    text: "Натисніть «+ Нова задача» щоб створити першу";
-                                    font-size: 13px;
-                                    color: Theme.text-muted;
-                                    horizontal-alignment: center;
-                                }
-                            }
-                        }
-
-                        ListView {
-                            vertical-stretch: 1;
-
-                            for row[i] in root.rows : Rectangle {
-                                property <string> raw-status: row.status;
-                                property <string> raw-priority: row.priority;
-                                property <color> status-color:
-                                    raw-status == "done"       ? Theme.success :
-                                    raw-status == "in_progress"? Theme.primary :
-                                    raw-status == "cancelled"  ? Theme.text-muted :
-                                    Theme.warning;
-                                property <color> status-bg:
-                                    raw-status == "done"       ? #1EB16E1F :
-                                    raw-status == "in_progress"? #3D75F41A :
-                                    raw-status == "cancelled"  ? #ABABB71F :
-                                    #F4A31E1F;
-                                property <color> priority-color:
-                                    raw-priority == "critical" ? Theme.priority-critical :
-                                    raw-priority == "high"     ? Theme.priority-high :
-                                    raw-priority == "normal"   ? Theme.primary :
-                                    Theme.text-muted;
-                                property <color> priority-bg:
-                                    raw-priority == "critical" ? #DC26261A :
-                                    raw-priority == "high"     ? #F973161A :
-                                    raw-priority == "normal"   ? #3D75F41A :
-                                    #ABABB71A;
-
-                                height: 52px;
-                                background: root.selected-row == i
-                                    ? Theme.row-selected
-                                    : (row-touch.has-hover
-                                        ? Theme.row-hover
-                                        : (Math.mod(i, 2) == 0 ? Theme.bg-card : Theme.row-stripe));
-                                border-width: 1px;
-                                border-color: Theme.border;
-                                animate background { duration: 80ms; easing: ease; }
+                            // Заголовок таблиці
+                            Rectangle {
+                                height: 34px;
+                                vertical-stretch: 0;
+                                background: Theme.table-header;
 
                                 HorizontalLayout {
-                                    padding-left: 15px;
-                                    padding-right: 15px;
+                                    padding-left: 16px;
+                                    padding-right: 16px;
+                                    spacing: 0;
 
-                                    Text {
-                                        text: row.title;
-                                        color: Theme.text-primary;
-                                        font-size: 13px;
-                                        font-weight: 500;
-                                        horizontal-stretch: 3;
-                                        vertical-alignment: center;
-                                        overflow: elide;
-                                    }
+                                    Rectangle { width: 26px; }
+                                    Text { text: "Задача";       color: Theme.text-second; font-size: Theme.font-xs; font-weight: 500; horizontal-stretch: 3; vertical-alignment: center; }
+                                    Text { text: "Пріоритет";    color: Theme.text-second; font-size: Theme.font-xs; font-weight: 500; width: 108px; vertical-alignment: center; }
+                                    Text { text: "Дедлайн";      color: Theme.text-second; font-size: Theme.font-xs; font-weight: 500; width: 140px; vertical-alignment: center; }
+                                    Text { text: "Нагадування";  color: Theme.text-second; font-size: Theme.font-xs; font-weight: 500; width: 140px; vertical-alignment: center; }
+                                    Text { text: "Статус";       color: Theme.text-second; font-size: Theme.font-xs; font-weight: 500; width: 96px;  vertical-alignment: center; }
+                                }
+                            }
 
-                                    Rectangle {
-                                        width: 110px;
+                            // Empty state
+                            if !root.loading && root.rows.length == 0 : Rectangle {
+                                vertical-stretch: 1;
+                                background: Theme.bg-card;
+
+                                VerticalLayout {
+                                    alignment: center;
+                                    spacing: Theme.space-2;
+
+                                    HorizontalLayout {
+                                        alignment: center;
                                         Rectangle {
-                                            width: 90px;
-                                            height: 24px;
-                                            y: (parent.height - self.height) / 2;
-                                            border-radius: 12px;
-                                            background: priority-bg;
-                                            Text {
-                                                text: row.priority-label;
-                                                color: priority-color;
-                                                font-size: 11px;
-                                                font-weight: 500;
-                                                horizontal-alignment: center;
-                                                vertical-alignment: center;
+                                            width: 56px; height: 56px;
+                                            border-radius: 28px;
+                                            background: Theme.bg-gray;
+                                            Image {
+                                                x: 10px; y: 10px;
+                                                width: 36px; height: 36px;
+                                                source: Icons.tasks;
+                                                image-fit: contain;
+                                                colorize: Theme.text-muted;
+                                            }
+                                        }
+                                    }
+                                    Text {
+                                        text: "Завдань ще немає";
+                                        font-size: Theme.font-lg;
+                                        font-weight: 500;
+                                        color: Theme.text-second;
+                                        horizontal-alignment: center;
+                                    }
+                                    Text {
+                                        text: "Натисніть «+ Нова задача» щоб створити першу";
+                                        font-size: Theme.font-md;
+                                        color: Theme.text-muted;
+                                        horizontal-alignment: center;
+                                    }
+                                }
+                            }
+
+                            ListView {
+                                vertical-stretch: 1;
+
+                                for row[i] in root.rows : Rectangle {
+                                    property <bool> is-open: row.status == "open" || row.status == "in_progress";
+                                    property <bool> show-row:
+                                        root.active-tab == 2 ||
+                                        (root.active-tab == 0 && self.is-open) ||
+                                        (root.active-tab == 1 && row.status == "done");
+
+                                    property <color> status-color:
+                                        row.status == "done"        ? Theme.success :
+                                        row.status == "in_progress" ? Theme.primary :
+                                        row.status == "cancelled"   ? Theme.text-muted :
+                                        Theme.warning;
+                                    property <color> status-bg:
+                                        row.status == "done"        ? #1EB16E1F :
+                                        row.status == "in_progress" ? #3D75F41A :
+                                        row.status == "cancelled"   ? #ABABB71F :
+                                        #F4A31E1F;
+                                    property <color> priority-color:
+                                        row.priority == "critical" ? Theme.priority-critical :
+                                        row.priority == "high"     ? Theme.priority-high :
+                                        row.priority == "normal"   ? Theme.primary :
+                                        Theme.text-muted;
+                                    property <color> priority-bg:
+                                        row.priority == "critical" ? #DC26261A :
+                                        row.priority == "high"     ? #F973161A :
+                                        row.priority == "normal"   ? #3D75F41A :
+                                        #ABABB71A;
+
+                                    height: self.show-row ? 48px : 0px;
+                                    clip: true;
+                                    background: root.selected-row == i
+                                        ? Theme.row-selected
+                                        : (row-touch.has-hover ? Theme.row-hover
+                                            : (Math.mod(i, 2) == 0 ? Theme.bg-card : Theme.row-stripe));
+                                    border-width: 1px;
+                                    border-color: Theme.border;
+                                    animate background { duration: 80ms; easing: ease; }
+
+                                    HorizontalLayout {
+                                        padding-left: 14px;
+                                        padding-right: 14px;
+                                        spacing: 0;
+
+                                        // Чекбокс
+                                        Rectangle {
+                                            width: 26px;
+                                            Image {
+                                                x: 0;
+                                                y: (parent.height - 15px) / 2;
+                                                width: 15px; height: 15px;
+                                                source: row.status == "done" ? Icons.check : Icons.uncheck;
+                                                image-fit: contain;
+                                                colorize: row.status == "done" ? Theme.success : Theme.text-muted;
+                                            }
+                                        }
+
+                                        Text {
+                                            text: row.title;
+                                            color: row.status == "done" ? Theme.text-muted : Theme.text-primary;
+                                            font-size: Theme.font-base;
+                                            font-weight: 500;
+                                            horizontal-stretch: 3;
+                                            vertical-alignment: center;
+                                            overflow: elide;
+                                        }
+
+                                        Rectangle {
+                                            width: 108px;
+                                            Rectangle {
+                                                width: 88px;
+                                                height: 20px;
+                                                y: (parent.height - self.height) / 2;
+                                                border-radius: 10px;
+                                                background: priority-bg;
+                                                Text {
+                                                    text: row.priority-label;
+                                                    color: priority-color;
+                                                    font-size: Theme.font-xs;
+                                                    font-weight: 500;
+                                                    horizontal-alignment: center;
+                                                    vertical-alignment: center;
+                                                }
+                                            }
+                                        }
+
+                                        Text {
+                                            text: row.due-date;
+                                            color: Theme.text-second;
+                                            font-size: Theme.font-sm;
+                                            width: 140px;
+                                            vertical-alignment: center;
+                                            overflow: elide;
+                                        }
+
+                                        Text {
+                                            text: row.reminder;
+                                            color: Theme.text-second;
+                                            font-size: Theme.font-sm;
+                                            width: 140px;
+                                            vertical-alignment: center;
+                                            overflow: elide;
+                                        }
+
+                                        Rectangle {
+                                            width: 96px;
+                                            Rectangle {
+                                                width: 80px;
+                                                height: 20px;
+                                                y: (parent.height - self.height) / 2;
+                                                border-radius: 10px;
+                                                background: status-bg;
+                                                Text {
+                                                    text: row.status-label;
+                                                    color: status-color;
+                                                    font-size: Theme.font-xs;
+                                                    font-weight: 500;
+                                                    horizontal-alignment: center;
+                                                    vertical-alignment: center;
+                                                }
                                             }
                                         }
                                     }
 
-                                    Text {
-                                        text: row.due-date;
-                                        color: Theme.text-second;
-                                        font-size: 13px;
-                                        width: 160px;
-                                        vertical-alignment: center;
-                                        overflow: elide;
-                                    }
-
-                                    Text {
-                                        text: row.reminder;
-                                        color: Theme.text-second;
-                                        font-size: 13px;
-                                        width: 160px;
-                                        vertical-alignment: center;
-                                        overflow: elide;
-                                    }
-
-                                    Rectangle {
-                                        width: 100px;
-                                        Rectangle {
-                                            width: 84px;
-                                            height: 24px;
-                                            y: (parent.height - self.height) / 2;
-                                            border-radius: 12px;
-                                            background: status-bg;
-                                            Text {
-                                                text: row.status-label;
-                                                color: status-color;
-                                                font-size: 11px;
-                                                font-weight: 500;
-                                                horizontal-alignment: center;
-                                                vertical-alignment: center;
-                                            }
+                                    row-touch := TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => {
+                                            root.selected-row         = i;
+                                            root.delete-confirm-armed = false;
+                                            root.selected-id          = row.id;
+                                            root.selected-status      = row.status;
+                                            root.selected-title       = row.title;
+                                            root.selected-priority    = row.priority-label;
+                                            root.row-selected(row.id);
                                         }
                                     }
                                 }
+                            }
+                        }
+                    }
 
-                                row-touch := TouchArea {
-                                    mouse-cursor: pointer;
-                                    clicked => {
-                                        root.selected-row      = i;
+                    // ── Action bar ────────────────────────────────────────
+                    if root.selected-row >= 0 : HorizontalLayout {
+                        height: 44px;
+                        spacing: Theme.space-2;
+                        vertical-stretch: 0;
+
+                        Text {
+                            text: root.selected-title + " · " + root.selected-priority;
+                            color: Theme.text-second;
+                            font-size: Theme.font-sm;
+                            font-weight: 500;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                            overflow: elide;
+                        }
+
+                        Rectangle {
+                            background: edit-btn-ta.has-hover ? Theme.btn-action-bg : Theme.bg-card;
+                            border-radius: Theme.radius-sm;
+                            border-width: 1px;
+                            border-color: Theme.border;
+                            height: 32px;
+                            width: 116px;
+                            y: (parent.height - self.height) / 2;
+                            animate background { duration: 80ms; easing: ease; }
+
+                            HorizontalLayout {
+                                alignment: center;
+                                spacing: Theme.space-1;
+                                Image {
+                                    width: 13px; height: 13px;
+                                    source: Icons.edit;
+                                    image-fit: contain;
+                                    colorize: edit-btn-ta.has-hover ? Theme.primary : Theme.text-second;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: "Редагувати";
+                                    color: edit-btn-ta.has-hover ? Theme.primary : Theme.text-second;
+                                    font-size: Theme.font-sm;
+                                    font-weight: 500;
+                                    vertical-alignment: center;
+                                }
+                            }
+
+                            edit-btn-ta := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    if root.selected-id != "" {
+                                        root.edit-clicked(root.selected-id);
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            background: root.selected-status == "done" ? Theme.bg-success : Theme.primary;
+                            border-radius: Theme.radius-sm;
+                            height: 32px;
+                            width: 150px;
+                            y: (parent.height - self.height) / 2;
+
+                            HorizontalLayout {
+                                alignment: center;
+                                spacing: Theme.space-1;
+                                Image {
+                                    width: 13px; height: 13px;
+                                    source: Icons.check;
+                                    image-fit: contain;
+                                    colorize: root.selected-status == "done" ? Theme.success : Theme.text-white;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: root.selected-status == "done" ? "Завершено" : "Завершити";
+                                    color: root.selected-status == "done" ? Theme.success : Theme.text-white;
+                                    font-size: Theme.font-sm;
+                                    font-weight: 500;
+                                    vertical-alignment: center;
+                                }
+                            }
+
+                            TouchArea {
+                                mouse-cursor: root.selected-status != "done" ? pointer : default;
+                                clicked => {
+                                    if root.selected-id != "" && root.selected-status != "done" {
                                         root.delete-confirm-armed = false;
-                                        root.selected-id       = row.id;
-                                        root.selected-status   = row.status;
-                                        root.selected-title    = row.title;
-                                        root.selected-priority = row.priority-label;
-                                        root.row-selected(row.id);
+                                        root.toggle-status-clicked(root.selected-id);
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            background: del-ta.has-hover ? Theme.bg-danger : Theme.bg-card;
+                            border-radius: Theme.radius-sm;
+                            border-width: 1px;
+                            border-color: del-ta.has-hover ? Theme.danger-border : Theme.border;
+                            height: 32px;
+                            width: root.delete-confirm-armed ? 140px : 96px;
+                            y: (parent.height - self.height) / 2;
+                            animate width { duration: 120ms; easing: ease; }
+                            animate background { duration: 80ms; easing: ease; }
+
+                            Text {
+                                text: root.delete-confirm-armed ? "Підтвердити" : "Видалити";
+                                color: del-ta.has-hover ? Theme.danger : Theme.text-second;
+                                font-size: Theme.font-sm;
+                                font-weight: 500;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+
+                            del-ta := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    if root.selected-id != "" {
+                                        if root.delete-confirm-armed {
+                                            root.delete-confirm-armed = false;
+                                            root.delete-clicked(root.selected-id);
+                                        } else {
+                                            root.delete-confirm-armed = true;
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
+            }
+        }
 
-                if root.selected-row >= 0 : HorizontalLayout {
-                    height: 48px;
-                    spacing: 8px;
+        // ════════════════════════════════════════════════════════════════════
+        // CALENDAR SIDEBAR — активні задачі
+        // ════════════════════════════════════════════════════════════════════
+        Rectangle {
+            width: 216px;
+            background: Theme.sidebar-bg;
+
+            Rectangle {
+                x: 0; y: 0;
+                width: 1px; height: parent.height;
+                background: Theme.border;
+            }
+
+            VerticalLayout {
+                spacing: 0;
+
+                // Header
+                Rectangle {
+                    height: Theme.topbar-height;
                     vertical-stretch: 0;
-
-                    Text {
-                        text: root.selected-title + " • " + root.selected-priority;
-                        color: Theme.text-second;
-                        font-size: 13px;
-                        font-weight: 500;
-                        vertical-alignment: center;
-                        horizontal-stretch: 1;
-                        overflow: elide;
-                    }
+                    background: Theme.bg-card;
 
                     Rectangle {
-                        background: Theme.bg-card;
-                        border-radius: 8px;
-                        border-width: 1px;
-                        border-color: Theme.border;
-                        height: 36px;
-                        width: 120px;
-                        y: (parent.height - self.height) / 2;
+                        y: parent.height - 1px;
+                        height: 1px; background: Theme.border;
+                    }
+
+                    VerticalLayout {
+                        alignment: center;
+                        padding-left: 14px;
+                        padding-right: 14px;
+                        spacing: Theme.space-1;
 
                         Text {
-                            text: "✎  Редагувати";
+                            text: root.today-label;
+                            font-size: Theme.font-sm;
+                            font-weight: 700;
                             color: Theme.text-primary;
-                            font-size: 13px;
-                            font-weight: 500;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                        Text {
+                            text: "Активні задачі";
+                            font-size: Theme.font-xs;
+                            color: Theme.text-muted;
+                        }
+                    }
+                }
+
+                ListView {
+                    vertical-stretch: 1;
+
+                    for row in root.rows : Rectangle {
+                        property <bool> is-active: row.status == "open" || row.status == "in_progress";
+                        height: self.is-active ? 54px : 0px;
+                        clip: true;
+                        background: transparent;
+
+                        Rectangle {
+                            y: parent.height - 1px;
+                            height: 1px; background: Theme.border;
                         }
 
-                        TouchArea {
-                            mouse-cursor: pointer;
-                            clicked => {
-                                if root.selected-id != "" {
-                                    root.edit-clicked(root.selected-id);
+                        HorizontalLayout {
+                            padding-left: 10px;
+                            padding-right: 10px;
+                            spacing: Theme.space-2;
+                            alignment: center;
+
+                            Rectangle {
+                                width: 5px; height: 5px;
+                                border-radius: 3px;
+                                background:
+                                    row.priority == "critical" ? Theme.priority-critical :
+                                    row.priority == "high"     ? Theme.priority-high :
+                                    row.priority == "normal"   ? Theme.primary :
+                                    Theme.text-muted;
+                                y: (parent.height - self.height) / 2;
+                            }
+
+                            VerticalLayout {
+                                horizontal-stretch: 1;
+                                alignment: center;
+                                spacing: Theme.space-1;
+
+                                Text {
+                                    text: row.title;
+                                    font-size: Theme.font-sm;
+                                    font-weight: 500;
+                                    color: Theme.text-primary;
+                                    overflow: elide;
+                                }
+                                Text {
+                                    text: row.due-date != "" ? row.due-date : row.priority-label;
+                                    font-size: Theme.font-xs;
+                                    color: Theme.text-muted;
                                 }
                             }
                         }
                     }
+                }
 
-                    Rectangle {
-                        background: Theme.primary;
-                        border-radius: 8px;
-                        height: 36px;
-                        width: 170px;
-                        y: (parent.height - self.height) / 2;
-
-                        Text {
-                            text: root.selected-status == "done" ? "✓  Завершено" : "✓  Завершити";
-                                                    color: Theme.text-white;
-                            font-size: 13px;
-                            font-weight: 500;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
-
-                        TouchArea {
-                            mouse-cursor: root.selected-status != "done" ? pointer : default;
-                            clicked => {
-                                if root.selected-id != "" && root.selected-status != "done" {
-                                    root.delete-confirm-armed = false;
-                                    root.toggle-status-clicked(root.selected-id);
-                                }
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        background: Theme.bg-danger;
-                        border-radius: 8px;
-                        border-width: 1px;
-                        border-color: Theme.danger-border;
-                        height: 36px;
-                        width: root.delete-confirm-armed ? 150px : 110px;
-                        y: (parent.height - self.height) / 2;
-
-                        Text {
-                            text: root.delete-confirm-armed ? "Підтвердити" : "🗑  Видалити";
-                            color: Theme.danger;
-                            font-size: 13px;
-                            font-weight: 500;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
-
-                        TouchArea {
-                            mouse-cursor: pointer;
-                            clicked => {
-                                if root.selected-id != "" {
-                                    if root.delete-confirm-armed {
-                                        root.delete-confirm-armed = false;
-                                        root.delete-clicked(root.selected-id);
-                                    } else {
-                                        root.delete-confirm-armed = true;
-                                    }
-                                }
-                            }
-                        }
+                if root.open-count == 0 : Rectangle {
+                    height: 80px;
+                    vertical-stretch: 0;
+                    Text {
+                        x: 0; y: 0;
+                        width: parent.width; height: parent.height;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        text: "Активних задач\nнемає";
+                        color: Theme.text-muted;
+                        font-size: Theme.font-xs;
+                        wrap: word-wrap;
                     }
                 }
             }

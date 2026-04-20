@@ -8,7 +8,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 use acta::app_ctx::AppCtx;
 use crate::{
     ui::helpers::*,
-    MainWindow,
+    CounterpartyActivityItem, MainWindow,
 };
 use acta::db;
 
@@ -261,7 +261,44 @@ pub async fn open_counterparty_card(
                     .collect::<Vec<_>>(),
             )));
 
-            ui.set_show_counterparty_card(true);
+            // Стрічка активності: акти + рахунки + платежі, відсортовані за датою
+            let mut activity: Vec<(chrono::NaiveDate, CounterpartyActivityItem)> = Vec::new();
+            for a in &acts {
+                activity.push((a.date, CounterpartyActivityItem {
+                    date_label: SharedString::from(a.date.format("%d.%m.%Y").to_string()),
+                    description: SharedString::from(
+                        format!("Акт {} — {}", a.number, format_amount_ua(a.total_amount))
+                    ),
+                    doc_type: SharedString::from("act"),
+                }));
+            }
+            for inv in &invoices {
+                activity.push((inv.date, CounterpartyActivityItem {
+                    date_label: SharedString::from(inv.date.format("%d.%m.%Y").to_string()),
+                    description: SharedString::from(
+                        format!("Рахунок {} — {}", inv.number, format_amount_ua(inv.total_amount))
+                    ),
+                    doc_type: SharedString::from("invoice"),
+                }));
+            }
+            for pay in &payments {
+                if let Ok(d) = chrono::NaiveDate::parse_from_str(&pay.date, "%d.%m.%Y") {
+                    activity.push((d, CounterpartyActivityItem {
+                        date_label: SharedString::from(pay.date.as_str()),
+                        description: SharedString::from(
+                            format!("Платіж — {}", format_amount_ua(pay.amount))
+                        ),
+                        doc_type: SharedString::from("payment"),
+                    }));
+                }
+            }
+            activity.sort_by(|a, b| b.0.cmp(&a.0));
+            ui.set_counterparty_card_activity(ModelRc::new(VecModel::from(
+                activity.into_iter().map(|(_, item)| item).collect::<Vec<_>>(),
+            )));
+
+            // Очистити ланцюжок (заповнюється окремо при потребі)
+            ui.set_counterparty_card_chain(ModelRc::new(VecModel::from(Vec::<crate::ChainStep>::new())));
         })
         .map_err(anyhow::Error::from)?;
 
@@ -696,6 +733,24 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
                 }
             }
         });
+    });
+
+    // ── Ланцюжок документів: створити наступний ───────────────────────────────
+    let ui_weak = ui.as_weak();
+    ui.on_counterparty_chain_create_next(move |doc_type| {
+        if let Some(ui) = ui_weak.upgrade() {
+            match doc_type.as_str() {
+                "act" => {
+                    ui.set_current_feature(SharedString::from("acts"));
+                    ui.invoke_act_create_clicked();
+                }
+                "invoice" | "waybill" => {
+                    ui.set_current_feature(SharedString::from("invoices"));
+                    ui.invoke_invoice_create_clicked();
+                }
+                _ => {}
+            }
+        }
     });
 
     // ── Архівувати контрагента ─────────────────────────────────────────────────

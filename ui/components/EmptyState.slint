@@ -1,0 +1,103 @@
+// Уніфікований порожній стан для списків та таблиць.
+//
+// Використання:
+//   import { Icons } from "../components/icons.slint";
+//   EmptyState {
+//       icon: Icons.documents; title: "Рахунків ще немає";
+//       description: "Натисніть «+ Новий рахунок» щоб створити перший";
+//       show-button: true; button-label: "+ Новий рахунок";
+//       button-clicked => { root.create-clicked(); }
+//   }
+//
+// Якщо description == "" — рядок опису не відображається.
+// Якщо show-button == false — кнопка прихована.
+
+import { Theme } from "../theme.slint";
+
+export component EmptyState inherits Rectangle {
+    in property <image>  icon;
+    in property <string> title;
+    in property <string> description:   "";
+    in property <bool>   show-button:   false;
+    in property <string> button-label:  "Створити";
+    callback button-clicked();
+
+    background: Theme.bg-card;
+    vertical-stretch: 1;
+
+    VerticalLayout {
+        alignment: center;
+        spacing: Theme.space-3;
+        padding: Theme.space-8;
+
+        // Іконний круг
+        HorizontalLayout {
+            alignment: center;
+
+            Rectangle {
+                width: 72px;
+                height: 72px;
+                border-radius: 36px;
+                background: Theme.bg-gray;
+
+                Image {
+                    x: 18px; y: 18px;
+                    width: 36px;
+                    height: 36px;
+                    source: root.icon;
+                    image-fit: contain;
+                    colorize: Theme.text-muted;
+                }
+            }
+        }
+
+        // Заголовок
+        Text {
+            text: root.title;
+            font-size: Theme.font-xl;
+            font-weight: 600;
+            color: Theme.text-second;
+            horizontal-alignment: center;
+        }
+
+        // Опис (опційний)
+        if root.description != "" : Text {
+            text: root.description;
+            font-size: Theme.font-md;
+            color: Theme.text-muted;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+
+        // CTA кнопка (опційна)
+        if root.show-button : HorizontalLayout {
+            alignment: center;
+            padding-top: Theme.space-1;
+
+            Rectangle {
+                height: Theme.btn-md-height;
+                width: max(160px, root.button-label.character-count * 9px + 40px);
+                border-radius: Theme.radius-md;
+                background: btn-ta.has-hover ? Theme.primary-hover : Theme.primary;
+                animate background { duration: 120ms; easing: ease; }
+
+                Text {
+                    x: 0; y: 0;
+                    width: parent.width;
+                    height: parent.height;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    text: root.button-label;
+                    font-size: Theme.font-md;
+                    font-weight: 500;
+                    color: Theme.text-white;
+                }
+
+                btn-ta := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.button-clicked(); }
+                }
+            }
+        }
+    }
+}

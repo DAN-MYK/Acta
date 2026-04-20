@@ -12,7 +12,7 @@ component FormField inherits Rectangle {
     min-height: 70px;
 
     VerticalLayout {
-        spacing: 6px;
+        spacing: Theme.space-2;
 
         Text {
             text: root.label;
@@ -21,11 +21,11 @@ component FormField inherits Rectangle {
         }
 
         Rectangle {
-            height: 40px;
+            height: Theme.input-height;
             background: Theme.bg-card;
             border-width: 1px;
             border-color: Theme.border;
-            border-radius: 8px;
+            border-radius: Theme.radius-lg;
 
             field := LineEdit {
                 text <=> root.value;
@@ -89,12 +89,12 @@ export component CounterpartyForm inherits Rectangle {
                 }
 
                 HorizontalLayout {
-                    padding-left: 32px;
-                    padding-right: 32px;
-                    spacing: 8px;
+                    padding-left: Theme.page-padding-x;
+                    padding-right: Theme.page-padding-x;
+                    spacing: Theme.space-2;
 
                     HorizontalLayout {
-                        spacing: 6px;
+                        spacing: Theme.space-2;
                         horizontal-stretch: 1;
                         alignment: start;
 
@@ -151,7 +151,7 @@ export component CounterpartyForm inherits Rectangle {
                         height: 36px;
                         y: (parent.height - self.height) / 2;
                         border-radius: 8px;
-                        background: cp-save-touch.has-hover ? #2D64E3 : Theme.primary;
+                        background: cp-save-touch.has-hover ? Theme.primary-hover : Theme.primary;
                         animate background { duration: 80ms; }
 
                         Text {
@@ -203,7 +203,7 @@ export component CounterpartyForm inherits Rectangle {
                     padding-left: 20px;
                     padding-right: 20px;
                     padding-bottom: 20px;
-                    spacing: 16px;
+                    spacing: Theme.space-4;
                     alignment: start;
 
                     Rectangle {
@@ -232,7 +232,7 @@ export component CounterpartyForm inherits Rectangle {
                             }
 
                             HorizontalLayout {
-                                spacing: 16px;
+                                spacing: Theme.space-4;
 
                                 FormField {
                                     horizontal-stretch: 1;
@@ -268,7 +268,7 @@ export component CounterpartyForm inherits Rectangle {
                             }
 
                             HorizontalLayout {
-                                spacing: 16px;
+                                spacing: Theme.space-4;
 
                                 FormField {
                                     horizontal-stretch: 1;

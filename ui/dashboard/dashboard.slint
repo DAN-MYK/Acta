@@ -1,8 +1,11 @@
-// dashboard.slint - Головна сторінка (Dashboard)
-// Відповідає макету Figma: DashboardScreen
+// dashboard.slint — Головна сторінка (Dashboard)
+// Два режими: Огляд (overview) та Вхідні (inbox)
 
 import { Theme } from "../theme.slint";
-import { StatusBadge, KpiCard, Topbar } from "../components/shared.slint";
+import { StatusBadge } from "../components/shared.slint";
+import { MetricStrip } from "../components/MetricStrip.slint";
+import { DashboardInbox } from "dashboard_inbox.slint";
+import { InboxItem } from "../structs.slint";
 
 export struct DashboardActRow {
     num:        string,
@@ -20,6 +23,7 @@ export struct DashboardPaymentRow {
 }
 
 export component DashboardPage {
+    // ── KPI (Огляд) ──────────────────────────────────────────────────────────
     in property <string> kpi-revenue:        "0 ₴";
     in property <string> kpi-revenue-trend:  "";
     in property <string> kpi-unpaid:         "0 ₴";
@@ -30,6 +34,7 @@ export component DashboardPage {
     in property <string> kpi-cp-trend:       "";
     in property <string> current-month-label: "";
 
+    // ── Графік ───────────────────────────────────────────────────────────────
     in property <[string]> chart-bar-labels:        ["", "", "", "", "", ""];
     in property <[string]> chart-bar-value-labels:  ["", "", "", "", "", ""];
     in property <[float]>  chart-bar-fractions:     [0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
@@ -42,9 +47,17 @@ export component DashboardPage {
     in property <[DashboardActRow]>     recent-acts;
     in property <[DashboardPaymentRow]> upcoming-payments;
 
+    // ── Inbox ─────────────────────────────────────────────────────────────────
+    in property <[InboxItem]> inbox-items;
+
+    // ── Колбеки ──────────────────────────────────────────────────────────────
     callback new-act-clicked();
     callback all-acts-clicked();
     callback add-todo-clicked();
+    callback inbox-action-clicked(string, string);
+
+    // ── Стан ─────────────────────────────────────────────────────────────────
+    private property <bool> inbox-mode: false;
 
     min-width: 800px;
     min-height: 720px;
@@ -54,66 +67,197 @@ export component DashboardPage {
     VerticalLayout {
         spacing: 0;
 
-        Topbar {
-            title: "Головна";
-            subtitle: root.current-month-label;
-            btn-label: "+ Новий акт";
-            btn-clicked => { root.new-act-clicked(); }
+        // ── Topbar з toggle ───────────────────────────────────────────────────
+        Rectangle {
+            height: Theme.topbar-height;
+            vertical-stretch: 0;
+            background: Theme.bg-card;
+
+            Rectangle {
+                y: parent.height - 1px;
+                height: 1px;
+                background: Theme.border;
+            }
+
+            HorizontalLayout {
+                padding-left: Theme.space-8;
+                padding-right: Theme.space-6;
+                spacing: Theme.space-4;
+                alignment: center;
+
+                // Заголовок
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    alignment: center;
+                    spacing: Theme.space-1;
+
+                    Text {
+                        text: "Головна";
+                        font-size: Theme.font-3xl;
+                        font-weight: 700;
+                        color: Theme.text-primary;
+                    }
+                    if root.current-month-label != "" : Text {
+                        text: root.current-month-label;
+                        font-size: Theme.font-md;
+                        color: Theme.text-second;
+                    }
+                }
+
+                // Перемикач [Огляд] [Вхідні]
+                Rectangle {
+                    height: 32px;
+                    width: 180px;
+                    border-radius: Theme.radius-md;
+                    background: Theme.bg-gray;
+                    border-width: 1px;
+                    border-color: Theme.border;
+
+                    HorizontalLayout {
+                        padding: Theme.space-1;
+                        spacing: Theme.space-1;
+
+                        // Кнопка Огляд
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            height: 28px;
+                            border-radius: Theme.radius-sm;
+                            background: !root.inbox-mode ? Theme.bg-card : transparent;
+                            border-width: !root.inbox-mode ? 1px : 0px;
+                            border-color: Theme.border;
+                            animate background { duration: 100ms; easing: ease; }
+
+                            Text {
+                                x: 0; y: 0;
+                                width: parent.width; height: parent.height;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                                text: "Огляд";
+                                font-size: Theme.font-base;
+                                font-weight: !root.inbox-mode ? 600 : 400;
+                                color: !root.inbox-mode ? Theme.text-primary : Theme.text-second;
+                            }
+
+                            TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { root.inbox-mode = false; }
+                            }
+                        }
+
+                        // Кнопка Вхідні
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            height: 28px;
+                            border-radius: Theme.radius-sm;
+                            background: root.inbox-mode ? Theme.bg-card : transparent;
+                            border-width: root.inbox-mode ? 1px : 0px;
+                            border-color: Theme.border;
+                            animate background { duration: 100ms; easing: ease; }
+
+                            Text {
+                                x: 0; y: 0;
+                                width: parent.width; height: parent.height;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                                text: "Вхідні";
+                                font-size: Theme.font-base;
+                                font-weight: root.inbox-mode ? 600 : 400;
+                                color: root.inbox-mode ? Theme.text-primary : Theme.text-second;
+                            }
+
+                            // Badge з кількістю елементів
+                            if root.inbox-items.length > 0 : Rectangle {
+                                x: parent.width - 20px;
+                                y: -4px;
+                                width: 16px;
+                                height: 16px;
+                                border-radius: 8px;
+                                background: Theme.danger;
+                                Text {
+                                    x: 0; y: 0;
+                                    width: parent.width; height: parent.height;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                    text: root.inbox-items.length > 9 ? "9+" : "\{root.inbox-items.length}";
+                                    font-size: 8px;
+                                    font-weight: 700;
+                                    color: Theme.text-white;
+                                }
+                            }
+
+                            TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { root.inbox-mode = true; }
+                            }
+                        }
+                    }
+                }
+
+                // Кнопка "+ Новий акт"
+                Rectangle {
+                    height: Theme.btn-md-height;
+                    width: 128px;
+                    border-radius: Theme.radius-md;
+                    background: new-ta.has-hover ? Theme.primary-hover : Theme.primary;
+                    animate background { duration: 120ms; easing: ease; }
+
+                    Text {
+                        x: 0; y: 0;
+                        width: parent.width; height: parent.height;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        text: "+ Новий акт";
+                        font-size: Theme.font-md;
+                        font-weight: 600;
+                        color: Theme.text-white;
+                    }
+
+                    new-ta := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.new-act-clicked(); }
+                    }
+                }
+            }
         }
 
+        // ── Контент ───────────────────────────────────────────────────────────
         Rectangle {
             background: Theme.bg-page;
             vertical-stretch: 1;
 
-            VerticalLayout {
+            // ── Inbox режим ───────────────────────────────────────────────────
+            if root.inbox-mode : DashboardInbox {
+                x: Theme.space-8;
+                y: Theme.space-6;
+                width: parent.width - Theme.space-8 * 2;
+                height: parent.height - Theme.space-6 * 2;
+                items: root.inbox-items;
+                action-clicked(id, t) => { root.inbox-action-clicked(id, t); }
+            }
+
+            // ── Огляд режим ───────────────────────────────────────────────────
+            if !root.inbox-mode : VerticalLayout {
                 alignment: start;
-                padding-left: 32px;
-                padding-right: 32px;
-                padding-top: 16px;
-                padding-bottom: 16px;
-                spacing: 16px;
+                padding-left: Theme.space-8;
+                padding-right: Theme.space-8;
+                padding-top: Theme.space-4;
+                padding-bottom: Theme.space-4;
+                spacing: Theme.space-4;
 
-                HorizontalLayout {
-                    height: 100px;
-                    spacing: 16px;
-
-                    KpiCard {
-                        horizontal-stretch: 1;
-                        accent: Theme.success;
-                        value: root.kpi-revenue;
-                        label: "Виручка (місяць)";
-                        trend: root.kpi-revenue-trend;
-                        trend-color: Theme.success;
-                    }
-                    KpiCard {
-                        horizontal-stretch: 1;
-                        accent: Theme.warning;
-                        value: root.kpi-unpaid;
-                        label: "Неоплачено";
-                        trend: root.kpi-unpaid-trend;
-                        trend-color: Theme.warning;
-                    }
-                    KpiCard {
-                        horizontal-stretch: 1;
-                        accent: Theme.primary;
-                        value: root.kpi-acts-month;
-                        label: "Актів за місяць";
-                        trend: root.kpi-acts-trend;
-                        trend-color: Theme.success;
-                    }
-                    KpiCard {
-                        horizontal-stretch: 1;
-                        accent: Theme.purple;
-                        value: root.kpi-counterparties;
-                        label: "Контрагенти";
-                        trend: root.kpi-cp-trend;
-                        trend-color: Theme.success;
-                    }
+                // MetricStrip — 4 метрики
+                MetricStrip {
+                    vertical-stretch: 0;
+                    items: [
+                        { label: "Виручка (місяць)", value: root.kpi-revenue,        subtext: "", accent: Theme.success },
+                        { label: "Неоплачено",        value: root.kpi-unpaid,         subtext: "", accent: Theme.warning },
+                        { label: "Актів за місяць",   value: root.kpi-acts-month,     subtext: "", accent: Theme.primary },
+                        { label: "Контрагенти",       value: root.kpi-counterparties, subtext: "", accent: Theme.text-primary },
+                    ];
                 }
 
                 HorizontalLayout {
                     height: 260px;
-                    spacing: 20px;
+                    spacing: Theme.space-5;
 
                     Rectangle {
                         horizontal-stretch: 65;
@@ -122,11 +266,8 @@ export component DashboardPage {
                         background: Theme.bg-card;
                         border-width: 1px;
                         border-color: Theme.border;
-                        drop-shadow-blur: 10px;
-                        drop-shadow-color: rgba(0, 0, 0, 5%);
-                        drop-shadow-offset-y: 1px;
 
-                        Text { x: 24px; y: 20px; text: "Виручка по місяцях"; font-size: 15px; font-weight: 600; color: Theme.text-primary; }
+                        Text { x: 24px; y: 20px; text: "Виручка по місяцях"; font-size: Theme.font-xl; font-weight: 600; color: Theme.text-primary; }
                         Text { x: 24px; y: 40px; text: "Останні 6 місяців · грн"; font-size: Theme.font-base; color: Theme.text-second; }
 
                         Rectangle { x: 60px; y: 72px;  width: parent.width - 90px; height: 1px; background: Theme.border; }
@@ -148,7 +289,7 @@ export component DashboardPage {
                             height: self.bar-h;
                             border-top-left-radius: 4px;
                             border-top-right-radius: 4px;
-                            background: idx == 5 ? Theme.primary : #D6DFF7;
+                            background: idx == 5 ? Theme.primary : Theme.chart-bar-bg;
 
                             Text {
                                 x: 0; y: -18px; width: 62px;
@@ -178,11 +319,8 @@ export component DashboardPage {
                         background: Theme.bg-card;
                         border-width: 1px;
                         border-color: Theme.border;
-                        drop-shadow-blur: 10px;
-                        drop-shadow-color: rgba(0, 0, 0, 5%);
-                        drop-shadow-offset-y: 1px;
 
-                        Text { x: 24px; y: 20px; text: "Статуси актів"; font-size: 15px; font-weight: 600; color: Theme.text-primary; }
+                        Text { x: 24px; y: 20px; text: "Статуси актів"; font-size: Theme.font-xl; font-weight: 600; color: Theme.text-primary; }
                         Text { x: 24px; y: 40px; text: "Поточний місяць"; font-size: Theme.font-base; color: Theme.text-second; }
 
                         Rectangle {
@@ -228,7 +366,7 @@ export component DashboardPage {
 
                 HorizontalLayout {
                     height: 316px;
-                    spacing: 20px;
+                    spacing: Theme.space-5;
 
                     Rectangle {
                         horizontal-stretch: 65;
@@ -237,12 +375,9 @@ export component DashboardPage {
                         background: Theme.bg-card;
                         border-width: 1px;
                         border-color: Theme.border;
-                        drop-shadow-blur: 10px;
-                        drop-shadow-color: rgba(0, 0, 0, 5%);
-                        drop-shadow-offset-y: 1px;
                         clip: true;
 
-                        Text { x: 24px; y: 20px; text: "Останні акти"; font-size: 15px; font-weight: 600; color: Theme.text-primary; }
+                        Text { x: 24px; y: 20px; text: "Останні акти"; font-size: Theme.font-xl; font-weight: 600; color: Theme.text-primary; }
 
                         link-touch := TouchArea {
                             x: parent.width - 100px; y: 18px;
@@ -304,7 +439,7 @@ export component DashboardPage {
                     VerticalLayout {
                         horizontal-stretch: 35;
                         height: 316px;
-                        spacing: 16px;
+                        spacing: Theme.space-4;
                         alignment: start;
 
                         Rectangle {
@@ -313,9 +448,6 @@ export component DashboardPage {
                             background: Theme.bg-card;
                             border-width: 1px;
                             border-color: Theme.border;
-                            drop-shadow-blur: 10px;
-                            drop-shadow-color: rgba(0, 0, 0, 5%);
-                            drop-shadow-offset-y: 1px;
 
                             Text { x: 24px; y: 20px; text: "To-Do"; font-size: Theme.font-lg; font-weight: 600; color: Theme.text-primary; }
 
@@ -360,9 +492,6 @@ export component DashboardPage {
                             background: Theme.bg-card;
                             border-width: 1px;
                             border-color: Theme.border;
-                            drop-shadow-blur: 10px;
-                            drop-shadow-color: rgba(0, 0, 0, 5%);
-                            drop-shadow-offset-y: 1px;
 
                             Text { x: 24px; y: 20px; text: "Очікувані платежі"; font-size: Theme.font-lg; font-weight: 600; color: Theme.text-primary; }
 

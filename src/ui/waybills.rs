@@ -24,7 +24,7 @@ use acta::{
 pub struct WaybillsUiData {
     pub waybill_rows: Vec<WaybillRow>,
     pub counts: Vec<i32>,
-    pub kpi_month: i32,
+    pub kpi_waybills_month: i32,
     pub kpi_delivered: SharedString,
     pub kpi_unsigned: SharedString,
     pub kpi_overdue: i32,
@@ -75,7 +75,7 @@ pub async fn prepare_waybills_data(
     Ok(WaybillsUiData {
         waybill_rows,
         counts,
-        kpi_month: kpi.waybills_this_month as i32,
+        kpi_waybills_month: kpi.waybills_this_month as i32,
         kpi_delivered: SharedString::from(format_kpi_amount(kpi.delivered_this_month).as_str()),
         kpi_unsigned: SharedString::from(format_kpi_amount(kpi.unsigned_total).as_str()),
         kpi_overdue: kpi.overdue_count as i32,
@@ -85,7 +85,7 @@ pub async fn prepare_waybills_data(
 pub fn apply_waybills_to_ui(ui: &MainWindow, d: WaybillsUiData, close_form: bool) {
     ui.set_waybill_rows(ModelRc::new(VecModel::from(d.waybill_rows)));
     ui.set_waybill_status_counts(ModelRc::new(VecModel::from(d.counts)));
-    ui.set_waybill_kpi_month(d.kpi_month);
+    ui.set_waybill_kpi_waybills_month(d.kpi_waybills_month);
     ui.set_waybill_kpi_delivered(d.kpi_delivered);
     ui.set_waybill_kpi_unsigned(d.kpi_unsigned);
     ui.set_waybill_kpi_overdue(d.kpi_overdue);

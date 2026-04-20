@@ -1,8 +1,7 @@
 // ============================================================
 // components/shared.slint — Спільні компоненти Acta UI
-// Відповідає макету Figma: StatusBadge, DocTypeBadge,
-// PrimaryButton, SecondaryButton, DangerButton, InputField,
-// Toggle, Topbar, KpiCard, ConfirmDeleteDialog, Sidebar
+// StatusBadge, DocTypeBadge, SecondaryButton, DangerButton,
+// PageFade, ConfirmDeleteDialog
 // ============================================================
 
 import { Theme } from "../theme.slint";
@@ -37,20 +36,19 @@ export component StatusBadge inherits Rectangle {
         Theme.text-second;
 
     height: Theme.badge-height;
-    border-radius: Theme.radius-sm;
+    border-radius: Theme.radius-lg;
     background: badge-bg;
 
     HorizontalLayout {
-        padding-left: 8px;
-        padding-right: 8px;
-        padding-top: 5px;
-        padding-bottom: 5px;
+        padding-left: Theme.space-2;
+        padding-right: Theme.space-2;
         alignment: center;
         Text {
             text: status;
             font-size: Theme.font-sm;
-            font-weight: 600;
+            font-weight: 500;
             color: badge-color;
+            vertical-alignment: center;
         }
     }
 }
@@ -77,44 +75,14 @@ export component DocTypeBadge inherits Rectangle {
     background: type-bg;
 
     Text {
-        x: 0; y: 5px;
-        width: 44px;
-        horizontal-alignment: center;
-        text: doc-type;
-        font-size: Theme.font-xs;
-        font-weight: 600;
-        color: type-color;
-    }
-}
-
-// ── PRIMARY BUTTON ───────────────────────────────────────────
-export component PrimaryButton inherits Rectangle {
-    in property <string> label;
-    callback clicked;
-
-    height: Theme.btn-md-height;
-    border-radius: Theme.radius-md;
-    background: btn-touch.has-hover ? #2D64E3 : Theme.primary;
-    drop-shadow-blur: 8px;
-    drop-shadow-color: rgba(0, 0, 0, 15%);
-    drop-shadow-offset-y: 2px;
-    animate background { duration: 120ms; easing: ease; }
-
-    Text {
-        x: 0; y: 0;
         width: parent.width;
         height: parent.height;
         horizontal-alignment: center;
         vertical-alignment: center;
-        text: label;
-        font-size: Theme.font-md;
+        text: doc-type;
+        font-size: Theme.font-xs;
         font-weight: 600;
-        color: Theme.text-white;
-    }
-
-    btn-touch := TouchArea {
-        mouse-cursor: pointer;
-        clicked => { root.clicked(); }
+        color: type-color;
     }
 }
 
@@ -131,7 +99,6 @@ export component SecondaryButton inherits Rectangle {
     animate background { duration: 120ms; easing: ease; }
 
     Text {
-        x: 0; y: 0;
         width: parent.width;
         height: parent.height;
         horizontal-alignment: center;
@@ -154,14 +121,10 @@ export component DangerButton inherits Rectangle {
     callback clicked;
 
     height: Theme.btn-lg-height;
-    border-radius: 10px; // навмисно між radius-md(8) і radius-lg(12) — не замінювати
+    border-radius: Theme.radius-lg;
     background: Theme.danger;
-    drop-shadow-blur: 12px;
-    drop-shadow-color: rgba(233, 58, 58, 25%);
-    drop-shadow-offset-y: 4px;
 
     Text {
-        x: 0; y: 0;
         width: parent.width;
         height: parent.height;
         horizontal-alignment: center;
@@ -178,184 +141,8 @@ export component DangerButton inherits Rectangle {
     }
 }
 
-// ── INPUT FIELD ──────────────────────────────────────────────
-export component InputField inherits Rectangle {
-    in property <string>  label;
-    in property <string>  placeholder;
-    in-out property <string> value;
-    in property <bool>    required: false;
-    in property <bool>    has-error: false;
-    in property <string>  error-text: "";
-
-    height: has-error ? 82px : 64px;
-    background: transparent;
-
-    Text {
-        x: 0; y: 0;
-        text: label + (required ? " *" : "");
-        font-size: Theme.font-base;
-        font-weight: 600;
-        color: Theme.text-second;
-    }
-
-    Rectangle {
-        x: 0; y: 20px;
-        width: parent.width;
-        height: 40px;
-        border-radius: Theme.radius-md;
-        background: Theme.bg-card;
-        border-width: has-error ? 1.5px : 1px;
-        border-color: has-error ? Theme.border-error : Theme.border;
-
-        TextInput {
-            x: 12px;
-            y: (parent.height - self.height) / 2;
-            width: parent.width - 24px;
-            font-size: Theme.font-lg;
-            color: Theme.text-primary;
-            text <=> root.value;
-        }
-    }
-
-    if has-error: Text {
-        x: 0; y: 64px;
-        text: "⚠ " + error-text;
-        font-size: Theme.font-sm;
-        color: Theme.danger;
-    }
-}
-
-// ── TOGGLE ───────────────────────────────────────────────────
-export component Toggle inherits Rectangle {
-    in-out property <bool> checked: false;
-    callback toggled(bool);
-
-    width: 44px;
-    height: 24px;
-    border-radius: 12px;
-    background: checked ? Theme.primary : Theme.bg-gray;
-    border-width: 1px;
-    border-color: checked ? Theme.primary : Theme.border;
-    animate background { duration: 150ms; easing: ease-in-out; }
-
-    Rectangle {
-        x: checked ? 22px : 2px;
-        y: 2px;
-        width: 20px;
-        height: 20px;
-        border-radius: 10px;
-        background: white;
-        drop-shadow-blur: 4px;
-        drop-shadow-color: rgba(0,0,0,15%);
-        drop-shadow-offset-y: 1px;
-        animate x { duration: 150ms; easing: ease-in-out; }
-    }
-
-    TouchArea {
-        mouse-cursor: pointer;
-        clicked => {
-            checked = !checked;
-            toggled(checked);
-        }
-    }
-}
-
-// ── TOPBAR ───────────────────────────────────────────────────
-export component Topbar inherits Rectangle {
-    in property <string> title;
-    in property <string> subtitle;
-    in property <string> breadcrumb: "";
-    in property <string> btn-label: "";
-    callback btn-clicked;
-
-    width: 100%;
-    height: Theme.topbar-height;
-    vertical-stretch: 0;
-    background: Theme.bg-card;
-    drop-shadow-blur: 10px;
-    drop-shadow-color: rgba(0, 0, 0, 5%);
-    drop-shadow-offset-y: 1px;
-
-    // Нижня рамка
-    Rectangle {
-        x: 0; y: parent.height - 1px;
-        width: parent.width; height: 1px;
-        background: Theme.border;
-    }
-
-    // Breadcrumb режим
-    if breadcrumb != "": Text {
-        x: Theme.space-8; y: 22px;
-        text: breadcrumb;
-        font-size: Theme.font-lg;
-        color: Theme.primary;
-    }
-
-    // Заголовок (без breadcrumb)
-    if breadcrumb == "": Text {
-        x: Theme.space-8; y: 14px;
-        text: title;
-        font-size: Theme.font-3xl;
-        font-weight: 700;
-        color: Theme.text-primary;
-    }
-    if breadcrumb == "" && subtitle != "": Text {
-        x: Theme.space-8; y: 40px;
-        text: subtitle;
-        font-size: Theme.font-md;
-        color: Theme.text-second;
-    }
-
-    // CTA кнопка
-    if btn-label != "": PrimaryButton {
-        x: parent.width - self.width - Theme.space-6;
-        y: (parent.height - self.height) / 2;
-        width: btn-label.character-count * 8px + 48px;
-        label: btn-label;
-        clicked => { btn-clicked(); }
-    }
-}
-
-// ── KPI CARD ─────────────────────────────────────────────────
-export component KpiCard inherits Rectangle {
-    in property <color>  accent;
-    in property <string> value;
-    in property <string> label;
-    in property <string> trend;
-    in property <color>  trend-color: Theme.success;
-
-    height: 100px;
-    background: Theme.bg-card;
-    border-radius: Theme.radius-lg;
-    border-width: 1px;
-    border-color: Theme.border;
-    drop-shadow-blur: 10px;
-    drop-shadow-color: rgba(0, 0, 0, 5%);
-    drop-shadow-offset-y: 2px;
-    clip: true;
-
-    // Акцентна смужка зверху
-    Rectangle {
-        x: 0; y: 0; height: 4px; width: parent.width;
-        background: accent;
-    }
-
-    // Іконний круг
-    Rectangle {
-        x: Theme.space-4; y: 20px; width: 40px; height: 40px;
-        border-radius: 20px;
-        background: accent.with-alpha(15%);
-    }
-
-    Text { x: 68px; y: 14px; text: root.value; font-size: Theme.font-3xl; font-weight: 700; color: Theme.text-primary; }
-    Text { x: 68px; y: 42px; text: root.label; font-size: Theme.font-base; color: Theme.text-second; }
-    Text { x: 68px; y: 60px; text: root.trend; font-size: Theme.font-sm;  color: trend-color; }
-}
-
 // ── PAGE FADE ────────────────────────────────────────────────
 // Обгортка сторінки з плавним fade-in при появі.
-// Використовується з if: `if condition : PageFade { Content { ... } }`
-// @children — розміщує дочірній елемент всередині.
 export component PageFade {
     width: 100%;
     height: 100%;
@@ -373,73 +160,95 @@ export component ConfirmDeleteDialog inherits Rectangle {
     callback confirmed;
     callback cancelled;
 
-    // Затемнення фону
     width: 100%; height: 100%;
-    background: rgba(10, 12, 24, 65%);
-
-    // Діалогова картка
-    Rectangle {
-        x: (parent.width  - 440px) / 2;
-        y: (parent.height - 280px) / 2;
-        width: 440px; height: 280px;
-        border-radius: Theme.radius-xl;
-        background: Theme.bg-card;
-        drop-shadow-blur: 40px;
-        drop-shadow-color: rgba(0, 0, 0, 20%);
-        drop-shadow-offset-y: 16px;
-
-        // Червона акцентна смужка
-        Rectangle {
-            x: 0; y: 0; width: 440px; height: 4px;
-            border-top-left-radius: Theme.radius-xl;
-            border-top-right-radius: Theme.radius-xl;
-            background: Theme.danger;
-        }
-
-        // Іконка попередження
-        Rectangle {
-            x: 192px; y: 24px; width: 56px; height: 56px;
-            border-radius: 28px;
-            background: Theme.bg-danger;
-            Text {
-                x: 0; y: 12px; width: 56px;
-                horizontal-alignment: center;
-                text: "!"; font-size: Theme.font-display; font-weight: 700; color: Theme.danger;
-            }
-        }
-
-        Text {
-            x: 0; y: 96px; width: 440px;
-            horizontal-alignment: center;
-            text: title;
-            font-size: Theme.font-2xl; font-weight: 700;
-            color: Theme.text-primary;
-        }
-
-        Text {
-            x: 32px; y: 130px; width: 376px;
-            horizontal-alignment: center;
-            wrap: word-wrap;
-            text: message;
-            font-size: Theme.font-md;
-            color: Theme.text-second;
-        }
-
-        Rectangle { x: 0; y: 184px; width: 440px; height: 1px; background: Theme.border; }
-
-        SecondaryButton {
-            x: 20px; y: 200px; width: 188px;
-            label: "Скасувати";
-            clicked => { cancelled(); }
-        }
-
-        DangerButton {
-            x: 220px; y: 200px; width: 200px;
-            label: confirm-label;
-            clicked => { confirmed(); }
-        }
-    }
+    background: Theme.overlay;
 
     // Клік по затемненню — закриття
     TouchArea { clicked => { cancelled(); } }
+
+    // Діалогова картка (по центру оверлею)
+    Rectangle {
+        width: 440px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        border-radius: Theme.radius-xl;
+        background: Theme.bg-card;
+        drop-shadow-blur: 40px;
+        drop-shadow-color: Theme.shadow-xl;
+        drop-shadow-offset-y: 16px;
+        clip: true;
+
+        // Червона акцентна смужка (вгорі картки)
+        Rectangle {
+            y: 0;
+            height: Theme.space-1;
+            background: Theme.danger;
+        }
+
+        VerticalLayout {
+            padding-top: Theme.space-8;
+            padding-bottom: Theme.space-5;
+            padding-left: Theme.space-8;
+            padding-right: Theme.space-8;
+            spacing: Theme.space-4;
+            alignment: start;
+
+            // Іконка попередження
+            Rectangle {
+                width: 56px;
+                height: 56px;
+                border-radius: self.height / 2;
+                background: Theme.bg-danger;
+                horizontal-stretch: 0;
+                // центруємо по горизонталі
+                x: (parent.width - self.width) / 2;
+
+                Text {
+                    width: parent.width;
+                    height: parent.height;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    text: "!";
+                    font-size: Theme.font-display;
+                    font-weight: 700;
+                    color: Theme.danger;
+                }
+            }
+
+            Text {
+                text: root.title;
+                font-size: Theme.font-2xl;
+                font-weight: 700;
+                color: Theme.text-primary;
+                horizontal-alignment: center;
+            }
+
+            Text {
+                text: root.message;
+                font-size: Theme.font-md;
+                color: Theme.text-second;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+
+            Rectangle { height: Theme.space-1; background: Theme.border; }
+
+            HorizontalLayout {
+                spacing: Theme.space-3;
+                padding-top: Theme.space-2;
+
+                SecondaryButton {
+                    horizontal-stretch: 1;
+                    label: "Скасувати";
+                    clicked => { root.cancelled(); }
+                }
+
+                DangerButton {
+                    horizontal-stretch: 1;
+                    label: root.confirm-label;
+                    clicked => { root.confirmed(); }
+                }
+            }
+        }
+    }
 }

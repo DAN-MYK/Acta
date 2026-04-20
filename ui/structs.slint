@@ -70,3 +70,44 @@ export struct FormItemRow {
     price: string,
     amount: string,
 }
+
+// ChainStep — крок ланцюжка документів (Рахунок → Акт → Накладна)
+// doc-type: "invoice" | "act" | "waybill"
+export struct ChainStep {
+    doc-type:   string,
+    doc-number: string,  // "" якщо відсутній
+    amount:     string,
+    status:     string,
+    exists:     bool,
+}
+
+// CounterpartyActivityItem — подія у хронологічній стрічці контрагента
+export struct CounterpartyActivityItem {
+    date-label:  string,  // "Сьогодні" | "Вчора" | "23 кві"
+    description: string,  // "Виставлено рахунок РАХ-2025-042 — ₴ 24 500"
+    doc-type:    string,  // "invoice" | "act" | "payment" | "contract"
+}
+
+// InboxItem — елемент черги "Вхідні" на дашборді
+// item-type: "overdue" | "unsigned" | "act_needed" | "unmatched" | "draft" | "waybill_needed"
+export struct InboxItem {
+    id:           string,
+    item-type:    string,
+    doc-number:   string,
+    counterparty: string,
+    amount:       string,
+    days-ago:     string,
+    action-label: string,
+}
+
+// CommandPaletteItem — результат глобального пошуку (Ctrl+K)
+// kind: "header" = роздільник категорії, "item" = дія
+// action: "navigate" | "create" | "open_doc" | "open_cp"
+export struct CommandPaletteItem {
+    kind:     string,
+    action:   string,
+    id:       string,
+    title:    string,
+    subtitle: string,
+    shortcut: string,
+}

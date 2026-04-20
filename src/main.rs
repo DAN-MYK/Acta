@@ -15,6 +15,7 @@ use sqlx::postgres::PgPoolOptions;
 use std::sync::{Arc, Mutex};
 use ui::{
     acts::{apply_acts_to_ui, prepare_acts_data, reload_acts},
+    command_palette,
     companies::{apply_settings_to_ui, prepare_settings_data, reload_companies, reload_settings},
     counterparties::{apply_counterparties_to_ui, prepare_counterparties_data, reload_counterparties},
     dashboard::reload_dashboard,
@@ -238,6 +239,44 @@ fn main() -> Result<()> {
     ui::documents::setup(&ui, ctx.clone());
     ui::companies::setup(&ui, ctx.clone());
     ui::dashboard::setup(&ui, ctx.clone());
+
+    // ── Command Palette (Ctrl+K) ─────────────────────────────────────────────
+    {
+        let pool_cp = Arc::new(pool.clone());
+        let cid_arc = ctx.active_company_id.clone();
+        let ui_weak_cp = ui_weak.clone();
+        ui.on_command_palette_search_changed(move |query: SharedString| {
+            let cid = *cid_arc.lock().unwrap();
+            command_palette::reload_palette(
+                ui_weak_cp.clone(),
+                pool_cp.clone(),
+                cid,
+                query.to_string(),
+            );
+        });
+    }
+    {
+        let pool_cp = Arc::new(pool.clone());
+        let cid_arc = ctx.active_company_id.clone();
+        let ui_weak_cp = ui_weak.clone();
+        ui.on_command_palette_item_selected(move |action: SharedString, id: SharedString| {
+            if let Some(ui) = ui_weak_cp.upgrade() {
+                command_palette::handle_item_selected(
+                    &ui,
+                    pool_cp.clone(),
+                    cid_arc.clone(),
+                    action.as_str(),
+                    id.as_str(),
+                );
+            }
+        });
+    }
+    // Початкові елементи палітри — статичні (навігація + створити)
+    {
+        let pool_cp = Arc::new(pool.clone());
+        let cid = *ctx.active_company_id.lock().unwrap();
+        command_palette::reload_palette(ui_weak.clone(), pool_cp, cid, String::new());
+    }
 
     // run() блокує до закриття вікна
     ui.run()?;

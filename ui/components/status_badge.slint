@@ -13,19 +13,35 @@ import { Theme } from "../theme.slint";
 export component StatusBadge inherits Rectangle {
     in property <string> label;
     in property <color>  badge-color: Theme.text-muted;
-    in property <color>  badge-bg:    #ABABB71F;
+    in property <color>  badge-bg:    Theme.bg-gray-soft;
+    in property <image>  icon;
 
     width: 84px;
     height: Theme.badge-height;
     border-radius: Theme.radius-lg;
     background: root.badge-bg;
 
-    Text {
-        text: root.label;
-        color: root.badge-color;
-        font-size: Theme.font-sm;
-        font-weight: 500;
-        horizontal-alignment: center;
-        vertical-alignment: center;
+    HorizontalLayout {
+        alignment: center;
+        spacing: Theme.space-1;
+        padding-left: 6px;
+        padding-right: 6px;
+
+        if root.icon.width > 0 : Image {
+            width: 11px;
+            height: 11px;
+            source: root.icon;
+            image-fit: contain;
+            colorize: root.badge-color;
+            vertical-alignment: center;
+        }
+
+        Text {
+            text: root.label;
+            color: root.badge-color;
+            font-size: Theme.font-sm;
+            font-weight: 500;
+            vertical-alignment: center;
+        }
     }
 }

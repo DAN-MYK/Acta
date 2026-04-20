@@ -6,6 +6,7 @@
 
 import { ListView, ProgressIndicator } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
+import { Icons } from "../components/icons.slint";
 
 export struct CompanyItem {
     id:           string,
@@ -42,9 +43,9 @@ export component CompanyList {
             background: Theme.bg-card;
 
             HorizontalLayout {
-                padding-left: 32px;
-                padding-right: Theme.space-8;
-                spacing: 16px;
+                padding-left: Theme.page-padding-x;
+                padding-right: Theme.page-padding-x;
+                spacing: Theme.space-4;
                 alignment: center;
 
                 Text {
@@ -129,7 +130,7 @@ export component CompanyList {
                             HorizontalLayout {
                                 padding-left: 16px;
                                 padding-right: Theme.space-4;
-                                spacing: 12px;
+                                spacing: Theme.space-3;
 
                                 Text { text: "Компанія";   color: Theme.text-second; font-size: Theme.font-base; font-weight: 500; horizontal-stretch: 3; vertical-alignment: center; }
                                 Text { text: "ЄДРПОУ";     color: Theme.text-second; font-size: Theme.font-base; font-weight: 500; horizontal-stretch: 1; vertical-alignment: center; }
@@ -146,16 +147,28 @@ export component CompanyList {
 
                             VerticalLayout {
                                 alignment: center;
-                                spacing: 8px;
+                                spacing: Theme.space-2;
 
-                                Text {
-                                    text: "🏢";
-                                    font-size: 32px;
-                                    horizontal-alignment: center;
+                                HorizontalLayout {
+                                    alignment: center;
+
+                                    Rectangle {
+                                        width: 56px; height: 56px;
+                                        border-radius: 28px;
+                                        background: Theme.bg-gray;
+
+                                        Image {
+                                            x: 10px; y: 10px;
+                                            width: 36px; height: 36px;
+                                            source: Icons.home;
+                                            image-fit: contain;
+                                            colorize: Theme.text-muted;
+                                        }
+                                    }
                                 }
                                 Text {
                                     text: "Компаній ще немає";
-                                    font-size: 15px;
+                                    font-size: Theme.font-xl;
                                     font-weight: 500;
                                     color: Theme.text-second;
                                     horizontal-alignment: center;
@@ -198,12 +211,12 @@ export component CompanyList {
                                 HorizontalLayout {
                                     padding-left: 16px;
                                     padding-right: Theme.space-4;
-                                    spacing: 12px;
+                                    spacing: Theme.space-3;
 
                                     // Ініціали + назва
                                     HorizontalLayout {
                                         horizontal-stretch: 3;
-                                        spacing: 10px;
+                                        spacing: Theme.space-3;
                                         alignment: center;
 
                                         Rectangle {
@@ -268,7 +281,7 @@ export component CompanyList {
                                         width: 172px;
 
                                         HorizontalLayout {
-                                            spacing: 6px;
+                                            spacing: Theme.space-2;
                                             alignment: center;
 
                                             // Обрати / Активна
@@ -295,20 +308,22 @@ export component CompanyList {
                                             }
 
                                             Rectangle {
-                                                width: 38px;
+                                                width: 30px;
                                                 height: 26px;
                                                 border-radius: Theme.radius-sm;
-                                                background: Theme.btn-action-bg;
+                                                background: edit-ta.has-hover ? Theme.btn-action-bg : transparent;
+                                                animate background { duration: 80ms; easing: ease; }
 
-                                                Text {
-                                                    text: "✎";
-                                                    color: Theme.primary;
-                                                    font-size: Theme.font-base;
-                                                    horizontal-alignment: center;
-                                                    vertical-alignment: center;
+                                                Image {
+                                                    x: 8px; y: 6px;
+                                                    width: 14px; height: 14px;
+                                                    source: Icons.edit;
+                                                    image-fit: contain;
+                                                    colorize: edit-ta.has-hover ? Theme.primary : Theme.text-second;
+                                                    animate colorize { duration: 80ms; easing: ease; }
                                                 }
 
-                                                TouchArea {
+                                                edit-ta := TouchArea {
                                                     mouse-cursor: pointer;
                                                     clicked => { root.edit(c.id); }
                                                 }

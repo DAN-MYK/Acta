@@ -1,5 +1,6 @@
 // ui/mod.rs — модулі UI (кожен відповідає за свою сторінку або функціональну групу)
 pub mod acts;
+pub mod command_palette;
 pub mod companies;
 pub mod counterparties;
 pub mod dashboard;
