@@ -9,9 +9,10 @@ use anyhow::Result;
 use chrono::{DateTime, Local, NaiveDateTime, TimeZone, Utc};
 use rust_decimal::{Decimal, RoundingStrategy};
 use slint::{EventLoopError, Model, ModelRc, SharedString, StandardListViewItem, VecModel, Weak};
-pub use acta::app_ctx::{ActListState, DocListState, InvoiceListState, TaskListState};
+pub use acta::app_ctx::{ActListState, DocListState, InvoiceListState, TaskListState, WaybillListState};
 pub use acta::models::{
     ActStatus as ModelActStatus, Company, CompanySummary, NewActItem, NewInvoiceItem,
+    waybill::NewWaybillItem,
     Task, TaskPriority,
 };
 
@@ -168,6 +169,47 @@ pub fn collect_invoice_items_from_ui(ui_weak: &Weak<MainWindow>) -> Vec<NewInvoi
         });
     }
     items
+}
+
+/// Зібрати позиції накладної (waybill) з UI-форми у Vec<NewWaybillItem>.
+pub fn collect_waybill_items_from_ui(ui_weak: &Weak<MainWindow>) -> Vec<NewWaybillItem> {
+    let Some(ui) = ui_weak.upgrade() else {
+        return vec![];
+    };
+    let model = ui.get_waybill_form_items();
+    let count = model.row_count();
+    let mut items = Vec::with_capacity(count);
+    for i in 0..count {
+        let row = model.row_data(i).unwrap_or_default();
+        let quantity = row.quantity.to_string().parse::<Decimal>().unwrap_or(Decimal::ONE);
+        let price = row.price.to_string().parse::<Decimal>().unwrap_or(Decimal::ZERO);
+        let unit = row.unit.to_string();
+        items.push(NewWaybillItem {
+            position: (i + 1) as i16,
+            description: row.description.to_string(),
+            unit: if unit.is_empty() { None } else { Some(unit) },
+            quantity,
+            price,
+        });
+    }
+    items
+}
+
+/// Перерахувати total-amount у формі накладної (waybill) на основі позицій.
+pub fn recalculate_waybill_total(ui: &MainWindow) {
+    let model = ui.get_waybill_form_items();
+    let mut items: Vec<FormItemRow> =
+        (0..model.row_count()).filter_map(|i| model.row_data(i)).collect();
+    let mut total = Decimal::ZERO;
+    for item in &mut items {
+        let qty = item.quantity.to_string().parse::<Decimal>().unwrap_or(Decimal::ZERO);
+        let price = item.price.to_string().parse::<Decimal>().unwrap_or(Decimal::ZERO);
+        let amount = (qty * price).round_dp(2);
+        item.amount = SharedString::from(format!("{:.2}", amount).as_str());
+        total += amount;
+    }
+    ui.set_waybill_form_items(ModelRc::new(VecModel::from(items)));
+    ui.set_waybill_form_total(SharedString::from(format!("{:.2}", total).as_str()));
 }
 
 /// Перерахувати total-amount у формі накладної на основі позицій.

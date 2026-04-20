@@ -7,20 +7,21 @@ slint::include_modules!();
 
 mod ui;
 
-use acta::app_ctx::{AppCtx, ActListState, CounterpartyListState, DocListState, InvoiceListState, TaskListState, PaymentListState};
+use acta::app_ctx::{AppCtx, ActListState, CounterpartyListState, DocListState, InvoiceListState, TaskListState, PaymentListState, WaybillListState};
 use acta::{config::AppConfig, db, notifications};
 use anyhow::Result;
 use slint::{ModelRc, SharedString, VecModel};
 use sqlx::postgres::PgPoolOptions;
 use std::sync::{Arc, Mutex};
 use ui::{
-    acts::{apply_acts_to_ui, prepare_acts_data},
+    acts::{apply_acts_to_ui, prepare_acts_data, reload_acts},
     companies::{apply_settings_to_ui, prepare_settings_data, reload_companies, reload_settings},
     counterparties::{apply_counterparties_to_ui, prepare_counterparties_data, reload_counterparties},
     dashboard::reload_dashboard,
     documents::{apply_documents_to_ui, fetch_doc_cp_filter_data, prepare_documents_data, reload_documents, DocCpFilterData},
     helpers::{apply_company_rows, company_display_name, company_subtitle, reset_company_form},
-    invoices::{apply_invoices_to_ui, prepare_invoices_data},
+    invoices::{apply_invoices_to_ui, prepare_invoices_data, reload_invoices},
+    waybills::{apply_waybills_to_ui, prepare_waybills_data, reload_waybills},
     payments::{apply_payments_to_ui, prepare_payments_data, prepare_payment_cp_options_data, reload_payments},
     tasks::{apply_tasks_to_ui, prepare_tasks_data, reload_tasks},
 };
@@ -61,8 +62,8 @@ fn main() -> Result<()> {
     let ui = MainWindow::new()?;
     ui.set_counterparty_show_archived(false);
 
-    // Toast та current-page зараз синхронізуються напряму через MainWindow
-    // properties, без старого Rust API до Slint global.
+    // Toast синхронізується через MainWindow properties.
+    // Навігація — через AppState.navigate-to(feature).
     let ui_weak = ui.as_weak();
 
     // ── Активна компанія та стани списків — спільні між усіма callbacks ──────
@@ -83,7 +84,7 @@ fn main() -> Result<()> {
         match companies.len() {
             0 => {
                 // Немає жодної компанії → одразу на сторінку Компанії (створити)
-                ui.set_current_page(6);
+                ui.set_current_feature(SharedString::from("companies"));
                 ui.set_active_company_name(SharedString::from("Оберіть компанію"));
                 ui.set_active_company_id(SharedString::from(""));
                 ui.set_active_company_subtitle(SharedString::from("Створіть першу компанію"));
@@ -131,12 +132,13 @@ fn main() -> Result<()> {
     // UI залишається порожнім, picker/форма компанії вже відображені.
     let cid = *active_company_id.lock().unwrap();
     if !cid.is_nil() {
-        let (cp_data, acts_data, inv_data, tasks_data, pay_data, doc_cp_data, docs_data, settings_data, pay_cp_data) =
+        let (cp_data, acts_data, inv_data, wb_data, tasks_data, pay_data, doc_cp_data, docs_data, settings_data, pay_cp_data) =
             rt.block_on(async {
-                let (r0, r1, r2, r3, r4, r5, r6, r7, r8) = tokio::join!(
+                let (r0, r1, r2, r3, r4, r5, r6, r7, r8, r9) = tokio::join!(
                     prepare_counterparties_data(&pool, cid, String::new(), false, 0),
                     prepare_acts_data(&pool, cid, None, String::new()),
                     prepare_invoices_data(&pool, cid, None, String::new()),
+                    prepare_waybills_data(&pool, cid, None, String::new()),
                     prepare_tasks_data(&pool, String::new()),
                     prepare_payments_data(&pool, cid, None, ""),
                     fetch_doc_cp_filter_data(&pool, cid),
@@ -144,7 +146,7 @@ fn main() -> Result<()> {
                     prepare_settings_data(&pool, cid),
                     prepare_payment_cp_options_data(&pool, cid),
                 );
-                Ok::<_, anyhow::Error>((r0?, r1?, r2?, r3?, r4?, r5?, r6?, r7?, r8?))
+                Ok::<_, anyhow::Error>((r0?, r1?, r2?, r3?, r4?, r5?, r6?, r7?, r8?, r9?))
             })?;
 
         // Оновлюємо doc_cp_ids перед застосуванням фільтру
@@ -158,6 +160,7 @@ fn main() -> Result<()> {
         apply_counterparties_to_ui(&ui, cp_data, false);
         apply_acts_to_ui(&ui, acts_data, false);
         apply_invoices_to_ui(&ui, inv_data, false);
+        apply_waybills_to_ui(&ui, wb_data, false);
         apply_tasks_to_ui(&ui, tasks_data, false);
         apply_payments_to_ui(&ui, pay_data);
         ui.set_doc_filter_cp_names(ModelRc::new(VecModel::from(doc_cp_names)));
@@ -179,23 +182,22 @@ fn main() -> Result<()> {
         counterparty_state: Arc::new(Mutex::new(CounterpartyListState::default())),
         act_state: Arc::new(Mutex::new(ActListState::default())),
         invoice_state: Arc::new(Mutex::new(InvoiceListState::default())),
+        waybill_state: Arc::new(Mutex::new(WaybillListState::default())),
         doc_state: Arc::new(Mutex::new(DocListState::default())),
         task_state: Arc::new(Mutex::new(TaskListState::default())),
         payment_state: Arc::new(Mutex::new(PaymentListState::default())),
     });
 
-    // ── navigate(feature, page) — навігація з перезавантаженням даних ───────────
+    // ── AppState.navigate-to(feature) — навігація з перезавантаженням даних ──────
     // Викликається з Slint коли користувач клікає NavItem у sidebar.
-    // current-page зберігаємо напряму в MainWindow, а не через старий global API.
-    // Реєструється ПІСЛЯ ctx — щоб мати доступ до pool та active_company_id.
+    // Встановлює AppState.current-feature та завантажує дані для розділу.
     {
         let pool = ctx.pool.clone();
         let cid_arc = ctx.active_company_id.clone();
         let weak = ui_weak.clone();
-        // MainWindow.navigate — єдиний канал. Sidebar форвардить подію в root.navigate.
-        ui.on_navigate(move |feature, page| {
+        ui.on_navigate_to(move |feature: SharedString| {
             if let Some(ui) = weak.upgrade() {
-                ui.set_current_page(page);
+                ui.set_current_feature(feature.clone());
             }
             let cid = *cid_arc.lock().unwrap();
             if cid.is_nil() {
@@ -206,29 +208,18 @@ fn main() -> Result<()> {
             let feat = feature.to_string();
             tokio::spawn(async move {
                 let result = match feat.as_str() {
-                    "dashboard" => {
-                        reload_dashboard(&pool, weak2, cid).await
-                    }
-                    "counterparties" => {
-                        reload_counterparties(&pool, weak2, cid, String::new(), false, 0, false).await
-                    }
-                    "documents" => {
-                        reload_documents(&pool, weak2, cid, 0, "outgoing", "", None, None, None).await
-                    }
-                    "payments" => {
-                        reload_payments(&pool, weak2, cid, None, "").await
-                    }
-                    "tasks" => {
-                        reload_tasks(&pool, weak2, String::new(), false).await
-                    }
-                    "companies" => {
-                        reload_companies(&pool, weak2, cid).await
-                    }
-                    "settings" => {
-                        reload_settings(&pool, weak2, cid).await
-                    }
+                    "dashboard"      => reload_dashboard(&pool, weak2, cid).await,
+                    "counterparties" => reload_counterparties(&pool, weak2, cid, String::new(), false, 0, false).await,
+                    "acts"           => reload_acts(&pool, weak2, cid, None, String::new(), false).await,
+                    "invoices"       => reload_invoices(&pool, weak2, cid, None, String::new(), false).await,
+                    "waybills"       => reload_waybills(&pool, weak2, cid, None, String::new(), false).await,
+                    "documents"      => reload_documents(&pool, weak2, cid, 0, "outgoing", "", None, None, None).await,
+                    "payments"       => reload_payments(&pool, weak2, cid, None, "").await,
+                    "tasks"          => reload_tasks(&pool, weak2, String::new(), false).await,
+                    "companies"      => reload_companies(&pool, weak2, cid).await,
+                    "settings"       => reload_settings(&pool, weak2, cid).await,
                     // "reports", "calendar" — заглушки, даних нема
-                    _ => Ok(()),
+                    _                => Ok(()),
                 };
                 if let Err(e) = result {
                     tracing::error!("Помилка завантаження при навігації до '{feat}': {e:#}");
@@ -241,6 +232,7 @@ fn main() -> Result<()> {
     ui::counterparties::setup(&ui, ctx.clone());
     ui::acts::setup(&ui, ctx.clone());
     ui::invoices::setup(&ui, ctx.clone());
+    ui::waybills::setup(&ui, ctx.clone());
     ui::tasks::setup(&ui, ctx.clone());
     ui::payments::setup(&ui, ctx.clone());
     ui::documents::setup(&ui, ctx.clone());
@@ -728,15 +720,19 @@ mod tests {
     }
 
     #[test]
-    fn property_current_page_navigates_across_all_main_sections() {
+    fn current_feature_navigates_across_all_sections() {
         i_slint_backend_testing::init_no_event_loop();
         let ui = MainWindow::new().expect("MainWindow");
 
-        // Нумерація з app.slint: 0=Контрагенти, 1=Документи, 3=Платежі,
-        //                          5=To-Do, 6=Компанії, 8=Dashboard
-        for page in [0i32, 1, 3, 5, 6, 8] {
-            ui.set_current_page(page);
-            assert_eq!(ui.get_current_page(), page, "перехід на сторінку {page}");
+        // feature-рядки з globals.slint / sidebar.slint
+        for feature in ["dashboard", "documents", "counterparties", "payments",
+                        "tasks", "companies", "settings", "reports", "calendar"] {
+            ui.set_current_feature(SharedString::from(feature));
+            assert_eq!(
+                ui.get_current_feature().as_str(),
+                feature,
+                "перехід на розділ {feature}"
+            );
         }
     }
 }

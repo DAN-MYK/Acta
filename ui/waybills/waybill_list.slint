@@ -1,9 +1,9 @@
-// Компонент: список рахунків
+// Компонент: список видаткових накладних
 //
-// Структура аналогічна ActList:
+// Структура аналогічна InvoiceList:
 //   - Topbar 64px (заголовок + кнопка створення)
 //   - Вкладки статусів (44px) з лічильниками
-//   - KPI картки (84px) — цього місяця, виручка, неоплачено, прострочено
+//   - KPI картки (84px) — цього місяця, доставлено, непідписано, прострочено
 //   - Рядок пошуку
 //   - Таблиця зі status badge та панеллю дій
 
@@ -11,7 +11,7 @@ import { Theme } from "../theme.slint";
 import { ProgressIndicator, ListView } from "std-widgets.slint";
 import { StatCard } from "../components/stat_card.slint";
 import { StatusBadge } from "../components/status_badge.slint";
-import { InvoiceRow } from "../structs.slint";
+import { WaybillRow } from "../structs.slint";
 
 component ActionButton inherits Rectangle {
     in property <string> text;
@@ -42,21 +42,21 @@ component ActionButton inherits Rectangle {
     }
 }
 
-export component InvoiceList {
+export component WaybillList {
 
     // ── Вхідні дані ────────────────────────────────────────────────────────
-    in property <[InvoiceRow]> rows;
+    in property <[WaybillRow]> rows;
     in property <bool>         loading: false;
     in property <[int]>        status-counts: [0, 0, 0, 0, 0];
 
     // ── KPI дані ─────────────────────────────────────────────────────────────
-    in property <int>    kpi-invoices-month: 0;
-    in property <string> kpi-revenue: "0 ₴";
-    in property <string> kpi-unpaid: "0 ₴";
+    in property <int>    kpi-month: 0;
+    in property <string> kpi-delivered: "0 ₴";
+    in property <string> kpi-unsigned: "0 ₴";
     in property <int>    kpi-overdue: 0;
 
     // ── Колбеки ─────────────────────────────────────────────────────────────
-    // 0=Усі, 1=Чернетка, 2=Виставлено, 3=Підписано, 4=Оплачено
+    // 0=Усі, 1=Чернетки, 2=Виставлені, 3=Підписані, 4=Доставлені
     callback status-filter-changed(int);
     callback search-changed(string);
     callback row-selected(string);
@@ -92,7 +92,7 @@ export component InvoiceList {
                 alignment: center;
 
                 Text {
-                    text: "Рахунки";
+                    text: "Накладні";
                     font-size: 18px;
                     font-weight: 600;
                     color: Theme.text-primary;
@@ -104,10 +104,10 @@ export component InvoiceList {
                     background: Theme.primary;
                     border-radius: 8px;
                     height: 36px;
-                    width: 155px;
+                    width: 165px;
 
                     Text {
-                        text: "+ Новий рахунок";
+                        text: "+ Нова накладна";
                         color: Theme.text-white;
                         font-size: 13px;
                         font-weight: 500;
@@ -135,7 +135,7 @@ export component InvoiceList {
             vertical-stretch: 0;
             background: Theme.bg-card;
 
-            private property <[string]> tab-names: ["Всі", "Чернетка", "Виставлені", "Підписані", "Оплачені"];
+            private property <[string]> tab-names: ["Всі", "Чернетки", "Виставлені", "Підписані", "Доставлені"];
 
             HorizontalLayout {
                 alignment: start;
@@ -207,22 +207,22 @@ export component InvoiceList {
 
                     StatCard {
                         accent: Theme.primary;
-                        value: root.kpi-invoices-month + "";
-                        label: "Рахунків за місяць";
+                        value: root.kpi-month + "";
+                        label: "Накладних за місяць";
                         secondary: "поточний місяць";
                     }
 
                     StatCard {
                         accent: Theme.success;
-                        value: root.kpi-revenue;
-                        label: "Виручка";
-                        secondary: "оплачені цього місяця";
+                        value: root.kpi-delivered;
+                        label: "Відвантажено";
+                        secondary: "доставлені цього місяця";
                     }
 
                     StatCard {
                         accent: Theme.warning;
-                        value: root.kpi-unpaid;
-                        label: "Неоплачено";
+                        value: root.kpi-unsigned;
+                        label: "Непідписаних";
                         secondary: "виставлені та підписані";
                     }
 
@@ -301,7 +301,7 @@ export component InvoiceList {
                                 Text { text: "Дата";       color: Theme.text-second; font-size: 12px; font-weight: 500; horizontal-stretch: 1; vertical-alignment: center; }
                                 Text { text: "Контрагент"; color: Theme.text-second; font-size: 12px; font-weight: 500; horizontal-stretch: 3; vertical-alignment: center; }
                                 Text { text: "Сума, ₴";    color: Theme.text-second; font-size: 12px; font-weight: 500; horizontal-stretch: 1; vertical-alignment: center; }
-                                Text { text: "Статус";     color: Theme.text-second; font-size: 12px; font-weight: 500; width: 100px; vertical-alignment: center; }
+                                Text { text: "Статус";     color: Theme.text-second; font-size: 12px; font-weight: 500; width: 110px; vertical-alignment: center; }
                             }
                         }
 
@@ -315,19 +315,19 @@ export component InvoiceList {
                                 spacing: 8px;
 
                                 Text {
-                                    text: "📄";
+                                    text: "📦";
                                     font-size: 32px;
                                     horizontal-alignment: center;
                                 }
                                 Text {
-                                    text: "Рахунків ще немає";
+                                    text: "Накладних ще немає";
                                     font-size: 15px;
                                     font-weight: 500;
                                     color: Theme.text-second;
                                     horizontal-alignment: center;
                                 }
                                 Text {
-                                    text: "Натисніть «+ Новий рахунок» щоб створити перший";
+                                    text: "Натисніть «+ Нова накладна» щоб створити першу";
                                     font-size: 13px;
                                     color: Theme.text-muted;
                                     horizontal-alignment: center;
@@ -342,14 +342,14 @@ export component InvoiceList {
                             for row[i] in root.rows : Rectangle {
                                 property <string> raw-status: row.status;
                                 property <color> badge-color:
-                                    raw-status == "paid"   ? Theme.success  :
-                                    raw-status == "signed" ? Theme.primary  :
-                                    raw-status == "issued" ? Theme.warning  :
+                                    raw-status == "delivered" ? Theme.success  :
+                                    raw-status == "signed"    ? Theme.primary  :
+                                    raw-status == "issued"    ? Theme.warning  :
                                     Theme.text-muted;
                                 property <color> badge-bg:
-                                    raw-status == "paid"   ? #1EB16E1F :
-                                    raw-status == "signed" ? #3D75F41A :
-                                    raw-status == "issued" ? #F4A31E1F :
+                                    raw-status == "delivered" ? #1EB16E1F :
+                                    raw-status == "signed"    ? #3D75F41A :
+                                    raw-status == "issued"    ? #F4A31E1F :
                                     #ABABB71F;
 
                                 height: 52px;
@@ -401,7 +401,7 @@ export component InvoiceList {
                                         overflow: elide;
                                     }
                                     Rectangle {
-                                        width: 100px;
+                                        width: 110px;
                                         StatusBadge {
                                             y: (parent.height - self.height) / 2;
                                             label: row.status-label;
@@ -465,10 +465,10 @@ export component InvoiceList {
                     ActionButton {
                         text: "Наступний статус ▶";
                         width: 180px;
-                        primary: root.selected-status != "paid";
-                        disabled: root.selected-status == "paid";
+                        primary: root.selected-status != "delivered";
+                        disabled: root.selected-status == "delivered";
                         clicked => {
-                            if (root.selected-id != "" && root.selected-status != "paid") {
+                            if (root.selected-id != "" && root.selected-status != "delivered") {
                                 root.advance-status-clicked(root.selected-id);
                                 root.selected-row    = -1;
                                 root.selected-id     = "";

@@ -20,10 +20,11 @@ pub mod document_templates;
 pub mod invoices;
 pub mod payments;
 pub mod tasks;
+pub mod waybills;
 
 #[cfg(test)]
 mod tests {
-    use super::{acts, categories, companies, contracts, counterparties, dashboard, document_templates, invoices, ilike_pattern, payments, tasks};
+    use super::{acts, categories, companies, contracts, counterparties, dashboard, document_templates, invoices, ilike_pattern, payments, tasks, waybills};
 
     #[test]
     fn db_submodules_are_available() {
@@ -37,6 +38,7 @@ mod tests {
         let _ = invoices::list;
         let _ = payments::list;
         let _ = tasks::list_open;
+        let _ = waybills::list;
     }
 
     #[test]

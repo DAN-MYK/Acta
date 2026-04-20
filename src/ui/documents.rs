@@ -103,7 +103,7 @@ pub async fn prepare_documents_data(
             i.date,
             DocRow {
                 id: SharedString::from(format!("inv:{}", i.id)),
-                doc_type: SharedString::from("НАК"),
+                doc_type: SharedString::from("РАХ"),
                 number: SharedString::from(i.number.as_str()),
                 counterparty: SharedString::from(i.counterparty_name.as_str()),
                 amount: SharedString::from(format!(

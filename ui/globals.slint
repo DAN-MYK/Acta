@@ -73,9 +73,8 @@ export global AppState {
     // ════════════════════════════════════════════════════════════════════════
 
     // ── Навігація ─────────────────────────────────────────────────────────────
-    // feature = ASCII-ідентифікатор розділу, page = номер сторінки
-    // Rust: ui.global::<AppState>().on_navigate(|feature, page| { ... });
-    callback navigate(/* feature */ string, /* page */ int);
+    // Callback navigate-to визначений на MainWindow (app.slint).
+    // AppState.current-feature — єдине джерело правди для активного розділу.
     callback switch-company();           // відкрити picker вибору компанії
 
     // ── Toast ────────────────────────────────────────────────────────────────

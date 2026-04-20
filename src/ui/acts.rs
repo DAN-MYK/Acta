@@ -1098,7 +1098,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
             ui.set_task_form_reminder_at(SharedString::from(""));
             ui.set_task_form_act_id(SharedString::from(act_id.as_str()));
             ui.set_task_form_return_page(1);
-            ui.set_current_page(5);
+            ui.set_current_feature(SharedString::from("tasks"));
             ui.set_show_task_form(true);
         }
     });
@@ -1138,7 +1138,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
                                     .as_str(),
                             ));
                             ui.set_task_form_return_page(1);
-                            ui.set_current_page(5);
+                            ui.set_current_feature(SharedString::from("tasks"));
                             ui.set_show_task_form(true);
                         })
                         .warn_if_terminated();

@@ -349,7 +349,7 @@ pub fn generate_invoice_pdf(data: &PdfInvoiceData, output_path: &Path) -> Result
 
 /// Створює `storage/documents/invoices/{рік}/` і повертає шлях до файлу.
 ///
-/// Приклад: "НАК-2026-001" → `storage/documents/invoices/2026/НАК-2026-001.pdf`
+/// Приклад: "РАХ-2026-001" → `storage/documents/invoices/2026/РАХ-2026-001.pdf`
 pub fn ensure_invoice_output_dir(invoice_number: &str) -> Result<PathBuf> {
     let year = invoice_number
         .split('-')
@@ -407,7 +407,7 @@ mod tests {
 
     fn sample_invoice_data() -> PdfInvoiceData {
         PdfInvoiceData {
-            number:      "НАК-2026-001".into(),
+            number:      "РАХ-2026-001".into(),
             date:        "15.04.2026".into(),
             company:     sample_company("Виконавець"),
             client:      sample_company("Замовник"),
@@ -500,7 +500,7 @@ mod tests {
 
     #[test]
     fn ensure_invoice_output_dir_puts_in_invoices_subdir() {
-        let path = ensure_invoice_output_dir("НАК-2026-001").unwrap();
+        let path = ensure_invoice_output_dir("РАХ-2026-001").unwrap();
         let s = path.to_str().unwrap();
         assert!(s.contains("invoices"));
         assert!(s.contains("2026"));

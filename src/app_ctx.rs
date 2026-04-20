@@ -26,6 +26,12 @@ pub struct InvoiceListState {
     pub status_filter: Option<crate::models::InvoiceStatus>,
 }
 
+#[derive(Clone, Default)]
+pub struct WaybillListState {
+    pub query: String,
+    pub status_filter: Option<crate::models::WaybillStatus>,
+}
+
 #[derive(Clone)]
 pub struct DocListState {
     pub tab: i32,               // 0=Всі, 1=Акти, 2=Накладні
@@ -73,6 +79,7 @@ pub struct AppCtx {
     pub counterparty_state: Arc<Mutex<CounterpartyListState>>,
     pub act_state: Arc<Mutex<ActListState>>,
     pub invoice_state: Arc<Mutex<InvoiceListState>>,
+    pub waybill_state: Arc<Mutex<WaybillListState>>,
     pub doc_state: Arc<Mutex<DocListState>>,
     pub task_state: Arc<Mutex<TaskListState>>,
     pub payment_state: Arc<Mutex<PaymentListState>>,
@@ -121,6 +128,7 @@ mod tests {
                 counterparty_state: Arc::new(Mutex::new(Default::default())),
                 act_state: Arc::new(Mutex::new(Default::default())),
                 invoice_state: Arc::new(Mutex::new(Default::default())),
+                waybill_state: Arc::new(Mutex::new(Default::default())),
                 doc_state: Arc::new(Mutex::new(Default::default())),
                 task_state: Arc::new(Mutex::new(Default::default())),
                 payment_state: Arc::new(Mutex::new(Default::default())),

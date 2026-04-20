@@ -13,7 +13,7 @@
 import { Button, ListView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { AppState } from "globals.slint";
-import { ActRow, InvoiceRow, TaskRow, PaymentRow, FormItemRow, ActStatus } from "structs.slint";
+import { ActRow, InvoiceRow, WaybillRow, TaskRow, PaymentRow, FormItemRow, ActStatus } from "structs.slint";
 import { DashboardPage, DashboardActRow, DashboardPaymentRow } from "dashboard/dashboard.slint";
 import { CounterpartyList } from "counterparties/counterparty_list.slint";
 import { CounterpartyForm } from "counterparties/counterparty_form.slint";
@@ -23,6 +23,8 @@ import { TaskList }         from "tasks/task_list.slint";
 import { TaskForm }         from "tasks/task_form.slint";
 import { InvoiceList }      from "invoices/invoice_list.slint";
 import { InvoiceForm }      from "invoices/invoice_form.slint";
+import { WaybillList }      from "waybills/waybill_list.slint";
+import { WaybillForm }      from "waybills/waybill_form.slint";
 import { CompanyList, CompanyItem } from "companies/company_list.slint";
 import { CompanyForm }      from "companies/company_form.slint";
 import { PaymentList }      from "payments/payment_list.slint";
@@ -44,10 +46,12 @@ export component MainWindow inherits Window {
     preferred-height: 900px;
 
     // ── Стан навігації ───────────────────────────────────────────────────────
-    // 0=Контрагенти | 1=Документи (акти+накладні) | 3=Платежі | 4=Звіти (заглушка)
-    // 5=To-Do | 6=Компанії | 7=Календар (заглушка) | 8=Dashboard  |  сторінка 2 не використовується
-    // AppState — єдине джерело правди; MainWindow лише синхронізується через <=>.
-    in-out property <int> current-page <=> AppState.current-page;
+    // AppState — єдине джерело правди.
+    // current-feature: рядковий ідентифікатор розділу ("dashboard", "documents", ...)
+    // Bidirectional binding відкриває get/set_current_feature() та on_navigate_to() з Rust.
+    in-out property <int>    current-page    <=> AppState.current-page;
+    in-out property <string> current-feature <=> AppState.current-feature;
+    callback navigate-to(string);
 
     // ── Дані Dashboard ───────────────────────────────────────────────────────
     in property <string> dashboard-kpi-revenue:        "0 ₴";
@@ -136,9 +140,14 @@ export component MainWindow inherits Window {
     in property <int>      act-form-contract-index: 0;
     in property <string>   act-form-expected-payment-date: "";
 
-    // ── Дані накладних ──────────────────────────────────────────────────────
+    // ── Дані рахунків ───────────────────────────────────────────────────────
     in property <[InvoiceRow]> invoice-rows;
     in property <bool>                     invoices-loading: false;
+    in property <[int]>                    invoice-status-counts: [0, 0, 0, 0, 0];
+    in property <int>                      invoice-kpi-invoices-month: 0;
+    in property <string>                   invoice-kpi-revenue: "0 ₴";
+    in property <string>                   invoice-kpi-unpaid: "0 ₴";
+    in property <int>                      invoice-kpi-overdue: 0;
 
     // ── Стан форми накладної ─────────────────────────────────────────────────
     in property <bool>     show-invoice-form: false;
@@ -233,6 +242,52 @@ export component MainWindow inherits Window {
     callback invoice-form-add-item();
     callback invoice-form-remove-item(int);
     callback invoice-form-item-changed(int, string, string);
+
+    // ── Дані накладних (товарних) ────────────────────────────────────────────
+    in property <[WaybillRow]> waybill-rows;
+    in property <bool>         waybills-loading: false;
+    in property <[int]>        waybill-status-counts: [0, 0, 0, 0, 0];
+    in property <int>          waybill-kpi-month: 0;
+    in property <string>       waybill-kpi-delivered: "0 ₴";
+    in property <string>       waybill-kpi-unsigned: "0 ₴";
+    in property <int>          waybill-kpi-overdue: 0;
+
+    // ── Стан форми накладної (товарної) ─────────────────────────────────────
+    in property <bool>     show-waybill-form: false;
+    in property <bool>     waybill-form-is-edit: false;
+    in property <string>   waybill-form-number: "";
+    in property <string>   waybill-form-date: "";
+    in property <string>   waybill-form-notes: "";
+    in property <int>      waybill-form-cp-index: 0;
+    in property <string>   waybill-form-edit-id: "";
+    in property <string>   waybill-form-total: "0.00";
+    in property <[string]> waybill-form-cp-names;
+    in property <[string]> waybill-form-cp-ids;
+    in property <[FormItemRow]> waybill-form-items;
+    in property <[string]> waybill-form-category-names;
+    in property <[string]> waybill-form-category-ids;
+    in property <int>      waybill-form-category-index: 0;
+    in property <[string]> waybill-form-contract-names;
+    in property <[string]> waybill-form-contract-ids;
+    in property <int>      waybill-form-contract-index: 0;
+
+    // ── Колбеки накладних (товарних) ────────────────────────────────────────
+    callback waybill-status-filter-changed(int);
+    callback waybill-search-changed(string);
+    callback waybill-selected(string);
+    callback waybill-create-clicked();
+    callback waybill-advance-status-clicked(string);
+    callback waybill-edit-clicked(string);
+    callback waybill-pdf-clicked(string);
+
+    // ── Колбеки форми накладної (товарної) ──────────────────────────────────
+    // number, date, cp_id, notes, category_id, contract_id
+    callback waybill-form-save(string, string, string, string, string, string);
+    callback waybill-form-update(string, string, string, string, string, string);
+    callback waybill-form-cancel();
+    callback waybill-form-add-item();
+    callback waybill-form-remove-item(int);
+    callback waybill-form-item-changed(int, string, string);
 
     // ── Дані платежів ──────────────────────────────────────────────────────
     in property <[PaymentRow]> payment-rows;
@@ -366,7 +421,6 @@ export component MainWindow inherits Window {
     in property <string>          active-company-id: "";
     in property <string>          active-company-subtitle: "Оберіть компанію для роботи";
     in-out property <bool>        show-company-picker: false;
-    callback navigate(string, int);
     callback switch-company();
 
     // ── Дані сторінки компаній ───────────────────────────────────────────────
@@ -412,9 +466,12 @@ export component MainWindow inherits Window {
 
         // ══ Бічна панель навігації ════════════════════════════════════════════
         Sidebar {
+            current-feature:         AppState.current-feature;
+            open-tasks-count:        AppState.open-tasks-count;
             active-company-name:     root.active-company-name;
             active-company-subtitle: root.active-company-subtitle;
-            switch-company => { root.switch-company(); }
+            navigate(feature)    => { root.navigate-to(feature); }
+            switch-company       => { root.switch-company(); }
         }
 
         // ══ Область контенту ════════════════════════════════════════════════
@@ -424,8 +481,8 @@ export component MainWindow inherits Window {
             background: Theme.bg-page;
             clip: true;
 
-            // ── Сторінка 0: Контрагенти — список ────────────────────────────
-            if root.current-page == 0 && !root.show-cp-form : PageFade {
+            // ── Контрагенти — список ────────────────────────────────────────
+            if AppState.current-feature == "counterparties" && !root.show-cp-form : PageFade {
                 CounterpartyList {
                     width: parent.width;
                     height: parent.height;
@@ -452,34 +509,30 @@ export component MainWindow inherits Window {
                 }
             }
 
-            // ── Сторінка 1: Документи — список ────────────────────────────────
-            if root.current-page == 1 && !root.show-act-form && !root.show-invoice-form : PageFade {
-                DocumentList {
+            // ── Акти — список ───────────────────────────────────────────────
+            if AppState.current-feature == "acts" && !root.show-act-form : PageFade {
+                ActList {
                     width: parent.width;
                     height: parent.height;
-                    rows:                   root.document-rows;
-                    loading:                root.documents-loading;
-                    direction-index:        root.doc-direction-index;
-                    active-tab:             root.doc-active-tab;
-                    filter-counterparty-names: root.doc-filter-cp-names;
-                    filter-counterparty-index: root.doc-filter-cp-index;
-
-                    new-document-act        => { root.doc-new-act-clicked(); }
-                    new-document-invoice    => { root.doc-new-invoice-clicked(); }
-                    open-document(id)       => { root.doc-open-clicked(id); }
-                    delete-document(id)     => { root.doc-delete-clicked(id); }
-                    export-pdf(id)          => { root.doc-pdf-clicked(id); }
-                    direction-changed(i)    => { root.doc-direction-changed(i); }
-                    tab-changed(i)          => { root.doc-tab-changed(i); }
-                    search-changed(q)       => { root.doc-search-changed(q); }
-                    counterparty-filter-changed(i) => { root.doc-cp-filter-changed(i); }
-                    date-from-changed(s)    => { root.doc-date-from-changed(s); }
-                    date-to-changed(s)      => { root.doc-date-to-changed(s); }
+                    rows:                root.act-rows;
+                    loading:             root.acts-loading;
+                    status-counts:       root.act-status-counts;
+                    kpi-acts-month:      root.act-kpi-acts-month;
+                    kpi-revenue:         root.act-kpi-revenue;
+                    kpi-unpaid:          root.act-kpi-unpaid;
+                    kpi-overdue:         root.act-kpi-overdue;
+                    status-filter-changed(i) => { root.act-status-filter-changed(i); }
+                    search-changed(q)        => { root.act-search-changed(q); }
+                    row-selected(id)         => { root.act-selected(id); }
+                    create-clicked           => { root.act-create-clicked(); }
+                    advance-status-clicked(id) => { root.act-advance-status-clicked(id); }
+                    edit-clicked(id)         => { root.act-edit-clicked(id); }
+                    pdf-clicked(id)          => { root.act-pdf-clicked(id); }
                 }
             }
 
-            // ── Сторінка 1: Акти — форма ─────────────────────────────────────
-            if root.current-page == 1 && root.show-act-form : ActForm {
+            // ── Акти — форма ─────────────────────────────────────────────────
+            if AppState.current-feature == "acts" && root.show-act-form : ActForm {
                 width: parent.width;
                 height: parent.height;
                 act-number:           root.act-form-number;
@@ -515,8 +568,71 @@ export component MainWindow inherits Window {
                 act-task-delete-clicked(id) => { root.act-task-delete-clicked(id); }
             }
 
-            // ── Сторінка 5: To-Do — список ────────────────────────────────
-            if root.current-page == 5 && !root.show-task-form : PageFade {
+            // ── Документи — список ──────────────────────────────────────────
+            if AppState.current-feature == "documents" && !root.show-act-form && !root.show-invoice-form : PageFade {
+                DocumentList {
+                    width: parent.width;
+                    height: parent.height;
+                    rows:                   root.document-rows;
+                    loading:                root.documents-loading;
+                    direction-index:        root.doc-direction-index;
+                    active-tab:             root.doc-active-tab;
+                    filter-counterparty-names: root.doc-filter-cp-names;
+                    filter-counterparty-index: root.doc-filter-cp-index;
+
+                    new-document-act        => { root.doc-new-act-clicked(); }
+                    new-document-invoice    => { root.doc-new-invoice-clicked(); }
+                    open-document(id)       => { root.doc-open-clicked(id); }
+                    delete-document(id)     => { root.doc-delete-clicked(id); }
+                    export-pdf(id)          => { root.doc-pdf-clicked(id); }
+                    direction-changed(i)    => { root.doc-direction-changed(i); }
+                    tab-changed(i)          => { root.doc-tab-changed(i); }
+                    search-changed(q)       => { root.doc-search-changed(q); }
+                    counterparty-filter-changed(i) => { root.doc-cp-filter-changed(i); }
+                    date-from-changed(s)    => { root.doc-date-from-changed(s); }
+                    date-to-changed(s)      => { root.doc-date-to-changed(s); }
+                }
+            }
+
+            // ── Документи — форма акту ──────────────────────────────────────
+            if AppState.current-feature == "documents" && root.show-act-form : ActForm {
+                width: parent.width;
+                height: parent.height;
+                act-number:           root.act-form-number;
+                act-date:             root.act-form-date;
+                act-notes:            root.act-form-notes;
+                act-cp-index:         root.act-form-cp-index;
+                act-edit-id:          root.act-form-edit-id;
+                total-amount:         root.act-form-total;
+                is-edit-mode:         root.act-form-is-edit;
+                counterparty-names:   root.act-form-cp-names;
+                counterparty-ids:     root.act-form-cp-ids;
+                items:                root.act-form-items;
+                act-task-rows:        root.act-task-rows;
+                act-tasks-loading:    root.act-tasks-loading;
+                category-names:       root.act-form-category-names;
+                category-ids:         root.act-form-category-ids;
+                act-category-index:   root.act-form-category-index;
+                contract-names:       root.act-form-contract-names;
+                contract-ids:         root.act-form-contract-ids;
+                act-contract-index:   root.act-form-contract-index;
+                act-expected-payment-date: root.act-form-expected-payment-date;
+
+                save(n, d, c, notes, cat, con, exp)       => { root.act-form-save(n, d, c, notes, cat, con, exp); }
+                save-draft(n, d, c, notes, cat, con, exp) => { root.act-form-save-draft(n, d, c, notes, cat, con, exp); }
+                update(n, d, c, notes, cat, con, exp)     => { root.act-form-update(n, d, c, notes, cat, con, exp); }
+                cancel                     => { root.act-form-cancel(); }
+                add-item                   => { root.act-form-add-item(); }
+                remove-item(i)             => { root.act-form-remove-item(i); }
+                item-changed(idx, fld, val) => { root.act-form-item-changed(idx, fld, val); }
+                act-task-create-clicked    => { root.act-task-create-clicked(); }
+                act-task-edit-clicked(id)  => { root.act-task-edit-clicked(id); }
+                act-task-toggle-status-clicked(id) => { root.act-task-toggle-status-clicked(id); }
+                act-task-delete-clicked(id) => { root.act-task-delete-clicked(id); }
+            }
+
+            // ── To-Do — список ──────────────────────────────────────────────
+            if AppState.current-feature == "tasks" && !root.show-task-form : PageFade {
                 TaskList {
                     width: parent.width;
                     height: parent.height;
@@ -532,8 +648,8 @@ export component MainWindow inherits Window {
                 }
             }
 
-            // ── Сторінка 5: To-Do — форма ─────────────────────────────────
-            if root.current-page == 5 && root.show-task-form : TaskForm {
+            // ── To-Do — форма ───────────────────────────────────────────────
+            if AppState.current-feature == "tasks" && root.show-task-form : TaskForm {
                 width: parent.width;
                 height: parent.height;
                 is-edit-mode:           root.task-form-is-edit;
@@ -550,8 +666,8 @@ export component MainWindow inherits Window {
                 cancel                    => { root.task-form-cancel(); }
             }
 
-            // ── Сторінка 6: Компанії — список ────────────────────────────
-            if root.current-page == 6 && !root.show-company-form : CompanyList {
+            // ── Компанії — список ───────────────────────────────────────────
+            if AppState.current-feature == "companies" && !root.show-company-form : CompanyList {
                 width: parent.width;
                 height: parent.height;
                 companies:   root.company-rows;
@@ -563,8 +679,8 @@ export component MainWindow inherits Window {
                 select(id)   => { root.company-select-clicked(id); }
             }
 
-            // ── Сторінка 6: Компанії — форма ─────────────────────────────
-            if root.current-page == 6 && root.show-company-form : CompanyForm {
+            // ── Компанії — форма ────────────────────────────────────────────
+            if AppState.current-feature == "companies" && root.show-company-form : CompanyForm {
                 width: parent.width;
                 height: parent.height;
                 is-edit:           root.company-form-is-edit;
@@ -582,8 +698,8 @@ export component MainWindow inherits Window {
                 cancel                              => { root.company-form-cancel(); }
             }
 
-            // ── Сторінка 1: Документи — форма накладної ───────────────────────
-            if root.current-page == 1 && root.show-invoice-form : InvoiceForm {
+            // ── Документи — форма накладної ─────────────────────────────────
+            if AppState.current-feature == "documents" && root.show-invoice-form : InvoiceForm {
                 width: parent.width;
                 height: parent.height;
                 invoice-number:       root.invoice-form-number;
@@ -612,8 +728,60 @@ export component MainWindow inherits Window {
                 item-changed(idx, fld, val) => { root.invoice-form-item-changed(idx, fld, val); }
             }
 
-            // ── Сторінка 8: Dashboard ────────────────────────────────────────
-            if root.current-page == 8 : PageFade {
+            // ── Рахунки — список ───────────────────────────────────────────
+            if AppState.current-feature == "invoices" && !root.show-invoice-form : PageFade {
+                InvoiceList {
+                    width: parent.width;
+                    height: parent.height;
+                    rows:                    root.invoice-rows;
+                    loading:                 root.invoices-loading;
+                    status-counts:           root.invoice-status-counts;
+                    kpi-invoices-month:      root.invoice-kpi-invoices-month;
+                    kpi-revenue:             root.invoice-kpi-revenue;
+                    kpi-unpaid:              root.invoice-kpi-unpaid;
+                    kpi-overdue:             root.invoice-kpi-overdue;
+                    status-filter-changed(i)   => { root.invoice-status-filter-changed(i); }
+                    search-changed(q)          => { root.invoice-search-changed(q); }
+                    row-selected(id)           => { root.invoice-selected(id); }
+                    create-clicked             => { root.invoice-create-clicked(); }
+                    advance-status-clicked(id) => { root.invoice-advance-status-clicked(id); }
+                    edit-clicked(id)           => { root.invoice-edit-clicked(id); }
+                    pdf-clicked(id)            => { root.invoice-pdf-clicked(id); }
+                }
+            }
+
+            // ── Накладні — форма ────────────────────────────────────────────
+            if AppState.current-feature == "invoices" && root.show-invoice-form : InvoiceForm {
+                width: parent.width;
+                height: parent.height;
+                invoice-number:       root.invoice-form-number;
+                invoice-date:         root.invoice-form-date;
+                invoice-notes:        root.invoice-form-notes;
+                invoice-cp-index:     root.invoice-form-cp-index;
+                invoice-edit-id:      root.invoice-form-edit-id;
+                total-amount:         root.invoice-form-total;
+                is-edit-mode:         root.invoice-form-is-edit;
+                counterparty-names:   root.invoice-form-cp-names;
+                counterparty-ids:     root.invoice-form-cp-ids;
+                items:                root.invoice-form-items;
+                category-names:       root.invoice-form-category-names;
+                category-ids:         root.invoice-form-category-ids;
+                invoice-category-index: root.invoice-form-category-index;
+                contract-names:       root.invoice-form-contract-names;
+                contract-ids:         root.invoice-form-contract-ids;
+                invoice-contract-index: root.invoice-form-contract-index;
+                invoice-expected-payment-date: root.invoice-form-expected-payment-date;
+
+                save(n, d, c, notes, cat, con, exp)   => { root.invoice-form-save(n, d, c, notes, cat, con, exp); }
+                update(n, d, c, notes, cat, con, exp) => { root.invoice-form-update(n, d, c, notes, cat, con, exp); }
+                cancel                      => { root.invoice-form-cancel(); }
+                add-item                    => { root.invoice-form-add-item(); }
+                remove-item(i)              => { root.invoice-form-remove-item(i); }
+                item-changed(idx, fld, val) => { root.invoice-form-item-changed(idx, fld, val); }
+            }
+
+            // ── Dashboard ────────────────────────────────────────────────────
+            if AppState.current-feature == "dashboard" : PageFade {
                 DashboardPage {
                     width: parent.width;
                     height: parent.height;
@@ -642,8 +810,8 @@ export component MainWindow inherits Window {
                 }
             }
 
-            // ── Сторінка 9: Налаштування ───────────────────────────────────────
-            if root.current-page == 9 : PageFade {
+            // ── Налаштування ─────────────────────────────────────────────────
+            if AppState.current-feature == "settings" : PageFade {
                 SettingsPage {
                     width: parent.width;
                     height: parent.height;
@@ -672,7 +840,7 @@ export component MainWindow inherits Window {
                 }
             }
 
-            if root.current-page == 3 && !root.show-payment-form : PageFade {
+            if AppState.current-feature == "payments" && !root.show-payment-form : PageFade {
                 PaymentList {
                     width: parent.width;
                     height: parent.height;
@@ -690,7 +858,7 @@ export component MainWindow inherits Window {
                 }
             }
 
-            if root.current-page == 3 && root.show-payment-form : PaymentForm {
+            if AppState.current-feature == "payments" && root.show-payment-form : PaymentForm {
                 width: parent.width;
                 height: parent.height;
                 is-edit-mode: root.payment-form-is-edit;
@@ -714,7 +882,7 @@ export component MainWindow inherits Window {
                 cancel => { root.payment-form-cancel(); }
             }
 
-            if root.current-page == 4 : Rectangle {
+            if AppState.current-feature == "reports" : Rectangle {
                 Text {
                     text: "📊  Звіти\nБуде реалізовано у наступній версії";
                     color: Theme.text-muted;
@@ -725,7 +893,7 @@ export component MainWindow inherits Window {
                 }
             }
 
-            if root.current-page == 7 : Rectangle {
+            if AppState.current-feature == "calendar" : Rectangle {
                 Text {
                     text: "📅  Календар платежів\nБуде реалізовано у наступній версії";
                     color: Theme.text-muted;
@@ -734,6 +902,57 @@ export component MainWindow inherits Window {
                     vertical-alignment: center;
                     wrap: word-wrap;
                 }
+            }
+
+            // ── Накладні — список ──────────────────────────────────────────
+            if AppState.current-feature == "waybills" && !root.show-waybill-form : PageFade {
+                WaybillList {
+                    width: parent.width;
+                    height: parent.height;
+                    rows:           root.waybill-rows;
+                    loading:        root.waybills-loading;
+                    status-counts:  root.waybill-status-counts;
+                    kpi-month:      root.waybill-kpi-month;
+                    kpi-delivered:  root.waybill-kpi-delivered;
+                    kpi-unsigned:   root.waybill-kpi-unsigned;
+                    kpi-overdue:    root.waybill-kpi-overdue;
+                    status-filter-changed(i)   => { root.waybill-status-filter-changed(i); }
+                    search-changed(q)           => { root.waybill-search-changed(q); }
+                    row-selected(id)            => { root.waybill-selected(id); }
+                    create-clicked              => { root.waybill-create-clicked(); }
+                    advance-status-clicked(id)  => { root.waybill-advance-status-clicked(id); }
+                    edit-clicked(id)            => { root.waybill-edit-clicked(id); }
+                    pdf-clicked(id)             => { root.waybill-pdf-clicked(id); }
+                }
+            }
+
+            // ── Накладні — форма ────────────────────────────────────────────
+            if AppState.current-feature == "waybills" && root.show-waybill-form : WaybillForm {
+                width: parent.width;
+                height: parent.height;
+                waybill-number:         root.waybill-form-number;
+                waybill-date:           root.waybill-form-date;
+                waybill-notes:          root.waybill-form-notes;
+                waybill-cp-index:       root.waybill-form-cp-index;
+                waybill-edit-id:        root.waybill-form-edit-id;
+                total-amount:           root.waybill-form-total;
+                is-edit-mode:           root.waybill-form-is-edit;
+                counterparty-names:     root.waybill-form-cp-names;
+                counterparty-ids:       root.waybill-form-cp-ids;
+                items:                  root.waybill-form-items;
+                category-names:         root.waybill-form-category-names;
+                category-ids:           root.waybill-form-category-ids;
+                waybill-category-index: root.waybill-form-category-index;
+                contract-names:         root.waybill-form-contract-names;
+                contract-ids:           root.waybill-form-contract-ids;
+                waybill-contract-index: root.waybill-form-contract-index;
+
+                save(n, d, c, notes, cat, con)   => { root.waybill-form-save(n, d, c, notes, cat, con); }
+                update(n, d, c, notes, cat, con) => { root.waybill-form-update(n, d, c, notes, cat, con); }
+                cancel                      => { root.waybill-form-cancel(); }
+                add-item                    => { root.waybill-form-add-item(); }
+                remove-item(i)              => { root.waybill-form-remove-item(i); }
+                item-changed(idx, fld, val) => { root.waybill-form-item-changed(idx, fld, val); }
             }
         }
     }
@@ -1008,7 +1227,7 @@ export component MainWindow inherits Window {
                         mouse-cursor: pointer;
                         clicked => {
                             root.show-company-picker = false;
-                            root.current-page = 6;
+                            AppState.current-feature = "companies";
                         }
 
                         Text {

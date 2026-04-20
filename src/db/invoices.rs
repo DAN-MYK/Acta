@@ -16,11 +16,11 @@ use crate::models::invoice::{
     Invoice, InvoiceItem, InvoiceListRow, InvoiceStatus, NewInvoice, NewInvoiceItem, UpdateInvoice,
 };
 
-/// Згенерувати наступний номер накладної у форматі "НАК-РРРР-NNN".
+/// Згенерувати наступний номер рахунку у форматі "РАХ-РРРР-NNN".
 ///
 /// Нумерація ізольована по компаніях і по роках.
 /// Парсимо числову частину після останнього дефісу — щоб уникнути
-/// лексикографічного MAX ("НАК-2026-9" > "НАК-2026-10" — хибний результат).
+/// лексикографічного MAX ("РАХ-2026-9" > "РАХ-2026-10" — хибний результат).
 pub async fn generate_next_number(pool: &PgPool, company_id: Uuid) -> Result<String> {
     use sqlx::Row;
     let year = chrono::Utc::now().year();
@@ -42,7 +42,7 @@ pub async fn generate_next_number(pool: &PgPool, company_id: Uuid) -> Result<Str
         .max()
         .unwrap_or(0);
 
-    Ok(format!("НАК-{year}-{:03}", max_seq + 1))
+    Ok(format!("РАХ-{year}-{:03}", max_seq + 1))
 }
 
 /// Отримати активних контрагентів компанії для ComboBox у формі накладної.
@@ -432,6 +432,75 @@ pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
     Ok(())
 }
 
+/// KPI-агрегати для сторінки списку рахунків.
+pub struct InvoiceKpi {
+    pub invoices_this_month: i64,
+    pub revenue_this_month: Decimal,
+    pub unpaid_total: Decimal,
+    pub overdue_count: i64,
+}
+
+/// Повернути кількість рахунків за кожним статусом для компанії.
+/// Результат: `[всього, draft, issued, signed, paid]` (5 елементів).
+pub async fn count_by_status(pool: &PgPool, company_id: Uuid) -> Result<Vec<i32>> {
+    use sqlx::Row;
+    let rows = sqlx::query(
+        "SELECT status, COUNT(*)::int AS cnt FROM invoices WHERE company_id = $1 GROUP BY status",
+    )
+    .bind(company_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut counts = [0i32; 5];
+    for row in &rows {
+        let status: InvoiceStatus = row.get("status");
+        let cnt: i32 = row.get("cnt");
+        let idx = match status {
+            InvoiceStatus::Draft  => 1,
+            InvoiceStatus::Issued => 2,
+            InvoiceStatus::Signed => 3,
+            InvoiceStatus::Paid   => 4,
+        };
+        counts[idx] = cnt;
+        counts[0] += cnt;
+    }
+    Ok(counts.to_vec())
+}
+
+/// Повернути KPI-агрегати для сторінки списку рахунків.
+pub async fn get_kpi(pool: &PgPool, company_id: Uuid) -> Result<InvoiceKpi> {
+    use sqlx::Row;
+    use chrono::Datelike;
+    let today = chrono::Utc::now().date_naive();
+    let first_of_month = chrono::NaiveDate::from_ymd_opt(today.year(), today.month(), 1)
+        .unwrap_or(today);
+    let overdue_threshold = today - chrono::Duration::days(30);
+
+    let row = sqlx::query(
+        r#"
+        SELECT
+            COUNT(*) FILTER (WHERE date >= $2)                                                       AS invoices_this_month,
+            COALESCE(SUM(total_amount) FILTER (WHERE status = 'paid' AND date >= $2), 0::numeric)    AS revenue_this_month,
+            COALESCE(SUM(total_amount) FILTER (WHERE status IN ('issued','signed')), 0::numeric)     AS unpaid_total,
+            COUNT(*) FILTER (WHERE status IN ('issued','signed') AND date < $3)                      AS overdue_count
+        FROM invoices
+        WHERE company_id = $1
+        "#,
+    )
+    .bind(company_id)
+    .bind(first_of_month)
+    .bind(overdue_threshold)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(InvoiceKpi {
+        invoices_this_month: row.get::<i64, _>("invoices_this_month"),
+        revenue_this_month:  row.get::<Decimal, _>("revenue_this_month"),
+        unpaid_total:        row.get::<Decimal, _>("unpaid_total"),
+        overdue_count:       row.get::<i64, _>("overdue_count"),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -449,6 +518,8 @@ mod tests {
         let _ = change_status;
         let _ = get_for_edit;
         let _ = advance_status;
+        let _ = count_by_status;
+        let _ = get_kpi;
     }
 
     #[test]

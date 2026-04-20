@@ -1,5 +1,6 @@
 /target
 .env
+.claude/
 .claude/worktrees/
 
 # Тимчасові файли

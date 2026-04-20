@@ -53,6 +53,16 @@ export struct PaymentRow {
     reconciled: bool,
 }
 
+export struct WaybillRow {
+    id: string,
+    num: string,
+    date: string,
+    counterparty: string,
+    amount: string,
+    status-label: string,
+    status: string,     // "draft" | "issued" | "signed" | "delivered"
+}
+
 export struct FormItemRow {
     description: string,
     quantity: string,

@@ -9,6 +9,7 @@ pub mod document_template;
 pub mod invoice;
 pub mod payment;
 pub mod task;
+pub mod waybill;
 
 #[allow(unused_imports)]
 pub use act::{Act, ActItem, ActListRow, ActStatus, NewAct, NewActItem, UpdateAct};
@@ -23,6 +24,10 @@ pub use contract::{
 #[allow(unused_imports)]
 pub use invoice::{
     Invoice, InvoiceItem, InvoiceListRow, InvoiceStatus, NewInvoice, NewInvoiceItem, UpdateInvoice,
+};
+#[allow(unused_imports)]
+pub use waybill::{
+    Waybill, WaybillItem, WaybillListRow, WaybillStatus, NewWaybill, NewWaybillItem, UpdateWaybill,
 };
 pub use counterparty::{Counterparty, NewCounterparty, UpdateCounterparty};
 #[allow(unused_imports)]

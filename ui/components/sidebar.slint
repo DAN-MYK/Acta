@@ -19,6 +19,7 @@ component NavItem {
     in property <bool> active: false;
     in property <bool> disabled: false;
     in property <int> badge: 0;
+    in property <length> indent: 0px;
     callback clicked;
 
     height: 36px;
@@ -41,7 +42,7 @@ component NavItem {
         }
 
         HorizontalLayout {
-            padding-left: 10px;
+            padding-left: 10px + root.indent;
             padding-right: 12px;
             spacing: 8px;
             alignment: start;
@@ -120,12 +121,13 @@ component SectionLabel {
 }
 
 export component Sidebar {
-    in property <int> current-page: 8;
+    in property <string> current-feature: "dashboard";
     in property <int> open-tasks-count: 0;
     in property <string> active-company-name: "Оберіть компанію";
     in property <string> active-company-subtitle: "";
+    in-out property <bool> docs-expanded: true;
 
-    callback navigate(string, int);
+    callback navigate(string);
     callback switch-company();
 
     width: 220px;
@@ -250,32 +252,98 @@ export component Sidebar {
                 NavItem {
                     label: "Головна";
                     icon: SidebarIcons.dashboard;
-                    active: root.current-page == 8;
-                    clicked => { root.navigate("dashboard", 8); }
+                    active: root.current-feature == "dashboard";
+                    clicked => { root.navigate("dashboard"); }
                 }
-                NavItem {
-                    label: "Документи";
+                Rectangle {
+                    height: 36px;
+                    vertical-stretch: 0;
+                    border-radius: Theme.radius-md;
+                    background: docs-ta.has-hover ? Theme.sidebar-hover : transparent;
+                    animate background { duration: 120ms; easing: ease; }
+
+                    HorizontalLayout {
+                        padding-left: 10px;
+                        padding-right: 12px;
+                        spacing: 8px;
+                        alignment: start;
+
+                        Rectangle {
+                            width: 18px;
+                            height: 18px;
+                            y: (parent.height - self.height) / 2;
+                            Image {
+                                width: parent.width;
+                                height: parent.height;
+                                source: SidebarIcons.documents;
+                                image-fit: contain;
+                                colorize: Theme.sidebar-icon;
+                            }
+                        }
+
+                        Text {
+                            text: "Документи";
+                            font-size: Theme.font-md;
+                            font-weight: 500;
+                            color: Theme.sidebar-text;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                        }
+
+                        Image {
+                            width: 10px;
+                            height: 10px;
+                            source: SidebarIcons.chevron-down;
+                            colorize: Theme.sidebar-icon;
+                            y: (parent.height - self.height) / 2;
+                            transform-rotation: root.docs-expanded ? 0deg : -90deg;
+                            animate transform-rotation { duration: 150ms; easing: ease-in-out; }
+                        }
+                    }
+
+                    docs-ta := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.docs-expanded = !root.docs-expanded; }
+                    }
+                }
+                if root.docs-expanded : NavItem {
+                    label: "Акти виконаних робіт";
                     icon: SidebarIcons.documents;
-                    active: root.current-page == 1;
-                    clicked => { root.navigate("documents", 1); }
+                    active: root.current-feature == "acts";
+                    indent: 10px;
+                    clicked => { root.navigate("acts"); }
+                }
+                if root.docs-expanded : NavItem {
+                    label: "Рахунки";
+                    icon: SidebarIcons.documents;
+                    active: root.current-feature == "invoices";
+                    indent: 10px;
+                    clicked => { root.navigate("invoices"); }
+                }
+                if root.docs-expanded : NavItem {
+                    label: "Накладні";
+                    icon: SidebarIcons.documents;
+                    active: root.current-feature == "waybills";
+                    indent: 10px;
+                    clicked => { root.navigate("waybills"); }
                 }
                 NavItem {
                     label: "Контрагенти";
                     icon: SidebarIcons.counterparties;
-                    active: root.current-page == 0;
-                    clicked => { root.navigate("counterparties", 0); }
+                    active: root.current-feature == "counterparties";
+                    clicked => { root.navigate("counterparties"); }
                 }
                 NavItem {
                     label: "Платежі";
                     icon: SidebarIcons.payments;
-                    active: root.current-page == 3;
-                    clicked => { root.navigate("payments", 3); }
+                    active: root.current-feature == "payments";
+                    clicked => { root.navigate("payments"); }
                 }
                 NavItem {
                     label: "Звіти";
                     icon: SidebarIcons.reports;
-                    active: root.current-page == 4;
-                    clicked => { root.navigate("reports", 4); }
+                    active: root.current-feature == "reports";
+                    clicked => { root.navigate("reports"); }
                 }
             }
 
@@ -301,21 +369,21 @@ export component Sidebar {
                 NavItem {
                     label: "To-Do";
                     icon: SidebarIcons.todo;
-                    active: root.current-page == 5;
+                    active: root.current-feature == "tasks";
                     badge: root.open-tasks-count;
-                    clicked => { root.navigate("tasks", 5); }
+                    clicked => { root.navigate("tasks"); }
                 }
                 NavItem {
                     label: "Компанії";
                     icon: SidebarIcons.companies;
-                    active: root.current-page == 6;
-                    clicked => { root.navigate("companies", 6); }
+                    active: root.current-feature == "companies";
+                    clicked => { root.navigate("companies"); }
                 }
                 NavItem {
                     label: "Календар платежів";
                     icon: SidebarIcons.calendar;
-                    active: root.current-page == 7;
-                    clicked => { root.navigate("calendar", 7); }
+                    active: root.current-feature == "calendar";
+                    clicked => { root.navigate("calendar"); }
                 }
             }
 
@@ -341,8 +409,8 @@ export component Sidebar {
                     width: parent.width - 24px;
                     label: "Налаштування";
                     icon: SidebarIcons.settings;
-                    active: root.current-page == 9;
-                    clicked => { root.navigate("settings", 9); }
+                    active: root.current-feature == "settings";
+                    clicked => { root.navigate("settings"); }
                 }
             }
 

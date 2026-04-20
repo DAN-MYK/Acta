@@ -1,4 +1,4 @@
-// ui/invoices.rs — колбеки та дані для сторінки Видаткові накладні.
+// ui/waybills.rs — колбеки та дані для сторінки Накладні.
 
 use std::sync::Arc;
 
@@ -9,11 +9,11 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel, Weak};
 use acta::app_ctx::AppCtx;
 use crate::{
     ui::helpers::*,
-    FormItemRow, InvoiceRow, MainWindow,
+    FormItemRow, WaybillRow, MainWindow,
 };
 use acta::{
     db,
-    models::{InvoiceStatus, NewInvoice, UpdateInvoice},
+    models::{WaybillStatus, NewWaybill, UpdateWaybill},
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -21,23 +21,23 @@ use acta::{
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[derive(Clone)]
-pub struct InvoicesUiData {
-    pub invoice_rows: Vec<InvoiceRow>,
+pub struct WaybillsUiData {
+    pub waybill_rows: Vec<WaybillRow>,
     pub counts: Vec<i32>,
-    pub kpi_invoices_month: i32,
-    pub kpi_revenue: SharedString,
-    pub kpi_unpaid: SharedString,
+    pub kpi_month: i32,
+    pub kpi_delivered: SharedString,
+    pub kpi_unsigned: SharedString,
     pub kpi_overdue: i32,
 }
 
-pub async fn prepare_invoices_data(
+pub async fn prepare_waybills_data(
     pool: &sqlx::PgPool,
     company_id: uuid::Uuid,
-    status_filter: Option<InvoiceStatus>,
+    status_filter: Option<WaybillStatus>,
     query: String,
-) -> Result<InvoicesUiData> {
-    let (invoices_result, counts_result, kpi_result) = tokio::join!(
-        db::invoices::list_filtered(
+) -> Result<WaybillsUiData> {
+    let (waybills_result, counts_result, kpi_result) = tokio::join!(
+        db::waybills::list_filtered(
             pool,
             company_id,
             status_filter,
@@ -47,76 +47,75 @@ pub async fn prepare_invoices_data(
             None,
             None,
         ),
-        db::invoices::count_by_status(pool, company_id),
-        db::invoices::get_kpi(pool, company_id),
+        db::waybills::count_by_status(pool, company_id),
+        db::waybills::get_kpi(pool, company_id),
     );
-    let invoices = invoices_result?;
+    let waybills = waybills_result?;
     let counts = counts_result?;
     let kpi = kpi_result?;
 
-    let invoice_rows = invoices
+    let waybill_rows = waybills
         .iter()
-        .map(|inv| InvoiceRow {
-            id: SharedString::from(inv.id.to_string().as_str()),
-            num: SharedString::from(inv.number.as_str()),
-            date: SharedString::from(inv.date.format("%d.%m.%Y").to_string().as_str()),
-            counterparty: SharedString::from(inv.counterparty_name.as_str()),
-            amount: SharedString::from(format_amount_ua(inv.total_amount).as_str()),
-            status_label: SharedString::from(match inv.status {
-                InvoiceStatus::Draft => "Чернетка",
-                InvoiceStatus::Issued => "Виставлено",
-                InvoiceStatus::Signed => "Підписано",
-                InvoiceStatus::Paid => "Оплачено",
+        .map(|wb| WaybillRow {
+            id: SharedString::from(wb.id.to_string().as_str()),
+            num: SharedString::from(wb.number.as_str()),
+            date: SharedString::from(wb.date.format("%d.%m.%Y").to_string().as_str()),
+            counterparty: SharedString::from(wb.counterparty_name.as_str()),
+            amount: SharedString::from(format_amount_ua(wb.total_amount).as_str()),
+            status_label: SharedString::from(match wb.status {
+                WaybillStatus::Draft     => "Чернетка",
+                WaybillStatus::Issued    => "Виставлена",
+                WaybillStatus::Signed    => "Підписана",
+                WaybillStatus::Delivered => "Доставлено",
             }),
-            status: SharedString::from(inv.status.as_str()),
+            status: SharedString::from(wb.status.as_str()),
         })
         .collect();
 
-    Ok(InvoicesUiData {
-        invoice_rows,
+    Ok(WaybillsUiData {
+        waybill_rows,
         counts,
-        kpi_invoices_month: kpi.invoices_this_month as i32,
-        kpi_revenue: SharedString::from(format_kpi_amount(kpi.revenue_this_month).as_str()),
-        kpi_unpaid: SharedString::from(format_kpi_amount(kpi.unpaid_total).as_str()),
+        kpi_month: kpi.waybills_this_month as i32,
+        kpi_delivered: SharedString::from(format_kpi_amount(kpi.delivered_this_month).as_str()),
+        kpi_unsigned: SharedString::from(format_kpi_amount(kpi.unsigned_total).as_str()),
         kpi_overdue: kpi.overdue_count as i32,
     })
 }
 
-pub fn apply_invoices_to_ui(ui: &MainWindow, d: InvoicesUiData, close_form: bool) {
-    ui.set_invoice_rows(ModelRc::new(VecModel::from(d.invoice_rows)));
-    ui.set_invoice_status_counts(ModelRc::new(VecModel::from(d.counts)));
-    ui.set_invoice_kpi_invoices_month(d.kpi_invoices_month);
-    ui.set_invoice_kpi_revenue(d.kpi_revenue);
-    ui.set_invoice_kpi_unpaid(d.kpi_unpaid);
-    ui.set_invoice_kpi_overdue(d.kpi_overdue);
+pub fn apply_waybills_to_ui(ui: &MainWindow, d: WaybillsUiData, close_form: bool) {
+    ui.set_waybill_rows(ModelRc::new(VecModel::from(d.waybill_rows)));
+    ui.set_waybill_status_counts(ModelRc::new(VecModel::from(d.counts)));
+    ui.set_waybill_kpi_month(d.kpi_month);
+    ui.set_waybill_kpi_delivered(d.kpi_delivered);
+    ui.set_waybill_kpi_unsigned(d.kpi_unsigned);
+    ui.set_waybill_kpi_overdue(d.kpi_overdue);
     if close_form {
-        ui.set_show_invoice_form(false);
+        ui.set_show_waybill_form(false);
     }
 }
 
-pub async fn reload_invoices(
+pub async fn reload_waybills(
     pool: &sqlx::PgPool,
     ui_weak: Weak<MainWindow>,
     company_id: uuid::Uuid,
-    status_filter: Option<InvoiceStatus>,
+    status_filter: Option<WaybillStatus>,
     query: String,
     close_form: bool,
 ) -> Result<()> {
-    let d = prepare_invoices_data(pool, company_id, status_filter, query).await?;
+    let d = prepare_waybills_data(pool, company_id, status_filter, query).await?;
     ui_weak
-        .upgrade_in_event_loop(move |ui| apply_invoices_to_ui(&ui, d, close_form))
+        .upgrade_in_event_loop(move |ui| apply_waybills_to_ui(&ui, d, close_form))
         .map_err(anyhow::Error::from)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ── spawn_save_invoice ─────────────────────────────────────────────────────────
+// ── spawn_save_waybill ─────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
 
-pub fn spawn_save_invoice(
+pub fn spawn_save_waybill(
     pool: sqlx::PgPool,
     ui_weak: Weak<MainWindow>,
-    inv_state: Arc<std::sync::Mutex<InvoiceListState>>,
-    doc_state: Arc<std::sync::Mutex<DocListState>>,
+    wb_state: Arc<std::sync::Mutex<WaybillListState>>,
     company_id: uuid::Uuid,
     number: String,
     date_str: String,
@@ -124,8 +123,7 @@ pub fn spawn_save_invoice(
     notes: Option<String>,
     cat_id_str: String,
     con_id_str: String,
-    exp_date_str: String,
-    items: Vec<acta::models::NewInvoiceItem>,
+    items: Vec<acta::models::waybill::NewWaybillItem>,
 ) {
     tokio::spawn(async move {
         if number.trim().is_empty() {
@@ -164,71 +162,34 @@ pub fn spawn_save_invoice(
         } else {
             uuid::Uuid::parse_str(con_id_str.as_str()).ok()
         };
-        let exp_date_opt: Option<chrono::NaiveDate> = if exp_date_str.trim().is_empty() {
-            None
-        } else {
-            NaiveDate::parse_from_str(exp_date_str.as_str(), "%d.%m.%Y").ok()
-        };
-        let new_invoice = NewInvoice {
+        let new_waybill = NewWaybill {
             number: number.clone(),
             counterparty_id: cp_uuid,
             contract_id: con_id_opt,
             category_id: cat_id_opt,
-            direction: {
-                let s = doc_state.lock().unwrap();
-                s.direction.clone()
-            },
+            direction: "outgoing".to_string(),
             date,
-            expected_payment_date: exp_date_opt,
             notes,
             bas_id: None,
             items,
         };
-        match db::invoices::create(&pool, company_id, &new_invoice).await {
-            Ok(inv) => {
-                tracing::info!("Накладну '{}' збережено (id={}).", inv.number, inv.id);
+        match db::waybills::create(&pool, company_id, &new_waybill).await {
+            Ok(wb) => {
+                tracing::info!("Накладну '{}' збережено (id={}).", wb.number, wb.id);
                 show_toast(
                     ui_weak.clone(),
-                    format!("Накладну '{}' збережено", inv.number),
+                    format!("Накладну '{}' збережено", wb.number),
                     false,
                 );
                 let (status_filter, query) = {
-                    let state = inv_state.lock().unwrap();
+                    let state = wb_state.lock().unwrap();
                     (state.status_filter.clone(), state.query.clone())
                 };
                 if let Err(e) =
-                    reload_invoices(&pool, ui_weak.clone(), company_id, status_filter, query, true)
+                    reload_waybills(&pool, ui_weak.clone(), company_id, status_filter, query, true)
                         .await
                 {
                     tracing::error!("Помилка оновлення списку накладних: {e}");
-                }
-                let (doc_tab, doc_direction, doc_query, doc_cp, doc_df, doc_dt) = {
-                    let s = doc_state.lock().unwrap();
-                    (
-                        s.tab,
-                        s.direction.clone(),
-                        s.query.clone(),
-                        s.counterparty_id,
-                        s.date_from,
-                        s.date_to,
-                    )
-                };
-                if let Err(e) = crate::ui::documents::reload_documents(
-                    &pool,
-                    ui_weak,
-                    company_id,
-                    doc_tab,
-                    &doc_direction,
-                    &doc_query,
-                    doc_cp,
-                    doc_df,
-                    doc_dt,
-                )
-                .await
-                {
-                    tracing::error!(
-                        "Помилка оновлення документів після збереження накладної: {e}"
-                    );
                 }
             }
             Err(e) => {
@@ -247,28 +208,28 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Фільтр статусу ────────────────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let state = ctx.invoice_state.clone();
+    let state = ctx.waybill_state.clone();
     let company_id_arc = ctx.active_company_id.clone();
-    ui.on_invoice_status_filter_changed(move |filter_idx| {
+    ui.on_waybill_status_filter_changed(move |filter_idx| {
         let pool = pool.clone();
         let ui_handle = ui_weak.clone();
-        let inv_state = state.clone();
+        let wb_state = state.clone();
         let cid = *company_id_arc.lock().unwrap();
         tokio::spawn(async move {
             let status_filter = match filter_idx {
-                1 => Some(InvoiceStatus::Draft),
-                2 => Some(InvoiceStatus::Issued),
-                3 => Some(InvoiceStatus::Signed),
-                4 => Some(InvoiceStatus::Paid),
+                1 => Some(WaybillStatus::Draft),
+                2 => Some(WaybillStatus::Issued),
+                3 => Some(WaybillStatus::Signed),
+                4 => Some(WaybillStatus::Delivered),
                 _ => None,
             };
             let query = {
-                let mut state = inv_state.lock().unwrap();
+                let mut state = wb_state.lock().unwrap();
                 state.status_filter = status_filter.clone();
                 state.query.clone()
             };
             if let Err(e) =
-                reload_invoices(&pool, ui_handle, cid, status_filter, query, false).await
+                reload_waybills(&pool, ui_handle, cid, status_filter, query, false).await
             {
                 tracing::error!("Помилка фільтру накладних: {e}");
             }
@@ -278,23 +239,24 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Пошук ─────────────────────────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let state = ctx.invoice_state.clone();
+    let state = ctx.waybill_state.clone();
     let company_id_arc = ctx.active_company_id.clone();
-    let search_task: Arc<std::sync::Mutex<Option<tokio::task::JoinHandle<()>>>> = Arc::new(std::sync::Mutex::new(None));
-    ui.on_invoice_search_changed(move |query| {
+    let search_task: Arc<std::sync::Mutex<Option<tokio::task::JoinHandle<()>>>> =
+        Arc::new(std::sync::Mutex::new(None));
+    ui.on_waybill_search_changed(move |query| {
         let pool = pool.clone();
         let ui_handle = ui_weak.clone();
-        let inv_state = state.clone();
+        let wb_state = state.clone();
         let cid = *company_id_arc.lock().unwrap();
         let query = query.to_string();
         let handle = tokio::spawn(async move {
             let (status_filter, query) = {
-                let mut state = inv_state.lock().unwrap();
+                let mut state = wb_state.lock().unwrap();
                 state.query = query.clone();
                 (state.status_filter.clone(), query)
             };
             if let Err(e) =
-                reload_invoices(&pool, ui_handle, cid, status_filter, query, false).await
+                reload_waybills(&pool, ui_handle, cid, status_filter, query, false).await
             {
                 tracing::error!("Помилка пошуку накладних: {e}");
             }
@@ -304,24 +266,24 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
         }
     });
 
-    ui.on_invoice_selected(|_id| {});
+    ui.on_waybill_selected(|_id| {});
 
-    // ── Новий рахунок ─────────────────────────────────────────────────────────
+    // ── Нова накладна ─────────────────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
     let company_id_arc = ctx.active_company_id.clone();
-    ui.on_invoice_create_clicked(move || {
+    ui.on_waybill_create_clicked(move || {
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
         let cid = *company_id_arc.lock().unwrap();
         tokio::spawn(async move {
             let (cps, next_number, categories) = tokio::join!(
-                db::invoices::counterparties_for_select(&pool, cid),
-                db::invoices::generate_next_number(&pool, cid),
+                db::waybills::counterparties_for_select(&pool, cid),
+                db::waybills::generate_next_number(&pool, cid),
                 db::categories::list_all_for_select(&pool, cid),
             );
             let cps = cps.unwrap_or_default();
-            let next_number = next_number.unwrap_or_else(|_| "РАХ-001".into());
+            let next_number = next_number.unwrap_or_else(|_| "НАК-001".into());
             let categories = categories.unwrap_or_default();
             let today = chrono::Local::now().format("%d.%m.%Y").to_string();
 
@@ -345,23 +307,22 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
                             )
                         })
                         .unzip();
-                    ui.set_invoice_form_cp_names(ModelRc::new(VecModel::from(names)));
-                    ui.set_invoice_form_cp_ids(ModelRc::new(VecModel::from(ids)));
-                    ui.set_invoice_form_number(SharedString::from(next_number.as_str()));
-                    ui.set_invoice_form_date(SharedString::from(today.as_str()));
-                    ui.set_invoice_form_notes(SharedString::from(""));
-                    ui.set_invoice_form_cp_index(0);
-                    ui.set_invoice_form_is_edit(false);
-                    ui.set_invoice_form_edit_id(SharedString::from(""));
-                    ui.set_invoice_form_total(SharedString::from("0.00"));
-                    ui.set_invoice_form_category_names(ModelRc::new(VecModel::from(cat_names)));
-                    ui.set_invoice_form_category_ids(ModelRc::new(VecModel::from(cat_ids)));
-                    ui.set_invoice_form_category_index(0);
-                    ui.set_invoice_form_expected_payment_date(SharedString::from(""));
-                    ui.set_invoice_form_items(ModelRc::new(VecModel::from(
+                    ui.set_waybill_form_cp_names(ModelRc::new(VecModel::from(names)));
+                    ui.set_waybill_form_cp_ids(ModelRc::new(VecModel::from(ids)));
+                    ui.set_waybill_form_number(SharedString::from(next_number.as_str()));
+                    ui.set_waybill_form_date(SharedString::from(today.as_str()));
+                    ui.set_waybill_form_notes(SharedString::from(""));
+                    ui.set_waybill_form_cp_index(0);
+                    ui.set_waybill_form_is_edit(false);
+                    ui.set_waybill_form_edit_id(SharedString::from(""));
+                    ui.set_waybill_form_total(SharedString::from("0.00"));
+                    ui.set_waybill_form_category_names(ModelRc::new(VecModel::from(cat_names)));
+                    ui.set_waybill_form_category_ids(ModelRc::new(VecModel::from(cat_ids)));
+                    ui.set_waybill_form_category_index(0);
+                    ui.set_waybill_form_items(ModelRc::new(VecModel::from(
                         Vec::<FormItemRow>::new(),
                     )));
-                    ui.set_show_invoice_form(true);
+                    ui.set_show_waybill_form(true);
                 })
                 .warn_if_terminated();
         });
@@ -370,37 +331,37 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Наступний статус ──────────────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let state = ctx.invoice_state.clone();
+    let state = ctx.waybill_state.clone();
     let company_id_arc = ctx.active_company_id.clone();
-    ui.on_invoice_advance_status_clicked(move |id| {
+    ui.on_waybill_advance_status_clicked(move |id| {
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
-        let inv_state = state.clone();
+        let wb_state = state.clone();
         let cid = *company_id_arc.lock().unwrap();
         let id_str = id.to_string();
         tokio::spawn(async move {
-            let invoice_id = match uuid::Uuid::parse_str(&id_str) {
+            let waybill_id = match uuid::Uuid::parse_str(&id_str) {
                 Ok(id) => id,
                 Err(_) => {
                     tracing::error!("Невалідний UUID накладної: {id_str}");
                     return;
                 }
             };
-            match db::invoices::advance_status(&pool, invoice_id).await {
-                Ok(Some(inv)) => {
+            match db::waybills::advance_status(&pool, waybill_id).await {
+                Ok(Some(wb)) => {
                     let (status_filter, query) = {
-                        let state = inv_state.lock().unwrap();
+                        let state = wb_state.lock().unwrap();
                         (state.status_filter.clone(), state.query.clone())
                     };
                     if let Err(e) =
-                        reload_invoices(&pool, ui_weak, cid, status_filter, query, false).await
+                        reload_waybills(&pool, ui_weak, cid, status_filter, query, false).await
                     {
                         tracing::error!("Помилка оновлення накладних: {e}");
                     }
-                    let _ = inv;
+                    let _ = wb;
                 }
                 Ok(None) => tracing::error!("Накладну {id_str} не знайдено"),
-                Err(e) => tracing::error!("Помилка зміни статусу накладної: {e}"),
+                Err(e)   => tracing::error!("Помилка зміни статусу накладної: {e}"),
             }
         });
     });
@@ -409,13 +370,13 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
     let company_id_arc = ctx.active_company_id.clone();
-    ui.on_invoice_edit_clicked(move |inv_id| {
+    ui.on_waybill_edit_clicked(move |wb_id| {
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
         let cid = *company_id_arc.lock().unwrap();
-        let id_str = inv_id.to_string();
+        let id_str = wb_id.to_string();
         tokio::spawn(async move {
-            let invoice_uuid = match uuid::Uuid::parse_str(&id_str) {
+            let waybill_uuid = match uuid::Uuid::parse_str(&id_str) {
                 Ok(id) => id,
                 Err(_) => {
                     tracing::error!("Невалідний UUID накладної: {id_str}");
@@ -423,18 +384,18 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
                 }
             };
             let (result, cps, categories) = tokio::join!(
-                db::invoices::get_for_edit(&pool, invoice_uuid),
-                db::invoices::counterparties_for_select(&pool, cid),
+                db::waybills::get_for_edit(&pool, waybill_uuid),
+                db::waybills::counterparties_for_select(&pool, cid),
                 db::categories::list_all_for_select(&pool, cid),
             );
-            let (invoice, items) = match result {
+            let (waybill, items) = match result {
                 Ok(Some(data)) => data,
                 Ok(None) => { tracing::error!("Накладна {id_str} не знайдена"); return; }
-                Err(e) => { tracing::error!("Помилка завантаження накладної: {e}"); return; }
+                Err(e)   => { tracing::error!("Помилка завантаження накладної: {e}"); return; }
             };
             let cps = cps.unwrap_or_default();
             let categories = categories.unwrap_or_default();
-            let cp_id_str = invoice.counterparty_id.to_string();
+            let cp_id_str = waybill.counterparty_id.to_string();
             let cp_index =
                 cps.iter().position(|(id, _)| id.to_string() == cp_id_str).unwrap_or(0);
 
@@ -447,13 +408,9 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
                 cat_ids.push(SharedString::from(c.id.to_string()));
             }
             let cat_id_str =
-                invoice.category_id.map(|id| id.to_string()).unwrap_or_default();
+                waybill.category_id.map(|id| id.to_string()).unwrap_or_default();
             let cat_index =
                 cat_ids.iter().position(|id| id.as_str() == cat_id_str).unwrap_or(0);
-            let exp_date_str = invoice
-                .expected_payment_date
-                .map(|d| d.format("%d.%m.%Y").to_string())
-                .unwrap_or_default();
 
             ui_weak
                 .upgrade_in_event_loop(move |ui| {
@@ -466,29 +423,26 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
                             )
                         })
                         .unzip();
-                    ui.set_invoice_form_cp_names(ModelRc::new(VecModel::from(names)));
-                    ui.set_invoice_form_cp_ids(ModelRc::new(VecModel::from(ids)));
-                    ui.set_invoice_form_number(SharedString::from(invoice.number.as_str()));
-                    ui.set_invoice_form_date(SharedString::from(
-                        invoice.date.format("%d.%m.%Y").to_string().as_str(),
+                    ui.set_waybill_form_cp_names(ModelRc::new(VecModel::from(names)));
+                    ui.set_waybill_form_cp_ids(ModelRc::new(VecModel::from(ids)));
+                    ui.set_waybill_form_number(SharedString::from(waybill.number.as_str()));
+                    ui.set_waybill_form_date(SharedString::from(
+                        waybill.date.format("%d.%m.%Y").to_string().as_str(),
                     ));
-                    ui.set_invoice_form_notes(SharedString::from(
-                        invoice.notes.as_deref().unwrap_or(""),
+                    ui.set_waybill_form_notes(SharedString::from(
+                        waybill.notes.as_deref().unwrap_or(""),
                     ));
-                    ui.set_invoice_form_cp_index(cp_index as i32);
-                    ui.set_invoice_form_is_edit(true);
-                    ui.set_invoice_form_edit_id(SharedString::from(
-                        invoice.id.to_string().as_str(),
+                    ui.set_waybill_form_cp_index(cp_index as i32);
+                    ui.set_waybill_form_is_edit(true);
+                    ui.set_waybill_form_edit_id(SharedString::from(
+                        waybill.id.to_string().as_str(),
                     ));
-                    ui.set_invoice_form_total(SharedString::from(
-                        invoice.total_amount.to_string().as_str(),
+                    ui.set_waybill_form_total(SharedString::from(
+                        waybill.total_amount.to_string().as_str(),
                     ));
-                    ui.set_invoice_form_category_names(ModelRc::new(VecModel::from(cat_names)));
-                    ui.set_invoice_form_category_ids(ModelRc::new(VecModel::from(cat_ids)));
-                    ui.set_invoice_form_category_index(cat_index as i32);
-                    ui.set_invoice_form_expected_payment_date(SharedString::from(
-                        exp_date_str.as_str(),
-                    ));
+                    ui.set_waybill_form_category_names(ModelRc::new(VecModel::from(cat_names)));
+                    ui.set_waybill_form_category_ids(ModelRc::new(VecModel::from(cat_ids)));
+                    ui.set_waybill_form_category_index(cat_index as i32);
                     let form_items: Vec<FormItemRow> = items
                         .iter()
                         .map(|it| FormItemRow {
@@ -499,8 +453,8 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
                             amount: SharedString::from(it.amount.to_string().as_str()),
                         })
                         .collect();
-                    ui.set_invoice_form_items(ModelRc::new(VecModel::from(form_items)));
-                    ui.set_show_invoice_form(true);
+                    ui.set_waybill_form_items(ModelRc::new(VecModel::from(form_items)));
+                    ui.set_show_waybill_form(true);
                 })
                 .warn_if_terminated();
         });
@@ -508,18 +462,18 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
 
     // ── Скасувати форму ───────────────────────────────────────────────────────
     let ui_weak = ui.as_weak();
-    ui.on_invoice_form_cancel(move || {
+    ui.on_waybill_form_cancel(move || {
         if let Some(ui) = ui_weak.upgrade() {
-            ui.set_show_invoice_form(false);
+            ui.set_show_waybill_form(false);
         }
     });
 
     // ── Додати позицію ────────────────────────────────────────────────────────
     let ui_weak = ui.as_weak();
-    ui.on_invoice_form_add_item(move || {
+    ui.on_waybill_form_add_item(move || {
         if let Some(ui) = ui_weak.upgrade() {
-            let mut items: Vec<FormItemRow> = (0..ui.get_invoice_form_items().row_count())
-                .filter_map(|i| ui.get_invoice_form_items().row_data(i))
+            let mut items: Vec<FormItemRow> = (0..ui.get_waybill_form_items().row_count())
+                .filter_map(|i| ui.get_waybill_form_items().row_data(i))
                 .collect();
             items.push(FormItemRow {
                 description: SharedString::from(""),
@@ -528,53 +482,45 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
                 price: SharedString::from("0.00"),
                 amount: SharedString::from("0.00"),
             });
-            ui.set_invoice_form_items(ModelRc::new(VecModel::from(items)));
+            ui.set_waybill_form_items(ModelRc::new(VecModel::from(items)));
         }
     });
 
     // ── Видалити позицію ──────────────────────────────────────────────────────
     let ui_weak = ui.as_weak();
-    ui.on_invoice_form_remove_item(move |idx| {
+    ui.on_waybill_form_remove_item(move |idx| {
         if let Some(ui) = ui_weak.upgrade() {
-            let mut items: Vec<FormItemRow> = (0..ui.get_invoice_form_items().row_count())
-                .filter_map(|i| ui.get_invoice_form_items().row_data(i))
+            let mut items: Vec<FormItemRow> = (0..ui.get_waybill_form_items().row_count())
+                .filter_map(|i| ui.get_waybill_form_items().row_data(i))
                 .collect();
             let idx = idx as usize;
             if idx < items.len() {
                 items.remove(idx);
             }
-            ui.set_invoice_form_items(ModelRc::new(VecModel::from(items)));
-            recalculate_invoice_total(&ui);
+            ui.set_waybill_form_items(ModelRc::new(VecModel::from(items)));
+            recalculate_waybill_total(&ui);
         }
     });
 
     // ── Редагування поля позиції ──────────────────────────────────────────────
     let ui_weak = ui.as_weak();
-    ui.on_invoice_form_item_changed(move |idx, field, value| {
+    ui.on_waybill_form_item_changed(move |idx, field, value| {
         if let Some(ui) = ui_weak.upgrade() {
-            let mut items: Vec<FormItemRow> = (0..ui.get_invoice_form_items().row_count())
-                .filter_map(|i| ui.get_invoice_form_items().row_data(i))
+            let mut items: Vec<FormItemRow> = (0..ui.get_waybill_form_items().row_count())
+                .filter_map(|i| ui.get_waybill_form_items().row_data(i))
                 .collect();
             let idx = idx as usize;
             if idx < items.len() {
                 match field.as_str() {
-                    "desc" => {
-                        items[idx].description = value;
-                    }
-                    "qty" => {
-                        items[idx].quantity = value;
-                    }
-                    "unit" => {
-                        items[idx].unit = value;
-                    }
-                    "price" => {
-                        items[idx].price = value;
-                    }
+                    "desc"  => { items[idx].description = value; }
+                    "qty"   => { items[idx].quantity    = value; }
+                    "unit"  => { items[idx].unit        = value; }
+                    "price" => { items[idx].price       = value; }
                     _ => {}
                 }
-                ui.set_invoice_form_items(ModelRc::new(VecModel::from(items)));
+                ui.set_waybill_form_items(ModelRc::new(VecModel::from(items)));
                 if matches!(field.as_str(), "qty" | "price") {
-                    recalculate_invoice_total(&ui);
+                    recalculate_waybill_total(&ui);
                 }
             }
         }
@@ -583,17 +529,15 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Зберегти нову накладну ────────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let state = ctx.invoice_state.clone();
-    let doc_state = ctx.doc_state.clone();
+    let state = ctx.waybill_state.clone();
     let company_id_arc = ctx.active_company_id.clone();
-    ui.on_invoice_form_save(move |number, date_str, cp_id_str, notes, cat_id_str, con_id_str, exp_date_str| {
+    ui.on_waybill_form_save(move |number, date_str, cp_id_str, notes, cat_id_str, con_id_str| {
         let cid = *company_id_arc.lock().unwrap();
-        let items = collect_invoice_items_from_ui(&ui_weak);
-        spawn_save_invoice(
+        let items = collect_waybill_items_from_ui(&ui_weak);
+        spawn_save_waybill(
             pool.clone(),
             ui_weak.clone(),
             state.clone(),
-            doc_state.clone(),
             cid,
             number.to_string(),
             date_str.to_string(),
@@ -601,7 +545,6 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
             if notes.is_empty() { None } else { Some(notes.to_string()) },
             cat_id_str.to_string(),
             con_id_str.to_string(),
-            exp_date_str.to_string(),
             items,
         );
     });
@@ -609,29 +552,26 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     // ── Оновити накладну ──────────────────────────────────────────────────────
     let pool = ctx.pool.clone();
     let ui_weak = ui.as_weak();
-    let state = ctx.invoice_state.clone();
-    let doc_state = ctx.doc_state.clone();
+    let state = ctx.waybill_state.clone();
     let company_id_arc = ctx.active_company_id.clone();
-    ui.on_invoice_form_update(move |number, date_str, cp_id_str, notes, cat_id_str, con_id_str, exp_date_str| {
+    ui.on_waybill_form_update(move |number, date_str, cp_id_str, notes, cat_id_str, con_id_str| {
         let cid = *company_id_arc.lock().unwrap();
         let edit_id = ui_weak
             .upgrade()
-            .map(|ui| ui.get_invoice_form_edit_id().to_string())
+            .map(|ui| ui.get_waybill_form_edit_id().to_string())
             .unwrap_or_default();
-        let items = collect_invoice_items_from_ui(&ui_weak);
+        let items = collect_waybill_items_from_ui(&ui_weak);
         let pool = pool.clone();
         let ui_weak = ui_weak.clone();
-        let inv_state = state.clone();
-        let doc_state_u = doc_state.clone();
+        let wb_state = state.clone();
         let number = number.to_string();
         let date_str = date_str.to_string();
         let cp_id_str = cp_id_str.to_string();
         let notes = notes.to_string();
         let cat_id_str = cat_id_str.to_string();
         let con_id_str = con_id_str.to_string();
-        let exp_date_str = exp_date_str.to_string();
         tokio::spawn(async move {
-            let invoice_uuid = match uuid::Uuid::parse_str(&edit_id) {
+            let waybill_uuid = match uuid::Uuid::parse_str(&edit_id) {
                 Ok(id) => id,
                 Err(_) => {
                     tracing::error!("Невалідний UUID накладної: {edit_id}");
@@ -662,33 +602,27 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
             } else {
                 uuid::Uuid::parse_str(con_id_str.as_str()).ok()
             };
-            let exp_date_opt: Option<chrono::NaiveDate> = if exp_date_str.trim().is_empty() {
-                None
-            } else {
-                NaiveDate::parse_from_str(exp_date_str.as_str(), "%d.%m.%Y").ok()
-            };
-            let update_data = UpdateInvoice {
+            let update_data = UpdateWaybill {
                 number: number.clone(),
                 counterparty_id: cp_uuid,
                 contract_id: con_id_opt,
                 category_id: cat_id_opt,
                 date,
-                expected_payment_date: exp_date_opt,
                 notes: if notes.is_empty() { None } else { Some(notes) },
             };
-            match db::invoices::update_with_items(&pool, invoice_uuid, update_data, items).await {
-                Ok(inv) => {
-                    tracing::info!("Накладну '{}' оновлено.", inv.number);
+            match db::waybills::update_with_items(&pool, waybill_uuid, update_data, items).await {
+                Ok(wb) => {
+                    tracing::info!("Накладну '{}' оновлено.", wb.number);
                     show_toast(
                         ui_weak.clone(),
-                        format!("Накладну '{}' оновлено", inv.number),
+                        format!("Накладну '{}' оновлено", wb.number),
                         false,
                     );
                     let (status_filter, query) = {
-                        let state = inv_state.lock().unwrap();
+                        let state = wb_state.lock().unwrap();
                         (state.status_filter.clone(), state.query.clone())
                     };
-                    if let Err(e) = reload_invoices(
+                    if let Err(e) = reload_waybills(
                         &pool,
                         ui_weak.clone(),
                         cid,
@@ -700,34 +634,6 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
                     {
                         tracing::error!("Помилка оновлення списку накладних: {e}");
                     }
-                    let (doc_tab, doc_direction, doc_query, doc_cp, doc_df, doc_dt) = {
-                        let s = doc_state_u.lock().unwrap();
-                        (
-                            s.tab,
-                            s.direction.clone(),
-                            s.query.clone(),
-                            s.counterparty_id,
-                            s.date_from,
-                            s.date_to,
-                        )
-                    };
-                    if let Err(e) = crate::ui::documents::reload_documents(
-                        &pool,
-                        ui_weak.clone(),
-                        cid,
-                        doc_tab,
-                        &doc_direction,
-                        &doc_query,
-                        doc_cp,
-                        doc_df,
-                        doc_dt,
-                    )
-                    .await
-                    {
-                        tracing::error!(
-                            "Помилка оновлення документів після редагування накладної: {e}"
-                        );
-                    }
                 }
                 Err(e) => {
                     tracing::error!("Помилка оновлення накладної: {e}");
@@ -737,75 +643,8 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
         });
     });
 
-    // ── PDF накладної ─────────────────────────────────────────────────────────
-    let pool = ctx.pool.clone();
-    let company_id_arc = ctx.active_company_id.clone();
-    ui.on_invoice_pdf_clicked(move |id| {
-        let pool = pool.clone();
-        let cid = *company_id_arc.lock().unwrap();
-        let id_str = id.to_string();
-        tokio::spawn(async move {
-            let Ok(uuid) = id_str.parse::<uuid::Uuid>() else { return; };
-            let (inv_result, company_result) = tokio::join!(
-                db::invoices::get_by_id(&pool, uuid),
-                db::companies::get_by_id(&pool, cid),
-            );
-            let Some((inv, items)) = (match inv_result {
-                Ok(v) => v,
-                Err(e) => { tracing::error!("PDF накладної: {e}"); return; }
-            }) else { return; };
-            let company = match company_result {
-                Ok(Some(v)) => v,
-                _ => { tracing::warn!("PDF накладної: компанія не знайдена."); return; }
-            };
-            let cp = match db::counterparties::get_by_id(&pool, inv.counterparty_id).await {
-                Ok(Some(v)) => v,
-                _ => { tracing::warn!("PDF накладної: контрагент не знайдено."); return; }
-            };
-            let pdf_items: Vec<acta::pdf::generator::PdfInvoiceItem> = items
-                .iter()
-                .enumerate()
-                .map(|(i, item)| acta::pdf::generator::PdfInvoiceItem {
-                    num: (i + 1) as u32,
-                    name: item.description.clone(),
-                    qty: item.quantity.to_string(),
-                    unit: item.unit.clone().unwrap_or_else(|| "шт".into()),
-                    price: item.price.to_string(),
-                    amount: item.amount.to_string(),
-                })
-                .collect();
-            let data = acta::pdf::generator::PdfInvoiceData {
-                number: inv.number.clone(),
-                date: inv.date.format("%d.%m.%Y").to_string(),
-                company: acta::pdf::generator::PdfCompany {
-                    name: company.name.clone(),
-                    edrpou: company.edrpou.unwrap_or_default(),
-                    iban: company.iban.unwrap_or_default(),
-                    address: company.legal_address.unwrap_or_default(),
-                },
-                client: acta::pdf::generator::PdfCompany {
-                    name: cp.name.clone(),
-                    edrpou: cp.edrpou.unwrap_or_default(),
-                    iban: cp.iban.unwrap_or_default(),
-                    address: cp.address.unwrap_or_default(),
-                },
-                items: pdf_items,
-                total: format!("{:.2}", inv.total_amount),
-                vat_amount: format!("{:.2}", inv.vat_amount),
-                total_words: acta::pdf::generator::amount_to_words(&inv.total_amount),
-                notes: inv.notes.clone().unwrap_or_default(),
-            };
-            let output_path = match acta::pdf::generator::ensure_invoice_output_dir(&inv.number) {
-                Ok(p) => p,
-                Err(e) => { tracing::error!("PDF накладної: директорія: {e}"); return; }
-            };
-            if let Err(e) = acta::pdf::generator::generate_invoice_pdf(&data, &output_path) {
-                tracing::error!("PDF накладної: генерація: {e}"); return;
-            }
-            tracing::info!("PDF '{}' → {}", inv.number, output_path.display());
-            if let Err(e) = open::that(&output_path) {
-                tracing::error!("PDF накладної: відкриття: {e}");
-            }
-        });
+    // ── PDF накладної (заглушка — логіка аналогічна invoice PDF) ─────────────
+    ui.on_waybill_pdf_clicked(move |_id| {
+        tracing::info!("PDF накладної: ще не реалізовано");
     });
 }

@@ -8,3 +8,4 @@ pub mod helpers;
 pub mod invoices;
 pub mod payments;
 pub mod tasks;
+pub mod waybills;
