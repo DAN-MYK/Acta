@@ -1,0 +1,252 @@
+// Acta — Data structure definitions
+// These mirror the Rust model structs. Populated by Rust, consumed by Slint UI.
+// All monetary values are float (display only — Rust uses Decimal internally).
+
+export enum NavScreen {
+    Dashboard,
+    Documents,
+    Counterparties,
+    Payments,
+    Reports,
+    Tasks,
+    Settings,
+}
+
+// ── Document / Status enums ──────────────────────────────────────────────────
+
+export enum DocumentKind {
+    Invoice,   // Рахунок
+    Act,       // Акт виконаних робіт
+    Waybill,   // Видаткова накладна
+}
+
+export enum DocumentStatus {
+    Draft,    // Чернетка
+    Issued,   // Виставлено
+    Signed,   // Підписано
+    Paid,     // Оплачено
+    Overdue,  // Прострочено
+    Partial,  // Частково
+}
+
+export enum Priority {
+    High,
+    Medium,
+    Low,
+}
+
+export enum Direction {
+    In,   // Надходження
+    Out,  // Списання
+}
+
+// ── Shared item structs ──────────────────────────────────────────────────────
+
+export struct DocumentItem {
+    id: string,
+    kind: DocumentKind,
+    number: string,
+    date: string,          // "dd.mm.yyyy"
+    counterparty: string,
+    amount: float,
+    status: DocumentStatus,
+    linked-id: string,     // linked document id or ""
+}
+
+export struct CounterpartyItem {
+    id: string,
+    name: string,
+    edrpou: string,
+    kind: string,          // "ЮО" | "ФОП"
+    balance: float,
+    doc-count: int,
+    overdue-count: int,
+}
+
+export struct PaymentItem {
+    id: string,
+    date: string,
+    counterparty: string,
+    amount: float,
+    direction: Direction,
+    matched-doc: string,   // document id or ""
+    account: string,
+}
+
+export struct TaskItem {
+    id: string,
+    title: string,
+    due-date: string,      // "dd.mm.yyyy" or ""
+    done: bool,
+    priority: Priority,
+    linked-doc: string,    // document id or ""
+}
+
+export struct MonthlyData {
+    month: string,         // abbreviated month name in Ukrainian
+    revenue: float,
+    expenses: float,
+}
+
+export struct AccountItem {
+    bank-name: string,
+    account-number: string,
+    balance: float,
+}
+
+// ── Dashboard model ──────────────────────────────────────────────────────────
+
+export struct DashboardMetrics {
+    revenue-month: float,
+    expenses-month: float,
+    net-month: float,
+    outstanding: float,
+    overdue: float,
+    delta-revenue: float,   // percent vs previous month
+    delta-expenses: float,  // percent vs previous month
+    delta-net: float,
+}
+
+export struct JournalRow {
+    date: string,
+    id: string,
+    operation: string,
+    counterparty: string,
+    debit: float,           // 0 if credit
+    credit: float,          // 0 if debit
+    is-credit: bool,        // true = credit side
+    status-label: string,
+    status-tone: string,    // "success" | "warning" | "danger" | "muted" | "info"
+}
+
+// ── Counterparty detail model ────────────────────────────────────────────────
+
+export struct CounterpartyDetails {
+    id: string,
+    name: string,
+    kind: string,
+    edrpou: string,
+    ipn: string,
+    vat: string,
+    iban: string,
+    bank: string,
+    address: string,
+    director: string,
+    phone: string,
+    email: string,
+    client-since: string,
+    balance: float,
+    doc-count: int,
+    overdue-count: int,
+    overdue-amount: float,
+    last-contact-days: int,
+    last-contact-date: string,
+}
+
+// ── Report model ─────────────────────────────────────────────────────────────
+
+export struct ReportMetrics {
+    revenue: float,
+    expenses: float,
+    profit: float,
+    margin: float,          // percent
+    delta-revenue: string,  // e.g. "+22.1%"
+    delta-expenses: string,
+    delta-profit: string,
+    delta-margin: string,
+}
+
+export struct ExpenseCategory {
+    label: string,
+    amount: float,
+    percent: int,
+}
+
+export struct DrillRow {
+    date: string,
+    operation: string,
+    counterparty: string,
+    doc-id: string,
+    amount: float,
+}
+
+// ── Settings model ───────────────────────────────────────────────────────────
+
+export struct CompanyInfo {
+    full-name: string,
+    short-name: string,
+    edrpou: string,
+    ipn: string,
+    address: string,
+    director: string,
+    iban: string,
+    bank: string,
+    vat-registered: bool,
+    vat-cert: string,
+}
+
+export struct IntegrationItem {
+    label: string,
+    description: string,
+    tag: string,
+    enabled: bool,
+}
+
+export struct TeamMember {
+    name: string,
+    email: string,
+    role: string,
+    last-active: string,
+}
+
+export struct NumberingRow {
+    doc-type: string,
+    template: string,
+    example: string,
+    next-number: int,
+}
+
+// ── Calendar / Day view ──────────────────────────────────────────────────────
+
+export struct DayEvent {
+    hour: int,
+    title: string,
+    subtitle: string,
+    is-primary: bool,
+}
+
+// ── Dashboard Inbox ──────────────────────────────────────────────────────────
+
+export struct InboxItem {
+    kind: string,          // "overdue" | "unsigned" | "act-needed" | "unmatched"
+    doc-id: string,
+    doc-number: string,
+    counterparty: string,
+    amount-str: string,    // pre-formatted Rust
+    age-days: int,
+    action-label: string,  // "Нагадати" | "Підписати" | "Поєднати"
+}
+
+// ── DocChain ─────────────────────────────────────────────────────────────────
+
+export struct ChainStep {
+    doc-type: string,    // "invoice" | "act" | "waybill"
+    doc-number: string,  // "" якщо документ відсутній
+    amount-str: string,  // pre-formatted Rust
+    status: string,      // "draft"|"issued"|"signed"|"paid"|"overdue"|""
+    exists: bool,
+}
+
+export struct DocChainGroup {
+    doc-id: string,      // ID батьківського документа
+    steps: [ChainStep],
+}
+
+// ── Chart bar ────────────────────────────────────────────────────────────────
+// Named type to replace anonymous {rev-h,exp-h,month} — necessary for Rust access.
+
+export struct ChartBar {
+    rev-h: float,    // revenue bar height 0.0–1.0
+    exp-h: float,    // expenses bar height 0.0–1.0
+    month: string,   // abbreviated label "Січ", "Лют", etc.
+}
