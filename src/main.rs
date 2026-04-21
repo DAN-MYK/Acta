@@ -7,15 +7,23 @@ slint::include_modules!();
 mod ui;
 
 use anyhow::Result;
-use acta::notifications;
-use sqlx::postgres::PgPoolOptions;
-use std::sync::Arc;
+use slint::ComponentHandle;
+use std::sync::{Arc, Mutex};
+use uuid::Uuid;
+
+async fn get_first_company_id(pool: &sqlx::PgPool) -> Uuid {
+    sqlx::query_scalar::<_, Uuid>("SELECT id FROM companies ORDER BY created_at LIMIT 1")
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(Uuid::nil)
+}
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
     let _ = dotenvy::dotenv();
 
-    // Tokio runtime — пул потоків окремо від головного потоку Slint.
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
@@ -25,7 +33,7 @@ fn main() -> Result<()> {
         std::env::var("DATABASE_URL").expect("DATABASE_URL не задано. Перевір .env файл.");
 
     let pool = rt.block_on(
-        PgPoolOptions::new()
+        sqlx::postgres::PgPoolOptions::new()
             .max_connections(5)
             .connect(&database_url),
     )?;
@@ -33,26 +41,96 @@ fn main() -> Result<()> {
     rt.block_on(sqlx::migrate!("./migrations").run(&pool))?;
     tracing::info!("Міграції застосовано.");
 
-    tokio::spawn(notifications::reminder_loop(Arc::new(pool.clone())));
+    let company_id = rt.block_on(get_first_company_id(&pool));
+    let active_company_id: Arc<Mutex<Uuid>> = Arc::new(Mutex::new(company_id));
 
-    // AppWindow — тип згенерований з ui-redesign/app.slint
+    let pool = Arc::new(pool);
+
+    tokio::spawn(acta::notifications::reminder_loop(pool.clone()));
+
     let ui = AppWindow::new()?;
 
-    // ── Stub callbacks — TODO: реалізувати завантаження даних з БД ─────────────
-    ui.on_nav_changed(|_| {});
-    ui.on_doc_search_changed(|_| {});
-    ui.on_doc_tab_changed(|_| {});
-    ui.on_doc_toggled(|_, _| {});
-    ui.on_doc_open(|_| {});
-    ui.on_doc_send(|_| {});
-    ui.on_doc_delete(|_| {});
-    ui.on_doc_new(|| {});
-    ui.on_doc_page_changed(|_| {});
-    ui.on_cp_selected(|_| {});
-    ui.on_cp_search_changed(|_| {});
-    ui.on_cp_new(|| {});
-    ui.on_cp_create_doc(|_| {});
-    ui.on_cp_tab_changed(|_| {});
+    // ── Початкове завантаження даних (паралельно) ────────────────────────────
+    let (dash_data, doc_data, cp_data, pay_data, task_data) = rt.block_on(async {
+        tokio::join!(
+            ui::dashboard::prepare_dashboard_data(&pool, company_id),
+            ui::documents::prepare_documents_data(&pool, company_id, None, None),
+            ui::counterparties::prepare_counterparties_data(&pool, company_id, None),
+            ui::payments::prepare_payments_data(&pool, company_id),
+            ui::tasks::prepare_tasks_data(&pool),
+        )
+    });
+
+    ui::dashboard::apply_dashboard_to_ui(&ui, dash_data);
+    ui::documents::apply_documents_to_ui(&ui, doc_data);
+    ui::counterparties::apply_counterparties_to_ui(&ui, cp_data);
+    ui::payments::apply_payments_to_ui(&ui, pay_data);
+    ui::tasks::apply_tasks_to_ui(&ui, task_data);
+    ui::settings::apply_settings_to_ui(&ui);
+
+    ui.set_company_name("Acta".into());
+    ui.set_user_name("Адміністратор".into());
+    ui.set_user_initials("АД".into());
+
+    // ── Навігація ────────────────────────────────────────────────────────────
+    ui.on_nav_changed({
+        let pool = pool.clone();
+        let ui_weak = ui.as_weak();
+        let company_id = active_company_id.clone();
+        move |screen| {
+            let pool = pool.clone();
+            let ui_weak = ui_weak.clone();
+            let cid = *company_id.lock().unwrap();
+            tokio::spawn(async move {
+                match screen {
+                    NavScreen::Dashboard => {
+                        let data = ui::dashboard::prepare_dashboard_data(&pool, cid).await;
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            ui::dashboard::apply_dashboard_to_ui(&ui, data);
+                        });
+                    }
+                    NavScreen::Documents => {
+                        let data =
+                            ui::documents::prepare_documents_data(&pool, cid, None, None).await;
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            ui::documents::apply_documents_to_ui(&ui, data);
+                        });
+                    }
+                    NavScreen::Counterparties => {
+                        let data =
+                            ui::counterparties::prepare_counterparties_data(&pool, cid, None).await;
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            ui::counterparties::apply_counterparties_to_ui(&ui, data);
+                        });
+                    }
+                    NavScreen::Payments => {
+                        let data = ui::payments::prepare_payments_data(&pool, cid).await;
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            ui::payments::apply_payments_to_ui(&ui, data);
+                        });
+                    }
+                    NavScreen::Tasks => {
+                        let data = ui::tasks::prepare_tasks_data(&pool).await;
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            ui::tasks::apply_tasks_to_ui(&ui, data);
+                        });
+                    }
+                    _ => {}
+                }
+            });
+        }
+    });
+
+    // ── Документи ────────────────────────────────────────────────────────────
+    ui::documents::wire_document_callbacks(&ui, &pool, &active_company_id);
+
+    // ── Контрагенти ──────────────────────────────────────────────────────────
+    ui::counterparties::wire_counterparty_callbacks(&ui, &pool, &active_company_id);
+
+    // ── Завдання ─────────────────────────────────────────────────────────────
+    ui::tasks::wire_task_callbacks(&ui, &pool);
+
+    // ── Заглушки для нереалізованих callback'ів ──────────────────────────────
     ui.on_pay_import_csv(|| {});
     ui.on_pay_sync_bank(|| {});
     ui.on_pay_new(|| {});
@@ -61,10 +139,6 @@ fn main() -> Result<()> {
     ui.on_rep_category_drilled(|_| {});
     ui.on_rep_export_csv(|| {});
     ui.on_rep_export_pdf(|| {});
-    ui.on_task_toggled(|_, _| {});
-    ui.on_task_more(|_| {});
-    ui.on_task_new(|| {});
-    ui.on_task_filter_changed(|_| {});
     ui.on_settings_section_changed(|_| {});
     ui.on_settings_dark_mode_toggled(|_| {});
     ui.on_settings_density_changed(|_| {});
