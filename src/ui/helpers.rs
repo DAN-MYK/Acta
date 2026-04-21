@@ -40,6 +40,7 @@ pub fn waybill_status_to_slint(s: &WaybillStatus) -> crate::DocumentStatus {
         WaybillStatus::Draft => crate::DocumentStatus::Draft,
         WaybillStatus::Issued => crate::DocumentStatus::Issued,
         WaybillStatus::Signed => crate::DocumentStatus::Signed,
+        // Delivered — найближчий фінальний стан у Slint (немає Delivered variant)
         WaybillStatus::Delivered => crate::DocumentStatus::Paid,
     }
 }
@@ -140,9 +141,10 @@ pub fn task_to_item(t: &Task) -> crate::TaskItem {
         title: t.title.clone().into(),
         due_date: t
             .due_date
-            .map(|d| d.naive_utc().date().format("%d.%m.%Y").to_string())
+            .map(|d| d.with_timezone(&chrono::Local).date_naive().format("%d.%m.%Y").to_string())
             .unwrap_or_default()
             .into(),
+        // Cancelled теж відображається як "виконано" — TaskItem.done є bool без Cancelled варіанту
         done: t.status == TaskStatus::Done || t.status == TaskStatus::Cancelled,
         priority: match t.priority {
             TaskPriority::High | TaskPriority::Critical => crate::Priority::High,
@@ -238,5 +240,12 @@ mod tests {
         };
         let item = payment_row_to_item(&row);
         assert_eq!(item.direction, crate::Direction::In);
+    }
+
+    #[test]
+    fn waybill_status_delivered_maps_to_paid() {
+        use acta::models::waybill::WaybillStatus;
+        assert_eq!(waybill_status_to_slint(&WaybillStatus::Draft), crate::DocumentStatus::Draft);
+        assert_eq!(waybill_status_to_slint(&WaybillStatus::Delivered), crate::DocumentStatus::Paid);
     }
 }
