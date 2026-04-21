@@ -1112,3 +1112,52 @@ mod tests {
         assert_eq!(format_company_total(&dec!(78000)), "78000 грн");
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ── Тести build_category_select ───────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+
+#[cfg(test)]
+mod tests_build_category {
+    use super::build_category_select;
+    use acta::models::CategorySelectItem;
+    use uuid::Uuid;
+
+    #[test]
+    fn build_category_select_prepends_empty_and_formats_depth() {
+        let cats = vec![
+            CategorySelectItem {
+                id: Uuid::new_v4(),
+                name: "Доходи".into(),
+                kind: "income".into(),
+                depth: 0,
+            },
+            CategorySelectItem {
+                id: Uuid::new_v4(),
+                name: "Зарплата".into(),
+                kind: "income".into(),
+                depth: 1,
+            },
+        ];
+
+        let (names, ids) = build_category_select(&cats);
+
+        // порожній sentinel + 2 категорії
+        assert_eq!(names.len(), 3, "names: sentinel + 2 елементи");
+        assert_eq!(ids.len(), 3, "ids: sentinel + 2 елементи");
+
+        // перший елемент — порожній sentinel
+        assert_eq!(names[0].as_str(), "— без категорії —");
+        assert_eq!(ids[0].as_str(), "");
+
+        // depth 0 — без префіксу
+        assert_eq!(names[1].as_str(), "Доходи");
+
+        // depth 1 — з префіксом «  └─ »
+        assert_eq!(names[2].as_str(), "  └─ Зарплата");
+
+        // ids для реальних категорій — валідні UUID-рядки (не порожні)
+        assert!(!ids[1].as_str().is_empty(), "ids[1] повинен бути UUID");
+        assert!(!ids[2].as_str().is_empty(), "ids[2] повинен бути UUID");
+    }
+}

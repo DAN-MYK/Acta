@@ -440,7 +440,7 @@ mod tests {
         assert_eq!(rows[0].reminder.as_str(), "—");
         assert_eq!(rows[0].status_label.as_str(), "В роботі");
         assert_eq!(rows[0].id.as_str(), task.id.to_string());
-        assert_eq!(rows[0].status.as_str(), "in_progress");
+        assert_eq!(rows[0].status, crate::TaskStatus::InProgress);
         assert_eq!(rows[0].priority.as_str(), "critical");
     }
 
