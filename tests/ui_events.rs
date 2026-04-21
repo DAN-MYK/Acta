@@ -770,6 +770,7 @@ fn escape_key() {
 
     // Відкриваємо форму платежів
     ui.set_current_page(3);
+    ui.set_current_feature(SharedString::from("payments"));
     ui.set_show_payment_form(true);
     ui.show().unwrap();
 
