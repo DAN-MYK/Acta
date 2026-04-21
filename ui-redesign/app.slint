@@ -13,7 +13,7 @@ import {
     CounterpartyDetails, ReportMetrics, ExpenseCategory, DrillRow,
     CompanyInfo, IntegrationItem, TeamMember, NumberingRow, DayEvent,
     DocumentKind, DocumentStatus, Priority, Direction,
-    ChartBar, InboxItem,
+    ChartBar, InboxItem, ChainStep, DocChainGroup,
 } from "types.slint";
 import { Shell } from "shell.slint";
 import { Dashboard } from "dashboard.slint";
@@ -91,6 +91,10 @@ export component AppWindow inherits Window {
     in property <string> dash-outstanding-str;
     in property <string> dash-overdue-str;
     in property <[InboxItem]> dash-inbox;
+
+    // ── DocChain data ──────────────────────────────────────────────────────
+    in property <[ChainStep]> doc-chain-steps;
+    in property <[DocChainGroup]> cp-doc-chains;
 
     // ── Documents data ─────────────────────────────────────────────────────
     in property <[DocumentItem]> all-documents;
@@ -189,6 +193,10 @@ export component AppWindow inherits Window {
 
     // Dashboard inbox
     callback inbox-action(string, string);
+
+    // DocChain
+    callback doc-chain-load(string);
+    callback doc-chain-create(string, string);
 
     // Tasks
     callback task-toggled(string, bool);
@@ -318,6 +326,8 @@ export component AppWindow inherits Window {
             icon-chevron-left: Icons.arrow-left;
             icon-chevron-right: Icons.arrow-right;
             icon-close: Icons.close;
+            chain-steps: root.doc-chain-steps;
+
             search-changed(q) => { root.docs-search-state = q; root.doc-search-changed(q); }
             tab-changed(t) => { root.docs-tab-state = t; root.doc-tab-changed(t); }
             row-selected(id, sel) => { root.doc-toggled(id, sel); }
@@ -326,6 +336,8 @@ export component AppWindow inherits Window {
             edit-document(id) => { root.doc-open(id); }
             create-document => { root.doc-new(); }
             page-changed(p) => { root.docs-page = p; root.doc-page-changed(p); }
+            chain-load(id) => { root.doc-chain-load(id); }
+            chain-create(t, id) => { root.doc-chain-create(t, id); }
         }
 
         if root.current-screen == NavScreen.Counterparties : Counterparties {
@@ -347,11 +359,14 @@ export component AppWindow inherits Window {
             icon-more: Icons.more;
             icon-edit: Icons.edit;
 
+            doc-chains: root.cp-doc-chains;
+
             select(id) => { root.cp-selected-id = id; root.cp-selected(id); }
             search-changed(q) => { root.cp-search = q; root.cp-search-changed(q); }
             tab-changed(t) => { root.cp-detail-tab-state = t; root.cp-tab-changed(t); }
             edit-cp(id) => { root.cp-selected(id); }
             create-doc(id) => { root.cp-create-doc(id); }
+            chain-create(t, id) => { root.doc-chain-create(t, id); }
         }
 
         if root.current-screen == NavScreen.Payments : Payments {
