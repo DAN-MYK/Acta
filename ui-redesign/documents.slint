@@ -1,0 +1,696 @@
+// Acta — Documents screen (Рахунки / Акти / Видаткові накладні)
+// Default view: Tabbed list — clean table with tabs for each document type.
+// Features: tab filter, search, bulk select bar, status badges, PDF/Edit/More actions.
+
+import { AppTheme } from "design-tokens.slint";
+import { DocumentItem, DocumentKind, DocumentStatus, ChainStep } from "types.slint";
+import {
+    Card, HDivider, VDivider, Badge, StatusDot,
+    GhostButton, SecondaryButton, PrimaryButton, IconButton,
+    SearchInput, HeadingSm, BulkBar, Checkbox, DocChain
+} from "components.slint";
+
+// ── Tab item ──────────────────────────────────────────────────────────────────
+component DocTab inherits Rectangle {
+    in property <string> label;
+    in property <int> count;
+    in property <bool> active: false;
+    callback clicked;
+
+    property <bool> hovered: false;
+
+    height: 46px;
+    background: transparent;
+
+    // Active underline
+    if active : Rectangle {
+        x: 0;
+        y: root.height - 2px;
+        width: root.width;
+        height: 2px;
+        background: AppTheme.accent;
+    }
+
+    HorizontalLayout {
+        padding-left: 14px;
+        padding-right: 14px;
+        spacing: 8px;
+        alignment: center;
+
+        Text {
+            text: root.label;
+            color: active ? AppTheme.text : AppTheme.text-muted;
+            font-size: 13px;
+            font-family: AppTheme.font-sans;
+            font-weight: active ? 500 : 400;
+            vertical-alignment: center;
+        }
+
+        // Count pill
+        Rectangle {
+            height: 18px;
+            min-width: count-text.preferred-width + 12px;
+            border-radius: 9999px;
+            background: AppTheme.bg-subtle;
+
+            count-text := Text {
+                text: root.count;
+                color: AppTheme.text-muted;
+                font-size: 11px;
+                font-family: AppTheme.font-sans;
+                vertical-alignment: center;
+                horizontal-alignment: center;
+            }
+        }
+    }
+
+    TouchArea {
+        mouse-cursor: pointer;
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.move) {
+                root.hovered = self.has-hover;
+            }
+        }
+        clicked => { root.clicked(); }
+    }
+}
+
+// ── Kind icon mapper ──────────────────────────────────────────────────────────
+component KindCell inherits HorizontalLayout {
+    in property <DocumentKind> kind;
+    in property <image> icon-invoice;
+    in property <image> icon-act;
+    in property <image> icon-waybill;
+
+    spacing: 6px;
+    alignment: start;
+
+    Image {
+        source:
+            kind == DocumentKind.Invoice ? root.icon-invoice :
+            kind == DocumentKind.Act     ? root.icon-act     :
+            root.icon-waybill;
+        width: 14px;
+        height: 14px;
+        colorize: AppTheme.text-muted;
+        image-fit: contain;
+        vertical-alignment: center;
+    }
+
+    Text {
+        text:
+            kind == DocumentKind.Invoice ? "Рахунок"            :
+            kind == DocumentKind.Act     ? "Акт вик. робіт"    :
+            "Видаткова накладна";
+        color: AppTheme.text;
+        font-size: 13px;
+        font-family: AppTheme.font-sans;
+        vertical-alignment: center;
+    }
+}
+
+// ── Document table row ─────────────────────────────────────────────────────────
+component DocRow inherits Rectangle {
+    in property <DocumentItem> doc;
+    in property <bool> selected: false;
+    in property <int> index: 0;
+    in property <image> icon-invoice;
+    in property <image> icon-act;
+    in property <image> icon-waybill;
+    in property <image> icon-pdf;
+    in property <image> icon-edit;
+    in property <image> icon-more;
+    in property <image> icon-check;
+    in property <bool> chain-expanded: false;
+    in property <[ChainStep]> chain-steps;
+    callback chain-toggle(string);
+    callback select-toggled(string, bool);
+    callback row-clicked(string);
+    callback pdf-clicked(string);
+    callback edit-clicked(string);
+    callback more-clicked(string);
+
+    property <bool> hovered: false;
+    property <string> status-tone:
+        doc.status == DocumentStatus.Issued  ? "info"    :
+        doc.status == DocumentStatus.Signed  ? "success" :
+        doc.status == DocumentStatus.Paid    ? "success" :
+        doc.status == DocumentStatus.Overdue ? "danger"  :
+        doc.status == DocumentStatus.Partial ? "warning" :
+        "muted";
+    property <string> status-label:
+        doc.status == DocumentStatus.Draft   ? "Чернетка"  :
+        doc.status == DocumentStatus.Issued  ? "Виставлено":
+        doc.status == DocumentStatus.Signed  ? "Підписано" :
+        doc.status == DocumentStatus.Paid    ? "Оплачено"  :
+        doc.status == DocumentStatus.Overdue ? "Прострочено":
+        "Частково";
+
+    height: chain-expanded ? 136px : 46px;
+    animate height { duration: 150ms; easing: ease-out; }
+    background: hovered ? AppTheme.bg-subtle : (selected ? AppTheme.accent-soft : transparent);
+
+    // Top hairline
+    Rectangle {
+        y: 0;
+        width: root.width;
+        height: 1px;
+        background: AppTheme.border;
+    }
+
+    HorizontalLayout {
+        padding-left: 18px;
+        padding-right: 18px;
+        spacing: 0px;
+        alignment: stretch;
+
+        // Checkbox col
+        Rectangle {
+            width: 32px;
+
+            Checkbox {
+                checked: root.selected;
+                check-icon: root.icon-check;
+                toggled(v) => { root.select-toggled(root.doc.id, v); }
+            }
+        }
+
+        // ID
+        Text {
+            text: root.doc.id;
+            color: AppTheme.accent-text;
+            font-family: AppTheme.font-mono;
+            font-size: 12px;
+            vertical-alignment: center;
+            width: 150px;
+        }
+
+        // Type
+        KindCell {
+            kind: root.doc.kind;
+            icon-invoice: root.icon-invoice;
+            icon-act: root.icon-act;
+            icon-waybill: root.icon-waybill;
+            width: 180px;
+        }
+
+        // Date
+        Text {
+            text: root.doc.date;
+            color: AppTheme.text-muted;
+            font-size: 13px;
+            font-family: AppTheme.font-sans;
+            vertical-alignment: center;
+            width: 100px;
+        }
+
+        // Counterparty
+        Text {
+            text: root.doc.counterparty;
+            color: AppTheme.text;
+            font-size: 13px;
+            font-family: AppTheme.font-sans;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+
+        // Status badge
+        HorizontalLayout {
+            spacing: 6px;
+            width: 130px;
+
+            StatusDot { tone: root.status-tone; }
+
+            Badge {
+                text: root.status-label;
+                tone: root.status-tone;
+            }
+        }
+
+        // Amount
+        Text {
+            text: root.doc.amount;
+            color: AppTheme.text;
+            font-family: AppTheme.font-mono;
+            font-size: 13px;
+            font-weight: 500;
+            vertical-alignment: center;
+            horizontal-alignment: right;
+            width: 130px;
+        }
+
+        // Chain toggle button
+        Rectangle {
+            width: 30px; height: 30px;
+            border-radius: AppTheme.radius-sm;
+            background: chain-ta.has-hover ? AppTheme.bg-hover : transparent;
+
+            Text {
+                text: root.chain-expanded ? "▲" : "▼";
+                color: AppTheme.text-faint;
+                font-size: 9px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            chain-ta := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.chain-toggle(root.doc.id); }
+            }
+        }
+
+        // Actions
+        HorizontalLayout {
+            spacing: 2px;
+            width: 90px;
+            alignment: end;
+
+            Rectangle {
+                width: 28px;
+                height: 28px;
+                border-radius: AppTheme.radius-md;
+                background: pdf-hover.has-hover ? AppTheme.bg-subtle : transparent;
+                Image {
+                    source: root.icon-pdf;
+                    width: 15px;
+                    height: 15px;
+                    colorize: AppTheme.text-muted;
+                    image-fit: contain;
+                }
+                pdf-hover := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.pdf-clicked(root.doc.id); }
+                }
+            }
+
+            Rectangle {
+                width: 28px;
+                height: 28px;
+                border-radius: AppTheme.radius-md;
+                background: edit-hover.has-hover ? AppTheme.bg-subtle : transparent;
+                Image {
+                    source: root.icon-edit;
+                    width: 15px;
+                    height: 15px;
+                    colorize: AppTheme.text-muted;
+                    image-fit: contain;
+                }
+                edit-hover := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.edit-clicked(root.doc.id); }
+                }
+            }
+
+            Rectangle {
+                width: 28px;
+                height: 28px;
+                border-radius: AppTheme.radius-md;
+                background: more-hover.has-hover ? AppTheme.bg-subtle : transparent;
+                Image {
+                    source: root.icon-more;
+                    width: 15px;
+                    height: 15px;
+                    colorize: AppTheme.text-muted;
+                    image-fit: contain;
+                }
+                more-hover := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.more-clicked(root.doc.id); }
+                }
+            }
+        }
+    }
+
+    TouchArea {
+        mouse-cursor: pointer;
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.move) {
+                root.hovered = self.has-hover;
+            }
+        }
+        clicked => { root.row-clicked(root.doc.id); }
+    }
+
+    if chain-expanded : Rectangle {
+        y: 46px;
+        height: 90px;
+        width: root.width;
+        background: AppTheme.bg-subtle;
+
+        Rectangle {
+            y: 0; width: root.width; height: 1px;
+            background: AppTheme.border;
+        }
+
+        DocChain {
+            x: 18px; y: 10px;
+            width: root.width - 36px;
+            steps: root.chain-steps;
+            create-next(_t) => { }
+        }
+    }
+}
+
+// ── Documents screen ──────────────────────────────────────────────────────────
+export component Documents inherits Rectangle {
+    // Data from Rust
+    in property <[DocumentItem]> all-docs;
+    in property <[DocumentItem]> invoice-docs;
+    in property <[DocumentItem]> act-docs;
+    in property <[DocumentItem]> waybill-docs;
+
+    // Selection state
+    in-out property <[string]> selected-ids;
+
+    // Search state
+    in-out property <string> search-query: "";
+
+    // Pagination
+    in property <int> page: 1;
+    in property <int> total-pages: 3;
+    in property <int> shown-count;
+    in property <int> total-count;
+
+    // Icons
+    in property <image> icon-search;
+    in property <image> icon-plus;
+    in property <image> icon-invoice;
+    in property <image> icon-act;
+    in property <image> icon-waybill;
+    in property <image> icon-pdf;
+    in property <image> icon-edit;
+    in property <image> icon-more;
+    in property <image> icon-check;
+    in property <image> icon-chevron-left;
+    in property <image> icon-chevron-right;
+    in property <image> icon-close;
+    // Callbacks
+    callback tab-changed(string);   // "all" | "invoice" | "act" | "waybill"
+    callback search-changed(string);
+    callback row-selected(string, bool);
+    callback selection-cleared;
+    callback create-document;
+    callback open-document(string);
+    callback pdf-export(string);
+    callback edit-document(string);
+    callback more-actions(string);
+    callback bulk-send;
+    callback bulk-archive;
+    callback bulk-delete;
+    callback page-changed(int);
+
+    in property <[ChainStep]> chain-steps;
+    property <string> expanded-doc-id: "";
+    callback chain-load(string);
+    callback chain-create(string, string);
+
+    // Internal tab state
+    property <string> active-tab: "all";
+    property <[DocumentItem]> visible-rows: all-docs;
+
+    background: AppTheme.bg;
+
+    Flickable {
+        VerticalLayout {
+            padding: 20px;
+            spacing: 16px;
+
+            Card {
+                padded: false;
+
+                VerticalLayout {
+                    // ── Bulk action bar (shown when rows selected) ─────────
+                    if selected-ids.length > 0 : Rectangle {
+                        height: 46px;
+                        background: AppTheme.accent-soft;
+                        border-radius: AppTheme.radius-xl;
+
+                        HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 12px;
+                            spacing: 8px;
+                            alignment: start;
+
+                            // Clear selection
+                            Rectangle {
+                                width: 22px;
+                                height: 22px;
+                                border-radius: 4px;
+                                background: clear-hover.has-hover ? AppTheme.accent : transparent;
+
+                                Image {
+                                    source: root.icon-close;
+                                    width: 13px;
+                                    height: 13px;
+                                    colorize: AppTheme.accent-text;
+                                    image-fit: contain;
+                                }
+                                clear-hover := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => { root.selection-cleared(); }
+                                }
+                            }
+
+                            Text {
+                                text: "Вибрано: " + root.selected-ids.length;
+                                color: AppTheme.accent-text;
+                                font-size: 12.5px;
+                                font-family: AppTheme.font-sans;
+                                font-weight: 500;
+                                vertical-alignment: center;
+                            }
+
+                            VDivider { height: 18px; }
+
+                            SecondaryButton { text: "Надіслати"; small: true; clicked => { root.bulk-send(); } }
+                            SecondaryButton { text: "Архів"; small: true; clicked => { root.bulk-archive(); } }
+                            SecondaryButton { text: "Видалити"; small: true; clicked => { root.bulk-delete(); } }
+                        }
+                    }
+
+                    // ── Tab strip + toolbar ────────────────────────────────
+                    if selected-ids.length == 0 : Rectangle {
+                        height: 46px;
+                        border-radius: AppTheme.radius-xl;
+
+                        // Bottom border
+                        Rectangle {
+                            y: parent.height - 1px;
+                            width: parent.width;
+                            height: 1px;
+                            background: AppTheme.border;
+                        }
+
+                        HorizontalLayout {
+                            padding-left: 8px;
+                            padding-right: 8px;
+                            spacing: 2px;
+                            alignment: stretch;
+
+                            DocTab {
+                                label: "Усі";
+                                count: root.all-docs.length;
+                                active: root.active-tab == "all";
+                                clicked => {
+                                    root.active-tab = "all";
+                                    root.tab-changed("all");
+                                }
+                            }
+
+                            DocTab {
+                                label: "Рахунки";
+                                count: root.invoice-docs.length;
+                                active: root.active-tab == "invoice";
+                                clicked => {
+                                    root.active-tab = "invoice";
+                                    root.tab-changed("invoice");
+                                }
+                            }
+
+                            DocTab {
+                                label: "Акти";
+                                count: root.act-docs.length;
+                                active: root.active-tab == "act";
+                                clicked => {
+                                    root.active-tab = "act";
+                                    root.tab-changed("act");
+                                }
+                            }
+
+                            DocTab {
+                                label: "Видаткові накладні";
+                                count: root.waybill-docs.length;
+                                active: root.active-tab == "waybill";
+                                clicked => {
+                                    root.active-tab = "waybill";
+                                    root.tab-changed("waybill");
+                                }
+                            }
+
+                            Rectangle { horizontal-stretch: 1; }
+
+                            // Toolbar
+                            HorizontalLayout {
+                                spacing: 6px;
+                                padding: 8px;
+
+                                SearchInput {
+                                    search-icon: root.icon-search;
+                                    placeholder: "Пошук № або контрагента…";
+                                    value: root.search-query;
+                                    width: 240px;
+                                    edited(v) => { root.search-changed(v); }
+                                }
+
+                                SecondaryButton {
+                                    text: "Фільтр";
+                                }
+
+                                PrimaryButton {
+                                    text: "Створити";
+                                    clicked => { root.create-document(); }
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Table header ───────────────────────────────────────
+                    Rectangle {
+                        height: 36px;
+                        background: AppTheme.bg-subtle;
+
+                        // Bottom border
+                        Rectangle {
+                            y: parent.height - 1px;
+                            width: parent.width;
+                            height: 1px;
+                            background: AppTheme.border;
+                        }
+
+                        HorizontalLayout {
+                            padding-left: 18px;
+                            padding-right: 18px;
+                            spacing: 0px;
+                            alignment: stretch;
+
+                            // Checkbox header
+                            Rectangle {
+                                width: 32px;
+
+                                Rectangle {
+                                    width: 14px;
+                                    height: 14px;
+                                    border-width: 1.5px;
+                                    border-color: AppTheme.border-strong;
+                                    border-radius: 3px;
+                                }
+                            }
+
+                            Text { text: "НОМЕР";       color: AppTheme.text-faint; font-size: 10.5px; font-family: AppTheme.font-sans; font-weight: 600; letter-spacing: 0.8px; vertical-alignment: center; width: 150px; }
+                            Text { text: "ТИП";         color: AppTheme.text-faint; font-size: 10.5px; font-family: AppTheme.font-sans; font-weight: 600; letter-spacing: 0.8px; vertical-alignment: center; width: 180px; }
+                            Text { text: "ДАТА";        color: AppTheme.text-faint; font-size: 10.5px; font-family: AppTheme.font-sans; font-weight: 600; letter-spacing: 0.8px; vertical-alignment: center; width: 100px; }
+                            Text { text: "КОНТРАГЕНТ";  color: AppTheme.text-faint; font-size: 10.5px; font-family: AppTheme.font-sans; font-weight: 600; letter-spacing: 0.8px; vertical-alignment: center; horizontal-stretch: 1; }
+                            Text { text: "СТАТУС";      color: AppTheme.text-faint; font-size: 10.5px; font-family: AppTheme.font-sans; font-weight: 600; letter-spacing: 0.8px; vertical-alignment: center; width: 130px; }
+                            Text { text: "СУМА";        color: AppTheme.text-faint; font-size: 10.5px; font-family: AppTheme.font-sans; font-weight: 600; letter-spacing: 0.8px; vertical-alignment: center; horizontal-alignment: right; width: 130px; }
+                            Text { text: "ДІЇ";         color: AppTheme.text-faint; font-size: 10.5px; font-family: AppTheme.font-sans; font-weight: 600; letter-spacing: 0.8px; vertical-alignment: center; horizontal-alignment: right; width: 90px; }
+                        }
+                    }
+
+                    // ── Document rows ──────────────────────────────────────
+                    for doc[i] in visible-rows : DocRow {
+                        doc: doc;
+                        index: i;
+                        selected: root.selected-ids.length > 0; // simplified — Rust manages selection
+                        icon-invoice: root.icon-invoice;
+                        icon-act: root.icon-act;
+                        icon-waybill: root.icon-waybill;
+                        icon-pdf: root.icon-pdf;
+                        icon-edit: root.icon-edit;
+                        icon-more: root.icon-more;
+                        icon-check: root.icon-check;
+                        select-toggled(id, v) => { root.row-selected(id, v); }
+                        row-clicked(id) => { root.open-document(id); }
+                        pdf-clicked(id) => { root.pdf-export(id); }
+                        edit-clicked(id) => { root.edit-document(id); }
+                        more-clicked(id) => { root.more-actions(id); }
+                        chain-expanded: doc.id == root.expanded-doc-id;
+                        chain-steps: root.chain-steps;
+                        chain-toggle(id) => {
+                            if (root.expanded-doc-id == id) {
+                                root.expanded-doc-id = "";
+                            } else {
+                                root.expanded-doc-id = id;
+                                root.chain-load(id);
+                            }
+                        }
+                    }
+
+                    // ── Pagination footer ──────────────────────────────────
+                    Rectangle {
+                        height: 44px;
+                        border-radius: AppTheme.radius-xl;
+
+                        // Top border
+                        Rectangle {
+                            y: 0;
+                            width: root.width;
+                            height: 1px;
+                            background: AppTheme.border;
+                        }
+
+                        HorizontalLayout {
+                            padding-left: 18px;
+                            padding-right: 18px;
+                            spacing: 6px;
+                            alignment: stretch;
+
+                            Text {
+                                text: "Показано " + root.shown-count + " з " + root.total-count;
+                                color: AppTheme.text-muted;
+                                font-size: 12px;
+                                font-family: AppTheme.font-sans;
+                                vertical-alignment: center;
+                                horizontal-stretch: 1;
+                            }
+
+                            Rectangle {
+                                width: 28px;
+                                height: 28px;
+                                border-radius: AppTheme.radius-md;
+                                background: prev-hover.has-hover ? AppTheme.bg-hover : transparent;
+                                Image { source: root.icon-chevron-left; width: 15px; height: 15px; colorize: AppTheme.text-muted; image-fit: contain; }
+                                prev-hover := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => { root.page-changed(root.page - 1); }
+                                }
+                            }
+
+                            Text {
+                                text: root.page + " / " + root.total-pages;
+                                color: AppTheme.text-muted;
+                                font-size: 12px;
+                                font-family: AppTheme.font-sans;
+                                vertical-alignment: center;
+                                horizontal-alignment: center;
+                                width: 50px;
+                            }
+
+                            Rectangle {
+                                width: 28px;
+                                height: 28px;
+                                border-radius: AppTheme.radius-md;
+                                background: next-hover.has-hover ? AppTheme.bg-hover : transparent;
+                                Image { source: root.icon-chevron-right; width: 15px; height: 15px; colorize: AppTheme.text-muted; image-fit: contain; }
+                                next-hover := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => { root.page-changed(root.page + 1); }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
