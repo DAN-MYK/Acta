@@ -429,16 +429,8 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let ui_weak = ui.as_weak();
     ui.on_waybill_form_add_item(move || {
         if let Some(ui) = ui_weak.upgrade() {
-            let mut items: Vec<FormItemRow> = (0..ui.get_waybill_form_items().row_count())
-                .filter_map(|i| ui.get_waybill_form_items().row_data(i))
-                .collect();
-            items.push(FormItemRow {
-                description: SharedString::from(""),
-                quantity: SharedString::from("1"),
-                unit: SharedString::from("шт"),
-                price: SharedString::from("0.00"),
-                amount: SharedString::from("0.00"),
-            });
+            let mut items = collect_model(&ui.get_waybill_form_items());
+            items.push(default_form_item());
             ui.set_waybill_form_items(ModelRc::new(VecModel::from(items)));
         }
     });
@@ -447,9 +439,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let ui_weak = ui.as_weak();
     ui.on_waybill_form_remove_item(move |idx| {
         if let Some(ui) = ui_weak.upgrade() {
-            let mut items: Vec<FormItemRow> = (0..ui.get_waybill_form_items().row_count())
-                .filter_map(|i| ui.get_waybill_form_items().row_data(i))
-                .collect();
+            let mut items = collect_model(&ui.get_waybill_form_items());
             let idx = idx as usize;
             if idx < items.len() {
                 items.remove(idx);
@@ -463,22 +453,12 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     let ui_weak = ui.as_weak();
     ui.on_waybill_form_item_changed(move |idx, field, value| {
         if let Some(ui) = ui_weak.upgrade() {
-            let mut items: Vec<FormItemRow> = (0..ui.get_waybill_form_items().row_count())
-                .filter_map(|i| ui.get_waybill_form_items().row_data(i))
-                .collect();
-            let idx = idx as usize;
-            if idx < items.len() {
-                match field.as_str() {
-                    "desc"  => { items[idx].description = value; }
-                    "qty"   => { items[idx].quantity    = value; }
-                    "unit"  => { items[idx].unit        = value; }
-                    "price" => { items[idx].price       = value; }
-                    _ => {}
-                }
+            let mut items = collect_model(&ui.get_waybill_form_items());
+            if apply_form_item_change(&mut items, idx as usize, field.as_str(), value) {
                 ui.set_waybill_form_items(ModelRc::new(VecModel::from(items)));
-                if matches!(field.as_str(), "qty" | "price") {
-                    recalculate_waybill_total(&ui);
-                }
+                recalculate_waybill_total(&ui);
+            } else {
+                ui.set_waybill_form_items(ModelRc::new(VecModel::from(items)));
             }
         }
     });

@@ -189,6 +189,41 @@ pub fn collect_form_items(ui: &MainWindow) -> Vec<NewActItem> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// ── Форми: позиції документів ──────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Повертає порожній рядок позиції з дефолтними значеннями.
+pub fn default_form_item() -> FormItemRow {
+    FormItemRow {
+        description: SharedString::from(""),
+        quantity:    SharedString::from("1"),
+        unit:        SharedString::from("шт"),
+        price:       SharedString::from("0.00"),
+        amount:      SharedString::from("0.00"),
+    }
+}
+
+/// Оновлює поле позиції за іменем. Повертає `true` якщо потрібен перерахунок total.
+pub fn apply_form_item_change(
+    items: &mut Vec<FormItemRow>,
+    idx: usize,
+    field: &str,
+    value: SharedString,
+) -> bool {
+    if idx >= items.len() {
+        return false;
+    }
+    match field {
+        "desc"  => items[idx].description = value,
+        "qty"   => items[idx].quantity    = value,
+        "unit"  => items[idx].unit        = value,
+        "price" => items[idx].price       = value,
+        _ => {}
+    }
+    matches!(field, "qty" | "price")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // ── Накладні ──────────────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -647,6 +682,8 @@ mod tests {
         populate_payment_form_sets_fields();
         populate_payment_form_no_counterparty();
         collect_model_reads_all_items();
+        default_form_item_has_expected_defaults();
+        apply_form_item_change_updates_field_and_returns_recalc_flag();
     }
 
     // ── collect_model ────────────────────────────────────────────────────
@@ -723,6 +760,70 @@ mod tests {
         assert_eq!(result[0], data[0]);
         assert_eq!(result[1], data[1]);
         assert_eq!(result[2], data[2]);
+    }
+
+    // ── default_form_item / apply_form_item_change ──────────────────────
+
+    fn default_form_item_has_expected_defaults() {
+        let item = default_form_item();
+        assert_eq!(item.description.as_str(), "");
+        assert_eq!(item.quantity.as_str(), "1");
+        assert_eq!(item.unit.as_str(), "шт");
+        assert_eq!(item.price.as_str(), "0.00");
+        assert_eq!(item.amount.as_str(), "0.00");
+    }
+
+    fn apply_form_item_change_updates_field_and_returns_recalc_flag() {
+        let mut items = vec![default_form_item()];
+
+        // "desc" — оновлює description, НЕ потребує перерахунку
+        let needs_recalc = apply_form_item_change(
+            &mut items,
+            0,
+            "desc",
+            SharedString::from("Послуга"),
+        );
+        assert!(!needs_recalc, "desc не повинен тригерити перерахунок");
+        assert_eq!(items[0].description.as_str(), "Послуга");
+
+        // "qty" — оновлює quantity, ПОТРЕБУЄ перерахунку
+        let needs_recalc = apply_form_item_change(
+            &mut items,
+            0,
+            "qty",
+            SharedString::from("5"),
+        );
+        assert!(needs_recalc, "qty повинен тригерити перерахунок");
+        assert_eq!(items[0].quantity.as_str(), "5");
+
+        // "price" — оновлює price, ПОТРЕБУЄ перерахунку
+        let needs_recalc = apply_form_item_change(
+            &mut items,
+            0,
+            "price",
+            SharedString::from("200.00"),
+        );
+        assert!(needs_recalc, "price повинен тригерити перерахунок");
+        assert_eq!(items[0].price.as_str(), "200.00");
+
+        // "unit" — оновлює unit, НЕ потребує перерахунку
+        let needs_recalc = apply_form_item_change(
+            &mut items,
+            0,
+            "unit",
+            SharedString::from("год"),
+        );
+        assert!(!needs_recalc, "unit не повинен тригерити перерахунок");
+        assert_eq!(items[0].unit.as_str(), "год");
+
+        // idx за межами — повертає false
+        let needs_recalc = apply_form_item_change(
+            &mut items,
+            99,
+            "qty",
+            SharedString::from("1"),
+        );
+        assert!(!needs_recalc, "вихід за межі → false");
     }
 
     // ── act_status_from_ui ───────────────────────────────────────────────
