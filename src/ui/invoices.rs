@@ -3,7 +3,6 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use chrono::NaiveDate;
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel, Weak};
 
 use acta::app_ctx::AppCtx;
@@ -140,35 +139,15 @@ pub fn spawn_save_invoice(
             tracing::error!("Контрагент не вибраний");
             return;
         }
-        let date = match NaiveDate::parse_from_str(&date_str, "%d.%m.%Y") {
-            Ok(d) => d,
-            Err(_) => {
-                tracing::error!("Невірний формат дати: '{date_str}'");
-                return;
-            }
+        let Some(date) = parse_date_ui(&date_str) else {
+            return;
         };
-        let cp_uuid = match uuid::Uuid::parse_str(&cp_id_str) {
-            Ok(id) => id,
-            Err(_) => {
-                tracing::error!("Невалідний UUID контрагента: '{cp_id_str}'");
-                return;
-            }
+        let Some(cp_uuid) = parse_uuid_or_log(&cp_id_str, "контрагента") else {
+            return;
         };
-        let cat_id_opt: Option<uuid::Uuid> = if cat_id_str.trim().is_empty() {
-            None
-        } else {
-            uuid::Uuid::parse_str(cat_id_str.as_str()).ok()
-        };
-        let con_id_opt: Option<uuid::Uuid> = if con_id_str.trim().is_empty() {
-            None
-        } else {
-            uuid::Uuid::parse_str(con_id_str.as_str()).ok()
-        };
-        let exp_date_opt: Option<chrono::NaiveDate> = if exp_date_str.trim().is_empty() {
-            None
-        } else {
-            NaiveDate::parse_from_str(exp_date_str.as_str(), "%d.%m.%Y").ok()
-        };
+        let cat_id_opt = parse_opt_uuid(&cat_id_str);
+        let con_id_opt = parse_opt_uuid(&con_id_str);
+        let exp_date_opt = if exp_date_str.trim().is_empty() { None } else { parse_date_ui(&exp_date_str) };
         let new_invoice = NewInvoice {
             number: number.clone(),
             counterparty_id: cp_uuid,
@@ -610,35 +589,15 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
                     return;
                 }
             };
-            let date = match NaiveDate::parse_from_str(&date_str, "%d.%m.%Y") {
-                Ok(d) => d,
-                Err(_) => {
-                    tracing::error!("Невірний формат дати: '{date_str}'");
-                    return;
-                }
+            let Some(date) = parse_date_ui(&date_str) else {
+                return;
             };
-            let cp_uuid = match uuid::Uuid::parse_str(&cp_id_str) {
-                Ok(id) => id,
-                Err(_) => {
-                    tracing::error!("Невалідний UUID контрагента: '{cp_id_str}'");
-                    return;
-                }
+            let Some(cp_uuid) = parse_uuid_or_log(&cp_id_str, "контрагента") else {
+                return;
             };
-            let cat_id_opt: Option<uuid::Uuid> = if cat_id_str.trim().is_empty() {
-                None
-            } else {
-                uuid::Uuid::parse_str(cat_id_str.as_str()).ok()
-            };
-            let con_id_opt: Option<uuid::Uuid> = if con_id_str.trim().is_empty() {
-                None
-            } else {
-                uuid::Uuid::parse_str(con_id_str.as_str()).ok()
-            };
-            let exp_date_opt: Option<chrono::NaiveDate> = if exp_date_str.trim().is_empty() {
-                None
-            } else {
-                NaiveDate::parse_from_str(exp_date_str.as_str(), "%d.%m.%Y").ok()
-            };
+            let cat_id_opt = parse_opt_uuid(&cat_id_str);
+            let con_id_opt = parse_opt_uuid(&con_id_str);
+            let exp_date_opt = if exp_date_str.trim().is_empty() { None } else { parse_date_ui(&exp_date_str) };
             let update_data = UpdateInvoice {
                 number: number.clone(),
                 counterparty_id: cp_uuid,

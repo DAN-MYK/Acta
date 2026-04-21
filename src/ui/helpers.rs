@@ -536,6 +536,33 @@ pub fn format_company_total(amount: &Decimal) -> String {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// ── Парсинг вхідних даних з UI ─────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Парсить дату формату "ДД.ММ.РРРР". При помилці логує і повертає None.
+pub fn parse_date_ui(s: &str) -> Option<chrono::NaiveDate> {
+    chrono::NaiveDate::parse_from_str(s, "%d.%m.%Y")
+        .map_err(|_| tracing::error!("Невірний формат дати: '{s}'"))
+        .ok()
+}
+
+/// Парсить UUID-рядок. При помилці логує з міткою і повертає None.
+pub fn parse_uuid_or_log(s: &str, label: &str) -> Option<uuid::Uuid> {
+    uuid::Uuid::parse_str(s)
+        .map_err(|_| tracing::error!("Невалідний UUID {label}: '{s}'"))
+        .ok()
+}
+
+/// Порожній рядок → None; інакше парсить UUID (помилку ігнорує → None).
+pub fn parse_opt_uuid(s: &str) -> Option<uuid::Uuid> {
+    if s.trim().is_empty() {
+        None
+    } else {
+        uuid::Uuid::parse_str(s).ok()
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // ── Утилітарні функції ─────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -626,6 +653,56 @@ mod tests {
     }
 
     // ── collect_model ────────────────────────────────────────────────────
+
+    // ── parse_date_ui ────────────────────────────────────────────────────────
+
+    #[test]
+    fn parse_date_ui_valid_date_returns_some() {
+        use chrono::NaiveDate;
+        let result = parse_date_ui("15.04.2026");
+        assert_eq!(result, NaiveDate::from_ymd_opt(2026, 4, 15));
+    }
+
+    #[test]
+    fn parse_date_ui_invalid_date_returns_none() {
+        assert!(parse_date_ui("не-дата").is_none());
+        assert!(parse_date_ui("2026-04-15").is_none()); // неправильний формат
+        assert!(parse_date_ui("").is_none());
+    }
+
+    // ── parse_uuid_or_log ─────────────────────────────────────────────────────
+
+    #[test]
+    fn parse_uuid_or_log_valid_uuid_returns_some() {
+        let id = uuid::Uuid::new_v4();
+        let result = parse_uuid_or_log(&id.to_string(), "тест");
+        assert_eq!(result, Some(id));
+    }
+
+    #[test]
+    fn parse_uuid_or_log_invalid_returns_none() {
+        assert!(parse_uuid_or_log("не-uuid", "тест").is_none());
+        assert!(parse_uuid_or_log("", "тест").is_none());
+    }
+
+    // ── parse_opt_uuid ────────────────────────────────────────────────────────
+
+    #[test]
+    fn parse_opt_uuid_empty_string_returns_none() {
+        assert!(parse_opt_uuid("").is_none());
+        assert!(parse_opt_uuid("   ").is_none());
+    }
+
+    #[test]
+    fn parse_opt_uuid_valid_uuid_returns_some() {
+        let id = uuid::Uuid::new_v4();
+        assert_eq!(parse_opt_uuid(&id.to_string()), Some(id));
+    }
+
+    #[test]
+    fn parse_opt_uuid_invalid_uuid_returns_none() {
+        assert!(parse_opt_uuid("не-uuid").is_none());
+    }
 
     fn collect_model_reads_all_items() {
         use slint::{ModelRc, VecModel};

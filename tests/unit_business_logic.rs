@@ -113,3 +113,35 @@ async fn notifications_loop_uses_default_sixty_second_period() {
 // build_category_select тестується в src/ui/helpers.rs::tests_build_category
 
 // build_cp_select тестується в src/ui/helpers.rs::tests_build_cp_select
+
+// ─── Інлайн-тести parse_date_ui / parse_opt_uuid логіки ──────────────────────
+// Ці тести дублюють логіку (не викликають helpers напряму) бо це бінарний крейт.
+
+#[test]
+fn parse_date_ui_valid_returns_some() {
+    use chrono::NaiveDate;
+    let result = NaiveDate::parse_from_str("15.04.2026", "%d.%m.%Y");
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), NaiveDate::from_ymd_opt(2026, 4, 15).unwrap());
+}
+
+#[test]
+fn parse_date_ui_invalid_returns_none() {
+    let result = chrono::NaiveDate::parse_from_str("не-дата", "%d.%m.%Y");
+    assert!(result.is_err());
+}
+
+#[test]
+fn parse_opt_uuid_empty_returns_none() {
+    let s = "";
+    let result: Option<uuid::Uuid> = if s.trim().is_empty() { None } else { uuid::Uuid::parse_str(s).ok() };
+    assert!(result.is_none());
+}
+
+#[test]
+fn parse_opt_uuid_valid_returns_some() {
+    let id = uuid::Uuid::new_v4();
+    let s = id.to_string();
+    let result: Option<uuid::Uuid> = if s.trim().is_empty() { None } else { uuid::Uuid::parse_str(&s).ok() };
+    assert_eq!(result, Some(id));
+}
