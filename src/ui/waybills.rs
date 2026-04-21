@@ -289,19 +289,12 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
 
             let (cat_names, cat_ids) = build_category_select(&categories);
 
+            let (cp_names, cp_ids) = build_cp_select(&cps);
+
             ui_weak
                 .upgrade_in_event_loop(move |ui| {
-                    let (names, ids): (Vec<SharedString>, Vec<SharedString>) = cps
-                        .iter()
-                        .map(|(id, name)| {
-                            (
-                                SharedString::from(name.as_str()),
-                                SharedString::from(id.to_string().as_str()),
-                            )
-                        })
-                        .unzip();
-                    ui.set_waybill_form_cp_names(ModelRc::new(VecModel::from(names)));
-                    ui.set_waybill_form_cp_ids(ModelRc::new(VecModel::from(ids)));
+                    ui.set_waybill_form_cp_names(ModelRc::new(VecModel::from(cp_names)));
+                    ui.set_waybill_form_cp_ids(ModelRc::new(VecModel::from(cp_ids)));
                     ui.set_waybill_form_number(SharedString::from(next_number.as_str()));
                     ui.set_waybill_form_date(SharedString::from(today.as_str()));
                     ui.set_waybill_form_notes(SharedString::from(""));
@@ -398,19 +391,12 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
             let cat_index =
                 cat_ids.iter().position(|id| id.as_str() == cat_id_str).unwrap_or(0);
 
+            let (cp_names, cp_ids) = build_cp_select(&cps);
+
             ui_weak
                 .upgrade_in_event_loop(move |ui| {
-                    let (names, ids): (Vec<SharedString>, Vec<SharedString>) = cps
-                        .iter()
-                        .map(|(id, name)| {
-                            (
-                                SharedString::from(name.as_str()),
-                                SharedString::from(id.to_string().as_str()),
-                            )
-                        })
-                        .unzip();
-                    ui.set_waybill_form_cp_names(ModelRc::new(VecModel::from(names)));
-                    ui.set_waybill_form_cp_ids(ModelRc::new(VecModel::from(ids)));
+                    ui.set_waybill_form_cp_names(ModelRc::new(VecModel::from(cp_names)));
+                    ui.set_waybill_form_cp_ids(ModelRc::new(VecModel::from(cp_ids)));
                     ui.set_waybill_form_number(SharedString::from(waybill.number.as_str()));
                     ui.set_waybill_form_date(SharedString::from(
                         waybill.date.format("%d.%m.%Y").to_string().as_str(),

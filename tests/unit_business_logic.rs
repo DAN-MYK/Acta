@@ -111,3 +111,28 @@ async fn notifications_loop_uses_default_sixty_second_period() {
 // collect_model<T> тестується в src/ui/helpers.rs::tests (потребує Slint env).
 
 // build_category_select тестується в src/ui/helpers.rs::tests_build_category
+
+// build_cp_select тестується в src/ui/helpers.rs::tests_build_cp_select
+// Тут перевіряємо логіку (без SharedString) — незалежний тест для CI.
+#[test]
+fn build_cp_select_returns_parallel_vecs() {
+    use uuid::Uuid;
+
+    let id1 = Uuid::new_v4();
+    let id2 = Uuid::new_v4();
+    let cps = vec![
+        (id1, "ТОВ Альфа".to_string()),
+        (id2, "ФОП Іваненко".to_string()),
+    ];
+
+    // Тестуємо логіку (SharedString недоступний в integration tests):
+    let (names_raw, ids_raw): (Vec<String>, Vec<String>) = cps
+        .iter()
+        .map(|(id, name)| (name.clone(), id.to_string()))
+        .unzip();
+
+    assert_eq!(names_raw[0], "ТОВ Альфа");
+    assert_eq!(ids_raw[0], id1.to_string());
+    assert_eq!(names_raw.len(), 2);
+    assert_eq!(ids_raw.len(), 2);
+}

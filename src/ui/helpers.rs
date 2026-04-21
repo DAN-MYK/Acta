@@ -123,6 +123,19 @@ pub fn build_category_select(
     (names, ids)
 }
 
+/// Будує (names, ids) для ComboBox контрагентів.
+/// Вхід: `&[(Uuid, String)]` — результат `counterparties_for_select`.
+pub fn build_cp_select(
+    cps: &[(uuid::Uuid, String)],
+) -> (Vec<SharedString>, Vec<SharedString>) {
+    cps.iter()
+        .map(|(id, name)| (
+            SharedString::from(name.as_str()),
+            SharedString::from(id.to_string().as_str()),
+        ))
+        .unzip()
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // ── Акти ──────────────────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1110,6 +1123,42 @@ mod tests {
     #[test]
     fn format_company_total_keeps_plain_decimal_style_without_grouping() {
         assert_eq!(format_company_total(&dec!(78000)), "78000 грн");
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ── Тести build_cp_select ─────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+
+#[cfg(test)]
+mod tests_build_cp_select {
+    use super::build_cp_select;
+    use uuid::Uuid;
+
+    #[test]
+    fn build_cp_select_returns_parallel_vecs() {
+        let id1 = Uuid::new_v4();
+        let id2 = Uuid::new_v4();
+        let cps = vec![
+            (id1, "ТОВ Альфа".to_string()),
+            (id2, "ФОП Іваненко".to_string()),
+        ];
+
+        let (names, ids) = build_cp_select(&cps);
+
+        assert_eq!(names.len(), 2);
+        assert_eq!(ids.len(), 2);
+        assert_eq!(names[0].as_str(), "ТОВ Альфа");
+        assert_eq!(ids[0].as_str(), id1.to_string());
+        assert_eq!(names[1].as_str(), "ФОП Іваненко");
+        assert_eq!(ids[1].as_str(), id2.to_string());
+    }
+
+    #[test]
+    fn build_cp_select_empty_input_returns_empty_vecs() {
+        let (names, ids) = build_cp_select(&[]);
+        assert!(names.is_empty());
+        assert!(ids.is_empty());
     }
 }
 

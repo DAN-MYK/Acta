@@ -334,14 +334,7 @@ async fn populate_act_form(
     let tasks = tasks_result.unwrap_or_default();
     let categories = cat_result.unwrap_or_default();
 
-    let cp_names: Vec<SharedString> = counterparties
-        .iter()
-        .map(|(_, n)| SharedString::from(n.as_str()))
-        .collect();
-    let cp_ids: Vec<SharedString> = counterparties
-        .iter()
-        .map(|(id, _)| SharedString::from(id.to_string().as_str()))
-        .collect();
+    let (cp_names, cp_ids) = build_cp_select(&counterparties);
     let cp_index = counterparties
         .iter()
         .position(|(id, _)| *id == act.counterparty_id)
@@ -633,14 +626,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
             };
             let categories = cat_result.unwrap_or_default();
 
-            let cp_names: Vec<SharedString> = counterparties
-                .iter()
-                .map(|(_, name)| SharedString::from(name.as_str()))
-                .collect();
-            let cp_ids: Vec<SharedString> = counterparties
-                .iter()
-                .map(|(id, _)| SharedString::from(id.to_string().as_str()))
-                .collect();
+            let (cp_names, cp_ids) = build_cp_select(&counterparties);
 
             let (cat_names, cat_ids) = build_category_select(&categories);
 
