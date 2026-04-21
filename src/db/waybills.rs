@@ -359,6 +359,15 @@ pub async fn change_status(
     Ok(waybill)
 }
 
+/// Видалити накладну та всі її позиції (ON DELETE CASCADE у БД).
+pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
+    sqlx::query("DELETE FROM waybills WHERE id = $1")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Перевести накладну до наступного статусу.
 pub async fn advance_status(pool: &PgPool, id: Uuid) -> Result<Option<Waybill>> {
     let current = sqlx::query_scalar::<_, WaybillStatus>(
@@ -463,6 +472,7 @@ mod tests {
         let _ = update_with_items;
         let _ = change_status;
         let _ = get_for_edit;
+        let _ = delete;
         let _ = advance_status;
         let _ = count_by_status;
         let _ = get_kpi;

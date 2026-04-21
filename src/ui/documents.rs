@@ -164,8 +164,10 @@ pub fn wire_document_callbacks(
                     if let Ok(uuid) = Uuid::parse_str(uuid_str) {
                         let _ = db::invoices::delete(&pool, uuid).await;
                     }
-                } else if id.starts_with("wbl:") {
-                    // db::waybills::delete не існує — пропустити
+                } else if let Some(uuid_str) = id.strip_prefix("wbl:") {
+                    if let Ok(uuid) = Uuid::parse_str(uuid_str) {
+                        let _ = db::waybills::delete(&pool, uuid).await;
+                    }
                 }
                 let data = prepare_documents_data(&pool, cid, None, None).await;
                 let _ = ui_weak.upgrade_in_event_loop(move |ui| apply_documents_to_ui(&ui, data));
