@@ -454,11 +454,10 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
     ui.on_waybill_form_item_changed(move |idx, field, value| {
         if let Some(ui) = ui_weak.upgrade() {
             let mut items = collect_model(&ui.get_waybill_form_items());
-            if apply_form_item_change(&mut items, idx as usize, field.as_str(), value) {
-                ui.set_waybill_form_items(ModelRc::new(VecModel::from(items)));
+            let needs_recalc = apply_form_item_change(&mut items, idx as usize, field.as_str(), value);
+            ui.set_waybill_form_items(ModelRc::new(VecModel::from(items)));
+            if needs_recalc {
                 recalculate_waybill_total(&ui);
-            } else {
-                ui.set_waybill_form_items(ModelRc::new(VecModel::from(items)));
             }
         }
     });

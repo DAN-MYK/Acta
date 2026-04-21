@@ -108,25 +108,7 @@ async fn notifications_loop_uses_default_sixty_second_period() {
     assert!(handle.await.unwrap_err().is_cancelled());
 }
 
-// ─── Тести apply_form_item_change логіки (без Slint env) ─────────────────────
-// Перевіряють лише логіку matches! без виклику самої функції (бінарний крейт).
-
-#[test]
-fn apply_form_item_change_desc_field_no_recalc() {
-    let field = "desc";
-    assert!(!matches!(field, "qty" | "price"));
-}
-
-#[test]
-fn apply_form_item_change_qty_triggers_recalc() {
-    assert!(matches!("qty", "qty" | "price"));
-}
-
-#[test]
-fn apply_form_item_change_price_triggers_recalc() {
-    assert!(matches!("price", "qty" | "price"));
-}
-
+// default_form_item / apply_form_item_change тестуються в src/ui/helpers.rs::tests (потребують Slint env).
 // collect_model<T> тестується в src/ui/helpers.rs::tests (потребує Slint env).
 
 // build_category_select тестується в src/ui/helpers.rs::tests_build_category

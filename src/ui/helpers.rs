@@ -218,7 +218,7 @@ pub fn apply_form_item_change(
         "qty"   => items[idx].quantity    = value,
         "unit"  => items[idx].unit        = value,
         "price" => items[idx].price       = value,
-        _ => {}
+        other   => tracing::warn!("apply_form_item_change: невідоме поле '{other}'"),
     }
     matches!(field, "qty" | "price")
 }
