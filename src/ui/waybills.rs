@@ -126,21 +126,23 @@ pub fn spawn_save_waybill(
 ) {
     tokio::spawn(async move {
         if number.trim().is_empty() {
-            tracing::error!("Номер накладної не може бути порожнім");
+            show_toast(ui_weak.clone(), "Номер накладної не може бути порожнім".to_string(), true);
             return;
         }
         if date_str.trim().is_empty() {
-            tracing::error!("Дата накладної не може бути порожньою");
+            show_toast(ui_weak.clone(), "Дата накладної не може бути порожньою".to_string(), true);
             return;
         }
         if cp_id_str.trim().is_empty() {
-            tracing::error!("Контрагент не вибраний");
+            show_toast(ui_weak.clone(), "Контрагент не вибраний".to_string(), true);
             return;
         }
         let Some(date) = parse_date_ui(&date_str) else {
+            show_toast(ui_weak.clone(), format!("Невірний формат дати: '{date_str}'"), true);
             return;
         };
         let Some(cp_uuid) = parse_uuid_or_log(&cp_id_str, "контрагента") else {
+            show_toast(ui_weak.clone(), "Контрагент не вибраний".to_string(), true);
             return;
         };
         let cat_id_opt = parse_opt_uuid(&cat_id_str);

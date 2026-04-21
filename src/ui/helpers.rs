@@ -571,10 +571,6 @@ pub fn optional_text(value: &str) -> Option<String> {
     if trimmed.is_empty() { None } else { Some(trimmed.to_string()) }
 }
 
-pub fn parse_optional_uuid(value: &str) -> Option<uuid::Uuid> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() { None } else { uuid::Uuid::parse_str(trimmed).ok() }
-}
 
 pub fn normalized_query(query: &str) -> Option<&str> {
     let trimmed = query.trim();
@@ -1067,35 +1063,35 @@ mod tests {
         assert_eq!(optional_text("  привіт  "), Some("привіт".to_string()));
     }
 
-    // ── parse_optional_uuid ──────────────────────────────────────────────────
+    // ── parse_opt_uuid ───────────────────────────────────────────────────────
 
     #[test]
     fn parse_optional_uuid_empty_is_none() {
-        assert_eq!(parse_optional_uuid(""), None);
+        assert_eq!(parse_opt_uuid(""), None);
     }
 
     #[test]
     fn parse_optional_uuid_whitespace_is_none() {
-        assert_eq!(parse_optional_uuid("   "), None);
+        assert_eq!(parse_opt_uuid("   "), None);
     }
 
     #[test]
     fn parse_optional_uuid_invalid_is_none() {
-        assert_eq!(parse_optional_uuid("не-uuid"), None);
-        assert_eq!(parse_optional_uuid("12345678"), None);
+        assert_eq!(parse_opt_uuid("не-uuid"), None);
+        assert_eq!(parse_opt_uuid("12345678"), None);
     }
 
     #[test]
     fn parse_optional_uuid_valid_round_trips() {
         let id = uuid::Uuid::new_v4();
-        assert_eq!(parse_optional_uuid(&id.to_string()), Some(id));
+        assert_eq!(parse_opt_uuid(&id.to_string()), Some(id));
     }
 
     #[test]
     fn parse_optional_uuid_valid_with_padding() {
         let id = uuid::Uuid::new_v4();
         let padded = format!("  {}  ", id);
-        assert_eq!(parse_optional_uuid(&padded), Some(id));
+        assert_eq!(parse_opt_uuid(&padded), Some(id));
     }
 
     // ── total_filtered_pages ─────────────────────────────────────────────────

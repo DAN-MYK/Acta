@@ -351,7 +351,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
                     } else {
                         models::payment::PaymentDirection::Expense
                     },
-                    counterparty_id: parse_optional_uuid(&counterparty_id),
+                    counterparty_id: parse_opt_uuid(&counterparty_id),
                     bank_name: optional_text(&bank_name),
                     bank_ref: optional_text(&bank_ref),
                     description: optional_text(&description),
@@ -435,7 +435,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
                     } else {
                         models::payment::PaymentDirection::Expense
                     },
-                    counterparty_id: parse_optional_uuid(&counterparty_id),
+                    counterparty_id: parse_opt_uuid(&counterparty_id),
                     bank_name: optional_text(&bank_name),
                     bank_ref: optional_text(&bank_ref),
                     description: optional_text(&description),
