@@ -1,1 +1,176 @@
-// TODO: завантаження та відображення контрагентів
+use std::sync::{Arc, Mutex};
+
+use slint::{ComponentHandle, ModelRc, VecModel};
+use sqlx::PgPool;
+use uuid::Uuid;
+
+use acta::db;
+use crate::ui::helpers::{
+    act_row_to_document_item, counterparty_to_details, counterparty_to_item,
+    invoice_row_to_document_item, payment_row_to_item,
+};
+
+pub struct CounterpartiesData {
+    pub items: Vec<crate::CounterpartyItem>,
+}
+
+pub struct CounterpartyDetailData {
+    pub detail: crate::CounterpartyDetails,
+    pub documents: Vec<crate::DocumentItem>,
+    pub payments: Vec<crate::PaymentItem>,
+}
+
+pub async fn prepare_counterparties_data(
+    pool: &PgPool,
+    company_id: Uuid,
+    search: Option<&str>,
+) -> CounterpartiesData {
+    let rows = db::counterparties::list_filtered(pool, company_id, search, false)
+        .await
+        .unwrap_or_default();
+    CounterpartiesData {
+        items: rows.iter().map(counterparty_to_item).collect(),
+    }
+}
+
+pub async fn prepare_counterparty_detail(
+    pool: &PgPool,
+    company_id: Uuid,
+    cp_id: Uuid,
+) -> Option<CounterpartyDetailData> {
+    let cp = db::counterparties::get_by_id(pool, cp_id).await.ok()??;
+
+    let (acts, invoices, payments) = tokio::join!(
+        db::acts::list_filtered(pool, company_id, None, None, None, Some(cp_id), None, None),
+        db::invoices::list_filtered(pool, company_id, None, None, None, Some(cp_id), None, None),
+        db::payments::list_by_counterparty(pool, company_id, cp_id),
+    );
+
+    let mut docs: Vec<(chrono::NaiveDate, crate::DocumentItem)> = vec![];
+    if let Ok(rows) = acts {
+        for r in &rows {
+            docs.push((r.date, act_row_to_document_item(r)));
+        }
+    }
+    if let Ok(rows) = invoices {
+        for r in &rows {
+            docs.push((r.date, invoice_row_to_document_item(r)));
+        }
+    }
+    docs.sort_by(|a, b| b.0.cmp(&a.0));
+    let documents: Vec<crate::DocumentItem> = docs.into_iter().map(|(_, d)| d).collect();
+
+    let pay_items: Vec<crate::PaymentItem> = payments
+        .unwrap_or_default()
+        .iter()
+        .map(payment_row_to_item)
+        .collect();
+
+    Some(CounterpartyDetailData {
+        detail: counterparty_to_details(&cp),
+        documents,
+        payments: pay_items,
+    })
+}
+
+pub fn apply_counterparties_to_ui(ui: &crate::AppWindow, data: CounterpartiesData) {
+    ui.set_counterparties(ModelRc::new(VecModel::from(data.items)));
+}
+
+pub fn apply_counterparty_detail_to_ui(ui: &crate::AppWindow, data: CounterpartyDetailData) {
+    ui.set_cp_detail(data.detail);
+    ui.set_cp_documents(ModelRc::new(VecModel::from(data.documents)));
+    ui.set_cp_payments(ModelRc::new(VecModel::from(data.payments)));
+}
+
+pub fn wire_counterparty_callbacks(
+    ui: &crate::AppWindow,
+    pool: &Arc<PgPool>,
+    company_id: &Arc<Mutex<Uuid>>,
+) {
+    ui.on_cp_selected({
+        let pool = pool.clone();
+        let ui_weak = ui.as_weak();
+        let company_id = company_id.clone();
+        move |id| {
+            let pool = pool.clone();
+            let ui_weak = ui_weak.clone();
+            let cid = *company_id.lock().unwrap();
+            let id_str = id.to_string();
+            tokio::spawn(async move {
+                if let Ok(cp_id) = Uuid::parse_str(&id_str) {
+                    if let Some(data) = prepare_counterparty_detail(&pool, cid, cp_id).await {
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            apply_counterparty_detail_to_ui(&ui, data);
+                            ui.set_cp_selected_id(id_str.into());
+                        });
+                    }
+                }
+            });
+        }
+    });
+
+    ui.on_cp_search_changed({
+        let pool = pool.clone();
+        let ui_weak = ui.as_weak();
+        let company_id = company_id.clone();
+        move |query| {
+            let pool = pool.clone();
+            let ui_weak = ui_weak.clone();
+            let cid = *company_id.lock().unwrap();
+            let q = query.to_string();
+            tokio::spawn(async move {
+                let search = if q.is_empty() { None } else { Some(q.as_str()) };
+                let data = prepare_counterparties_data(&pool, cid, search).await;
+                let _ = ui_weak
+                    .upgrade_in_event_loop(move |ui| apply_counterparties_to_ui(&ui, data));
+            });
+        }
+    });
+
+    ui.on_cp_new(|| {});
+    ui.on_cp_create_doc(|_| {});
+    ui.on_cp_tab_changed(|_| {});
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use acta::models::counterparty::Counterparty;
+    use chrono::Utc;
+    use uuid::Uuid;
+
+    fn sample_cp() -> Counterparty {
+        Counterparty {
+            id: Uuid::nil(),
+            name: "ТОВ Тест".to_string(),
+            edrpou: Some("12345678".to_string()),
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            is_archived: false,
+            bas_id: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    #[test]
+    fn counterparty_maps_to_item() {
+        let cp = sample_cp();
+        let item = crate::ui::helpers::counterparty_to_item(&cp);
+        assert_eq!(item.name.as_str(), "ТОВ Тест");
+        assert_eq!(item.edrpou.as_str(), "12345678");
+    }
+
+    #[test]
+    fn counterparty_maps_to_details() {
+        let cp = sample_cp();
+        let details = crate::ui::helpers::counterparty_to_details(&cp);
+        assert_eq!(details.id.as_str(), Uuid::nil().to_string());
+        assert_eq!(details.edrpou.as_str(), "12345678");
+    }
+}
