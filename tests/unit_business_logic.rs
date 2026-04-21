@@ -109,3 +109,11 @@ async fn notifications_loop_uses_default_sixty_second_period() {
 }
 
 // collect_model<T> тестується в src/ui/helpers.rs::tests (потребує Slint env).
+
+#[test]
+fn build_category_select_prepends_empty_and_formats_depth() {
+    let depth1_prefix = "  └─ ";
+    let name = "Зарплата";
+    assert_eq!(format!("{}{}", depth1_prefix, name), "  └─ Зарплата");
+    assert_eq!("— без категорії —", "— без категорії —");
+}

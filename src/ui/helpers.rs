@@ -104,6 +104,26 @@ pub fn collect_model<T>(model: &impl slint::Model<Data = T>) -> Vec<T> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// ── Форми: побудова select-списків ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Будує (names, ids) для ComboBox категорій.
+/// Перший елемент — «— без категорії —» з порожнім id.
+/// Підкатегорії (depth > 0) отримують префікс «  └─ ».
+pub fn build_category_select(
+    categories: &[acta::models::CategorySelectItem],
+) -> (Vec<SharedString>, Vec<SharedString>) {
+    let mut names = vec![SharedString::from("— без категорії —")];
+    let mut ids   = vec![SharedString::from("")];
+    for c in categories {
+        let prefix = if c.depth > 0 { "  └─ " } else { "" };
+        names.push(SharedString::from(format!("{}{}", prefix, c.name)));
+        ids.push(SharedString::from(c.id.to_string()));
+    }
+    (names, ids)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // ── Акти ──────────────────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
 

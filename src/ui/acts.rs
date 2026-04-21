@@ -347,13 +347,7 @@ async fn populate_act_form(
         .position(|(id, _)| *id == act.counterparty_id)
         .unwrap_or(0) as i32;
 
-    let mut cat_names: Vec<SharedString> = vec![SharedString::from("— без категорії —")];
-    let mut cat_ids: Vec<SharedString> = vec![SharedString::from("")];
-    for c in &categories {
-        let prefix = if c.depth > 0 { "  └─ " } else { "" };
-        cat_names.push(SharedString::from(format!("{}{}", prefix, c.name)));
-        cat_ids.push(SharedString::from(c.id.to_string()));
-    }
+    let (cat_names, cat_ids) = build_category_select(&categories);
     let cat_id_str = act.category_id.map(|id| id.to_string()).unwrap_or_default();
     let cat_index = cat_ids.iter().position(|id| id.as_str() == cat_id_str).unwrap_or(0) as i32;
 
@@ -648,14 +642,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
                 .map(|(id, _)| SharedString::from(id.to_string().as_str()))
                 .collect();
 
-            let mut cat_names: Vec<SharedString> =
-                vec![SharedString::from("— без категорії —")];
-            let mut cat_ids: Vec<SharedString> = vec![SharedString::from("")];
-            for c in &categories {
-                let prefix = if c.depth > 0 { "  └─ " } else { "" };
-                cat_names.push(SharedString::from(format!("{}{}", prefix, c.name)));
-                cat_ids.push(SharedString::from(c.id.to_string()));
-            }
+            let (cat_names, cat_ids) = build_category_select(&categories);
 
             let today = chrono::Local::now().date_naive().format("%d.%m.%Y").to_string();
 

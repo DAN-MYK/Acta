@@ -9,11 +9,11 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel, Weak};
 use acta::app_ctx::AppCtx;
 use crate::{
     ui::helpers::*,
-    FormItemRow, WaybillRow, MainWindow,
+    FormItemRow, WaybillRow, WaybillStatus, MainWindow,
 };
 use acta::{
     db,
-    models::{WaybillStatus, NewWaybill, UpdateWaybill},
+    models::{WaybillStatus as ModelWaybillStatus, NewWaybill, UpdateWaybill},
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -33,7 +33,7 @@ pub struct WaybillsUiData {
 pub async fn prepare_waybills_data(
     pool: &sqlx::PgPool,
     company_id: uuid::Uuid,
-    status_filter: Option<WaybillStatus>,
+    status_filter: Option<ModelWaybillStatus>,
     query: String,
 ) -> Result<WaybillsUiData> {
     let (waybills_result, counts_result, kpi_result) = tokio::join!(
@@ -62,13 +62,13 @@ pub async fn prepare_waybills_data(
             date: SharedString::from(wb.date.format("%d.%m.%Y").to_string().as_str()),
             counterparty: SharedString::from(wb.counterparty_name.as_str()),
             amount: SharedString::from(format_amount_ua(wb.total_amount).as_str()),
-            status_label: SharedString::from(match wb.status {
-                WaybillStatus::Draft     => "Чернетка",
-                WaybillStatus::Issued    => "Виставлена",
-                WaybillStatus::Signed    => "Підписана",
-                WaybillStatus::Delivered => "Доставлено",
-            }),
-            status: SharedString::from(wb.status.as_str()),
+            status_label: SharedString::from(wb.status.label()),
+            status: match wb.status {
+                ModelWaybillStatus::Draft     => WaybillStatus::Draft,
+                ModelWaybillStatus::Issued    => WaybillStatus::Issued,
+                ModelWaybillStatus::Signed    => WaybillStatus::Signed,
+                ModelWaybillStatus::Delivered => WaybillStatus::Delivered,
+            },
         })
         .collect();
 
@@ -98,7 +98,7 @@ pub async fn reload_waybills(
     pool: &sqlx::PgPool,
     ui_weak: Weak<MainWindow>,
     company_id: uuid::Uuid,
-    status_filter: Option<WaybillStatus>,
+    status_filter: Option<ModelWaybillStatus>,
     query: String,
     close_form: bool,
 ) -> Result<()> {
@@ -217,10 +217,10 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
         let cid = *company_id_arc.lock().unwrap();
         tokio::spawn(async move {
             let status_filter = match filter_idx {
-                1 => Some(WaybillStatus::Draft),
-                2 => Some(WaybillStatus::Issued),
-                3 => Some(WaybillStatus::Signed),
-                4 => Some(WaybillStatus::Delivered),
+                1 => Some(ModelWaybillStatus::Draft),
+                2 => Some(ModelWaybillStatus::Issued),
+                3 => Some(ModelWaybillStatus::Signed),
+                4 => Some(ModelWaybillStatus::Delivered),
                 _ => None,
             };
             let query = {
@@ -287,14 +287,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
             let categories = categories.unwrap_or_default();
             let today = chrono::Local::now().format("%d.%m.%Y").to_string();
 
-            let mut cat_names: Vec<SharedString> =
-                vec![SharedString::from("— без категорії —")];
-            let mut cat_ids: Vec<SharedString> = vec![SharedString::from("")];
-            for c in &categories {
-                let prefix = if c.depth > 0 { "  └─ " } else { "" };
-                cat_names.push(SharedString::from(format!("{}{}", prefix, c.name)));
-                cat_ids.push(SharedString::from(c.id.to_string()));
-            }
+            let (cat_names, cat_ids) = build_category_select(&categories);
 
             ui_weak
                 .upgrade_in_event_loop(move |ui| {
@@ -399,14 +392,7 @@ pub fn setup(ui: &MainWindow, ctx: Arc<AppCtx>) {
             let cp_index =
                 cps.iter().position(|(id, _)| id.to_string() == cp_id_str).unwrap_or(0);
 
-            let mut cat_names: Vec<SharedString> =
-                vec![SharedString::from("— без категорії —")];
-            let mut cat_ids: Vec<SharedString> = vec![SharedString::from("")];
-            for c in &categories {
-                let prefix = if c.depth > 0 { "  └─ " } else { "" };
-                cat_names.push(SharedString::from(format!("{}{}", prefix, c.name)));
-                cat_ids.push(SharedString::from(c.id.to_string()));
-            }
+            let (cat_names, cat_ids) = build_category_select(&categories);
             let cat_id_str =
                 waybill.category_id.map(|id| id.to_string()).unwrap_or_default();
             let cat_index =
