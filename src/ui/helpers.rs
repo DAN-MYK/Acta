@@ -555,10 +555,11 @@ pub fn parse_uuid_or_log(s: &str, label: &str) -> Option<uuid::Uuid> {
 
 /// Порожній рядок → None; інакше парсить UUID (помилку ігнорує → None).
 pub fn parse_opt_uuid(s: &str) -> Option<uuid::Uuid> {
-    if s.trim().is_empty() {
+    let trimmed = s.trim();
+    if trimmed.is_empty() {
         None
     } else {
-        uuid::Uuid::parse_str(s).ok()
+        uuid::Uuid::parse_str(trimmed).ok()
     }
 }
 
@@ -698,6 +699,12 @@ mod tests {
     #[test]
     fn parse_opt_uuid_invalid_uuid_returns_none() {
         assert!(parse_opt_uuid("не-uuid").is_none());
+    }
+
+    #[test]
+    fn parse_opt_uuid_padded_uuid_returns_some() {
+        let id = uuid::Uuid::new_v4();
+        assert_eq!(parse_opt_uuid(&format!("  {}  ", id)), Some(id));
     }
 
     fn collect_model_reads_all_items() {
@@ -1061,37 +1068,6 @@ mod tests {
     fn optional_text_value_is_trimmed_some() {
         assert_eq!(optional_text("привіт"), Some("привіт".to_string()));
         assert_eq!(optional_text("  привіт  "), Some("привіт".to_string()));
-    }
-
-    // ── parse_opt_uuid ───────────────────────────────────────────────────────
-
-    #[test]
-    fn parse_optional_uuid_empty_is_none() {
-        assert_eq!(parse_opt_uuid(""), None);
-    }
-
-    #[test]
-    fn parse_optional_uuid_whitespace_is_none() {
-        assert_eq!(parse_opt_uuid("   "), None);
-    }
-
-    #[test]
-    fn parse_optional_uuid_invalid_is_none() {
-        assert_eq!(parse_opt_uuid("не-uuid"), None);
-        assert_eq!(parse_opt_uuid("12345678"), None);
-    }
-
-    #[test]
-    fn parse_optional_uuid_valid_round_trips() {
-        let id = uuid::Uuid::new_v4();
-        assert_eq!(parse_opt_uuid(&id.to_string()), Some(id));
-    }
-
-    #[test]
-    fn parse_optional_uuid_valid_with_padding() {
-        let id = uuid::Uuid::new_v4();
-        let padded = format!("  {}  ", id);
-        assert_eq!(parse_opt_uuid(&padded), Some(id));
     }
 
     // ── total_filtered_pages ─────────────────────────────────────────────────
