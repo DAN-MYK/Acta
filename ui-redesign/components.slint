@@ -1,0 +1,763 @@
+// Acta — Reusable UI primitives
+// Aesthetic: hairline borders only, no decorative shadows on content.
+// Shadows reserved for floating surfaces (popovers, modals, command palette).
+
+import { AppTheme } from "design-tokens.slint";
+import { ChainStep } from "types.slint";
+
+// ── Card ──────────────────────────────────────────────────────────────────────
+// Flat elevated surface. No shadow — only a 1px hairline border.
+export component Card inherits Rectangle {
+    in property <bool> padded: true;
+
+    background: AppTheme.bg-elevated;
+    border-width: 1px;
+    border-color: AppTheme.border;
+    border-radius: AppTheme.radius-xl;
+
+    @children
+}
+
+// ── Divider ───────────────────────────────────────────────────────────────────
+export component HDivider inherits Rectangle {
+    height: 1px;
+    background: AppTheme.border;
+}
+
+export component VDivider inherits Rectangle {
+    width: 1px;
+    background: AppTheme.border;
+}
+
+// ── Badge ─────────────────────────────────────────────────────────────────────
+// tone: "muted" | "info" | "success" | "warning" | "danger" | "accent"
+export component Badge inherits Rectangle {
+    in property <string> text;
+    in property <string> tone: "muted";
+
+    property <color> bg-color:
+        tone == "info"    ? AppTheme.info-soft    :
+        tone == "success" ? AppTheme.success-soft :
+        tone == "warning" ? AppTheme.warning-soft :
+        tone == "danger"  ? AppTheme.danger-soft  :
+        tone == "accent"  ? AppTheme.accent-soft  :
+        AppTheme.bg-subtle;
+
+    property <color> fg-color:
+        tone == "info"    ? AppTheme.info    :
+        tone == "success" ? AppTheme.success :
+        tone == "warning" ? AppTheme.warning :
+        tone == "danger"  ? AppTheme.danger  :
+        tone == "accent"  ? AppTheme.accent-text :
+        AppTheme.text-muted;
+
+    background: bg-color;
+    border-radius: AppTheme.radius-sm;
+    height: 18px;
+
+    HorizontalLayout {
+        padding-left: 7px;
+        padding-right: 7px;
+        Text {
+            text: root.text;
+            color: root.fg-color;
+            font-size: 11px;
+            font-family: AppTheme.font-sans;
+            font-weight: 500;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+        }
+    }
+}
+
+// ── StatusDot ─────────────────────────────────────────────────────────────────
+export component StatusDot inherits Rectangle {
+    in property <string> tone: "muted";
+
+    property <color> dot-color:
+        tone == "info"    ? AppTheme.info    :
+        tone == "success" ? AppTheme.success :
+        tone == "warning" ? AppTheme.warning :
+        tone == "danger"  ? AppTheme.danger  :
+        tone == "accent"  ? AppTheme.accent  :
+        AppTheme.text-faint;
+
+    width: 6px;
+    height: 6px;
+    border-radius: 3px;
+    background: dot-color;
+}
+
+// ── PrimaryButton ─────────────────────────────────────────────────────────────
+export component PrimaryButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> enabled: true;
+    callback clicked;
+
+    property <bool> hovered: false;
+
+    height: 30px;
+    min-width: text-label.preferred-width + 22px;
+    background: enabled ? (hovered ? AppTheme.accent-hover : AppTheme.accent) : AppTheme.bg-subtle;
+    border-radius: AppTheme.radius-md;
+    opacity: enabled ? 1.0 : 0.5;
+
+    Text {
+        text: root.text;
+        color: enabled ? #ffffff : AppTheme.text-muted;
+        font-size: AppTheme.font-body;
+        font-family: AppTheme.font-sans;
+        font-weight: 500;
+        vertical-alignment: center;
+        horizontal-alignment: center;
+        accessible-role: none;
+    }
+
+    text-label := Text {
+        text: root.text;
+        font-size: AppTheme.font-body;
+        visible: false;
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.move) {
+                root.hovered = self.has-hover;
+            }
+        }
+        clicked => { root.clicked(); }
+    }
+}
+
+// ── SecondaryButton ───────────────────────────────────────────────────────────
+export component SecondaryButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> small: false;
+    callback clicked;
+
+    property <bool> hovered: false;
+
+    height: small ? 26px : 30px;
+    min-width: label.preferred-width + 22px;
+    background: hovered ? AppTheme.bg-hover : AppTheme.bg-elevated;
+    border-width: 1px;
+    border-color: AppTheme.border;
+    border-radius: AppTheme.radius-md;
+
+    label := Text {
+        text: root.text;
+        color: AppTheme.text;
+        font-size: small ? 12px : AppTheme.font-body;
+        font-family: AppTheme.font-sans;
+        font-weight: 500;
+        vertical-alignment: center;
+        horizontal-alignment: center;
+    }
+
+    TouchArea {
+        mouse-cursor: pointer;
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.move) {
+                root.hovered = self.has-hover;
+            }
+        }
+        clicked => { root.clicked(); }
+    }
+}
+
+// ── GhostButton ───────────────────────────────────────────────────────────────
+export component GhostButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> small: false;
+    callback clicked;
+
+    property <bool> hovered: false;
+
+    height: small ? 26px : 30px;
+    min-width: label.preferred-width + 16px;
+    background: hovered ? AppTheme.bg-subtle : transparent;
+    border-radius: AppTheme.radius-md;
+
+    label := Text {
+        text: root.text;
+        color: AppTheme.text-muted;
+        font-size: small ? 12px : AppTheme.font-body;
+        font-family: AppTheme.font-sans;
+        font-weight: 400;
+        vertical-alignment: center;
+        horizontal-alignment: center;
+    }
+
+    TouchArea {
+        mouse-cursor: pointer;
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.move) {
+                root.hovered = self.has-hover;
+            }
+        }
+        clicked => { root.clicked(); }
+    }
+}
+
+// ── IconButton ────────────────────────────────────────────────────────────────
+export component IconButton inherits Rectangle {
+    in property <image> icon;
+    in property <bool> active: false;
+    in property <string> tooltip: "";
+    callback clicked;
+
+    property <bool> hovered: false;
+
+    width: 28px;
+    height: 28px;
+    background: (active || hovered) ? AppTheme.bg-subtle : transparent;
+    border-radius: AppTheme.radius-md;
+
+    Image {
+        source: root.icon;
+        width: 16px;
+        height: 16px;
+        colorize: (active || root.hovered) ? AppTheme.text : AppTheme.text-muted;
+        image-fit: contain;
+    }
+
+    TouchArea {
+        mouse-cursor: pointer;
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.move) {
+                root.hovered = self.has-hover;
+            }
+        }
+        clicked => { root.clicked(); }
+    }
+}
+
+// ── SearchInput ───────────────────────────────────────────────────────────────
+export component SearchInput inherits Rectangle {
+    in property <string> placeholder: "Пошук…";
+    in-out property <string> value: "";
+    in property <image> search-icon;
+    callback edited(string);
+
+    height: 30px;
+    background: AppTheme.bg-elevated;
+    border-width: 1px;
+    border-color: AppTheme.border;
+    border-radius: AppTheme.radius-md;
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 7px;
+
+        Image {
+            source: root.search-icon;
+            width: 14px;
+            height: 14px;
+            colorize: AppTheme.text-faint;
+            image-fit: contain;
+            vertical-alignment: center;
+        }
+
+        field := TextInput {
+            text <=> root.value;
+            color: AppTheme.text;
+            selection-background-color: AppTheme.accent-soft;
+            selection-foreground-color: AppTheme.accent-text;
+            font-size: 12px;
+            font-family: AppTheme.font-sans;
+            single-line: true;
+            vertical-alignment: center;
+            edited => { root.edited(self.text); }
+        }
+
+        // Placeholder overlay shown when field is empty
+        if root.value == "" : Text {
+            text: root.placeholder;
+            color: AppTheme.text-faint;
+            font-size: 12px;
+            font-family: AppTheme.font-sans;
+            vertical-alignment: center;
+            accessible-role: none;
+        }
+    }
+}
+
+// ── SectionLabel ─────────────────────────────────────────────────────────────
+// Uppercase label for section headers within cards
+export component SectionLabel inherits Text {
+    in property <string> label;
+    text: label;
+    color: AppTheme.text-faint;
+    font-size: AppTheme.font-xs;
+    font-family: AppTheme.font-sans;
+    font-weight: 600;
+    letter-spacing: 1.4px;
+}
+
+// ── MonoNumber ────────────────────────────────────────────────────────────────
+// Tabular monospace number display
+export component MonoNumber inherits Text {
+    in property <float> value;
+    in property <string> tone: "default"; // "default" | "positive" | "negative" | "muted"
+    in property <bool> show-sign: false;
+    in property <int> decimals: 2;
+
+    property <string> formatted: "";   // set from Rust via binding
+
+    text: formatted;
+    color:
+        tone == "positive" ? AppTheme.success :
+        tone == "negative" ? AppTheme.danger  :
+        tone == "muted"    ? AppTheme.text-muted :
+        AppTheme.text;
+    font-family: AppTheme.font-mono;
+    font-size: AppTheme.font-body;
+    font-weight: 500;
+}
+
+// ── SerifHeading ──────────────────────────────────────────────────────────────
+export component HeadingLg inherits Text {
+    color: AppTheme.text;
+    font-family: AppTheme.font-serif;
+    font-size: 28px;
+    font-weight: 500;
+    letter-spacing: -0.4px;
+}
+
+export component HeadingMd inherits Text {
+    color: AppTheme.text;
+    font-family: AppTheme.font-serif;
+    font-size: 20px;
+    font-weight: 500;
+    letter-spacing: -0.2px;
+}
+
+export component HeadingSm inherits Text {
+    color: AppTheme.text;
+    font-family: AppTheme.font-sans;
+    font-size: 15px;
+    font-weight: 500;
+}
+
+// ── Avatar ────────────────────────────────────────────────────────────────────
+// Plain, flat — no gradients as per design audit.
+export component Avatar inherits Rectangle {
+    in property <string> initials;
+    in property <string> tone: "default"; // "default" | "accent" | "success"
+    in property <int> size: 28;
+
+    property <color> bg-color:
+        tone == "accent"  ? AppTheme.accent-soft  :
+        tone == "success" ? AppTheme.success-soft :
+        AppTheme.bg-subtle;
+
+    property <color> fg-color:
+        tone == "accent"  ? AppTheme.accent-text  :
+        tone == "success" ? AppTheme.success :
+        AppTheme.text-muted;
+
+    width: size * 1px;
+    height: size * 1px;
+    border-radius: size >= 40 ? 10px : 6px;
+    background: bg-color;
+
+    Text {
+        text: root.initials;
+        color: root.fg-color;
+        font-size: max(10px, root.size * 0.36 * 1px);
+        font-family: AppTheme.font-sans;
+        font-weight: 600;
+        letter-spacing: 0.2px;
+        vertical-alignment: center;
+        horizontal-alignment: center;
+    }
+}
+
+// ── FilterPill ────────────────────────────────────────────────────────────────
+// Active filter chip with label + value + remove button
+export component FilterPill inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <image> close-icon;
+    callback removed;
+
+    height: 24px;
+    background: AppTheme.bg-subtle;
+    border-width: 1px;
+    border-color: AppTheme.border;
+    border-radius: AppTheme.radius-md;
+
+    HorizontalLayout {
+        padding-left: 9px;
+        padding-right: 3px;
+        spacing: 6px;
+
+        Text {
+            text: root.label + ":";
+            color: AppTheme.text-faint;
+            font-size: 12px;
+            font-family: AppTheme.font-sans;
+            vertical-alignment: center;
+        }
+
+        Text {
+            text: root.value;
+            color: AppTheme.text;
+            font-size: 12px;
+            font-family: AppTheme.font-sans;
+            font-weight: 500;
+            vertical-alignment: center;
+        }
+
+        Rectangle {
+            width: 18px;
+            height: 18px;
+            border-radius: 3px;
+
+            Image {
+                source: root.close-icon;
+                width: 11px;
+                height: 11px;
+                colorize: AppTheme.text-faint;
+                image-fit: contain;
+            }
+
+            TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.removed(); }
+            }
+        }
+    }
+}
+
+// ── Checkbox ─────────────────────────────────────────────────────────────────
+export component Checkbox inherits Rectangle {
+    in-out property <bool> checked: false;
+    in property <bool> indeterminate: false;
+    in property <image> check-icon;
+    callback toggled(bool);
+
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    border-width: 1.5px;
+    border-color: (checked || indeterminate) ? AppTheme.accent : AppTheme.border-strong;
+    background: (checked || indeterminate) ? AppTheme.accent : transparent;
+
+    if checked : Image {
+        source: root.check-icon;
+        width: 10px;
+        height: 10px;
+        colorize: #ffffff;
+        image-fit: contain;
+    }
+
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.checked = !root.checked;
+            root.toggled(root.checked);
+        }
+    }
+}
+
+// ── TableHeader ───────────────────────────────────────────────────────────────
+// Consistent table column header style across all screens
+export component TableHeaderCell inherits Rectangle {
+    in property <string> label;
+    in property <TextHorizontalAlignment> align: left;
+
+    background: AppTheme.bg-subtle;
+
+    Text {
+        text: root.label;
+        color: AppTheme.text-faint;
+        font-size: AppTheme.font-xs;
+        font-family: AppTheme.font-sans;
+        font-weight: 600;
+        letter-spacing: 1.2px;
+        horizontal-alignment: root.align;
+        vertical-alignment: center;
+    }
+}
+
+// ── KbdHint ───────────────────────────────────────────────────────────────────
+// Keyboard shortcut hint chip
+export component KbdHint inherits Rectangle {
+    in property <string> key;
+
+    height: 16px;
+    min-width: 16px;
+    background: transparent;
+    border-width: 1px;
+    border-color: AppTheme.border;
+    border-radius: 3px;
+
+    HorizontalLayout {
+        padding-left: 4px;
+        padding-right: 4px;
+        Text {
+            text: root.key;
+            color: AppTheme.text-faint;
+            font-size: 10px;
+            font-family: AppTheme.font-mono;
+            font-weight: 500;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+        }
+    }
+}
+
+// ── BulkBar ───────────────────────────────────────────────────────────────────
+// Horizontal action bar shown when rows are selected (bulk operations)
+export component BulkBar inherits Rectangle {
+    in property <int> selected-count;
+    in property <image> icon-close;
+    callback clear-selection;
+    callback send;
+    callback archive;
+    callback delete;
+
+    height: 46px;
+    background: AppTheme.accent-soft;
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 8px;
+        alignment: start;
+
+        Rectangle {
+            width: 22px;
+            height: 22px;
+            border-radius: 4px;
+            background: clear-h.has-hover ? AppTheme.accent : transparent;
+
+            Image {
+                source: root.icon-close;
+                width: 13px;
+                height: 13px;
+                colorize: AppTheme.accent-text;
+                image-fit: contain;
+            }
+            clear-h := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.clear-selection(); }
+            }
+        }
+
+        Text {
+            text: "Вибрано: " + root.selected-count;
+            color: AppTheme.accent-text;
+            font-size: 12.5px;
+            font-family: AppTheme.font-sans;
+            font-weight: 500;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// ── SparkLine ─────────────────────────────────────────────────────────────────
+// Minimal inline sparkline built from Rectangle segments
+// data: array of floats (relative values 0..1 normalized externally)
+export component SparkLine inherits Rectangle {
+    in property <[float]> data;  // values 0.0–1.0 (caller normalizes)
+    in property <color> line-color: AppTheme.text-muted;
+
+    height: 28px;
+    clip: true;
+
+    for val[i] in data : Rectangle {
+        x: i * (root.width / max(1, data.length - 1)) - 1px;
+        y: root.height - val * (root.height - 4px) - 2px;
+        width: root.width / max(1, data.length - 1) + 1px;
+        height: 1.5px;
+        background: root.line-color;
+    }
+}
+
+// ── BarChart ──────────────────────────────────────────────────────────────────
+// Dual-bar monthly chart (revenue + expenses).
+// Heights passed as normalized [0..1] floats. Rust normalizes from raw values.
+export component BarChart inherits Rectangle {
+    in property <[{rev-h: float, exp-h: float, month: string}]> bars;
+    // rev-h and exp-h are fractional heights 0.0–1.0
+
+    height: 200px;
+
+    HorizontalLayout {
+        padding-bottom: 22px;
+        padding-top: 8px;
+        spacing: 6px;
+        alignment: stretch;
+
+        for bar in bars : VerticalLayout {
+            alignment: end;
+            spacing: 0px;
+            horizontal-stretch: 1;
+
+            HorizontalLayout {
+                alignment: center;
+                spacing: 2px;
+                height: root.height - 30px;
+
+                // Revenue bar (filled, accent color)
+                Rectangle {
+                    width: 12px;
+                    vertical-stretch: 0;
+                    height: bar.rev-h * (root.height - 30px);
+                    background: AppTheme.accent;
+                }
+
+                // Expenses bar (outlined)
+                Rectangle {
+                    width: 12px;
+                    vertical-stretch: 0;
+                    height: bar.exp-h * (root.height - 30px);
+                    background: transparent;
+                    border-width: 1px;
+                    border-color: AppTheme.border-strong;
+                }
+            }
+
+            Text {
+                text: bar.month;
+                font-size: 10px;
+                font-family: AppTheme.font-sans;
+                color: AppTheme.text-faint;
+                horizontal-alignment: center;
+                height: 16px;
+            }
+        }
+    }
+
+    // Gridlines
+    for i in [0, 1, 2, 3] : Rectangle {
+        y: 8px + i * ((root.height - 30px) / 4);
+        width: root.width;
+        height: 1px;
+        background: AppTheme.border;
+        opacity: 0.5;
+    }
+}
+
+// ── SimpleProgressBar ─────────────────────────────────────────────────────────
+// Used in Reports expense categories
+export component SimpleProgressBar inherits Rectangle {
+    in property <float> value;  // 0.0–1.0
+    in property <color> fill-color: AppTheme.accent;
+
+    height: 3px;
+    border-radius: 9999px;
+    background: AppTheme.bg-subtle;
+    clip: true;
+
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: root.value * root.width;
+        height: root.height;
+        background: root.fill-color;
+        border-radius: 9999px;
+    }
+}
+
+// ── DocChain ──────────────────────────────────────────────────────────────────
+// Horizontal pipeline: Invoice → Act → Waybill.
+// Existing docs: solid box with number, status dot, amount.
+// Missing docs: dashed border + ghost "Створити" button.
+
+component ChainStepBox inherits Rectangle {
+    in property <ChainStep> step;
+    callback create-next(string);
+
+    property <bool> hovered: false;
+
+    width: 158px;
+    height: 80px;
+    border-radius: AppTheme.radius-md;
+    border-width: 1px;
+    border-color: step.exists ? AppTheme.border : #cccccc80;
+    background: step.exists ? AppTheme.bg-elevated : transparent;
+
+    VerticalLayout {
+        padding: 10px;
+        spacing: 4px;
+
+        Text {
+            text:
+                step.doc-type == "invoice" ? "РАХУНОК" :
+                step.doc-type == "act"     ? "АКТ" :
+                "НАКЛАДНА";
+            color: AppTheme.text-faint;
+            font-size: 10px;
+            font-family: AppTheme.font-sans;
+            font-weight: 600;
+        }
+
+        if step.exists : Text {
+            text: step.doc-number;
+            color: AppTheme.accent-text;
+            font-family: AppTheme.font-mono;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        if step.exists : HorizontalLayout {
+            spacing: 6px;
+            alignment: start;
+
+            StatusDot {
+                tone:
+                    step.status == "paid"    ? "success" :
+                    step.status == "overdue" ? "danger"  :
+                    step.status == "signed"  ? "success" :
+                    step.status == "issued"  ? "info"    :
+                    "muted";
+            }
+            Text {
+                text: step.amount-str;
+                color: AppTheme.text-muted;
+                font-size: 11px;
+                font-family: AppTheme.font-mono;
+                vertical-alignment: center;
+            }
+        }
+
+        if !step.exists : GhostButton {
+            text: "Створити";
+            small: true;
+            clicked => { root.create-next(root.step.doc-type); }
+        }
+    }
+}
+
+export component DocChain inherits HorizontalLayout {
+    in property <[ChainStep]> steps;
+    callback create-next(string);
+
+    spacing: 0px;
+    alignment: start;
+
+    for step[i] in steps : HorizontalLayout {
+        spacing: 0px;
+
+        if i > 0 : Text {
+            text: "→";
+            color: AppTheme.text-faint;
+            font-size: 14px;
+            font-family: AppTheme.font-sans;
+            vertical-alignment: center;
+            width: 28px;
+            horizontal-alignment: center;
+        }
+
+        ChainStepBox {
+            step: step;
+            create-next(t) => { root.create-next(t); }
+        }
+    }
+}
