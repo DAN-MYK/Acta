@@ -8,6 +8,7 @@ import { ProgressIndicator, ListView } from "std-widgets.slint";
 import { MetricStrip } from "../components/MetricStrip.slint";
 import { Icons } from "../components/icons.slint";
 import { PaymentRow } from "../structs.slint";
+import { TableActionButton, EmptyStateIcon } from "../components/form_elements.slint";
 
 export component PaymentList {
 
@@ -32,8 +33,8 @@ export component PaymentList {
     private property <int>    selected-row: -1;
     private property <string> selected-id: "";
 
-    min-width: 600px;
-    min-height: 400px;
+    min-width: Theme.list-min-width;
+    min-height: Theme.list-min-height;
 
     VerticalLayout {
         spacing: 0;
@@ -64,7 +65,7 @@ export component PaymentList {
                     background: new-touch.has-hover ? Theme.primary-hover : Theme.primary;
                     border-radius: Theme.radius-md;
                     height: Theme.btn-md-height;
-                    width: 140px;
+                    width: Theme.topbar-button-width;
                     animate background { duration: 120ms; easing: ease; }
 
                     Text {
@@ -84,8 +85,8 @@ export component PaymentList {
             }
 
             Rectangle {
-                y: parent.height - 1px;
-                height: 1px;
+                y: parent.height - Theme.divider-height;
+                height: Theme.divider-height;
                 background: Theme.border;
             }
         }
@@ -126,13 +127,13 @@ export component PaymentList {
                         clip: true;
 
                         HorizontalLayout {
-                            padding-left: 12px;
-                            padding-right: 12px;
+                            padding-left: Theme.space-3;
+                            padding-right: Theme.space-3;
                             spacing: Theme.space-2;
 
                             Image {
-                                width: 16px;
-                                height: 16px;
+                                width: Theme.icon-sm;
+                                height: Theme.icon-sm;
                                 source: Icons.search;
                                 image-fit: contain;
                                 colorize: Theme.text-muted;
@@ -164,7 +165,7 @@ export component PaymentList {
                         alignment: center;
 
                         for lbl[i] in ["Усі", "Доходи", "Витрати"]: Rectangle {
-                            width: 80px;
+                            width: Theme.filter-button-width;
                             height: Theme.btn-sm-height;
                             border-radius: Theme.radius-sm;
                             background: root.active-filter == i ? Theme.primary : Theme.bg-gray;
@@ -209,22 +210,22 @@ export component PaymentList {
 
                         // Заголовок таблиці
                         Rectangle {
-                            height: 40px;
+                            height: Theme.table-header-height;
                             vertical-stretch: 0;
                             background: Theme.table-header;
 
                             HorizontalLayout {
-                                padding-left: 16px;
-                                padding-right: 16px;
+                                padding-left: Theme.table-header-padding;
+                                padding-right: Theme.table-header-padding;
                                 spacing: Theme.space-2;
 
-                                Text { text: "Дата";        font-size: Theme.font-base; font-weight: 500; color: Theme.text-second; vertical-alignment: center; width: 100px; }
+                                Text { text: "Дата";        font-size: Theme.font-base; font-weight: 500; color: Theme.text-second; vertical-alignment: center; width: Theme.col-small; }
                                 Text { text: "Контрагент";  font-size: Theme.font-base; font-weight: 500; color: Theme.text-second; vertical-alignment: center; horizontal-stretch: 1; }
                                 Text { text: "Призначення"; font-size: Theme.font-base; font-weight: 500; color: Theme.text-second; vertical-alignment: center; horizontal-stretch: 2; }
-                                Text { text: "Банк";        font-size: Theme.font-base; font-weight: 500; color: Theme.text-second; vertical-alignment: center; width: 100px; }
-                                Text { text: "Сума";        font-size: Theme.font-base; font-weight: 500; color: Theme.text-second; horizontal-alignment: right; vertical-alignment: center; width: 110px; }
-                                Text { text: "Зведено";     font-size: Theme.font-base; font-weight: 500; color: Theme.text-second; horizontal-alignment: center; vertical-alignment: center; width: 64px; }
-                                Rectangle { width: 72px; }
+                                Text { text: "Банк";        font-size: Theme.font-base; font-weight: 500; color: Theme.text-second; vertical-alignment: center; width: Theme.col-small; }
+                                Text { text: "Сума";        font-size: Theme.font-base; font-weight: 500; color: Theme.text-second; horizontal-alignment: right; vertical-alignment: center; width: Theme.col-medium; }
+                                Text { text: "Зведено";     font-size: Theme.font-base; font-weight: 500; color: Theme.text-second; horizontal-alignment: center; vertical-alignment: center; width: Theme.col-reconciled; }
+                                Rectangle { width: Theme.col-actions; }
                             }
                         }
 
@@ -235,25 +236,11 @@ export component PaymentList {
 
                             VerticalLayout {
                                 alignment: center;
-                                spacing: Theme.space-2;
+                                spacing: Theme.space-3;
 
-                                HorizontalLayout {
-                                    alignment: center;
-
-                                    Rectangle {
-                                        width: 56px;
-                                        height: 56px;
-                                        border-radius: 28px;
-                                        background: Theme.bg-gray;
-
-                                        Image {
-                                            x: 10px; y: 10px;
-                                            width: 36px; height: 36px;
-                                            source: Icons.payments;
-                                            image-fit: contain;
-                                            colorize: Theme.text-muted;
-                                        }
-                                    }
+                                EmptyStateIcon {
+                                    icon: Icons.payments;
+                                    icon-color: Theme.text-muted;
                                 }
                                 Text {
                                     text: "Платежів ще немає";
@@ -295,15 +282,15 @@ export component PaymentList {
                                 }
 
                                 HorizontalLayout {
-                                    padding-left: 16px;
-                                    padding-right: 16px;
+                                    padding-left: Theme.table-header-padding;
+                                    padding-right: Theme.table-header-padding;
                                     spacing: Theme.space-2;
 
                                     // Іконка напрямку
                                     Image {
-                                        width: 14px;
-                                        height: 14px;
-                                        y: (parent.height - 14px) / 2;
+                                        width: Theme.icon-sm - 2px;
+                                        height: Theme.icon-sm - 2px;
+                                        y: (parent.height - self.height) / 2;
                                         source: row.direction == "income" ? Icons.incoming : Icons.outgoing;
                                         image-fit: contain;
                                         colorize: row.direction == "income" ? Theme.success : Theme.danger;
@@ -314,7 +301,7 @@ export component PaymentList {
                                         font-size: Theme.font-md;
                                         color: Theme.text-second;
                                         vertical-alignment: center;
-                                        width: 97px;
+                                        width: Theme.col-small;
                                     }
                                     Text {
                                         text: row.counterparty == "" ? "—" : row.counterparty;
@@ -338,7 +325,7 @@ export component PaymentList {
                                         color: Theme.text-muted;
                                         vertical-alignment: center;
                                         overflow: elide;
-                                        width: 100px;
+                                        width: Theme.col-small;
                                     }
 
                                     // Сума з кольором
@@ -349,13 +336,12 @@ export component PaymentList {
                                         color: row.direction == "income" ? Theme.success : Theme.danger;
                                         horizontal-alignment: right;
                                         vertical-alignment: center;
-                                        width: 110px;
+                                        width: Theme.col-medium;
                                     }
 
                                     // Прапорець зведення
                                     Rectangle {
-                                        width: 64px;
-                                        height: 24px;
+                                        width: Theme.col-reconciled;
 
                                         Text {
                                             text: row.reconciled ? "✓" : "—";
@@ -368,54 +354,21 @@ export component PaymentList {
 
                                     // Кнопки дій
                                     HorizontalLayout {
-                                        width: 72px;
+                                        width: Theme.col-actions;
                                         spacing: Theme.space-1;
                                         alignment: center;
 
                                         // Зведення
-                                        if !row.reconciled : rec-rect := Rectangle {
-                                            width: 30px;
-                                            height: 30px;
-                                            border-radius: Theme.radius-sm;
-                                            background: rec-touch.has-hover ? Theme.bg-success : transparent;
-                                            animate background { duration: 80ms; easing: ease; }
-
-                                            Text {
-                                                text: "✓";
-                                                font-size: 14px;
-                                                color: rec-touch.has-hover ? Theme.success : Theme.text-muted;
-                                                horizontal-alignment: center;
-                                                vertical-alignment: center;
-                                                animate color { duration: 80ms; easing: ease; }
-                                            }
-
-                                            rec-touch := TouchArea {
-                                                mouse-cursor: pointer;
-                                                clicked => { root.reconcile-clicked(row.id); }
-                                            }
+                                        if !row.reconciled : TableActionButton {
+                                            icon: Icons.check;
+                                            hover-bg: Theme.bg-success;
+                                            clicked => { root.reconcile-clicked(row.id); }
                                         }
 
                                         // Редагування
-                                        edit-rect := Rectangle {
-                                            width: 30px;
-                                            height: 30px;
-                                            border-radius: Theme.radius-sm;
-                                            background: edit-touch.has-hover ? Theme.btn-action-bg : transparent;
-                                            animate background { duration: 80ms; easing: ease; }
-
-                                            Image {
-                                                x: 8px; y: 8px;
-                                                width: 14px; height: 14px;
-                                                source: Icons.edit;
-                                                image-fit: contain;
-                                                colorize: edit-touch.has-hover ? Theme.primary : Theme.text-muted;
-                                                animate colorize { duration: 80ms; easing: ease; }
-                                            }
-
-                                            edit-touch := TouchArea {
-                                                mouse-cursor: pointer;
-                                                clicked => { root.edit-clicked(row.id); }
-                                            }
+                                        TableActionButton {
+                                            icon: Icons.edit;
+                                            clicked => { root.edit-clicked(row.id); }
                                         }
                                     }
                                 }

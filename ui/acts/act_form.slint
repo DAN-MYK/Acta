@@ -21,7 +21,7 @@
 import { Theme } from "../theme.slint";
 import { LineEdit, TextEdit, ComboBox, ScrollView, ProgressIndicator, ListView } from "std-widgets.slint";
 import { StatusOption } from "../components/status_option.slint";
-import { ActStatus, TaskRow, FormItemRow } from "../structs.slint";
+import { ActStatus, TaskStatus, TaskPriority, TaskRow, FormItemRow } from "../structs.slint";
 
 // ── Головний компонент форми ───────────────────────────────────────────────
 component FieldLabel {
@@ -731,27 +731,25 @@ export component ActForm inherits Rectangle {
                                         vertical-stretch: 1;
 
                                         for row[i] in root.act-task-rows : Rectangle {
-                                            property <string> raw-status: row.status;
-                                            property <string> raw-priority: row.priority;
                                             property <color> status-color:
-                                                raw-status == "done"        ? Theme.success :
-                                                raw-status == "in_progress" ? Theme.primary :
-                                                raw-status == "cancelled"   ? Theme.text-muted :
+                                                row.status == TaskStatus.done        ? Theme.success :
+                                                row.status == TaskStatus.in_progress ? Theme.primary :
+                                                row.status == TaskStatus.cancelled   ? Theme.text-muted :
                                                 Theme.warning;
                                             property <color> status-bg:
-                                                raw-status == "done"        ? Theme.success.with-alpha(12%) :
-                                                raw-status == "in_progress" ? Theme.primary.with-alpha(10%) :
-                                                raw-status == "cancelled"   ? Theme.text-muted.with-alpha(12%) :
+                                                row.status == TaskStatus.done        ? Theme.success.with-alpha(12%) :
+                                                row.status == TaskStatus.in_progress ? Theme.primary.with-alpha(10%) :
+                                                row.status == TaskStatus.cancelled   ? Theme.text-muted.with-alpha(12%) :
                                                 Theme.warning.with-alpha(12%);
                                             property <color> priority-color:
-                                                raw-priority == "critical" ? Theme.priority-critical :
-                                                raw-priority == "high"     ? Theme.priority-high :
-                                                raw-priority == "normal"   ? Theme.primary :
+                                                row.priority == TaskPriority.critical ? Theme.priority-critical :
+                                                row.priority == TaskPriority.high     ? Theme.priority-high :
+                                                row.priority == TaskPriority.normal   ? Theme.primary :
                                                 Theme.text-muted;
                                             property <color> priority-bg:
-                                                raw-priority == "critical" ? Theme.priority-critical.with-alpha(10%) :
-                                                raw-priority == "high"     ? Theme.priority-high.with-alpha(10%) :
-                                                raw-priority == "normal"   ? Theme.primary.with-alpha(10%) :
+                                                row.priority == TaskPriority.critical ? Theme.priority-critical.with-alpha(10%) :
+                                                row.priority == TaskPriority.high     ? Theme.priority-high.with-alpha(10%) :
+                                                row.priority == TaskPriority.normal   ? Theme.primary.with-alpha(10%) :
                                                 Theme.text-muted.with-alpha(10%);
 
                                             height: 48px;

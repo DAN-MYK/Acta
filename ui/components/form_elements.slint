@@ -1,0 +1,348 @@
+// ============================================================
+// components/form_elements.slint — Переиспользуемые компоненты форм
+// FormField, FormCheckbox, FormSelect, FormRadioGroup, TableCell
+// ============================================================
+
+import { Theme } from "../theme.slint";
+import { CheckBox } from "std-widgets.slint";
+
+// ── FORM FIELD (контейнер) ───────────────────────────────
+// Обгортає label + input з консистентним spacing
+export component FormField {
+    in property <string> label: "";
+    in property <string> required: "";  // "* " для обов'язкових полів
+    in property <string> helper-text: "";
+    in property <bool> error: false;
+    in property <string> error-text: "";
+
+    height: root.label != ""
+        ? Theme.form-label-height + Theme.form-field-height + Theme.form-group-spacing
+        : Theme.form-field-height;
+    vertical-stretch: 0;
+
+    VerticalLayout {
+        spacing: Theme.space-2;
+
+        if root.label != "" : Text {
+            text: root.required + root.label;
+            font-size: Theme.font-sm;
+            font-weight: 500;
+            color: root.error ? Theme.border-error : Theme.text-primary;
+            height: Theme.form-label-height;
+        }
+
+        @children
+    }
+}
+
+// ── TABLE CELL — стандартна комірка таблиці ──────────────
+// Фіксована висота, padding, межа для скорочених текстів
+export component TableCell inherits Rectangle {
+    in property <string> text: "";
+    in property <bool> truncate: true;
+    in property <int> text-align: 0;  // 0=left, 1=center, 2=right
+
+    height: Theme.row-height;
+    background: transparent;
+    border-width: 1px;
+    border-color: Theme.table-header;
+
+    HorizontalLayout {
+        padding-left: Theme.space-3;
+        padding-right: Theme.space-3;
+        alignment: root.text-align == 0 ? start : (root.text-align == 1 ? center : end);
+
+        Text {
+            text: root.text;
+            font-size: Theme.font-md;
+            color: Theme.text-primary;
+            vertical-alignment: center;
+            overflow: root.truncate ? elide : clip;
+        }
+    }
+}
+
+// ── TABLE HEADER CELL ─────────────────────────────────────
+export component TableHeaderCell inherits Rectangle {
+    in property <string> text: "";
+    in property <bool> sortable: false;
+    callback sort-clicked;
+
+    height: Theme.row-height;
+    background: Theme.table-header;
+
+    HorizontalLayout {
+        padding-left: Theme.space-3;
+        padding-right: Theme.space-3;
+        alignment: start;
+        spacing: Theme.space-2;
+
+        Text {
+            text: root.text;
+            font-size: Theme.font-sm;
+            font-weight: 600;
+            color: Theme.text-primary;
+            vertical-alignment: center;
+        }
+
+        if root.sortable : Text {
+            text: "↕";
+            color: Theme.text-muted;
+            vertical-alignment: center;
+        }
+    }
+
+    if root.sortable : TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.sort-clicked(); }
+    }
+}
+
+// ── FORM INPUT ROW ────────────────────────────────────────
+// Горизонтальний ряд для інпутів (2-3 колонки в одному рядку)
+export component FormInputRow inherits HorizontalLayout {
+    spacing: Theme.form-group-spacing;
+    height: Theme.form-field-height + Theme.space-6;  // з місцем під label
+}
+
+// ── SECTION DIVIDER ───────────────────────────────────────
+// Тонкий дільник між групами форми
+export component SectionDivider inherits Rectangle {
+    height: Theme.divider-height;
+    background: Theme.border;
+    vertical-stretch: 0;
+}
+
+// ── ICON BUTTON (компактна кнопка для іконок) ───────────
+export component IconButton inherits Rectangle {
+    in property <image> icon;
+    in property <color> icon-color: Theme.text-primary;
+    in property <bool> disabled: false;
+    callback clicked;
+
+    width: Theme.icon-lg + Theme.space-4;
+    height: self.width;
+    border-radius: Theme.radius-md;
+    background: ta.has-hover && !root.disabled ? Theme.bg-hover : transparent;
+    opacity: root.disabled ? 0.5 : 1.0;
+    animate background { duration: 100ms; easing: ease; }
+
+    Image {
+        width: Theme.icon-md;
+        height: Theme.icon-md;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        source: root.icon;
+        colorize: root.icon-color;
+    }
+
+    ta := TouchArea {
+        enabled: !root.disabled;
+        mouse-cursor: self.enabled ? pointer : default;
+        clicked => { root.clicked(); }
+    }
+}
+
+// ── ACTION BUTTON (для таблиці — редагування, видалення) ──
+export component TableActionButton inherits Rectangle {
+    in property <image> icon;
+    in property <color> hover-bg: Theme.btn-action-bg;
+    callback clicked;
+
+    width: Theme.action-btn-size;
+    height: Theme.action-btn-size;
+    border-radius: Theme.radius-sm;
+    background: ta.has-hover ? hover-bg : transparent;
+    animate background { duration: 80ms; easing: ease; }
+
+    Image {
+        x: Theme.space-2;
+        y: Theme.space-2;
+        width: Theme.icon-sm;
+        height: Theme.icon-sm;
+        source: root.icon;
+        colorize: ta.has-hover ? Theme.primary : Theme.text-muted;
+        animate colorize { duration: 80ms; easing: ease; }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// ── FORM CHECKBOX (чекбокс з label) ──────────────────────
+export component FormCheckbox inherits HorizontalLayout {
+    in property <string> label: "";
+    in property <bool> checked: false;
+    in property <bool> disabled: false;
+    in-out property <bool> value <=> cb.checked;
+    callback toggled;
+
+    spacing: Theme.space-3;
+    alignment: start;
+    height: Theme.form-field-height;
+    vertical-stretch: 0;
+
+    cb := CheckBox {
+        checked: root.checked;
+        enabled: !root.disabled;
+        toggled => { root.toggled(); }
+    }
+
+    Text {
+        text: root.label;
+        font-size: Theme.font-md;
+        color: root.disabled ? Theme.text-disabled : Theme.text-primary;
+        vertical-alignment: center;
+        horizontal-stretch: 1;
+    }
+}
+
+// ── FORM SELECT (dropdown з label) ────────────────────────
+export component FormSelect inherits VerticalLayout {
+    in property <string> label: "";
+    in property <string> required: "";  // "* " для обов'язкових полів
+    in property <[string]> options: [];
+    in property <int> selected-index: 0;
+    in property <bool> disabled: false;
+    callback selected(int);
+    callback open-clicked;
+
+    spacing: Theme.space-2;
+    height: root.label != ""
+        ? Theme.form-label-height + Theme.form-field-height + Theme.form-group-spacing
+        : Theme.form-field-height;
+    vertical-stretch: 0;
+
+    if root.label != "" : Text {
+        text: root.required + root.label;
+        font-size: Theme.font-sm;
+        font-weight: 500;
+        color: Theme.text-primary;
+        height: Theme.form-label-height;
+    }
+
+    Rectangle {
+        height: Theme.form-field-height;
+        border-radius: Theme.radius-md;
+        background: root.disabled ? Theme.bg-gray : Theme.bg-card;
+        border-width: 1px;
+        border-color: Theme.border;
+        opacity: root.disabled ? 0.6 : 1.0;
+
+        HorizontalLayout {
+            padding-left: Theme.space-3;
+            padding-right: Theme.space-3;
+            alignment: space-between;
+
+            Text {
+                text: root.selected-index >= 0 && root.selected-index < root.options.length
+                    ? root.options[root.selected-index]
+                    : "Оберіть...";
+                font-size: Theme.font-md;
+                color: root.selected-index >= 0 ? Theme.text-primary : Theme.text-muted;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+
+            Text {
+                text: "▼";
+                color: Theme.text-muted;
+                font-size: 10px;
+                vertical-alignment: center;
+            }
+        }
+
+        ta := TouchArea {
+            enabled: !root.disabled;
+            mouse-cursor: self.enabled ? pointer : default;
+            clicked => { root.open-clicked(); }
+        }
+    }
+}
+
+// ── FORM RADIO GROUP (група радіо-кнопок з label) ────────
+export component FormRadioGroup inherits VerticalLayout {
+    in property <string> label: "";
+    in property <string> required: "";  // "* " для обов'язкових полів
+    in property <[string]> options: [];
+    in property <int> selected-index: 0;
+    in property <bool> disabled: false;
+    callback selected(int);
+
+    spacing: Theme.space-2;
+    vertical-stretch: 0;
+
+    if root.label != "" : Text {
+        text: root.required + root.label;
+        font-size: Theme.font-sm;
+        font-weight: 500;
+        color: Theme.text-primary;
+        height: Theme.form-label-height;
+    }
+
+    VerticalLayout {
+        spacing: Theme.space-2;
+        vertical-stretch: 0;
+
+        for opt[idx] in root.options : HorizontalLayout {
+            spacing: Theme.space-2;
+            alignment: start;
+            height: Theme.row-height;
+
+            Rectangle {
+                width: Theme.icon-sm;
+                height: Theme.icon-sm;
+                border-radius: Theme.icon-sm / 2;
+                border-width: 2px;
+                border-color: root.selected-index == idx ? Theme.primary : Theme.border;
+                background: root.selected-index == idx ? Theme.bg-primary : transparent;
+                y: (parent.height - self.height) / 2;
+
+                if root.selected-index == idx : Rectangle {
+                    width: Theme.icon-sm / 2;
+                    height: Theme.icon-sm / 2;
+                    border-radius: self.height / 2;
+                    background: Theme.primary;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                }
+            }
+
+            Text {
+                text: opt;
+                font-size: Theme.font-md;
+                color: root.disabled ? Theme.text-disabled : Theme.text-primary;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+
+            TouchArea {
+                enabled: !root.disabled;
+                mouse-cursor: self.enabled ? pointer : default;
+                clicked => { root.selected(idx); }
+            }
+        }
+    }
+}
+
+// ── EMPTY STATE ILLUSTRATION ──────────────────────────────
+export component EmptyStateIcon inherits Rectangle {
+    in property <image> icon;
+    in property <color> icon-color: Theme.text-muted;
+
+    width: Theme.empty-state-size;
+    height: Theme.empty-state-size;
+    border-radius: self.height / 2;
+    background: Theme.bg-gray;
+
+    Image {
+        x: (parent.width - Theme.icon-lg) / 2;
+        y: (parent.height - Theme.icon-lg) / 2;
+        width: Theme.icon-lg;
+        height: Theme.icon-lg;
+        source: root.icon;
+        colorize: root.icon-color;
+    }
+}

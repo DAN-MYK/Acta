@@ -7,7 +7,7 @@ import { StatusTabBar } from "../components/StatusTabBar.slint";
 import { StatusBadge } from "../components/status_badge.slint";
 import { ActionButton } from "../components/action_button.slint";
 import { Icons } from "../components/icons.slint";
-import { InvoiceRow } from "../structs.slint";
+import { InvoiceRow, InvoiceStatus } from "../structs.slint";
 
 export component InvoiceList {
 
@@ -33,14 +33,14 @@ export component InvoiceList {
     callback pdf-clicked(string);
 
     // ── Внутрішній стан ─────────────────────────────────────────────────────
-    private property <int>    selected-row:    -1;
-    private property <string> selected-id:     "";
-    private property <string> selected-status: "";
-    private property <string> selected-number: "";
-    property <int>            active-tab:      0;
+    private property <int>           selected-row:    -1;
+    private property <string>        selected-id:     "";
+    private property <InvoiceStatus> selected-status: InvoiceStatus.draft;
+    private property <string>        selected-number: "";
+    property <int>                   active-tab:      0;
 
-    min-width: 600px;
-    min-height: 400px;
+    min-width: Theme.list-min-width;
+    min-height: Theme.list-min-height;
 
     VerticalLayout {
         spacing: 0;
@@ -171,19 +171,19 @@ export component InvoiceList {
 
                             for row[i] in root.rows : Rectangle {
                                 property <color> badge-color:
-                                    row.status == "paid"   ? Theme.success :
-                                    row.status == "signed" ? Theme.primary :
-                                    row.status == "issued" ? Theme.warning :
+                                    row.status == InvoiceStatus.paid   ? Theme.success :
+                                    row.status == InvoiceStatus.signed ? Theme.primary :
+                                    row.status == InvoiceStatus.issued ? Theme.warning :
                                     Theme.text-muted;
                                 property <color> badge-bg:
-                                    row.status == "paid"   ? Theme.success.with-alpha(12%) :
-                                    row.status == "signed" ? Theme.primary.with-alpha(10%) :
-                                    row.status == "issued" ? Theme.warning.with-alpha(12%) :
+                                    row.status == InvoiceStatus.paid   ? Theme.success.with-alpha(12%) :
+                                    row.status == InvoiceStatus.signed ? Theme.primary.with-alpha(10%) :
+                                    row.status == InvoiceStatus.issued ? Theme.warning.with-alpha(12%) :
                                     Theme.text-muted.with-alpha(12%);
                                 property <image> badge-icon:
-                                    row.status == "paid"   ? Icons.paid   :
-                                    row.status == "signed" ? Icons.signed :
-                                    row.status == "issued" ? Icons.issued :
+                                    row.status == InvoiceStatus.paid   ? Icons.paid   :
+                                    row.status == InvoiceStatus.signed ? Icons.signed :
+                                    row.status == InvoiceStatus.issued ? Icons.issued :
                                     Icons.draft;
 
                                 height: Theme.row-height;
@@ -304,13 +304,13 @@ export component InvoiceList {
                         icon: Icons.arrow-right;
                         text: "Наступний статус";
                         primary: true;
-                        disabled: root.selected-status == "paid";
+                        disabled: root.selected-status == InvoiceStatus.paid;
                         clicked => {
                             if (root.selected-id != "") {
                                 root.advance-status-clicked(root.selected-id);
                                 root.selected-row    = -1;
                                 root.selected-id     = "";
-                                root.selected-status = "";
+                                root.selected-status = InvoiceStatus.draft;
                                 root.selected-number = "";
                             }
                         }

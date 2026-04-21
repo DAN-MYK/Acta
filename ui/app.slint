@@ -42,10 +42,10 @@ import { CommandPalette } from "components/CommandPalette.slint";
 // ── MainWindow — головне вікно ───────────────────────────────────────────────
 export component MainWindow inherits Window {
     title: "Acta — Управлінський облік";
-    min-width:  1100px;
-    min-height: 680px;
-    preferred-width:  1440px;
-    preferred-height: 900px;
+    min-width:  Theme.window-min-width;
+    min-height: Theme.window-min-height;
+    preferred-width:  Theme.window-pref-width;
+    preferred-height: Theme.window-pref-height;
 
     // ── Стан навігації ───────────────────────────────────────────────────────
     // AppState — єдине джерело правди.
@@ -219,7 +219,7 @@ export component MainWindow inherits Window {
     callback act-pdf-clicked(string);
 
     // ── Колбеки форми акту ───────────────────────────────────────────────────
-    // number, date, cp_id, notes, category_id, contract_id, expected_payment_date
+    // Параметри: number, date, counterparty_id, notes, category_id, contract_id, expected_payment_date
     callback act-form-save(string, string, string, string, string, string, string);
     callback act-form-save-draft(string, string, string, string, string, string, string);
     callback act-form-update(string, string, string, string, string, string, string);
@@ -242,7 +242,7 @@ export component MainWindow inherits Window {
     callback invoice-pdf-clicked(string);
 
     // ── Колбеки форми накладної ──────────────────────────────────────────────
-    // number, date, cp_id, notes, category_id, contract_id, expected_payment_date
+    // Параметри: number, date, counterparty_id, notes, category_id, contract_id, expected_payment_date
     callback invoice-form-save(string, string, string, string, string, string, string);
     callback invoice-form-update(string, string, string, string, string, string, string);
     callback invoice-form-cancel();
@@ -288,7 +288,8 @@ export component MainWindow inherits Window {
     callback waybill-pdf-clicked(string);
 
     // ── Колбеки форми накладної (товарної) ──────────────────────────────────
-    // number, date, cp_id, notes, category_id, contract_id
+    // Параметри: number, date, counterparty_id, notes, category_id, contract_id
+    // Примітка: накладні товарів (WaybillRow) не мають expected_payment_date (на відміну від Acti/Invoice)
     callback waybill-form-save(string, string, string, string, string, string);
     callback waybill-form-update(string, string, string, string, string, string);
     callback waybill-form-cancel();
@@ -1021,14 +1022,16 @@ export component MainWindow inherits Window {
         background: Theme.overlay;
 
         Rectangle {
-            width: parent.width - 80px;
-            height: parent.height - 80px;
+            width: parent.width - Theme.modal-overlay-padding * 2;
+            height: parent.height - Theme.modal-overlay-padding * 2;
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
-            border-radius: 18px;
+            border-radius: Theme.modal-border-radius;
             background: Theme.bg-card;
             border-width: 1px;
             border-color: Theme.border;
+            drop-shadow-blur: Theme.modal-shadow-blur;
+            drop-shadow-color: Theme.modal-shadow-color;
             clip: true;
 
             CounterpartyCard {
@@ -1062,14 +1065,16 @@ export component MainWindow inherits Window {
         background: Theme.overlay;
 
         Rectangle {
-            width: parent.width - 80px;
-            height: parent.height - 80px;
+            width: parent.width - Theme.modal-overlay-padding * 2;
+            height: parent.height - Theme.modal-overlay-padding * 2;
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
-            border-radius: 18px;
+            border-radius: Theme.modal-border-radius;
             background: Theme.bg-card;
             border-width: 1px;
             border-color: Theme.border;
+            drop-shadow-blur: Theme.modal-shadow-blur;
+            drop-shadow-color: Theme.modal-shadow-color;
             clip: true;
 
             ActCard {
@@ -1097,14 +1102,16 @@ export component MainWindow inherits Window {
         background: Theme.overlay;
 
         Rectangle {
-            width: min(parent.width - 80px, 860px);
-            height: parent.height - 80px;
+            width: min(parent.width - Theme.modal-overlay-padding * 2, Theme.modal-max-width);
+            height: parent.height - Theme.modal-overlay-padding * 2;
             x: (parent.width  - self.width)  / 2;
             y: (parent.height - self.height) / 2;
-            border-radius: 18px;
+            border-radius: Theme.modal-border-radius;
             background: Theme.surface;
             border-width: 1px;
             border-color: Theme.border;
+            drop-shadow-blur: Theme.modal-shadow-blur;
+            drop-shadow-color: Theme.modal-shadow-color;
             clip: true;
 
             CounterpartyForm {
@@ -1132,16 +1139,16 @@ export component MainWindow inherits Window {
         background: Theme.overlay;
 
         Rectangle {
-            width: 680px;
-            height: 700px;
+            width: Theme.company-picker-width;
+            height: Theme.company-picker-height;
             x: (parent.width  - self.width)  / 2;
             y: 100px;
-            border-radius: 16px;
+            border-radius: Theme.modal-border-radius;
             background: Theme.bg-card;
             border-width: 1px;
             border-color: Theme.border;
-            drop-shadow-blur: 32px;
-            drop-shadow-color: Theme.shadow-xl;
+            drop-shadow-blur: Theme.modal-shadow-blur;
+            drop-shadow-color: Theme.modal-shadow-color;
 
             VerticalLayout {
                 padding: Theme.space-8;

@@ -14,14 +14,14 @@ pub use acta::models::{
     ActStatus as ModelActStatus,
     Company, CompanySummary, NewActItem, NewInvoiceItem,
     waybill::NewWaybillItem,
-    Task, TaskPriority,
+    Task, TaskPriority as ModelTaskPriority,
 };
 use acta::models::TaskStatus as ModelTaskStatus;
 
 // ── Slint-generated types ──────────────────────────────────────────────────────
 // Ці типи генеруються через slint::include_modules!() у main.rs.
 // Отримуємо їх через crate:: шлях (бінарний крейт = main.rs).
-use crate::{ActRow, ActStatus, CompanyItem, FormItemRow, TaskRow, TaskStatus};
+use crate::{ActRow, ActStatus, CompanyItem, FormItemRow, TaskPriority, TaskRow, TaskStatus};
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ── TableData ──────────────────────────────────────────────────────────────────
@@ -455,21 +455,21 @@ pub fn doc_direction_index(direction: &str) -> i32 {
 // ── Задачі ─────────────────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
 
-pub fn task_priority_from_index(index: i32) -> TaskPriority {
+pub fn task_priority_from_index(index: i32) -> ModelTaskPriority {
     match index {
-        0 => TaskPriority::Low,
-        1 => TaskPriority::Normal,
-        2 => TaskPriority::High,
-        _ => TaskPriority::Critical,
+        0 => ModelTaskPriority::Low,
+        1 => ModelTaskPriority::Normal,
+        2 => ModelTaskPriority::High,
+        _ => ModelTaskPriority::Critical,
     }
 }
 
-pub fn task_priority_index(priority: &TaskPriority) -> i32 {
+pub fn task_priority_index(priority: &ModelTaskPriority) -> i32 {
     match priority {
-        TaskPriority::Low => 0,
-        TaskPriority::Normal => 1,
-        TaskPriority::High => 2,
-        TaskPriority::Critical => 3,
+        ModelTaskPriority::Low => 0,
+        ModelTaskPriority::Normal => 1,
+        ModelTaskPriority::High => 2,
+        ModelTaskPriority::Critical => 3,
     }
 }
 
@@ -525,7 +525,12 @@ pub fn to_task_rows(tasks: &[Task]) -> Vec<TaskRow> {
                 ModelTaskStatus::Done       => TaskStatus::Done,
                 ModelTaskStatus::Cancelled  => TaskStatus::Cancelled,
             },
-            priority: SharedString::from(task.priority.as_str()),
+            priority: match task.priority {
+                ModelTaskPriority::Critical => TaskPriority::Critical,
+                ModelTaskPriority::High     => TaskPriority::High,
+                ModelTaskPriority::Normal   => TaskPriority::Normal,
+                ModelTaskPriority::Low      => TaskPriority::Low,
+            },
         })
         .collect()
 }

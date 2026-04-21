@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel, Weak};
+use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 
 use acta::app_ctx::AppCtx;
 use crate::{

@@ -10,7 +10,7 @@ component NavItem {
     in property <length> indent: 0px;
     callback clicked;
 
-    height: 32px;
+    height: Theme.nav-item-height;
     min-width: 0;
 
     Rectangle {
@@ -25,22 +25,22 @@ component NavItem {
         // accent bar on left edge when active
         if root.active : Rectangle {
             x: 0px;
-            y: (parent.height - 20px) / 2;
-            width: 3px;
-            height: 20px;
+            y: (parent.height - (Theme.nav-item-height - Theme.space-4)) / 2;
+            width: Theme.nav-item-accent-bar-width;
+            height: Theme.nav-item-height - Theme.space-4;
             border-radius: 2px;
             background: Theme.sidebar-active-bar;
         }
 
         HorizontalLayout {
-            padding-left: 10px + root.indent;
-            padding-right: 10px;
+            padding-left: Theme.nav-item-padding-x + root.indent;
+            padding-right: Theme.nav-item-padding-x;
             spacing: Theme.space-2;
             alignment: start;
 
             Rectangle {
-                width: 16px;
-                height: 16px;
+                width: Theme.icon-sm;
+                height: Theme.icon-sm;
                 y: (parent.height - self.height) / 2;
                 background: transparent;
                 opacity: root.disabled ? 0.4 : 1.0;
@@ -133,9 +133,9 @@ export component Sidebar {
 
         // right border
         Rectangle {
-            x: parent.width - 1px;
+            x: parent.width - Theme.divider-height;
             y: 0;
-            width: 1px;
+            width: Theme.divider-height;
             height: parent.height;
             background: Theme.border;
         }
@@ -146,7 +146,7 @@ export component Sidebar {
 
             // ── Company switcher ─────────────────────────────────────────────
             Rectangle {
-                height: 60px;
+                height: Theme.company-switcher-height;
                 vertical-stretch: 0;
                 background: switch-touch.has-hover ? Theme.sidebar-switcher-hover : transparent;
                 animate background { duration: 100ms; easing: ease; }
@@ -165,16 +165,17 @@ export component Sidebar {
 
                         // Acta logo square
                         Rectangle {
-                            width: 28px;
-                            height: 28px;
+                            width: Theme.logo-size;
+                            height: Theme.logo-size;
                             border-radius: Theme.radius-md;
                             background: Theme.primary;
                             y: (parent.height - self.height) / 2;
 
                             Image {
-                                x: 4px; y: 4px;
-                                width: 20px;
-                                height: 20px;
+                                x: (parent.width - Theme.logo-icon-size) / 2;
+                                y: (parent.height - Theme.logo-icon-size) / 2;
+                                width: Theme.logo-icon-size;
+                                height: Theme.logo-icon-size;
                                 source: Icons.sidebar-logo;
                                 image-fit: contain;
                                 colorize: Theme.text-white;
@@ -203,8 +204,8 @@ export component Sidebar {
                         }
 
                         Image {
-                            width: 13px;
-                            height: 13px;
+                            width: Theme.chevron-size;
+                            height: Theme.chevron-size;
                             source: Icons.chevron-down;
                             colorize: Theme.text-muted;
                             y: (parent.height - self.height) / 2;
@@ -215,7 +216,7 @@ export component Sidebar {
 
             // ── Divider ──────────────────────────────────────────────────────
             Rectangle {
-                height: 1px;
+                height: Theme.divider-height;
                 background: Theme.sidebar-divider;
                 vertical-stretch: 0;
             }
@@ -238,21 +239,21 @@ export component Sidebar {
 
                 // Documents group with expand toggle
                 Rectangle {
-                    height: 32px;
+                    height: Theme.nav-item-height;
                     vertical-stretch: 0;
                     border-radius: Theme.radius-md;
                     background: docs-ta.has-hover ? Theme.sidebar-hover : transparent;
                     animate background { duration: 100ms; easing: ease; }
 
                     HorizontalLayout {
-                        padding-left: Theme.space-2;
-                        padding-right: Theme.space-2;
+                        padding-left: Theme.nav-item-padding-x;
+                        padding-right: Theme.nav-item-padding-x;
                         spacing: Theme.space-2;
                         alignment: start;
 
                         Rectangle {
-                            width: 16px;
-                            height: 16px;
+                            width: Theme.icon-sm;
+                            height: Theme.icon-sm;
                             y: (parent.height - self.height) / 2;
                             Image {
                                 width: parent.width;
@@ -273,8 +274,8 @@ export component Sidebar {
                         }
 
                         Image {
-                            width: 10px;
-                            height: 10px;
+                            width: Theme.chevron-size;
+                            height: Theme.chevron-size;
                             source: Icons.chevron-down;
                             colorize: Theme.sidebar-icon;
                             y: (parent.height - self.height) / 2;
@@ -335,7 +336,7 @@ export component Sidebar {
             Rectangle { height: Theme.space-2; vertical-stretch: 0; }
 
             Rectangle {
-                height: 1px;
+                height: Theme.divider-height;
                 background: Theme.sidebar-divider;
                 vertical-stretch: 0;
             }
@@ -375,7 +376,7 @@ export component Sidebar {
 
             // ── Divider + Settings ───────────────────────────────────────────
             Rectangle {
-                height: 1px;
+                height: Theme.divider-height;
                 background: Theme.sidebar-divider;
                 vertical-stretch: 0;
             }

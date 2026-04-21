@@ -11,6 +11,34 @@ export enum ActStatus {
     paid,
 }
 
+export enum InvoiceStatus {
+    draft,
+    issued,
+    signed,
+    paid,
+}
+
+export enum WaybillStatus {
+    draft,
+    issued,
+    signed,
+    delivered,
+}
+
+export enum TaskStatus {
+    open,
+    in_progress,
+    done,
+    cancelled,
+}
+
+export enum TaskPriority {
+    critical,
+    high,
+    normal,
+    low,
+}
+
 export struct ActRow {
     id: string,
     num: string,
@@ -28,7 +56,7 @@ export struct InvoiceRow {
     counterparty: string,
     amount: string,
     status-label: string,
-    status: string,        // "draft" | "issued" | "signed" | "paid"
+    status: InvoiceStatus,
 }
 
 export struct TaskRow {
@@ -38,8 +66,8 @@ export struct TaskRow {
     due-date: string,
     reminder: string,
     status-label: string,
-    status: string,        // "open" | "in_progress" | "done" | "cancelled"
-    priority: string,      // "critical" | "high" | "normal" | "low"
+    status: TaskStatus,
+    priority: TaskPriority,
 }
 
 export struct PaymentRow {
@@ -60,7 +88,7 @@ export struct WaybillRow {
     counterparty: string,
     amount: string,
     status-label: string,
-    status: string,     // "draft" | "issued" | "signed" | "delivered"
+    status: WaybillStatus,
 }
 
 export struct FormItemRow {

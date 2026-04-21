@@ -128,4 +128,66 @@ export global Theme {
     out property <length> input-height:     40px;  // поля вводу (forms + searches)
     out property <length> page-padding-x:   32px;  // горизонтальний padding контенту сторінки
     out property <length> page-padding-y:   24px;  // вертикальний padding контенту сторінки
+
+    // ── Іконки ───────────────────────────────────────────
+    out property <length> icon-xs:  12px;
+    out property <length> icon-sm:  16px;
+    out property <length> icon-md:  20px;
+    out property <length> icon-lg:  24px;
+    out property <length> icon-xl:  32px;
+
+    // ── Таблиці — ширини колон (гіб) ──────────────────────
+    out property <length> col-icon:       48px;  // для іконок дій, checkbox
+    out property <length> col-narrow:     80px;  // статус, сума (2-3 слова)
+    out property <length> col-small:      100px; // номер, дата
+    out property <length> col-medium:     110px; // назва, контрагент
+    out property <length> col-wide:       130px; // опис, текст
+    out property <length> col-larger:     180px; // довгий текст
+    out property <length> col-actions:    72px;  // розмір блоку дій
+    out property <length> col-reconciled: 64px;  // прапорець зведення платежів
+    out property <length> table-header-height: 40px;
+    out property <length> table-header-padding: 16px;
+    out property <length> action-btn-size: 30px; // кнопка редагування/видалення
+
+    // ── Форми ─────────────────────────────────────────────
+    out property <length> form-field-height: Theme.input-height;
+    out property <length> form-textarea-height: 88px;
+    out property <length> form-group-spacing: Theme.space-4;
+    out property <length> form-label-height: 18px;
+
+    // ── Списки документів ──────────────────────────────────
+    out property <length> list-min-width: 600px;
+    out property <length> list-min-height: 400px;
+    out property <length> topbar-button-width: 140px;
+    out property <length> filter-button-width: 80px;
+
+    // ── Дільники ──────────────────────────────────────────
+    out property <length> divider-height: 1px;
+
+    // ── Sidebar ───────────────────────────────────────────
+    out property <length> nav-item-height:    32px;
+    out property <length> company-switcher-height: 60px;
+    out property <length> logo-size: 28px;
+    out property <length> logo-icon-size: 20px;
+    out property <length> chevron-size: 10px;
+    out property <length> nav-item-padding-x: Theme.space-2;
+    out property <length> nav-item-accent-bar-width: 3px;
+
+    // ── Вікно ─────────────────────────────────────────────
+    out property <length> window-min-width:  1100px;
+    out property <length> window-min-height: 680px;
+    out property <length> window-pref-width:  1440px;
+    out property <length> window-pref-height: 900px;
+
+    // ── EmptyState ────────────────────────────────────────────
+    out property <length> empty-state-size: 56px;
+
+    // ── Модальні вікна / Overlay ──────────────────────────────
+    out property <length> modal-overlay-padding: 40px;  // 80px / 2 (відступ з обох сторін)
+    out property <length> modal-max-width:       860px; // CounterpartyForm, ActForm max width
+    out property <length> modal-border-radius:   18px;  // округлення overlay
+    out property <length> modal-shadow-blur:     32px;  // drop-shadow для всіх modal/overlay
+    out property <color>  modal-shadow-color:    Theme.shadow-xl;
+    out property <length> company-picker-width:  680px;
+    out property <length> company-picker-height: 700px;
 }

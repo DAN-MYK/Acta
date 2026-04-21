@@ -3,7 +3,8 @@
 import { Theme } from "../theme.slint";
 import { ProgressIndicator, ListView } from "std-widgets.slint";
 import { Icons } from "../components/icons.slint";
-import { TaskRow } from "../structs.slint";
+import { TaskRow, TaskStatus, TaskPriority } from "../structs.slint";
+import { EmptyStateIcon } from "../components/form_elements.slint";
 
 export component TaskList {
 
@@ -23,16 +24,16 @@ export component TaskList {
     callback edit-clicked(string);
 
     // ── Внутрішній стан ──────────────────────────────────────────────────────
-    private property <int>    selected-row: -1;
-    private property <string> selected-id: "";
-    private property <string> selected-status: "";
-    private property <string> selected-title: "";
-    private property <string> selected-priority: "";
-    private property <bool>   delete-confirm-armed: false;
-    private property <int>    active-tab: 0;   // 0=Відкриті, 1=Виконані, 2=Всі
+    private property <int>       selected-row: -1;
+    private property <string>    selected-id: "";
+    private property <TaskStatus> selected-status: TaskStatus.open;
+    private property <string>    selected-title: "";
+    private property <string>    selected-priority: "";
+    private property <bool>      delete-confirm-armed: false;
+    private property <int>       active-tab: 0;   // 0=Відкриті, 1=Виконані, 2=Всі
 
     min-width: 700px;
-    min-height: 400px;
+    min-height: Theme.list-min-height;
 
     HorizontalLayout {
         spacing: 0;
@@ -279,21 +280,12 @@ export component TaskList {
 
                                 VerticalLayout {
                                     alignment: center;
-                                    spacing: Theme.space-2;
+                                    spacing: Theme.space-3;
 
                                     HorizontalLayout {
                                         alignment: center;
-                                        Rectangle {
-                                            width: 56px; height: 56px;
-                                            border-radius: 28px;
-                                            background: Theme.bg-gray;
-                                            Image {
-                                                x: 10px; y: 10px;
-                                                width: 36px; height: 36px;
-                                                source: Icons.tasks;
-                                                image-fit: contain;
-                                                colorize: Theme.text-muted;
-                                            }
+                                        EmptyStateIcon {
+                                            icon: Icons.tasks;
                                         }
                                     }
                                     Text {
@@ -316,32 +308,32 @@ export component TaskList {
                                 vertical-stretch: 1;
 
                                 for row[i] in root.rows : Rectangle {
-                                    property <bool> is-open: row.status == "open" || row.status == "in_progress";
+                                    property <bool> is-open: row.status == TaskStatus.open || row.status == TaskStatus.in_progress;
                                     property <bool> show-row:
                                         root.active-tab == 2 ||
                                         (root.active-tab == 0 && self.is-open) ||
-                                        (root.active-tab == 1 && row.status == "done");
+                                        (root.active-tab == 1 && row.status == TaskStatus.done);
 
                                     property <color> status-color:
-                                        row.status == "done"        ? Theme.success :
-                                        row.status == "in_progress" ? Theme.primary :
-                                        row.status == "cancelled"   ? Theme.text-muted :
+                                        row.status == TaskStatus.done        ? Theme.success :
+                                        row.status == TaskStatus.in_progress ? Theme.primary :
+                                        row.status == TaskStatus.cancelled   ? Theme.text-muted :
                                         Theme.warning;
                                     property <color> status-bg:
-                                        row.status == "done"        ? #1EB16E1F :
-                                        row.status == "in_progress" ? #3D75F41A :
-                                        row.status == "cancelled"   ? #ABABB71F :
-                                        #F4A31E1F;
+                                        row.status == TaskStatus.done        ? Theme.success.with-alpha(12%) :
+                                        row.status == TaskStatus.in_progress ? Theme.primary.with-alpha(10%) :
+                                        row.status == TaskStatus.cancelled   ? Theme.text-muted.with-alpha(12%) :
+                                        Theme.warning.with-alpha(12%);
                                     property <color> priority-color:
-                                        row.priority == "critical" ? Theme.priority-critical :
-                                        row.priority == "high"     ? Theme.priority-high :
-                                        row.priority == "normal"   ? Theme.primary :
+                                        row.priority == TaskPriority.critical ? Theme.priority-critical :
+                                        row.priority == TaskPriority.high     ? Theme.priority-high :
+                                        row.priority == TaskPriority.normal   ? Theme.primary :
                                         Theme.text-muted;
                                     property <color> priority-bg:
-                                        row.priority == "critical" ? #DC26261A :
-                                        row.priority == "high"     ? #F973161A :
-                                        row.priority == "normal"   ? #3D75F41A :
-                                        #ABABB71A;
+                                        row.priority == TaskPriority.critical ? Theme.priority-critical.with-alpha(10%) :
+                                        row.priority == TaskPriority.high     ? Theme.priority-high.with-alpha(10%) :
+                                        row.priority == TaskPriority.normal   ? Theme.primary.with-alpha(10%) :
+                                        Theme.text-muted.with-alpha(10%);
 
                                     height: self.show-row ? 48px : 0px;
                                     clip: true;
@@ -365,15 +357,15 @@ export component TaskList {
                                                 x: 0;
                                                 y: (parent.height - 15px) / 2;
                                                 width: 15px; height: 15px;
-                                                source: row.status == "done" ? Icons.check : Icons.uncheck;
+                                                source: row.status == TaskStatus.done ? Icons.check : Icons.uncheck;
                                                 image-fit: contain;
-                                                colorize: row.status == "done" ? Theme.success : Theme.text-muted;
+                                                colorize: row.status == TaskStatus.done ? Theme.success : Theme.text-muted;
                                             }
                                         }
 
                                         Text {
                                             text: row.title;
-                                            color: row.status == "done" ? Theme.text-muted : Theme.text-primary;
+                                            color: row.status == TaskStatus.done ? Theme.text-muted : Theme.text-primary;
                                             font-size: Theme.font-base;
                                             font-weight: 500;
                                             horizontal-stretch: 3;
@@ -476,7 +468,7 @@ export component TaskList {
                             border-radius: Theme.radius-sm;
                             border-width: 1px;
                             border-color: Theme.border;
-                            height: 32px;
+                            height: Theme.btn-md-height;
                             width: 116px;
                             y: (parent.height - self.height) / 2;
                             animate background { duration: 80ms; easing: ease; }
@@ -511,9 +503,9 @@ export component TaskList {
                         }
 
                         Rectangle {
-                            background: root.selected-status == "done" ? Theme.bg-success : Theme.primary;
+                            background: root.selected-status == TaskStatus.done ? Theme.bg-success : Theme.primary;
                             border-radius: Theme.radius-sm;
-                            height: 32px;
+                            height: Theme.btn-md-height;
                             width: 150px;
                             y: (parent.height - self.height) / 2;
 
@@ -524,12 +516,12 @@ export component TaskList {
                                     width: 13px; height: 13px;
                                     source: Icons.check;
                                     image-fit: contain;
-                                    colorize: root.selected-status == "done" ? Theme.success : Theme.text-white;
+                                    colorize: root.selected-status == TaskStatus.done ? Theme.success : Theme.text-white;
                                     vertical-alignment: center;
                                 }
                                 Text {
-                                    text: root.selected-status == "done" ? "Завершено" : "Завершити";
-                                    color: root.selected-status == "done" ? Theme.success : Theme.text-white;
+                                    text: root.selected-status == TaskStatus.done ? "Завершено" : "Завершити";
+                                    color: root.selected-status == TaskStatus.done ? Theme.success : Theme.text-white;
                                     font-size: Theme.font-sm;
                                     font-weight: 500;
                                     vertical-alignment: center;
@@ -537,9 +529,9 @@ export component TaskList {
                             }
 
                             TouchArea {
-                                mouse-cursor: root.selected-status != "done" ? pointer : default;
+                                mouse-cursor: root.selected-status != TaskStatus.done ? pointer : default;
                                 clicked => {
-                                    if root.selected-id != "" && root.selected-status != "done" {
+                                    if root.selected-id != "" && root.selected-status != TaskStatus.done {
                                         root.delete-confirm-armed = false;
                                         root.toggle-status-clicked(root.selected-id);
                                     }
@@ -552,7 +544,7 @@ export component TaskList {
                             border-radius: Theme.radius-sm;
                             border-width: 1px;
                             border-color: del-ta.has-hover ? Theme.danger-border : Theme.border;
-                            height: 32px;
+                            height: Theme.btn-md-height;
                             width: root.delete-confirm-armed ? 140px : 96px;
                             y: (parent.height - self.height) / 2;
                             animate width { duration: 120ms; easing: ease; }
@@ -638,7 +630,7 @@ export component TaskList {
                     vertical-stretch: 1;
 
                     for row in root.rows : Rectangle {
-                        property <bool> is-active: row.status == "open" || row.status == "in_progress";
+                        property <bool> is-active: row.status == TaskStatus.open || row.status == TaskStatus.in_progress;
                         height: self.is-active ? 54px : 0px;
                         clip: true;
                         background: transparent;
@@ -658,9 +650,9 @@ export component TaskList {
                                 width: 5px; height: 5px;
                                 border-radius: 3px;
                                 background:
-                                    row.priority == "critical" ? Theme.priority-critical :
-                                    row.priority == "high"     ? Theme.priority-high :
-                                    row.priority == "normal"   ? Theme.primary :
+                                    row.priority == TaskPriority.critical ? Theme.priority-critical :
+                                    row.priority == TaskPriority.high     ? Theme.priority-high :
+                                    row.priority == TaskPriority.normal   ? Theme.primary :
                                     Theme.text-muted;
                                 y: (parent.height - self.height) / 2;
                             }
