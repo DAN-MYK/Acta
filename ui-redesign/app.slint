@@ -1,0 +1,459 @@
+// Acta — Main application entry point
+// Wires Shell + all screen components together.
+// Navigation driven by NavScreen enum; Shell emits nav-changed callback.
+//
+// Icon loading: compile-time @image-url → passed as `in property <image>` down
+// the tree. All monetary strings pre-formatted in Rust before binding.
+
+import { AppTheme } from "design-tokens.slint";
+import { NavScreen } from "types.slint";
+import {
+    DocumentItem, CounterpartyItem, PaymentItem, TaskItem,
+    MonthlyData, AccountItem, DashboardMetrics, JournalRow,
+    CounterpartyDetails, ReportMetrics, ExpenseCategory, DrillRow,
+    CompanyInfo, IntegrationItem, TeamMember, NumberingRow, DayEvent,
+    DocumentKind, DocumentStatus, Priority, Direction,
+    ChartBar, InboxItem,
+} from "types.slint";
+import { Shell } from "shell.slint";
+import { Dashboard } from "dashboard.slint";
+import { Documents } from "documents.slint";
+import { Counterparties } from "counterparties.slint";
+import { Payments } from "payments.slint";
+import { Reports } from "reports.slint";
+import { Tasks } from "tasks.slint";
+import { Settings } from "settings.slint";
+
+// ── Icon bundle (loaded once at compile time) ─────────────────────────────────
+global Icons {
+    out property <image> home:          @image-url("../ui/assets/icons/Home.svg");
+    out property <image> documents:     @image-url("../ui/assets/icons/Documents.svg");
+    out property <image> counterparties:@image-url("../ui/assets/icons/Counterparties.svg");
+    out property <image> payments:      @image-url("../ui/assets/icons/Payments.svg");
+    out property <image> reports:       @image-url("../ui/assets/icons/Reports.svg");
+    out property <image> tasks:         @image-url("../ui/assets/icons/To-Do.svg");
+    out property <image> settings:      @image-url("../ui/assets/icons/Settings.svg");
+
+    out property <image> search:        @image-url("../ui/assets/icons/Search.svg");
+    out property <image> check:         @image-url("../ui/assets/icons/Check.svg");
+    out property <image> close:         @image-url("../ui/assets/icons/Close.svg");
+    out property <image> more:          @image-url("../ui/assets/icons/More.svg");
+    out property <image> plus:          @image-url("../ui/assets/icons/New.svg");
+    out property <image> edit:          @image-url("../ui/assets/icons/Edit.svg");
+    out property <image> sort:          @image-url("../ui/assets/icons/Sort.svg");
+    out property <image> refresh:       @image-url("../ui/assets/icons/Refresh.svg");
+    out property <image> calendar:      @image-url("../ui/assets/icons/Calendar.svg");
+    out property <image> link:          @image-url("../ui/assets/icons/Archive.svg");
+    out property <image> pdf:           @image-url("../ui/assets/icons/PDF-Print.svg");
+    out property <image> chart-bar:     @image-url("../ui/assets/icons/Chart-Bar.svg");
+    out property <image> uah:           @image-url("../ui/assets/icons/UAH.svg");
+
+    // Status icons
+    out property <image> draft:         @image-url("../ui/assets/icons/Draft.svg");
+    out property <image> issued:        @image-url("../ui/assets/icons/Issued.svg");
+    out property <image> signed:        @image-url("../ui/assets/icons/Signed.svg");
+    out property <image> paid:          @image-url("../ui/assets/icons/Paid.svg");
+    out property <image> overdue:       @image-url("../ui/assets/icons/Overdue.svg");
+    out property <image> incoming:      @image-url("../ui/assets/icons/Incoming.svg");
+    out property <image> outgoing:      @image-url("../ui/assets/icons/Outgoing.svg");
+    out property <image> arrow-left:    @image-url("../ui/assets/icons/Arrow-Left.svg");
+    out property <image> arrow-right:   @image-url("../ui/assets/icons/Arrow-Right.svg");
+}
+
+// ── AppWindow ─────────────────────────────────────────────────────────────────
+export component AppWindow inherits Window {
+    title: "Acta";
+    preferred-width: 1440px;
+    preferred-height: 900px;
+    min-width: 1024px;
+    min-height: 640px;
+    background: AppTheme.bg;
+
+    // ── Navigation state ───────────────────────────────────────────────────
+    in-out property <NavScreen> current-screen: NavScreen.Dashboard;
+
+    // ── Shell / sidebar data ───────────────────────────────────────────────
+    in property <string> company-name: "ТОВ «Альфа-Бізнес»";
+    in property <string> user-name:    "Михайло Дзюба";
+    in property <string> user-initials: "МД";
+    in property <int> documents-badge: 0;
+    in property <int> tasks-badge: 0;
+
+    // ── Dashboard data ─────────────────────────────────────────────────────
+    in property <DashboardMetrics> dash-metrics;
+    in property <[ChartBar]> dash-chart-bars;
+    in property <[JournalRow]> dash-journal;
+    in property <[AccountItem]> dash-accounts;
+    in property <[TaskItem]> dash-tasks;
+    in property <string> dash-revenue-str;
+    in property <string> dash-expenses-str;
+    in property <string> dash-net-str;
+    in property <string> dash-outstanding-str;
+    in property <string> dash-overdue-str;
+    in property <[InboxItem]> dash-inbox;
+
+    // ── Documents data ─────────────────────────────────────────────────────
+    in property <[DocumentItem]> all-documents;
+    in property <string> docs-search: "";
+    in property <string> docs-filter-tab: "all";   // "all"|"invoice"|"act"|"waybill"
+    in property <[string]> docs-selected-ids;
+    in property <int> docs-total-count;
+    in-out property <int> docs-page: 1;
+    in property <int> docs-page-count: 1;
+
+    // ── Counterparties data ────────────────────────────────────────────────
+    in property <[CounterpartyItem]> counterparties;
+    in property <CounterpartyDetails> cp-detail;
+    in property <[DocumentItem]> cp-documents;
+    in property <[PaymentItem]> cp-payments;
+    in-out property <string> cp-selected-id: "";
+    in-out property <string> cp-search: "";
+    in property <string> cp-balance-str;
+    in property <string> cp-overdue-amount-str;
+    // Pre-formatted cp metrics
+    in property <string> cp-balance-display;
+    in property <string> cp-doc-count-str;
+    in property <string> cp-overdue-str;
+    in property <string> cp-last-contact-str;
+
+    // ── Payments data ──────────────────────────────────────────────────────
+    in property <[PaymentItem]> payments;
+    in property <string> pay-incoming-str;
+    in property <string> pay-outgoing-str;
+    in property <string> pay-net-str;
+    in property <string> pay-unmatched-str;
+    in property <string> pay-incoming-sub;
+    in property <string> pay-outgoing-sub;
+    in property <int> pay-unmatched-count;
+
+    // ── Reports data ───────────────────────────────────────────────────────
+    in property <ReportMetrics> rep-metrics;
+    in property <[ChartBar]> rep-chart-bars;
+    in property <[ExpenseCategory]> rep-categories;
+    in property <[DrillRow]> rep-drill-rows;
+    in property <string> rep-revenue-str;
+    in property <string> rep-expenses-str;
+    in property <string> rep-profit-str;
+    in property <string> rep-margin-str;
+
+    // ── Tasks data ─────────────────────────────────────────────────────────
+    in property <[TaskItem]> tasks-open;
+    in property <[TaskItem]> tasks-done;
+    in property <[TaskItem]> tasks-all;
+    in property <[DayEvent]> day-events;
+    in property <int> tasks-open-count;
+    in property <int> tasks-high-count;
+    in property <int> tasks-done-count;
+    in property <string> tasks-today-label;
+
+    // ── Settings data ──────────────────────────────────────────────────────
+    in property <CompanyInfo> company-info;
+    in property <[IntegrationItem]> integrations;
+    in property <[TeamMember]> team-members;
+    in property <[NumberingRow]> numbering-rows;
+    in property <string> last-backup-label;
+    in property <string> last-backup-file;
+
+    // ── Outbound callbacks ─────────────────────────────────────────────────
+    // Navigation
+    callback nav-changed(NavScreen);
+
+    // Documents
+    callback doc-search-changed(string);
+    callback doc-tab-changed(string);
+    callback doc-toggled(string, bool);
+    callback doc-open(string);
+    callback doc-send(string);
+    callback doc-delete(string);
+    callback doc-new;
+    callback doc-page-changed(int);
+
+    // Counterparties
+    callback cp-selected(string);
+    callback cp-search-changed(string);
+    callback cp-new;
+    callback cp-create-doc(string);
+    callback cp-tab-changed(string);
+
+    // Payments
+    callback pay-import-csv;
+    callback pay-sync-bank;
+    callback pay-new;
+    callback pay-link(string);
+
+    // Reports
+    callback rep-period-changed(int);
+    callback rep-category-drilled(string);
+    callback rep-export-csv;
+    callback rep-export-pdf;
+
+    // Dashboard inbox
+    callback inbox-action(string, string);
+
+    // Tasks
+    callback task-toggled(string, bool);
+    callback task-more(string);
+    callback task-new;
+    callback task-filter-changed(string);
+
+    // Settings
+    callback settings-section-changed(string);
+    callback settings-dark-mode-toggled(bool);
+    callback settings-density-changed(int);
+    callback settings-company-saved(CompanyInfo);
+    callback settings-integration-configure(string);
+    callback settings-team-invite;
+    callback settings-backup-now;
+    callback settings-backup-download;
+
+    // Command palette
+    callback palette-query-changed(string);
+    callback palette-item-activated(string);
+
+    // ── Internal state ─────────────────────────────────────────────────────
+    property <string> docs-tab-state: "all";
+    property <string> docs-search-state: "";
+    property <string> tasks-filter-state: "open";
+    property <string> rep-drill-state: "";
+    property <int> rep-period-state: 1;
+    property <string> cp-detail-tab-state: "docs";
+    property <string> settings-section-state: "appearance";
+    property <bool> palette-open: false;
+    property <string> palette-query-state: "";
+
+    // ── Shell (sidebar + header + content slot) ────────────────────────────
+    Shell {
+        width: root.width;
+        height: root.height;
+
+        // Shell inputs
+        current-screen: root.current-screen;
+        company-name: root.company-name;
+        user-name: root.user-name;
+        user-initials: root.user-initials;
+        documents-badge: root.documents-badge;
+        tasks-badge: root.tasks-badge;
+        is-dark: AppTheme.is-dark;
+        cmd-palette-open: root.palette-open;
+
+        // Icons
+        icon-home:           Icons.home;
+        icon-documents:      Icons.documents;
+        icon-counterparties: Icons.counterparties;
+        icon-payments:       Icons.payments;
+        icon-reports:        Icons.reports;
+        icon-tasks:          Icons.tasks;
+        icon-settings:       Icons.settings;
+        icon-search:         Icons.search;
+        icon-close:          Icons.close;
+        icon-plus:           Icons.plus;
+        icon-more:           Icons.more;
+        icon-bell:           Icons.search;  // placeholder — no bell icon in bundle
+        icon-sun:            Icons.uah;     // placeholder
+        icon-moon:           Icons.uah;     // placeholder
+        icon-chevron-down:   Icons.sort;    // placeholder
+        icon-star:           Icons.uah;     // placeholder
+        icon-enter:          Icons.arrow-right;
+        logo:                Icons.home;    // placeholder
+
+        // Shell callbacks
+        navigate(screen) => {
+            root.current-screen = screen;
+            root.nav-changed(screen);
+        }
+        toggle-theme => {
+            AppTheme.is-dark = !AppTheme.is-dark;
+            root.settings-dark-mode-toggled(AppTheme.is-dark);
+        }
+        open-cmd-palette => { root.palette-open = true; }
+        close-cmd-palette => { root.palette-open = false; }
+
+        // ── Screen content ─────────────────────────────────────────────────
+        if root.current-screen == NavScreen.Dashboard : Dashboard {
+            width: 100%;
+            height: 100%;
+
+            metrics: root.dash-metrics;
+            chart-bars: root.dash-chart-bars;
+            journal: root.dash-journal;
+            accounts: root.dash-accounts;
+            tasks: root.dash-tasks;
+            revenue-str: root.dash-revenue-str;
+            expenses-str: root.dash-expenses-str;
+            net-str: root.dash-net-str;
+            outstanding-str: root.dash-outstanding-str;
+            overdue-str: root.dash-overdue-str;
+
+            icon-check: Icons.check;
+            icon-plus: Icons.plus;
+            icon-arrow-right: Icons.arrow-right;
+            icon-chevron-down: Icons.sort;
+
+            inbox: root.dash-inbox;
+            inbox-action(id, kind) => { root.inbox-action(id, kind); }
+            task-toggled(id, done) => { root.task-toggled(id, done); }
+            new-task => { root.task-new(); }
+        }
+
+        if root.current-screen == NavScreen.Documents : Documents {
+            width: 100%;
+            height: 100%;
+
+            all-docs: root.all-documents;
+            search-query: root.docs-search-state;
+            selected-ids: root.docs-selected-ids;
+            total-count: root.docs-total-count;
+            page: root.docs-page;
+            total-pages: root.docs-page-count;
+
+            icon-search: Icons.search;
+            icon-more: Icons.more;
+            icon-plus: Icons.plus;
+            icon-pdf: Icons.pdf;
+            icon-invoice: Icons.documents;
+            icon-act: Icons.documents;
+            icon-waybill: Icons.documents;
+            icon-edit: Icons.edit;
+            icon-check: Icons.check;
+            icon-chevron-left: Icons.arrow-left;
+            icon-chevron-right: Icons.arrow-right;
+            icon-close: Icons.close;
+            search-changed(q) => { root.docs-search-state = q; root.doc-search-changed(q); }
+            tab-changed(t) => { root.docs-tab-state = t; root.doc-tab-changed(t); }
+            row-selected(id, sel) => { root.doc-toggled(id, sel); }
+            open-document(id) => { root.doc-open(id); }
+            pdf-export(id) => { root.doc-send(id); }
+            edit-document(id) => { root.doc-open(id); }
+            create-document => { root.doc-new(); }
+            page-changed(p) => { root.docs-page = p; root.doc-page-changed(p); }
+        }
+
+        if root.current-screen == NavScreen.Counterparties : Counterparties {
+            width: 100%;
+            height: 100%;
+
+            list: root.counterparties;
+            detail: root.cp-detail;
+            detail-docs: root.cp-documents;
+            detail-payments: root.cp-payments;
+            selected-id: root.cp-selected-id;
+            search-query: root.cp-search;
+            active-tab: root.cp-detail-tab-state;
+            detail-balance-str: root.cp-balance-display;
+            detail-overdue-str: root.cp-overdue-str;
+
+            icon-search: Icons.search;
+            icon-plus: Icons.plus;
+            icon-more: Icons.more;
+            icon-edit: Icons.edit;
+
+            select(id) => { root.cp-selected-id = id; root.cp-selected(id); }
+            search-changed(q) => { root.cp-search = q; root.cp-search-changed(q); }
+            tab-changed(t) => { root.cp-detail-tab-state = t; root.cp-tab-changed(t); }
+            edit-cp(id) => { root.cp-selected(id); }
+            create-doc(id) => { root.cp-create-doc(id); }
+        }
+
+        if root.current-screen == NavScreen.Payments : Payments {
+            width: 100%;
+            height: 100%;
+
+            payments: root.payments;
+            incoming-str: root.pay-incoming-str;
+            outgoing-str: root.pay-outgoing-str;
+            net-str: root.pay-net-str;
+            unmatched-str: root.pay-unmatched-str;
+            incoming-sub: root.pay-incoming-sub;
+            outgoing-sub: root.pay-outgoing-sub;
+            unmatched-count: root.pay-unmatched-count;
+
+            icon-plus: Icons.plus;
+            icon-link: Icons.link;
+
+            import-csv => { root.pay-import-csv(); }
+            sync-bank => { root.pay-sync-bank(); }
+            new-payment => { root.pay-new(); }
+            link-payment(id) => { root.pay-link(id); }
+        }
+
+        if root.current-screen == NavScreen.Reports : Reports {
+            width: 100%;
+            height: 100%;
+
+            metrics: root.rep-metrics;
+            chart-bars: root.rep-chart-bars;
+            categories: root.rep-categories;
+            drill-rows: root.rep-drill-rows;
+            revenue-str: root.rep-revenue-str;
+            expenses-str: root.rep-expenses-str;
+            profit-str: root.rep-profit-str;
+            margin-str: root.rep-margin-str;
+            drill-category: root.rep-drill-state;
+            period: root.rep-period-state;
+
+            icon-calendar: Icons.calendar;
+            icon-pdf: Icons.pdf;
+            icon-close: Icons.close;
+
+            period-changed(p) => { root.rep-period-state = p; root.rep-period-changed(p); }
+            category-drilled(cat) => { root.rep-drill-state = cat; root.rep-category-drilled(cat); }
+            export-csv => { root.rep-export-csv(); }
+            export-pdf => { root.rep-export-pdf(); }
+        }
+
+        if root.current-screen == NavScreen.Tasks : Tasks {
+            width: 100%;
+            height: 100%;
+
+            open-tasks: root.tasks-open;
+            done-tasks: root.tasks-done;
+            all-tasks: root.tasks-all;
+            day-events: root.day-events;
+            open-count: root.tasks-open-count;
+            high-count: root.tasks-high-count;
+            done-count: root.tasks-done-count;
+            today-label: root.tasks-today-label;
+            filter: root.tasks-filter-state;
+
+            icon-check: Icons.check;
+            icon-calendar: Icons.calendar;
+            icon-more: Icons.more;
+            icon-plus: Icons.plus;
+
+            filter-changed(f) => { root.tasks-filter-state = f; root.task-filter-changed(f); }
+            task-toggled(id, done) => { root.task-toggled(id, done); }
+            task-more(id) => { root.task-more(id); }
+            new-task => { root.task-new(); }
+        }
+
+        if root.current-screen == NavScreen.Settings : Settings {
+            width: 100%;
+            height: 100%;
+
+            company: root.company-info;
+            integrations: root.integrations;
+            team: root.team-members;
+            numbering: root.numbering-rows;
+            section: root.settings-section-state;
+            dark-mode: AppTheme.is-dark;
+            last-backup-label: root.last-backup-label;
+            last-backup-file: root.last-backup-file;
+
+            icon-more: Icons.more;
+            icon-plus: Icons.plus;
+            icon-check: Icons.check;
+
+            section-changed(s) => { root.settings-section-state = s; root.settings-section-changed(s); }
+            dark-mode-toggled(dark) => {
+                AppTheme.is-dark = dark;
+                root.settings-dark-mode-toggled(dark);
+            }
+            density-changed(d) => { root.settings-density-changed(d); }
+            company-saved(c) => { root.settings-company-saved(c); }
+            integration-configure(label) => { root.settings-integration-configure(label); }
+            team-invite => { root.settings-team-invite(); }
+            backup-now => { root.settings-backup-now(); }
+            backup-download => { root.settings-backup-download(); }
+        }
+    }
+}

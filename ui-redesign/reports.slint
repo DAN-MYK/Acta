@@ -1,0 +1,428 @@
+// Acta — Reports screen
+// Period selector + KPI strip + bar chart + expense categories + drill-down.
+// Drill-down: click category row → shows detail table below.
+
+import { AppTheme } from "design-tokens.slint";
+import { ReportMetrics, ExpenseCategory, DrillRow, ChartBar } from "types.slint";
+import {
+    Card, HDivider, VDivider, Badge,
+    GhostButton, SecondaryButton, PrimaryButton,
+    HeadingSm, BarChart, SimpleProgressBar, SectionLabel
+} from "components.slint";
+
+// ── Report KPI metric ─────────────────────────────────────────────────────────
+component RepMetric inherits VerticalLayout {
+    in property <string> label;
+    in property <string> value;
+    in property <string> suffix: "₴";
+    in property <string> delta: "";
+    in property <bool> delta-positive: true;
+
+    horizontal-stretch: 1;
+    padding-right: 20px;
+    spacing: 4px;
+
+    Text {
+        text: root.label;
+        color: AppTheme.text-faint;
+        font-size: 10.5px;
+        font-family: AppTheme.font-sans;
+        font-weight: 600;
+        letter-spacing: 1.2px;
+    }
+
+    HorizontalLayout {
+        spacing: 3px;
+        Text {
+            text: root.value;
+            color: AppTheme.text;
+            font-family: AppTheme.font-serif;
+            font-size: 26px;
+            font-weight: 500;
+            letter-spacing: -0.4px;
+        }
+        if suffix != "" : Text {
+            text: root.suffix;
+            color: AppTheme.text-faint;
+            font-family: AppTheme.font-serif;
+            font-size: 15px;
+            font-weight: 400;
+            vertical-alignment: center;
+        }
+    }
+
+    if delta != "" : HorizontalLayout {
+        spacing: 4px;
+
+        Text {
+            text: root.delta;
+            color: root.delta-positive ? AppTheme.success : AppTheme.danger;
+            font-size: 11.5px;
+            font-family: AppTheme.font-mono;
+        }
+        Text {
+            text: "vs попер. квартал";
+            color: AppTheme.text-faint;
+            font-size: 11.5px;
+            font-family: AppTheme.font-sans;
+        }
+    }
+}
+
+// ── Period pill button ────────────────────────────────────────────────────────
+component PeriodBtn inherits Rectangle {
+    in property <string> label;
+    in property <bool> active: false;
+    callback clicked;
+
+    height: 28px;
+    min-width: lbl.preferred-width + 28px;
+    background: active ? AppTheme.bg : transparent;
+    border-radius: 4px;
+    border-width: active ? 1px : 0px;
+    border-color: AppTheme.border;
+
+    lbl := Text {
+        text: root.label;
+        color: active ? AppTheme.text : AppTheme.text-muted;
+        font-size: 12px;
+        font-family: AppTheme.font-sans;
+        font-weight: active ? 500 : 400;
+        vertical-alignment: center;
+        horizontal-alignment: center;
+    }
+
+    TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
+// ── Expense category row ──────────────────────────────────────────────────────
+component CategoryRow inherits Rectangle {
+    in property <ExpenseCategory> cat;
+    in property <bool> active: false;
+    callback clicked(string);
+
+    property <bool> hovered: false;
+
+    height: 56px;
+    background:
+        active  ? AppTheme.accent-soft :
+        hovered ? AppTheme.bg-hover    :
+        transparent;
+
+    // Left accent when active
+    if active : Rectangle {
+        x: 0; y: 0;
+        width: 2px;
+        height: root.height;
+        background: AppTheme.accent;
+    }
+
+    VerticalLayout {
+        padding-left: 18px;
+        padding-right: 18px;
+        padding-top: 12px;
+        padding-bottom: 12px;
+        spacing: 6px;
+
+        HorizontalLayout {
+            alignment: stretch;
+
+            Text {
+                text: root.cat.label;
+                color: AppTheme.text;
+                font-size: 13px;
+                font-family: AppTheme.font-sans;
+                font-weight: active ? 500 : 400;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+
+            HorizontalLayout {
+                spacing: 6px;
+                Text {
+                    text: root.cat.amount;
+                    color: AppTheme.text-muted;
+                    font-family: AppTheme.font-mono;
+                    font-size: 12px;
+                    vertical-alignment: center;
+                }
+                Text { text: "₴"; color: AppTheme.text-faint; font-size: 12px; vertical-alignment: center; }
+                Text { text: "·"; color: AppTheme.text-faint; font-size: 12px; vertical-alignment: center; }
+                Text {
+                    text: root.cat.percent + "%";
+                    color: AppTheme.text-faint;
+                    font-family: AppTheme.font-mono;
+                    font-size: 12px;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        SimpleProgressBar {
+            value: root.cat.percent / 100.0;
+            fill-color: AppTheme.accent;
+        }
+    }
+
+    TouchArea {
+        mouse-cursor: pointer;
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.move) { root.hovered = self.has-hover; }
+        }
+        clicked => { root.clicked(root.cat.label); }
+    }
+}
+
+// ── Reports screen ────────────────────────────────────────────────────────────
+export component Reports inherits Rectangle {
+    // Data
+    in property <ReportMetrics> metrics;
+    in property <[ChartBar]> chart-bars;
+    in property <[ExpenseCategory]> categories;
+    in property <[DrillRow]> drill-rows;
+
+    // Pre-formatted strings
+    in property <string> revenue-str;
+    in property <string> expenses-str;
+    in property <string> profit-str;
+    in property <string> margin-str;
+
+    // Drill state
+    in-out property <string> drill-category: "";
+    in-out property <int> period: 1;   // 0=month 1=quarter 2=year 3=custom
+
+    // Icons
+    in property <image> icon-calendar;
+    in property <image> icon-pdf;
+    in property <image> icon-close;
+
+    // Callbacks
+    callback period-changed(int);
+    callback category-drilled(string);
+    callback export-csv;
+    callback export-pdf;
+
+    background: AppTheme.bg;
+
+    Flickable {
+        VerticalLayout {
+            padding: 20px;
+            spacing: 20px;
+
+            // ── Period controls ────────────────────────────────────────────
+            HorizontalLayout {
+                spacing: 10px;
+                alignment: start;
+
+                // Period selector
+                Rectangle {
+                    height: 34px;
+                    background: AppTheme.bg-elevated;
+                    border-width: 1px;
+                    border-color: AppTheme.border;
+                    border-radius: AppTheme.radius-md;
+
+                    HorizontalLayout {
+                        spacing: 0px;
+                        padding: 3px;
+
+                        PeriodBtn { label: "Місяць";  active: root.period == 0; clicked => { root.period = 0; root.period-changed(0); } }
+                        PeriodBtn { label: "Квартал"; active: root.period == 1; clicked => { root.period = 1; root.period-changed(1); } }
+                        PeriodBtn { label: "Рік";     active: root.period == 2; clicked => { root.period = 2; root.period-changed(2); } }
+                        PeriodBtn { label: "Власний"; active: root.period == 3; clicked => { root.period = 3; root.period-changed(3); } }
+                    }
+                }
+
+                GhostButton {
+                    text: "01.01.2026 — 30.04.2026";
+                    small: true;
+                }
+
+                Rectangle { horizontal-stretch: 1; }
+
+                SecondaryButton { text: "Експорт CSV"; small: true; clicked => { root.export-csv(); } }
+                SecondaryButton { text: "Звіт PDF"; small: true; clicked => { root.export-pdf(); } }
+            }
+
+            // ── Metric strip ───────────────────────────────────────────────
+            Card {
+                padded: false;
+                height: 90px;
+
+                HorizontalLayout {
+                    padding: 20px;
+                    alignment: stretch;
+
+                    RepMetric { label: "Дохід";          value: root.revenue-str;  suffix: "₴"; delta: metrics.delta-revenue; }
+                    VDivider { }
+                    RepMetric { label: "Витрати";        value: root.expenses-str; suffix: "₴"; delta: metrics.delta-expenses; }
+                    VDivider { }
+                    RepMetric { label: "Прибуток";       value: root.profit-str;   suffix: "₴"; delta: metrics.delta-profit; }
+                    VDivider { }
+                    RepMetric { label: "Рентабельність"; value: root.margin-str;   suffix: "%"; delta: metrics.delta-margin; }
+                }
+            }
+
+            // ── Chart + Categories (2-column) ──────────────────────────────
+            HorizontalLayout {
+                spacing: 16px;
+
+                // Bar chart
+                Card {
+                    horizontal-stretch: 2;
+
+                    VerticalLayout {
+                        spacing: 18px;
+
+                        HorizontalLayout {
+                            alignment: stretch;
+
+                            VerticalLayout {
+                                HeadingSm { text: "Динаміка доходу та витрат"; }
+                                Text { text: "помісячно · I кв. 2026"; color: AppTheme.text-muted; font-size: 11.5px; font-family: AppTheme.font-sans; }
+                            }
+
+                            Rectangle { horizontal-stretch: 1; }
+
+                            // Legend
+                            HorizontalLayout {
+                                spacing: 16px;
+                                alignment: center;
+
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    Rectangle { width: 8px; height: 8px; border-radius: 2px; background: AppTheme.accent; }
+                                    Text { text: "Дохід"; color: AppTheme.text-muted; font-size: 11.5px; font-family: AppTheme.font-sans; vertical-alignment: center; }
+                                }
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    Rectangle { width: 8px; height: 8px; border-radius: 2px; background: AppTheme.text-faint; opacity: 0.5; }
+                                    Text { text: "Витрати"; color: AppTheme.text-muted; font-size: 11.5px; font-family: AppTheme.font-sans; vertical-alignment: center; }
+                                }
+                            }
+                        }
+
+                        BarChart {
+                            bars: root.chart-bars;
+                            height: 240px;
+                        }
+                    }
+                }
+
+                // Expense categories
+                Card {
+                    horizontal-stretch: 1;
+                    padded: false;
+
+                    VerticalLayout {
+                        // Header
+                        Rectangle {
+                            height: 56px;
+
+                            VerticalLayout {
+                                alignment: center;
+                                padding-left: 18px;
+                                padding-right: 18px;
+                                HeadingSm { text: "Структура витрат"; }
+                                Text {
+                                    text: "За категоріями · натисніть для деталізації";
+                                    color: AppTheme.text-muted;
+                                    font-size: 11.5px;
+                                    font-family: AppTheme.font-sans;
+                                }
+                            }
+
+                            Rectangle { y: root.height - 1px; width: root.width; height: 1px; background: AppTheme.border; }
+                        }
+
+                        // Category rows
+                        for cat in categories : CategoryRow {
+                            cat: cat;
+                            active: root.drill-category == cat.label;
+                            clicked(label) => {
+                                root.drill-category = root.drill-category == label ? "" : label;
+                                root.category-drilled(root.drill-category);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── Drill-down table (shown when category selected) ────────────
+            if drill-category != "" : Card {
+                padded: false;
+
+                VerticalLayout {
+                    // Header
+                    HorizontalLayout {
+                        padding-left: 20px;
+                        padding-right: 20px;
+                        padding-top: 16px;
+                        padding-bottom: 16px;
+                        alignment: stretch;
+                        height: 64px;
+
+                        VerticalLayout {
+                            SectionLabel { label: "ДЕТАЛІЗАЦІЯ КАТЕГОРІЇ"; }
+                            HeadingSm { text: root.drill-category + " · I квартал 2026"; }
+                        }
+
+                        Rectangle { horizontal-stretch: 1; }
+
+                        // Close drill-down
+                        Rectangle {
+                            width: 28px;
+                            height: 28px;
+                            border-radius: AppTheme.radius-md;
+                            background: close-h.has-hover ? AppTheme.bg-hover : transparent;
+
+                            Image { source: root.icon-close; width: 14px; height: 14px; colorize: AppTheme.text-muted; image-fit: contain; }
+                            close-h := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { root.drill-category = ""; }
+                            }
+                        }
+                    }
+
+                    HDivider { }
+
+                    // Table header
+                    Rectangle {
+                        height: 36px;
+                        background: AppTheme.bg-subtle;
+                        Rectangle { y: 0; width: root.width; height: 1px; background: AppTheme.border; }
+
+                        HorizontalLayout {
+                            padding-left: 20px;
+                            padding-right: 20px;
+                            alignment: stretch;
+
+                            Text { text: "ДАТА";        color: AppTheme.text-faint; font-size: 10.5px; font-family: AppTheme.font-sans; font-weight: 600; letter-spacing: 1.2px; vertical-alignment: center; width: 100px; }
+                            Text { text: "ОПЕРАЦІЯ";    color: AppTheme.text-faint; font-size: 10.5px; font-family: AppTheme.font-sans; font-weight: 600; letter-spacing: 1.2px; vertical-alignment: center; horizontal-stretch: 1; }
+                            Text { text: "КОНТРАГЕНТ";  color: AppTheme.text-faint; font-size: 10.5px; font-family: AppTheme.font-sans; font-weight: 600; letter-spacing: 1.2px; vertical-alignment: center; horizontal-stretch: 1; }
+                            Text { text: "ДОКУМЕНТ";    color: AppTheme.text-faint; font-size: 10.5px; font-family: AppTheme.font-sans; font-weight: 600; letter-spacing: 1.2px; vertical-alignment: center; width: 120px; }
+                            Text { text: "СУМА";        color: AppTheme.text-faint; font-size: 10.5px; font-family: AppTheme.font-sans; font-weight: 600; letter-spacing: 1.2px; vertical-alignment: center; horizontal-alignment: right; width: 130px; }
+                        }
+                    }
+
+                    for row in drill-rows : Rectangle {
+                        height: 44px;
+                        Rectangle { y: 0; width: root.width; height: 1px; background: AppTheme.border; }
+
+                        HorizontalLayout {
+                            padding-left: 20px;
+                            padding-right: 20px;
+                            alignment: stretch;
+
+                            Text { text: row.date;         color: AppTheme.text-muted; font-family: AppTheme.font-mono; font-size: 11.5px; vertical-alignment: center; width: 100px; }
+                            Text { text: row.operation;    color: AppTheme.text; font-size: 13px; font-family: AppTheme.font-sans; vertical-alignment: center; horizontal-stretch: 1; }
+                            Text { text: row.counterparty; color: AppTheme.text-muted; font-size: 13px; font-family: AppTheme.font-sans; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
+                            Text { text: row.doc-id;       color: AppTheme.accent-text; font-family: AppTheme.font-mono; font-size: 11.5px; vertical-alignment: center; width: 120px; }
+                            Text { text: row.amount;       color: AppTheme.text; font-family: AppTheme.font-mono; font-size: 12px; vertical-alignment: center; horizontal-alignment: right; width: 130px; }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

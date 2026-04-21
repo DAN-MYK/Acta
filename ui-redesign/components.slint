@@ -3,7 +3,7 @@
 // Shadows reserved for floating surfaces (popovers, modals, command palette).
 
 import { AppTheme } from "design-tokens.slint";
-import { ChainStep } from "types.slint";
+import { ChainStep, ChartBar } from "types.slint";
 
 // ── Card ──────────────────────────────────────────────────────────────────────
 // Flat elevated surface. No shadow — only a 1px hairline border.
@@ -583,7 +583,7 @@ export component SparkLine inherits Rectangle {
 // Dual-bar monthly chart (revenue + expenses).
 // Heights passed as normalized [0..1] floats. Rust normalizes from raw values.
 export component BarChart inherits Rectangle {
-    in property <[{rev-h: float, exp-h: float, month: string}]> bars;
+    in property <[ChartBar]> bars;
     // rev-h and exp-h are fractional heights 0.0–1.0
 
     height: 200px;

@@ -1,0 +1,1031 @@
+// Acta — Dashboard screen
+// Default view: Journal (V3) — numbers-first, flat KPI strip, bar chart, journal table, sidebar.
+// Design: no AI-slop (no icon-in-colored-square, no gradient, no decorative shadows).
+// KPI strip stays flat; chart + journal + sidebar blocks each in a Card.
+
+import { AppTheme } from "design-tokens.slint";
+import {
+    DashboardMetrics, MonthlyData, JournalRow, AccountItem, TaskItem, Priority,
+    InboxItem, ChartBar
+} from "types.slint";
+import {
+    Card, HDivider, VDivider, Badge, StatusDot,
+    GhostButton, SecondaryButton, PrimaryButton, IconButton,
+    HeadingSm, SectionLabel, BarChart, SparkLine,
+    Avatar, Checkbox
+} from "components.slint";
+
+// ── KPI Metric ────────────────────────────────────────────────────────────────
+component KpiMetric inherits VerticalLayout {
+    in property <string> label;
+    in property <string> value;    // pre-formatted by Rust: "388 450"
+    in property <string> currency: "₴";
+    in property <string> delta: "";     // pre-formatted: "+13.4% до березня"
+    in property <bool> danger: false;
+    in property <[float]> sparkline-data;  // normalized 0..1
+
+    spacing: 4px;
+    horizontal-stretch: 1;
+    padding-right: 20px;
+
+    Text {
+        text: root.label;
+        color: AppTheme.text-faint;
+        font-size: 10.5px;
+        font-family: AppTheme.font-sans;
+        font-weight: 600;
+        letter-spacing: 1.2px;
+    }
+
+    HorizontalLayout {
+        spacing: 4px;
+        alignment: start;
+
+        Text {
+            text: root.value;
+            color: root.danger ? AppTheme.danger : AppTheme.text;
+            font-family: AppTheme.font-serif;
+            font-size: 28px;
+            font-weight: 500;
+            letter-spacing: -0.4px;
+        }
+
+        Text {
+            text: root.currency;
+            color: AppTheme.text-faint;
+            font-family: AppTheme.font-serif;
+            font-size: 16px;
+            font-weight: 400;
+            vertical-alignment: center;
+        }
+    }
+
+    if delta != "" : Text {
+        text: root.delta;
+        color: AppTheme.text-muted;
+        font-size: 11px;
+        font-family: AppTheme.font-mono;
+    }
+
+    if sparkline-data.length > 1 : SparkLine {
+        data: root.sparkline-data;
+        line-color: root.danger ? AppTheme.danger : AppTheme.text-muted;
+        height: 28px;
+        opacity: 0.55;
+    }
+}
+
+// ── Journal table row ─────────────────────────────────────────────────────────
+component JournalTableRow inherits Rectangle {
+    in property <JournalRow> data;
+    in property <bool> even: true;
+
+    property <bool> hovered: false;
+
+    height: 42px;
+    background: hovered ? AppTheme.bg-hover : transparent;
+    border-radius: 0px;
+
+    // Top hairline
+    Rectangle {
+        y: 0;
+        width: root.width;
+        height: 1px;
+        background: AppTheme.border;
+    }
+
+    HorizontalLayout {
+        padding-left: 18px;
+        padding-right: 18px;
+        spacing: 0px;
+        alignment: stretch;
+
+        // Date
+        Text {
+            text: data.date;
+            color: AppTheme.text-muted;
+            font-family: AppTheme.font-mono;
+            font-size: 11.5px;
+            vertical-alignment: center;
+            width: 84px;
+        }
+
+        // ID
+        Text {
+            text: data.id;
+            color: AppTheme.accent-text;
+            font-family: AppTheme.font-mono;
+            font-size: 11.5px;
+            vertical-alignment: center;
+            width: 120px;
+        }
+
+        // Operation
+        Text {
+            text: data.operation;
+            color: AppTheme.text;
+            font-size: 12.5px;
+            font-family: AppTheme.font-sans;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+
+        // Counterparty
+        Text {
+            text: data.counterparty;
+            color: AppTheme.text;
+            font-size: 12.5px;
+            font-family: AppTheme.font-sans;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+
+        // Debit
+        Text {
+            text: data.debit > 0 ? data.debit : "—";
+            color: data.debit > 0 ? AppTheme.text : AppTheme.text-faint;
+            font-family: AppTheme.font-mono;
+            font-size: 12px;
+            vertical-alignment: center;
+            horizontal-alignment: right;
+            width: 110px;
+        }
+
+        // Credit
+        Text {
+            text: data.credit > 0 ? data.credit : "—";
+            color: data.credit > 0 ? AppTheme.text : AppTheme.text-faint;
+            font-family: AppTheme.font-mono;
+            font-size: 12px;
+            vertical-alignment: center;
+            horizontal-alignment: right;
+            width: 110px;
+        }
+
+        // Status
+        HorizontalLayout {
+            spacing: 6px;
+            width: 130px;
+            padding-left: 12px;
+
+            StatusDot {
+                tone: data.status-tone;
+            }
+
+            Text {
+                text: data.status-label;
+                color:
+                    data.status-tone == "success" ? AppTheme.success :
+                    data.status-tone == "danger"  ? AppTheme.danger  :
+                    data.status-tone == "warning" ? AppTheme.warning :
+                    data.status-tone == "info"    ? AppTheme.info    :
+                    AppTheme.text-muted;
+                font-size: 11.5px;
+                font-family: AppTheme.font-sans;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    TouchArea {
+        mouse-cursor: pointer;
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.move) {
+                root.hovered = self.has-hover;
+            }
+        }
+    }
+}
+
+// ── Account sidebar item ──────────────────────────────────────────────────────
+component AccountRow inherits Rectangle {
+    in property <AccountItem> account;
+
+    height: 48px;
+
+    // Top hairline
+    Rectangle {
+        y: 0;
+        width: root.width;
+        height: 1px;
+        background: AppTheme.border;
+    }
+
+    VerticalLayout {
+        padding-top: 10px;
+        padding-bottom: 10px;
+
+        HorizontalLayout {
+            alignment: stretch;
+
+            Text {
+                text: root.account.bank-name;
+                color: AppTheme.text;
+                font-size: 12.5px;
+                font-family: AppTheme.font-sans;
+                font-weight: 500;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+
+            Text {
+                text: root.account.balance;
+                color: AppTheme.text;
+                font-family: AppTheme.font-mono;
+                font-size: 12.5px;
+                vertical-alignment: center;
+            }
+
+            Text {
+                text: "₴";
+                color: AppTheme.text-faint;
+                font-family: AppTheme.font-mono;
+                font-size: 12px;
+                vertical-alignment: center;
+            }
+        }
+
+        Text {
+            text: root.account.account-number;
+            color: AppTheme.text-faint;
+            font-family: AppTheme.font-mono;
+            font-size: 10.5px;
+        }
+    }
+}
+
+// ── Task item (compact, for sidebar) ─────────────────────────────────────────
+component DashboardTaskItem inherits Rectangle {
+    in property <TaskItem> task;
+    in property <image> check-icon;
+    callback toggled(string, bool);
+
+    property <bool> hovered: false;
+
+    height: 46px;
+    background: transparent;
+
+    // Top hairline
+    Rectangle {
+        y: 0;
+        width: root.width;
+        height: 1px;
+        background: AppTheme.border;
+    }
+
+    HorizontalLayout {
+        padding-top: 8px;
+        padding-bottom: 8px;
+        spacing: 8px;
+        alignment: start;
+
+        // Checkbox
+        checkbox-btn := Rectangle {
+            width: 13px;
+            height: 13px;
+            border-radius: 3px;
+            border-width: 1px;
+            border-color: task.done ? AppTheme.success : AppTheme.border-strong;
+            background: task.done ? AppTheme.success : transparent;
+
+            if task.done : Image {
+                source: root.check-icon;
+                width: 9px;
+                height: 9px;
+                colorize: #ffffff;
+                image-fit: contain;
+            }
+
+            TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.toggled(root.task.id, !root.task.done); }
+            }
+        }
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 3px;
+
+            title := Text {
+                text: task.title;
+                color: task.done ? AppTheme.text-muted : AppTheme.text;
+                font-size: 12.5px;
+                font-family: AppTheme.font-sans;
+                wrap: word-wrap;
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+
+                if task.due-date != "" : Text {
+                    text: task.due-date;
+                    // Red for overdue (Rust formats and passes the label)
+                    color: AppTheme.text-faint;
+                    font-size: 11px;
+                    font-family: AppTheme.font-mono;
+                }
+
+                if task.linked-doc != "" : Text {
+                    text: task.linked-doc;
+                    color: AppTheme.accent-text;
+                    font-size: 11px;
+                    font-family: AppTheme.font-mono;
+                }
+            }
+        }
+
+        // Priority dot
+        Rectangle {
+            width: 6px;
+            height: 6px;
+            border-radius: 3px;
+            background:
+                task.priority == Priority.High   ? AppTheme.danger  :
+                task.priority == Priority.Medium ? AppTheme.warning :
+                AppTheme.text-faint;
+        }
+    }
+
+    TouchArea {
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.move) {
+                root.hovered = self.has-hover;
+            }
+        }
+    }
+}
+
+// ── Inbox row ─────────────────────────────────────────────────────────────────
+component InboxRow inherits Rectangle {
+    in property <InboxItem> item;
+    callback action-clicked(string, string);
+
+    height: 56px;
+    background: ta.has-hover ? AppTheme.bg-hover : transparent;
+
+    Rectangle {
+        x: 0; y: 0;
+        width: 3px; height: root.height;
+        background:
+            item.kind == "overdue"   ? AppTheme.danger  :
+            item.kind == "unsigned"  ? AppTheme.warning :
+            item.kind == "unmatched" ? AppTheme.info    :
+            AppTheme.text-faint;
+    }
+
+    Rectangle {
+        y: root.height - 1px;
+        width: root.width; height: 1px;
+        background: AppTheme.border;
+    }
+
+    HorizontalLayout {
+        padding-left: 16px; padding-right: 16px;
+        spacing: 0px; alignment: stretch;
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 3px;
+
+            HorizontalLayout {
+                spacing: 10px;
+                Text {
+                    text: item.doc-number;
+                    color: AppTheme.accent-text;
+                    font-family: AppTheme.font-mono;
+                    font-size: 12px; font-weight: 500;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: item.counterparty;
+                    color: AppTheme.text;
+                    font-size: 12.5px; font-family: AppTheme.font-sans;
+                    vertical-alignment: center;
+                    overflow: elide; horizontal-stretch: 1;
+                }
+                Text {
+                    text: item.amount-str;
+                    color: AppTheme.text;
+                    font-family: AppTheme.font-mono; font-size: 12px;
+                    vertical-alignment: center;
+                }
+            }
+            Text {
+                text: item.age-days + " дн. тому";
+                color: AppTheme.text-faint;
+                font-size: 11px; font-family: AppTheme.font-mono;
+            }
+        }
+
+        GhostButton {
+            text: item.action-label;
+            small: true;
+            clicked => { root.action-clicked(item.doc-id, item.kind); }
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+    }
+}
+
+// ── Inbox empty state ─────────────────────────────────────────────────────────
+component InboxEmpty inherits VerticalLayout {
+    alignment: center; spacing: 8px; height: 200px;
+    Text {
+        text: "✓"; color: AppTheme.success;
+        font-size: 32px; horizontal-alignment: center;
+    }
+    Text {
+        text: "Відмінно! Немає документів що потребують уваги.";
+        color: AppTheme.text-muted; font-size: 13px;
+        font-family: AppTheme.font-sans;
+        horizontal-alignment: center; wrap: word-wrap;
+    }
+}
+
+// ── InboxView ─────────────────────────────────────────────────────────────────
+component InboxView inherits Rectangle {
+    in property <[InboxItem]> items;
+    callback action(string, string);
+
+    background: transparent;
+
+    if items.length == 0 : InboxEmpty { }
+
+    if items.length > 0 : VerticalLayout {
+        for item in items : InboxRow {
+            item: item;
+            action-clicked(id, kind) => { root.action(id, kind); }
+        }
+    }
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+export component Dashboard inherits Rectangle {
+    // ── Data bindings from Rust ────────────────────────────────────────────
+    in property <DashboardMetrics> metrics;
+    in property <[MonthlyData]> monthly;
+    in property <[ChartBar]> chart-bars; // normalized by Rust
+    in property <[JournalRow]> journal;
+    in property <[AccountItem]> accounts;
+    in property <string> accounts-total;   // pre-formatted
+    in property <[TaskItem]> tasks;
+    in property <int> open-task-count;
+
+    // Pre-formatted strings from Rust (avoid float formatting in Slint)
+    in property <string> revenue-str;
+    in property <string> expenses-str;
+    in property <string> net-str;
+    in property <string> outstanding-str;
+    in property <string> overdue-str;
+    in property <string> delta-revenue-str;
+    in property <string> delta-expenses-str;
+    in property <string> delta-net-str;
+    in property <string> ytd-total-str;
+    in property <string> ytd-revenue-str;
+    in property <string> ytd-expenses-str;
+
+    // Sparklines — normalized 0..1 by Rust
+    in property <[float]> spark-revenue;
+    in property <[float]> spark-expenses;
+
+    // Icons
+    in property <image> icon-arrow-right;
+    in property <image> icon-chevron-down;
+    in property <image> icon-plus;
+    in property <image> icon-check;
+
+    // Inbox
+    in property <[InboxItem]> inbox;
+    callback inbox-action(string, string);
+    property <string> mode-state: "journal";
+
+    // Callbacks
+    callback task-toggled(string, bool);
+    callback new-task;
+    callback all-tasks;
+    callback all-operations;
+
+    background: AppTheme.bg;
+
+    // Main scroll area
+    Flickable {
+        viewport-height: content-col.preferred-height + 40px;
+
+        HorizontalLayout {
+            padding: 20px;
+            padding-right: 22px;
+            spacing: 20px;
+            alignment: stretch;
+
+            // ── Left column (metrics + chart + journal) ────────────────────
+            content-col := VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 20px;
+
+                // ── Mode toggle ────────────────────────────────────────────
+                HorizontalLayout {
+                    spacing: 2px; alignment: start; height: 32px;
+
+                    Rectangle {
+                        width: journal-btn.preferred-width + 20px; height: 28px;
+                        border-radius: AppTheme.radius-md;
+                        background: mode-state == "journal" ? AppTheme.bg-elevated : transparent;
+                        border-width: mode-state == "journal" ? 1px : 0px;
+                        border-color: AppTheme.border;
+
+                        journal-btn := Text {
+                            text: "Огляд";
+                            color: mode-state == "journal" ? AppTheme.text : AppTheme.text-muted;
+                            font-size: 12.5px; font-family: AppTheme.font-sans;
+                            font-weight: mode-state == "journal" ? 500 : 400;
+                            vertical-alignment: center; horizontal-alignment: center;
+                        }
+                        TouchArea { mouse-cursor: pointer; clicked => { root.mode-state = "journal"; } }
+                    }
+
+                    Rectangle {
+                        width: inbox-btn.preferred-width + 20px; height: 28px;
+                        border-radius: AppTheme.radius-md;
+                        background: mode-state == "inbox" ? AppTheme.bg-elevated : transparent;
+                        border-width: mode-state == "inbox" ? 1px : 0px;
+                        border-color: AppTheme.border;
+
+                        inbox-btn := Text {
+                            text: root.inbox.length > 0 ? "Вхідні (" + root.inbox.length + ")" : "Вхідні";
+                            color: mode-state == "inbox" ? AppTheme.text : AppTheme.text-muted;
+                            font-size: 12.5px; font-family: AppTheme.font-sans;
+                            font-weight: mode-state == "inbox" ? 500 : 400;
+                            vertical-alignment: center; horizontal-alignment: center;
+                        }
+                        TouchArea { mouse-cursor: pointer; clicked => { root.mode-state = "inbox"; } }
+                    }
+                }
+
+                if mode-state == "journal" : VerticalLayout {
+                    spacing: 20px;
+                    horizontal-stretch: 1;
+
+                    // ── KPI Metric strip ───────────────────────────────────────
+                    Card {
+                        padded: false;
+                        height: 110px;
+
+                        HorizontalLayout {
+                            padding-top: 20px;
+                            padding-bottom: 20px;
+                            padding-left: 4px;
+                            padding-right: 4px;
+                            alignment: stretch;
+
+                            KpiMetric {
+                                label: "Дохід · квітень";
+                                value: root.revenue-str;
+                                delta: root.delta-revenue-str;
+                                sparkline-data: root.spark-revenue;
+                            }
+
+                            VDivider { }
+
+                            KpiMetric {
+                                label: "Витрати";
+                                value: root.expenses-str;
+                                delta: root.delta-expenses-str;
+                                sparkline-data: root.spark-expenses;
+                            }
+
+                            VDivider { }
+
+                            KpiMetric {
+                                label: "Чистий прибуток";
+                                value: root.net-str;
+                                delta: root.delta-net-str;
+                            }
+
+                            VDivider { }
+
+                            KpiMetric {
+                                label: "Заборгованість";
+                                value: root.outstanding-str;
+                            }
+
+                            VDivider { }
+
+                            KpiMetric {
+                                label: "Прострочка";
+                                value: root.overdue-str;
+                                danger: true;
+                            }
+                        }
+                    }
+
+                    // ── Cash flow chart ────────────────────────────────────────
+                    Card {
+                        height: 260px;
+
+                        VerticalLayout {
+                            spacing: 4px;
+
+                            HorizontalLayout {
+                                alignment: stretch;
+                                spacing: 12px;
+
+                                HeadingSm { text: "Рух коштів"; vertical-alignment: center; }
+
+                                Text {
+                                    text: "травень 2025 — квітень 2026";
+                                    color: AppTheme.text-faint;
+                                    font-size: 11.5px;
+                                    font-family: AppTheme.font-sans;
+                                    vertical-alignment: center;
+                                }
+
+                                Rectangle { horizontal-stretch: 1; }
+
+                                // Legend
+                                HorizontalLayout {
+                                    spacing: 16px;
+
+                                    HorizontalLayout {
+                                        spacing: 6px;
+                                        Rectangle {
+                                            width: 10px;
+                                            height: 10px;
+                                            background: AppTheme.accent;
+                                        }
+                                        Text {
+                                            text: "Дохід";
+                                            color: AppTheme.text-muted;
+                                            font-size: 11px;
+                                            font-family: AppTheme.font-sans;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+
+                                    HorizontalLayout {
+                                        spacing: 6px;
+                                        Rectangle {
+                                            width: 10px;
+                                            height: 10px;
+                                            border-width: 1px;
+                                            border-color: AppTheme.border-strong;
+                                        }
+                                        Text {
+                                            text: "Витрати";
+                                            color: AppTheme.text-muted;
+                                            font-size: 11px;
+                                            font-family: AppTheme.font-sans;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+                            }
+
+                            HorizontalLayout {
+                                spacing: 4px;
+
+                                Text {
+                                    text: "чистий";
+                                    color: AppTheme.text-faint;
+                                    font-size: 11.5px;
+                                    font-family: AppTheme.font-sans;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: root.ytd-total-str;
+                                    color: AppTheme.text;
+                                    font-family: AppTheme.font-mono;
+                                    font-size: 11.5px;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: "₴ · дохід";
+                                    color: AppTheme.text-faint;
+                                    font-size: 11.5px;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: root.ytd-revenue-str;
+                                    color: AppTheme.text-muted;
+                                    font-family: AppTheme.font-mono;
+                                    font-size: 11.5px;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: "· витрати";
+                                    color: AppTheme.text-faint;
+                                    font-size: 11.5px;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: root.ytd-expenses-str;
+                                    color: AppTheme.text-muted;
+                                    font-family: AppTheme.font-mono;
+                                    font-size: 11.5px;
+                                    vertical-alignment: center;
+                                }
+                            }
+
+                            BarChart {
+                                bars: root.chart-bars;
+                                height: 180px;
+                            }
+                        }
+                    }
+
+                    // ── Journal ────────────────────────────────────────────────
+                    Card {
+                        padded: false;
+
+                        VerticalLayout {
+                            // Header
+                            HorizontalLayout {
+                                padding-left: 18px;
+                                padding-right: 18px;
+                                padding-top: 14px;
+                                padding-bottom: 12px;
+                                spacing: 12px;
+                                alignment: stretch;
+                                height: 50px;
+
+                                HeadingSm { text: "Журнал операцій"; vertical-alignment: center; }
+
+                                Text {
+                                    text: "квітень · 10 останніх";
+                                    color: AppTheme.text-faint;
+                                    font-size: 11.5px;
+                                    font-family: AppTheme.font-sans;
+                                    vertical-alignment: center;
+                                }
+
+                                Rectangle { horizontal-stretch: 1; }
+
+                                GhostButton {
+                                    text: "Усі типи";
+                                    small: true;
+                                }
+
+                                GhostButton {
+                                    text: "Всі операції";
+                                    small: true;
+                                    clicked => { root.all-operations(); }
+                                }
+                            }
+
+                            // Table header
+                            Rectangle {
+                                height: 36px;
+                                background: AppTheme.bg-subtle;
+                                border-radius: 0px;
+
+                                // Top border
+                                Rectangle {
+                                    y: 0;
+                                    width: root.width;
+                                    height: 1px;
+                                    background: AppTheme.border;
+                                }
+
+                                HorizontalLayout {
+                                    padding-left: 18px;
+                                    padding-right: 18px;
+                                    spacing: 0px;
+                                    alignment: stretch;
+
+                                    th-date := Text {
+                                        text: "ДАТА";
+                                        color: AppTheme.text-faint;
+                                        font-size: 10.5px;
+                                        font-family: AppTheme.font-sans;
+                                        font-weight: 600;
+                                        letter-spacing: 1.2px;
+                                        vertical-alignment: center;
+                                        width: 84px;
+                                    }
+                                    th-id := Text {
+                                        text: "ID";
+                                        color: AppTheme.text-faint;
+                                        font-size: 10.5px;
+                                        font-family: AppTheme.font-sans;
+                                        font-weight: 600;
+                                        letter-spacing: 1.2px;
+                                        vertical-alignment: center;
+                                        width: 120px;
+                                    }
+                                    th-op := Text {
+                                        text: "ОПЕРАЦІЯ";
+                                        color: AppTheme.text-faint;
+                                        font-size: 10.5px;
+                                        font-family: AppTheme.font-sans;
+                                        font-weight: 600;
+                                        letter-spacing: 1.2px;
+                                        vertical-alignment: center;
+                                        horizontal-stretch: 1;
+                                    }
+                                    th-cp := Text {
+                                        text: "КОНТРАГЕНТ";
+                                        color: AppTheme.text-faint;
+                                        font-size: 10.5px;
+                                        font-family: AppTheme.font-sans;
+                                        font-weight: 600;
+                                        letter-spacing: 1.2px;
+                                        vertical-alignment: center;
+                                        horizontal-stretch: 1;
+                                    }
+                                    th-debit := Text {
+                                        text: "ДЕБЕТ";
+                                        color: AppTheme.text-faint;
+                                        font-size: 10.5px;
+                                        font-family: AppTheme.font-sans;
+                                        font-weight: 600;
+                                        letter-spacing: 1.2px;
+                                        vertical-alignment: center;
+                                        horizontal-alignment: right;
+                                        width: 110px;
+                                    }
+                                    th-credit := Text {
+                                        text: "КРЕДИТ";
+                                        color: AppTheme.text-faint;
+                                        font-size: 10.5px;
+                                        font-family: AppTheme.font-sans;
+                                        font-weight: 600;
+                                        letter-spacing: 1.2px;
+                                        vertical-alignment: center;
+                                        horizontal-alignment: right;
+                                        width: 110px;
+                                    }
+                                    th-status := Text {
+                                        text: "СТАТУС";
+                                        color: AppTheme.text-faint;
+                                        font-size: 10.5px;
+                                        font-family: AppTheme.font-sans;
+                                        font-weight: 600;
+                                        letter-spacing: 1.2px;
+                                        vertical-alignment: center;
+                                        width: 130px;
+                                    }
+                                }
+                            }
+
+                            // Journal rows
+                            for row[i] in journal : JournalTableRow {
+                                data: row;
+                                even: Math.mod(i, 2) == 0;
+                            }
+                        }
+                    }
+                }
+
+                if mode-state == "inbox" : InboxView {
+                    horizontal-stretch: 1;
+                    items: root.inbox;
+                    action(id, kind) => { root.inbox-action(id, kind); }
+                }
+            }
+
+            // ── Right sidebar (320px) ──────────────────────────────────────
+            sidebar-col := VerticalLayout {
+                width: 320px;
+                spacing: 20px;
+
+                // ── Bank accounts ──────────────────────────────────────────
+                Card {
+                    VerticalLayout {
+                        HorizontalLayout {
+                            alignment: stretch;
+
+                            HeadingSm { text: "Рахунки"; vertical-alignment: center; horizontal-stretch: 1; }
+
+                            Rectangle {
+                                width: 22px;
+                                height: 22px;
+                                border-radius: AppTheme.radius-md;
+                                background: plus-hover.has-hover ? AppTheme.bg-hover : transparent;
+
+                                Image {
+                                    source: root.icon-plus;
+                                    width: 12px;
+                                    height: 12px;
+                                    colorize: AppTheme.text-muted;
+                                    image-fit: contain;
+                                }
+                                plus-hover := TouchArea { mouse-cursor: pointer; }
+                            }
+                        }
+
+                        for account in accounts : AccountRow {
+                            account: account;
+                        }
+
+                        // Total row
+                        Rectangle {
+                            height: 1px;
+                            background: AppTheme.border-strong;
+                        }
+
+                        HorizontalLayout {
+                            padding-top: 12px;
+                            alignment: stretch;
+
+                            Text {
+                                text: "УСЬОГО";
+                                color: AppTheme.text-faint;
+                                font-size: 10.5px;
+                                font-family: AppTheme.font-sans;
+                                font-weight: 600;
+                                letter-spacing: 1.2px;
+                                vertical-alignment: center;
+                                horizontal-stretch: 1;
+                            }
+
+                            HorizontalLayout {
+                                spacing: 3px;
+
+                                Text {
+                                    text: root.accounts-total;
+                                    color: AppTheme.text;
+                                    font-family: AppTheme.font-serif;
+                                    font-size: 16px;
+                                    font-weight: 500;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: "₴";
+                                    color: AppTheme.text-faint;
+                                    font-family: AppTheme.font-serif;
+                                    font-size: 13px;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Tasks ──────────────────────────────────────────────────
+                Card {
+                    VerticalLayout {
+                        // Tasks header
+                        HorizontalLayout {
+                            alignment: stretch;
+
+                            HeadingSm { text: "Задачі"; vertical-alignment: center; }
+
+                            Badge {
+                                text: root.open-task-count;
+                                tone: "muted";
+                            }
+
+                            Rectangle { horizontal-stretch: 1; }
+
+                            Rectangle {
+                                width: 26px;
+                                height: 26px;
+                                border-radius: AppTheme.radius-md;
+                                background: add-hover.has-hover ? AppTheme.bg-hover : transparent;
+
+                                Image {
+                                    source: root.icon-plus;
+                                    width: 12px;
+                                    height: 12px;
+                                    colorize: AppTheme.text-muted;
+                                    image-fit: contain;
+                                }
+                                add-hover := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => { root.new-task(); }
+                                }
+                            }
+                        }
+
+                        // Task items
+                        for task in tasks : DashboardTaskItem {
+                            task: task;
+                            check-icon: root.icon-check;
+                            toggled(id, done) => { root.task-toggled(id, done); }
+                        }
+
+                        // Footer: link to all tasks
+                        HorizontalLayout {
+                            padding-top: 10px;
+
+                            Rectangle {
+                                height: 1px;
+                                y: 0;
+                                background: AppTheme.border;
+                            }
+
+                            GhostButton {
+                                text: "Усі задачі →";
+                                small: true;
+                                clicked => { root.all-tasks(); }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
