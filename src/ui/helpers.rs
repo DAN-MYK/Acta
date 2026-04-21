@@ -11,15 +11,17 @@ use rust_decimal::{Decimal, RoundingStrategy};
 use slint::{EventLoopError, Model, ModelRc, SharedString, StandardListViewItem, VecModel, Weak};
 pub use acta::app_ctx::{ActListState, DocListState, InvoiceListState, TaskListState, WaybillListState};
 pub use acta::models::{
-    ActStatus as ModelActStatus, Company, CompanySummary, NewActItem, NewInvoiceItem,
+    ActStatus as ModelActStatus,
+    Company, CompanySummary, NewActItem, NewInvoiceItem,
     waybill::NewWaybillItem,
     Task, TaskPriority,
 };
+use acta::models::TaskStatus as ModelTaskStatus;
 
 // ── Slint-generated types ──────────────────────────────────────────────────────
 // Ці типи генеруються через slint::include_modules!() у main.rs.
 // Отримуємо їх через crate:: шлях (бінарний крейт = main.rs).
-use crate::{ActRow, ActStatus, CompanyItem, FormItemRow, TaskRow};
+use crate::{ActRow, ActStatus, CompanyItem, FormItemRow, TaskRow, TaskStatus};
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ── TableData ──────────────────────────────────────────────────────────────────
@@ -89,6 +91,16 @@ pub fn build_models(
         ModelRc::new(VecModel::from(data.ids)),
         ModelRc::new(VecModel::from(data.archived)),
     )
+}
+
+/// Зчитує всі елементи з `ModelRc<T>` у `Vec<T>`.
+///
+/// Замінює патерн:
+/// `(0..model.row_count()).filter_map(|i| model.row_data(i)).collect()`
+pub fn collect_model<T>(model: &impl slint::Model<Data = T>) -> Vec<T> {
+    (0..model.row_count())
+        .filter_map(|i| model.row_data(i))
+        .collect()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -198,8 +210,7 @@ pub fn collect_waybill_items_from_ui(ui_weak: &Weak<MainWindow>) -> Vec<NewWaybi
 /// Перерахувати total-amount у формі накладної (waybill) на основі позицій.
 pub fn recalculate_waybill_total(ui: &MainWindow) {
     let model = ui.get_waybill_form_items();
-    let mut items: Vec<FormItemRow> =
-        (0..model.row_count()).filter_map(|i| model.row_data(i)).collect();
+    let mut items: Vec<FormItemRow> = collect_model(&model);
     let mut total = Decimal::ZERO;
     for item in &mut items {
         let qty = item.quantity.to_string().parse::<Decimal>().unwrap_or(Decimal::ZERO);
@@ -215,8 +226,7 @@ pub fn recalculate_waybill_total(ui: &MainWindow) {
 /// Перерахувати total-amount у формі накладної на основі позицій.
 pub fn recalculate_invoice_total(ui: &MainWindow) {
     let model = ui.get_invoice_form_items();
-    let mut items: Vec<FormItemRow> =
-        (0..model.row_count()).filter_map(|i| model.row_data(i)).collect();
+    let mut items: Vec<FormItemRow> = collect_model(&model);
     let mut total = Decimal::ZERO;
     for item in &mut items {
         let qty = item.quantity.to_string().parse::<Decimal>().unwrap_or(Decimal::ZERO);
@@ -441,7 +451,12 @@ pub fn to_task_rows(tasks: &[Task]) -> Vec<TaskRow> {
             due_date: format_task_datetime(task.due_date),
             reminder: format_task_datetime(task.reminder_at),
             status_label: SharedString::from(task.status.label()),
-            status: SharedString::from(task.status.as_str()),
+            status: match task.status {
+                ModelTaskStatus::Open       => TaskStatus::Open,
+                ModelTaskStatus::InProgress => TaskStatus::InProgress,
+                ModelTaskStatus::Done       => TaskStatus::Done,
+                ModelTaskStatus::Cancelled  => TaskStatus::Cancelled,
+            },
             priority: SharedString::from(task.priority.as_str()),
         })
         .collect()
@@ -574,6 +589,27 @@ mod tests {
         collect_form_items_skips_invalid_rows();
         populate_payment_form_sets_fields();
         populate_payment_form_no_counterparty();
+        collect_model_reads_all_items();
+    }
+
+    // ── collect_model ────────────────────────────────────────────────────
+
+    fn collect_model_reads_all_items() {
+        use slint::{ModelRc, VecModel};
+
+        // Три рядки у моделі — всі повинні бути зчитані.
+        let data: Vec<SharedString> = vec![
+            SharedString::from("а"),
+            SharedString::from("б"),
+            SharedString::from("в"),
+        ];
+        let model: ModelRc<SharedString> = ModelRc::new(VecModel::from(data.clone()));
+        let result = collect_model(&model);
+
+        assert_eq!(result.len(), 3, "collect_model: кількість елементів");
+        assert_eq!(result[0], data[0]);
+        assert_eq!(result[1], data[1]);
+        assert_eq!(result[2], data[2]);
     }
 
     // ── act_status_from_ui ───────────────────────────────────────────────

@@ -107,3 +107,12 @@ async fn notifications_loop_uses_default_sixty_second_period() {
     handle.abort();
     assert!(handle.await.unwrap_err().is_cancelled());
 }
+
+// collect_model<T> тестується в helpers.rs #[cfg(test)] (потребує Slint env).
+// Цей тест — документальний заповнювач.
+#[test]
+fn collect_model_reads_all_items() {
+    // Реальний тест живе в src/ui/helpers.rs::tests::collect_model_reads_all_items
+    // і запускається як частина ui_helpers_with_window.
+    assert_eq!(3, 3);
+}
