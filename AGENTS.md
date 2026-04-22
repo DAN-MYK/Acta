@@ -55,6 +55,21 @@
 - Події передавай через `callback`.
 - Використовуй `std-widgets`.
 
+### Форматування коду — ОБОВ'ЯЗКОВО
+- Коментарі та документація **українською мовою**.
+
+### Архітектурні рішення (від 2026-04-22)
+- **Канонічний UI** — `ui-redesign/app.slint` (не `ui/`). Компілюється через `build.rs`.
+- **Icon Bundle** — `ui-redesign/icons.slint`, імпортується як `{ Icons }`.
+- **Money Contract** — грошові суми передаються в Slint як `string` (pre-formatted у Rust). У `types.slint` коментар `MONEY CONTRACT RULE` документує правило: `float` тільки для `ChartBar.rev-h/exp-h` (normalized 0.0–1.0).
+- **Formatter** — `src/ui/helpers.rs` містить `format_money()`, `format_money_round()`, `format_money_ua()` замість старого `decimal_to_f32()`.
+- **AppCtx** — `src/app_ctx.rs`. Канонічний контейнер для `PgPool` + `active_company_id`. Передається `&Arc<AppCtx>` у wire_* функції.
+- **Main.rs** — ТІЛЬКИ bootstrap: ініціалізація, AppCtx, wire_*. Вся orchestration через `wire_navigation()`, `wire_stub_callbacks()`.
+- **No-op callbacks** — мовчазні `|| {}` замінені на `tracing::info!("TODO: ...")`.
+- **Internal state** — у `app.slint` використовується `private property <string>` для локального UI стану.
+- **Keyboard shortcuts** — `Ctrl+1..7` для навігації, `Ctrl+K` для Command Palette (див. `shell.slint`).
+- **Keyboard Navigation** — документація в `docs/a11y/keyboard-navigation.md`.
+
 ## Робочий порядок
 1. Спочатку звір релевантний файл у Vault або коді.
 2. Далі внеси зміни в найменшу потрібну частину системи.

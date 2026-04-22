@@ -11,6 +11,13 @@ use crate::models::payment::{
     UpdatePayment,
 };
 
+/// KPI-агрегати для верхньої смужки екрана платежів.
+pub struct PaymentKpi {
+    pub incoming_month: rust_decimal::Decimal,
+    pub outgoing_month: rust_decimal::Decimal,
+    pub unmatched_count: i64,
+}
+
 impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Payment {
     fn from_row(row: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
         Ok(Self {
@@ -123,6 +130,51 @@ pub async fn list(
             is_reconciled:    r.is_reconciled,
         })
         .collect())
+}
+
+/// Агреговані KPI платежів за поточний місяць.
+pub async fn payment_kpi(pool: &PgPool, company_id: Uuid) -> Result<PaymentKpi> {
+    struct Row {
+        incoming_month: rust_decimal::Decimal,
+        outgoing_month: rust_decimal::Decimal,
+        unmatched_count: i64,
+    }
+
+    impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Row {
+        fn from_row(r: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
+            Ok(Self {
+                incoming_month: r.try_get("incoming_month")?,
+                outgoing_month: r.try_get("outgoing_month")?,
+                unmatched_count: r.try_get("unmatched_count")?,
+            })
+        }
+    }
+
+    let row = sqlx::query_as::<_, Row>(
+        r#"
+        SELECT
+            COALESCE(SUM(amount) FILTER (
+                WHERE direction = 'income'
+                  AND date_trunc('month', date) = date_trunc('month', CURRENT_DATE)
+            ), 0) AS incoming_month,
+            COALESCE(SUM(amount) FILTER (
+                WHERE direction = 'expense'
+                  AND date_trunc('month', date) = date_trunc('month', CURRENT_DATE)
+            ), 0) AS outgoing_month,
+            COUNT(*) FILTER (WHERE is_reconciled = FALSE) AS unmatched_count
+        FROM payments
+        WHERE company_id = $1
+        "#,
+    )
+    .bind(company_id)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(PaymentKpi {
+        incoming_month: row.incoming_month,
+        outgoing_month: row.outgoing_month,
+        unmatched_count: row.unmatched_count,
+    })
 }
 
 /// Отримати платіж за ID.

@@ -68,11 +68,10 @@ component CpListItem inherits Rectangle {
                 }
 
                 Text {
-                    text: root.cp.balance == 0 ? "—" : root.cp.balance;
+                    text: root.cp.balance-str != "" ? root.cp.balance-str : "—";
                     color:
-                        root.cp.balance < 0 ? AppTheme.danger  :
-                        root.cp.balance == 0 ? AppTheme.text-faint :
-                        AppTheme.text;
+                        root.cp.balance-str != "" ? AppTheme.text :
+                        AppTheme.text-faint;
                     font-family: AppTheme.font-mono;
                     font-size: 12px;
                     vertical-alignment: center;
@@ -208,6 +207,7 @@ export component Counterparties inherits Rectangle {
 
     // Pre-formatted detail values
     in property <string> detail-balance-str;
+    in property <bool> detail-balance-is-negative: false;
     in property <string> detail-overdue-str;
 
     // Icons
@@ -363,8 +363,7 @@ export component Counterparties inherits Rectangle {
                                 CpMetric {
                                     label: "Баланс";
                                     value: root.detail-balance-str;
-                                    sub: detail.balance < 0 ? "ми винні" : detail.balance > 0 ? "нам винні" : "розраховано";
-                                    danger: detail.balance < 0;
+                                    danger: root.detail-balance-is-negative;
                                 }
                                 VDivider { }
                                 CpMetric {
@@ -376,7 +375,7 @@ export component Counterparties inherits Rectangle {
                                 CpMetric {
                                     label: "Прострочено";
                                     value: detail.overdue-count;
-                                    sub: detail.overdue-count > 0 ? root.detail-overdue-str + " ₴" : "немає";
+                                    sub: detail.overdue-amount-str;
                                     danger: detail.overdue-count > 0;
                                 }
                                 VDivider { }
@@ -502,7 +501,7 @@ export component Counterparties inherits Rectangle {
                                         vertical-alignment: center;
                                     }
                                 }
-                                Text { text: doc.amount; color: AppTheme.text; font-family: AppTheme.font-mono; font-size: 12px; vertical-alignment: center; horizontal-alignment: right; width: 130px; }
+                                Text { text: doc.amount-str; color: AppTheme.text; font-family: AppTheme.font-mono; font-size: 12px; vertical-alignment: center; horizontal-alignment: right; width: 130px; }
                             }
                         }
 

@@ -1,6 +1,10 @@
 // Acta — Data structure definitions
 // These mirror the Rust model structs. Populated by Rust, consumed by Slint UI.
-// All monetary values are float (display only — Rust uses Decimal internally).
+//
+// MONEY CONTRACT RULE:
+//   - Грошові суми ТІЛЬКИ як `string` (pre-formatted у Rust)
+//   - `float` дозволено ТІЛЬКИ для: ChartBar (normalized 0.0–1.0), MonthlyData (charts)
+//   - Ніколи не використовуй float для сум, балансів, чи грошових відображень
 
 export enum NavScreen {
     Dashboard,
@@ -48,7 +52,7 @@ export struct DocumentItem {
     number: string,
     date: string,          // "dd.mm.yyyy"
     counterparty: string,
-    amount: float,
+    amount-str: string,    // pre-formatted by Rust
     status: DocumentStatus,
     linked-id: string,     // linked document id or ""
 }
@@ -58,7 +62,7 @@ export struct CounterpartyItem {
     name: string,
     edrpou: string,
     kind: string,          // "ЮО" | "ФОП"
-    balance: float,
+    balance-str: string,   // pre-formatted by Rust
     doc-count: int,
     overdue-count: int,
 }
@@ -67,7 +71,7 @@ export struct PaymentItem {
     id: string,
     date: string,
     counterparty: string,
-    amount: float,
+    amount-str: string,    // pre-formatted by Rust
     direction: Direction,
     matched-doc: string,   // document id or ""
     account: string,
@@ -91,20 +95,20 @@ export struct MonthlyData {
 export struct AccountItem {
     bank-name: string,
     account-number: string,
-    balance: float,
+    balance-str: string,    // pre-formatted by Rust
 }
 
 // ── Dashboard model ──────────────────────────────────────────────────────────
 
 export struct DashboardMetrics {
-    revenue-month: float,
-    expenses-month: float,
-    net-month: float,
-    outstanding: float,
-    overdue: float,
-    delta-revenue: float,   // percent vs previous month
-    delta-expenses: float,  // percent vs previous month
-    delta-net: float,
+    revenue-month: string,  // pre-formatted by Rust
+    expenses-month: string,
+    net-month: string,
+    outstanding: string,
+    overdue: string,
+    delta-revenue: string,  // e.g. "+13.4%"
+    delta-expenses: string,
+    delta-net: string,
 }
 
 export struct JournalRow {
@@ -112,8 +116,8 @@ export struct JournalRow {
     id: string,
     operation: string,
     counterparty: string,
-    debit: float,           // 0 if credit
-    credit: float,          // 0 if debit
+    debit-str: string,      // "" if credit side
+    credit-str: string,     // "" if debit side
     is-credit: bool,        // true = credit side
     status-label: string,
     status-tone: string,    // "success" | "warning" | "danger" | "muted" | "info"
@@ -135,10 +139,11 @@ export struct CounterpartyDetails {
     phone: string,
     email: string,
     client-since: string,
-    balance: float,
+    balance-str: string,           // pre-formatted by Rust
+    balance-is-negative: bool,     // true = we owe them
     doc-count: int,
     overdue-count: int,
-    overdue-amount: float,
+    overdue-amount-str: string,    // pre-formatted by Rust
     last-contact-days: int,
     last-contact-date: string,
 }
@@ -146,11 +151,11 @@ export struct CounterpartyDetails {
 // ── Report model ─────────────────────────────────────────────────────────────
 
 export struct ReportMetrics {
-    revenue: float,
-    expenses: float,
-    profit: float,
-    margin: float,          // percent
-    delta-revenue: string,  // e.g. "+22.1%"
+    revenue: string,         // pre-formatted
+    expenses: string,
+    profit: string,
+    margin: string,          // pre-formatted "15.3%"
+    delta-revenue: string,   // e.g. "+22.1%"
     delta-expenses: string,
     delta-profit: string,
     delta-margin: string,
@@ -158,7 +163,7 @@ export struct ReportMetrics {
 
 export struct ExpenseCategory {
     label: string,
-    amount: float,
+    amount-str: string,    // pre-formatted by Rust
     percent: int,
 }
 
@@ -167,7 +172,7 @@ export struct DrillRow {
     operation: string,
     counterparty: string,
     doc-id: string,
-    amount: float,
+    amount-str: string,    // pre-formatted by Rust
 }
 
 // ── Settings model ───────────────────────────────────────────────────────────

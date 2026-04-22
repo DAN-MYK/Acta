@@ -1,0 +1,81 @@
+// Acta — Design Tokens
+// Brand accent: #3D75F4 (from repo logo/icons)
+// Philosophy: hairline borders, no shadows on content cards, flat avatars.
+// Shadows reserved for floating surfaces only (popovers, modals).
+
+export global AppTheme {
+    // Theme toggle — set from Rust
+    in-out property <bool> is-dark: false;
+
+    // Base font size (user configurable, 12–18px)
+    in-out property <length> base-font-size: 13px;
+
+    // ── Background ──────────────────────────────────────────────────────
+    out property <color> bg:          is-dark ? #262931 : #F6F5F1;
+    out property <color> bg-elevated: is-dark ? #31353E : #FFFFFF;
+    out property <color> bg-subtle:   is-dark ? #393E48 : #EEECE6;
+    out property <color> bg-hover:    is-dark ? #3D4250 : #EDEBE4;
+    out property <color> bg-sidebar:  is-dark ? #1F222A : #F0EEE8;
+    out property <color> bg-stripe:   is-dark ? #2D3038 : #F4F2EC;
+
+    // ── Borders ──────────────────────────────────────────────────────────
+    out property <color> border:        is-dark ? #464C58 : #E4E1D9;
+    out property <color> border-strong: is-dark ? #5A6070 : #CDC9BE;
+
+    // ── Text ─────────────────────────────────────────────────────────────
+    out property <color> text:       is-dark ? #F1F2F5 : #1A1B1F;
+    out property <color> text-muted: is-dark ? #B4B8C2 : #5E5F66;
+    out property <color> text-faint: is-dark ? #868B97 : #8A8B92;
+
+    // ── Brand & State Colors ─────────────────────────────────────────────
+    out property <color> accent:       is-dark ? #8FAEFF : #3D75F4;
+    out property <color> accent-hover: is-dark ? #A7C0FF : #2F63DC;
+    out property <color> accent-soft:  is-dark ? #2E3F60 : #E6EDFD;
+    out property <color> accent-text:  is-dark ? #A7C0FF : #3D75F4;
+
+    out property <color> success:      is-dark ? #5DE0A6 : #1EB16E;
+    out property <color> success-soft: is-dark ? #1F4633 : #E4F5EC;
+
+    out property <color> warning:      is-dark ? #EFB267 : #C77A1C;
+    out property <color> warning-soft: is-dark ? #4A3B22 : #F7ECD9;
+
+    out property <color> danger:       is-dark ? #EF8880 : #C0433B;
+    out property <color> danger-soft:  is-dark ? #4A2C29 : #F6E3E0;
+
+    out property <color> info:         is-dark ? #9AB4E1 : #4A6FA5;
+    out property <color> info-soft:    is-dark ? #2A3A56 : #E6EBF2;
+
+    // ── Fonts ─────────────────────────────────────────────────────────────
+    // Geist for body + UI, Source Serif 4 for headings, JetBrains Mono for numbers.
+    // These must be installed on the host system (or embedded via slint::font!).
+    out property <string> font-sans:  "Geist";
+    out property <string> font-serif: "Source Serif 4";
+    out property <string> font-mono:  "JetBrains Mono";
+
+    // ── Font Sizes ────────────────────────────────────────────────────────
+    out property <length> font-xs:   10px;
+    out property <length> font-sm:   11px;
+    out property <length> font-body: 13px;
+    out property <length> font-md:   15px;
+    out property <length> font-lg:   20px;
+    out property <length> font-xl:   26px;
+    out property <length> font-2xl:  28px;
+    out property <length> font-3xl:  32px;
+
+    // ── Border Radius ─────────────────────────────────────────────────────
+    out property <length> radius-sm:   4px;
+    out property <length> radius-md:   6px;
+    out property <length> radius-lg:   8px;
+    out property <length> radius-xl:   10px;
+    out property <length> radius-2xl:  14px;
+
+    // ── Spacing ───────────────────────────────────────────────────────────
+    out property <length> sp-1: 4px;
+    out property <length> sp-2: 8px;
+    out property <length> sp-3: 12px;
+    out property <length> sp-4: 16px;
+    out property <length> sp-5: 20px;
+    out property <length> sp-6: 24px;
+    out property <length> sp-7: 32px;
+    out property <length> sp-8: 40px;
+}

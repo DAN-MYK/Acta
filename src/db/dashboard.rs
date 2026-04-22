@@ -10,7 +10,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::models::dashboard::{
-    KpiSummary, MonthRevenue, RecentAct, StatusSlice, UpcomingPayment,
+    CategoryRevenue, KpiSummary, MonthRevenue, RecentAct, StatusSlice, UpcomingPayment,
 };
 
 /// Один SQL-запит з агрегатами для KPI-карток Dashboard.
@@ -262,6 +262,212 @@ pub async fn get_recent_acts(
             amount: r.amount,
             status: r.status,
             date: r.date,
+        })
+        .collect())
+}
+
+// ── Inbox — дії, що потребують уваги ─────────────────────────────────────────
+
+/// Рядок inbox: прострочені акти та неузгоджені платежі.
+pub struct InboxRow {
+    pub doc_id: String,
+    pub doc_number: String,
+    pub counterparty: String,
+    pub amount: Decimal,
+    pub age_days: i32,
+    pub kind: String,
+    pub action_label: String,
+}
+
+impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for InboxRow {
+    fn from_row(r: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
+        use sqlx::Row as _;
+        Ok(Self {
+            doc_id:       r.try_get("doc_id")?,
+            doc_number:   r.try_get("doc_number")?,
+            counterparty: r.try_get("counterparty")?,
+            amount:       r.try_get("amount")?,
+            age_days:     r.try_get("age_days")?,
+            kind:         r.try_get("kind")?,
+            action_label: r.try_get("action_label")?,
+        })
+    }
+}
+
+/// Прострочені акти (>14 днів без оплати) та неузгоджені платежі.
+/// Відсортовано за кількістю днів очікування (найдавніші — першими).
+/// Повертає не більше 20 записів.
+pub async fn inbox_items(pool: &PgPool, company_id: Uuid) -> Result<Vec<InboxRow>> {
+    sqlx::query_as::<_, InboxRow>(
+        r#"
+        SELECT
+            'act:' || a.id::text          AS doc_id,
+            a.number                       AS doc_number,
+            c.name                         AS counterparty,
+            a.total_amount                 AS amount,
+            (CURRENT_DATE - a.date)::int   AS age_days,
+            'overdue'::text                AS kind,
+            'Нагадати'::text               AS action_label
+        FROM acts a
+        JOIN counterparties c ON c.id = a.counterparty_id
+        WHERE a.company_id = $1
+          AND a.status::text = 'issued'
+          AND a.date < CURRENT_DATE - INTERVAL '14 days'
+        UNION ALL
+        SELECT
+            'pay:' || p.id::text,
+            'ПЛТ-' || LEFT(p.id::text, 8),
+            COALESCE(c.name, '—'),
+            p.amount,
+            (CURRENT_DATE - p.date)::int,
+            'unmatched'::text,
+            'Поєднати'::text
+        FROM payments p
+        LEFT JOIN counterparties c ON c.id = p.counterparty_id
+        WHERE p.company_id = $1
+          AND p.is_reconciled = false
+        ORDER BY age_days DESC
+        LIMIT 20
+        "#,
+    )
+    .bind(company_id)
+    .bind(company_id)
+    .fetch_all(pool)
+    .await
+    .map_err(anyhow::Error::from)
+}
+
+/// Витрати по місяцях за категоріями типу `expense`.
+pub async fn expenses_by_month(
+    pool: &PgPool,
+    company_id: Uuid,
+    months: u32,
+) -> Result<Vec<MonthRevenue>> {
+    struct Row {
+        month_num: i32,
+        year_num: i32,
+        amount: Decimal,
+    }
+
+    impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Row {
+        fn from_row(r: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
+            use sqlx::Row as _;
+            Ok(Self {
+                month_num: r.try_get("month_num")?,
+                year_num: r.try_get("year_num")?,
+                amount: r.try_get("amount")?,
+            })
+        }
+    }
+
+    let rows = sqlx::query_as::<_, Row>(
+        r#"
+        WITH expense_docs AS (
+            SELECT a.date, a.total_amount AS amount
+            FROM acts a
+            JOIN categories c ON c.id = a.category_id
+            WHERE a.company_id = $1
+              AND c.kind = 'expense'
+              AND a.date >= date_trunc('month', CURRENT_DATE) - ($2::int - 1) * INTERVAL '1 month'
+
+            UNION ALL
+
+            SELECT i.date, i.total_amount AS amount
+            FROM invoices i
+            JOIN categories c ON c.id = i.category_id
+            WHERE i.company_id = $1
+              AND c.kind = 'expense'
+              AND i.date >= date_trunc('month', CURRENT_DATE) - ($2::int - 1) * INTERVAL '1 month'
+        )
+        SELECT
+            EXTRACT(MONTH FROM date_trunc('month', date))::int AS month_num,
+            EXTRACT(YEAR FROM date_trunc('month', date))::int AS year_num,
+            COALESCE(SUM(amount), 0) AS amount
+        FROM expense_docs
+        GROUP BY date_trunc('month', date)
+        ORDER BY date_trunc('month', date) ASC
+        "#,
+    )
+    .bind(company_id)
+    .bind(months as i32)
+    .fetch_all(pool)
+    .await?;
+
+    let today = Local::now().date_naive();
+    let mut result: Vec<MonthRevenue> = Vec::with_capacity(months as usize);
+
+    for i in (0..months).rev() {
+        let target_month = subtract_months(today, i);
+        let found = rows.iter().find(|r| {
+            r.month_num as u32 == target_month.month() && r.year_num == target_month.year()
+        });
+        result.push(MonthRevenue {
+            month_num: target_month.month(),
+            year: target_month.year(),
+            amount: found.map(|r| r.amount).unwrap_or(Decimal::ZERO),
+        });
+    }
+
+    result.reverse();
+    Ok(result)
+}
+
+/// Розподіл витрат за категоріями для екрана звітів.
+pub async fn category_breakdown(
+    pool: &PgPool,
+    company_id: Uuid,
+    months: u32,
+) -> Result<Vec<CategoryRevenue>> {
+    struct Row {
+        label: String,
+        amount: Decimal,
+    }
+
+    impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Row {
+        fn from_row(r: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
+            use sqlx::Row as _;
+            Ok(Self {
+                label: r.try_get("label")?,
+                amount: r.try_get("amount")?,
+            })
+        }
+    }
+
+    let rows = sqlx::query_as::<_, Row>(
+        r#"
+        WITH expense_docs AS (
+            SELECT c.name AS label, a.total_amount AS amount
+            FROM acts a
+            JOIN categories c ON c.id = a.category_id
+            WHERE a.company_id = $1
+              AND c.kind = 'expense'
+              AND a.date >= date_trunc('month', CURRENT_DATE) - ($2::int - 1) * INTERVAL '1 month'
+
+            UNION ALL
+
+            SELECT c.name AS label, i.total_amount AS amount
+            FROM invoices i
+            JOIN categories c ON c.id = i.category_id
+            WHERE i.company_id = $1
+              AND c.kind = 'expense'
+              AND i.date >= date_trunc('month', CURRENT_DATE) - ($2::int - 1) * INTERVAL '1 month'
+        )
+        SELECT label, COALESCE(SUM(amount), 0) AS amount
+        FROM expense_docs
+        GROUP BY label
+        ORDER BY amount DESC, label ASC
+        "#,
+    )
+    .bind(company_id)
+    .bind(months as i32)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| CategoryRevenue {
+            label: row.label,
+            amount: row.amount,
         })
         .collect())
 }

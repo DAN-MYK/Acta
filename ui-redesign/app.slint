@@ -1,20 +1,15 @@
-// Acta — Main application entry point
-// Wires Shell + all screen components together.
-// Navigation driven by NavScreen enum; Shell emits nav-changed callback.
+// Acta — Main application window
 //
-// Icon loading: compile-time @image-url → passed as `in property <image>` down
-// the tree. All monetary strings pre-formatted in Rust before binding.
+// AppWindow — root component який:
+//   1. Тримає навігацію (NavScreen)
+//   2. Передає дані з Rust у дочірні екрани
+//   3. Пробрасує callbacks з екранів у Rust
+//
+// Кожен екран має власний .slint файл — тут ТІЛЬКИ wiring.
 
 import { AppTheme } from "design-tokens.slint";
 import { NavScreen } from "types.slint";
-import {
-    DocumentItem, CounterpartyItem, PaymentItem, TaskItem,
-    MonthlyData, AccountItem, DashboardMetrics, JournalRow,
-    CounterpartyDetails, ReportMetrics, ExpenseCategory, DrillRow,
-    CompanyInfo, IntegrationItem, TeamMember, NumberingRow, DayEvent,
-    DocumentKind, DocumentStatus, Priority, Direction,
-    ChartBar, InboxItem, ChainStep, DocChainGroup,
-} from "types.slint";
+import { Icons } from "icons.slint";
 import { Shell } from "shell.slint";
 import { Dashboard } from "dashboard.slint";
 import { Documents } from "documents.slint";
@@ -24,41 +19,14 @@ import { Reports } from "reports.slint";
 import { Tasks } from "tasks.slint";
 import { Settings } from "settings.slint";
 
-// ── Icon bundle (loaded once at compile time) ─────────────────────────────────
-global Icons {
-    out property <image> home:          @image-url("../ui/assets/icons/Home.svg");
-    out property <image> documents:     @image-url("../ui/assets/icons/Documents.svg");
-    out property <image> counterparties:@image-url("../ui/assets/icons/Counterparties.svg");
-    out property <image> payments:      @image-url("../ui/assets/icons/Payments.svg");
-    out property <image> reports:       @image-url("../ui/assets/icons/Reports.svg");
-    out property <image> tasks:         @image-url("../ui/assets/icons/To-Do.svg");
-    out property <image> settings:      @image-url("../ui/assets/icons/Settings.svg");
-
-    out property <image> search:        @image-url("../ui/assets/icons/Search.svg");
-    out property <image> check:         @image-url("../ui/assets/icons/Check.svg");
-    out property <image> close:         @image-url("../ui/assets/icons/Close.svg");
-    out property <image> more:          @image-url("../ui/assets/icons/More.svg");
-    out property <image> plus:          @image-url("../ui/assets/icons/New.svg");
-    out property <image> edit:          @image-url("../ui/assets/icons/Edit.svg");
-    out property <image> sort:          @image-url("../ui/assets/icons/Sort.svg");
-    out property <image> refresh:       @image-url("../ui/assets/icons/Refresh.svg");
-    out property <image> calendar:      @image-url("../ui/assets/icons/Calendar.svg");
-    out property <image> link:          @image-url("../ui/assets/icons/Archive.svg");
-    out property <image> pdf:           @image-url("../ui/assets/icons/PDF-Print.svg");
-    out property <image> chart-bar:     @image-url("../ui/assets/icons/Chart-Bar.svg");
-    out property <image> uah:           @image-url("../ui/assets/icons/UAH.svg");
-
-    // Status icons
-    out property <image> draft:         @image-url("../ui/assets/icons/Draft.svg");
-    out property <image> issued:        @image-url("../ui/assets/icons/Issued.svg");
-    out property <image> signed:        @image-url("../ui/assets/icons/Signed.svg");
-    out property <image> paid:          @image-url("../ui/assets/icons/Paid.svg");
-    out property <image> overdue:       @image-url("../ui/assets/icons/Overdue.svg");
-    out property <image> incoming:      @image-url("../ui/assets/icons/Incoming.svg");
-    out property <image> outgoing:      @image-url("../ui/assets/icons/Outgoing.svg");
-    out property <image> arrow-left:    @image-url("../ui/assets/icons/Arrow-Left.svg");
-    out property <image> arrow-right:   @image-url("../ui/assets/icons/Arrow-Right.svg");
-}
+// ── Типи даних (імпортовані для property declarations) ─────────────────────
+import {
+    DocumentItem, CounterpartyItem, PaymentItem, TaskItem,
+    AccountItem, DashboardMetrics, JournalRow,
+    CounterpartyDetails, ReportMetrics, ExpenseCategory, DrillRow,
+    CompanyInfo, IntegrationItem, TeamMember, NumberingRow, DayEvent,
+    ChartBar, InboxItem, ChainStep, DocChainGroup,
+} from "types.slint";
 
 // ── AppWindow ─────────────────────────────────────────────────────────────────
 export component AppWindow inherits Window {
@@ -69,17 +37,18 @@ export component AppWindow inherits Window {
     min-height: 640px;
     background: AppTheme.bg;
 
-    // ── Navigation state ───────────────────────────────────────────────────
+    // ── Navigation ───────────────────────────────────────────────────────
     in-out property <NavScreen> current-screen: NavScreen.Dashboard;
+    callback nav-changed(NavScreen);
 
-    // ── Shell / sidebar data ───────────────────────────────────────────────
+    // ── Shell info ───────────────────────────────────────────────────────
     in property <string> company-name: "ТОВ «Альфа-Бізнес»";
-    in property <string> user-name:    "Михайло Дзюба";
+    in property <string> user-name: "Михайло Дзюба";
     in property <string> user-initials: "МД";
     in property <int> documents-badge: 0;
     in property <int> tasks-badge: 0;
 
-    // ── Dashboard data ─────────────────────────────────────────────────────
+    // ── Dashboard ────────────────────────────────────────────────────────
     in property <DashboardMetrics> dash-metrics;
     in property <[ChartBar]> dash-chart-bars;
     in property <[JournalRow]> dash-journal;
@@ -91,78 +60,14 @@ export component AppWindow inherits Window {
     in property <string> dash-outstanding-str;
     in property <string> dash-overdue-str;
     in property <[InboxItem]> dash-inbox;
+    callback inbox-action(string, string);
 
-    // ── DocChain data ──────────────────────────────────────────────────────
-    in property <[ChainStep]> doc-chain-steps;
-    in property <[DocChainGroup]> cp-doc-chains;
-
-    // ── Documents data ─────────────────────────────────────────────────────
+    // ── Documents ────────────────────────────────────────────────────────
     in property <[DocumentItem]> all-documents;
-    in property <string> docs-search: "";
-    in property <string> docs-filter-tab: "all";   // "all"|"invoice"|"act"|"waybill"
     in property <[string]> docs-selected-ids;
     in property <int> docs-total-count;
     in-out property <int> docs-page: 1;
     in property <int> docs-page-count: 1;
-
-    // ── Counterparties data ────────────────────────────────────────────────
-    in property <[CounterpartyItem]> counterparties;
-    in property <CounterpartyDetails> cp-detail;
-    in property <[DocumentItem]> cp-documents;
-    in property <[PaymentItem]> cp-payments;
-    in-out property <string> cp-selected-id: "";
-    in-out property <string> cp-search: "";
-    in property <string> cp-balance-str;
-    in property <string> cp-overdue-amount-str;
-    // Pre-formatted cp metrics
-    in property <string> cp-balance-display;
-    in property <string> cp-doc-count-str;
-    in property <string> cp-overdue-str;
-    in property <string> cp-last-contact-str;
-
-    // ── Payments data ──────────────────────────────────────────────────────
-    in property <[PaymentItem]> payments;
-    in property <string> pay-incoming-str;
-    in property <string> pay-outgoing-str;
-    in property <string> pay-net-str;
-    in property <string> pay-unmatched-str;
-    in property <string> pay-incoming-sub;
-    in property <string> pay-outgoing-sub;
-    in property <int> pay-unmatched-count;
-
-    // ── Reports data ───────────────────────────────────────────────────────
-    in property <ReportMetrics> rep-metrics;
-    in property <[ChartBar]> rep-chart-bars;
-    in property <[ExpenseCategory]> rep-categories;
-    in property <[DrillRow]> rep-drill-rows;
-    in property <string> rep-revenue-str;
-    in property <string> rep-expenses-str;
-    in property <string> rep-profit-str;
-    in property <string> rep-margin-str;
-
-    // ── Tasks data ─────────────────────────────────────────────────────────
-    in property <[TaskItem]> tasks-open;
-    in property <[TaskItem]> tasks-done;
-    in property <[TaskItem]> tasks-all;
-    in property <[DayEvent]> day-events;
-    in property <int> tasks-open-count;
-    in property <int> tasks-high-count;
-    in property <int> tasks-done-count;
-    in property <string> tasks-today-label;
-
-    // ── Settings data ──────────────────────────────────────────────────────
-    in property <CompanyInfo> company-info;
-    in property <[IntegrationItem]> integrations;
-    in property <[TeamMember]> team-members;
-    in property <[NumberingRow]> numbering-rows;
-    in property <string> last-backup-label;
-    in property <string> last-backup-file;
-
-    // ── Outbound callbacks ─────────────────────────────────────────────────
-    // Navigation
-    callback nav-changed(NavScreen);
-
-    // Documents
     callback doc-search-changed(string);
     callback doc-tab-changed(string);
     callback doc-toggled(string, bool);
@@ -172,39 +77,68 @@ export component AppWindow inherits Window {
     callback doc-new;
     callback doc-page-changed(int);
 
-    // Counterparties
+    // ── DocChain ─────────────────────────────────────────────────────────
+    in property <[ChainStep]> doc-chain-steps;
+    in property <[DocChainGroup]> cp-doc-chains;
+    callback doc-chain-load(string);
+    callback doc-chain-create(string, string);
+
+    // ── Counterparties ───────────────────────────────────────────────────
+    in property <[CounterpartyItem]> counterparties;
+    in property <CounterpartyDetails> cp-detail;
+    in property <[DocumentItem]> cp-documents;
+    in property <[PaymentItem]> cp-payments;
     callback cp-selected(string);
     callback cp-search-changed(string);
     callback cp-new;
     callback cp-create-doc(string);
     callback cp-tab-changed(string);
 
-    // Payments
+    // ── Payments ─────────────────────────────────────────────────────────
+    in property <[PaymentItem]> payments;
+    in property <string> pay-incoming-str;
+    in property <string> pay-outgoing-str;
+    in property <string> pay-net-str;
+    in property <string> pay-unmatched-str;
+    in property <string> pay-incoming-sub;
+    in property <string> pay-outgoing-sub;
+    in property <int> pay-unmatched-count;
     callback pay-import-csv;
     callback pay-sync-bank;
     callback pay-new;
     callback pay-link(string);
 
-    // Reports
+    // ── Reports ──────────────────────────────────────────────────────────
+    in property <ReportMetrics> rep-metrics;
+    in property <[ChartBar]> rep-chart-bars;
+    in property <[ExpenseCategory]> rep-categories;
+    in property <[DrillRow]> rep-drill-rows;
     callback rep-period-changed(int);
     callback rep-category-drilled(string);
     callback rep-export-csv;
     callback rep-export-pdf;
 
-    // Dashboard inbox
-    callback inbox-action(string, string);
-
-    // DocChain
-    callback doc-chain-load(string);
-    callback doc-chain-create(string, string);
-
-    // Tasks
+    // ── Tasks ────────────────────────────────────────────────────────────
+    in property <[TaskItem]> tasks-open;
+    in property <[TaskItem]> tasks-done;
+    in property <[TaskItem]> tasks-all;
+    in property <[DayEvent]> day-events;
+    in property <int> tasks-open-count;
+    in property <int> tasks-high-count;
+    in property <int> tasks-done-count;
+    in property <string> tasks-today-label;
     callback task-toggled(string, bool);
     callback task-more(string);
     callback task-new;
     callback task-filter-changed(string);
 
-    // Settings
+    // ── Settings ─────────────────────────────────────────────────────────
+    in property <CompanyInfo> company-info;
+    in property <[IntegrationItem]> integrations;
+    in property <[TeamMember]> team-members;
+    in property <[NumberingRow]> numbering-rows;
+    in property <string> last-backup-label;
+    in property <string> last-backup-file;
     callback settings-section-changed(string);
     callback settings-dark-mode-toggled(bool);
     callback settings-density-changed(int);
@@ -214,27 +148,27 @@ export component AppWindow inherits Window {
     callback settings-backup-now;
     callback settings-backup-download;
 
-    // Command palette
+    // ── Command palette ──────────────────────────────────────────────────
     callback palette-query-changed(string);
     callback palette-item-activated(string);
 
-    // ── Internal state ─────────────────────────────────────────────────────
-    property <string> docs-tab-state: "all";
-    property <string> docs-search-state: "";
-    property <string> tasks-filter-state: "open";
-    property <string> rep-drill-state: "";
-    property <int> rep-period-state: 1;
-    property <string> cp-detail-tab-state: "docs";
-    property <string> settings-section-state: "appearance";
-    property <bool> palette-open: false;
-    property <string> palette-query-state: "";
+    // ── Internal state (UI-only, not exposed to Rust) ────────────────────
+    private property <string> docs-tab-state: "all";
+    private property <string> docs-search-state: "";
+    private property <string> tasks-filter-state: "open";
+    private property <string> rep-drill-state: "";
+    private property <int> rep-period-state: 1;
+    in-out property <string> cp-selected-id: "";
+    in-out property <string> cp-search: "";
+    private property <string> cp-detail-tab-state: "docs";
+    private property <string> settings-section-state: "appearance";
+    private property <bool> palette-open: false;
 
-    // ── Shell (sidebar + header + content slot) ────────────────────────────
+    // ── Shell ────────────────────────────────────────────────────────────
     Shell {
         width: root.width;
         height: root.height;
 
-        // Shell inputs
         current-screen: root.current-screen;
         company-name: root.company-name;
         user-name: root.user-name;
@@ -244,7 +178,7 @@ export component AppWindow inherits Window {
         is-dark: AppTheme.is-dark;
         cmd-palette-open: root.palette-open;
 
-        // Icons
+        // Icons from Icons global
         icon-home:           Icons.home;
         icon-documents:      Icons.documents;
         icon-counterparties: Icons.counterparties;
@@ -256,15 +190,14 @@ export component AppWindow inherits Window {
         icon-close:          Icons.close;
         icon-plus:           Icons.plus;
         icon-more:           Icons.more;
-        icon-bell:           Icons.search;  // placeholder — no bell icon in bundle
-        icon-sun:            Icons.uah;     // placeholder
-        icon-moon:           Icons.uah;     // placeholder
-        icon-chevron-down:   Icons.sort;    // placeholder
-        icon-star:           Icons.uah;     // placeholder
+        icon-bell:           Icons.search;      // TODO: додати Bell.svg
+        icon-sun:            Icons.uah;          // TODO: додати Sun.svg
+        icon-moon:           Icons.uah;          // TODO: додати Moon.svg
+        icon-chevron-down:   Icons.sort;         // TODO: додати ChevronDown.svg
+        icon-star:           Icons.uah;          // TODO: додати Star.svg
         icon-enter:          Icons.arrow-right;
-        logo:                Icons.home;    // placeholder
+        logo:                Icons.home;
 
-        // Shell callbacks
         navigate(screen) => {
             root.current-screen = screen;
             root.nav-changed(screen);
@@ -276,7 +209,10 @@ export component AppWindow inherits Window {
         open-cmd-palette => { root.palette-open = true; }
         close-cmd-palette => { root.palette-open = false; }
 
-        // ── Screen content ─────────────────────────────────────────────────
+        // ═══════════════════════════════════════════════════════════════
+        // Screen routing — кожен екран отримує свої дані та callbacks
+        // ═══════════════════════════════════════════════════════════════
+
         if root.current-screen == NavScreen.Dashboard : Dashboard {
             width: 100%;
             height: 100%;
@@ -351,8 +287,9 @@ export component AppWindow inherits Window {
             selected-id: root.cp-selected-id;
             search-query: root.cp-search;
             active-tab: root.cp-detail-tab-state;
-            detail-balance-str: root.cp-balance-display;
-            detail-overdue-str: root.cp-overdue-str;
+            detail-balance-str: self.detail.balance-str;
+            detail-balance-is-negative: self.detail.balance-is-negative;
+            detail-overdue-str: self.detail.overdue-amount-str;
 
             icon-search: Icons.search;
             icon-plus: Icons.plus;
@@ -399,10 +336,6 @@ export component AppWindow inherits Window {
             chart-bars: root.rep-chart-bars;
             categories: root.rep-categories;
             drill-rows: root.rep-drill-rows;
-            revenue-str: root.rep-revenue-str;
-            expenses-str: root.rep-expenses-str;
-            profit-str: root.rep-profit-str;
-            margin-str: root.rep-margin-str;
             drill-category: root.rep-drill-state;
             period: root.rep-period-state;
 

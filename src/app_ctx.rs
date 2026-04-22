@@ -1,107 +1,77 @@
-// app_ctx.rs — спільний стан програми, що передається між модулями UI.
+// app_ctx.rs — канонічний контейнер спільного стану програми.
 //
-// AppCtx містить пул БД, активну компанію та стани фільтрів/пошуку.
-// Передається через Arc<AppCtx> у кожен setup-модуль.
+// Передається через Arc<AppCtx> у всі модулі UI wiring.
+// Всі accessor'и безпечні при отруєному mutex.
 
 use sqlx::PgPool;
 use std::sync::{Arc, Mutex};
 
+// ---------------------------------------------------------------------------
+// List state structs — клонуються для кожного refresh
+// ---------------------------------------------------------------------------
 
 #[derive(Clone, Default)]
 pub struct CounterpartyListState {
     pub query: String,
     pub include_archived: bool,
-    pub page: usize,
-}
-
-#[derive(Clone, Default)]
-pub struct ActListState {
-    pub query: String,
-    pub status_filter: Option<crate::models::ActStatus>,
-}
-
-#[derive(Clone, Default)]
-pub struct InvoiceListState {
-    pub query: String,
-    pub status_filter: Option<crate::models::InvoiceStatus>,
-}
-
-#[derive(Clone, Default)]
-pub struct WaybillListState {
-    pub query: String,
-    pub status_filter: Option<crate::models::WaybillStatus>,
-}
-
-#[derive(Clone)]
-pub struct DocListState {
-    pub tab: i32,               // 0=Всі, 1=Акти, 2=Накладні
-    pub direction: String,      // "outgoing" | "incoming"
-    pub counterparty_index: i32, // 0 = всі контрагенти
-    pub query: String,
-    pub counterparty_id: Option<uuid::Uuid>, // None = всі контрагенти
-    pub date_from: Option<chrono::NaiveDate>,
-    pub date_to: Option<chrono::NaiveDate>,
-}
-
-impl Default for DocListState {
-    fn default() -> Self {
-        Self {
-            tab: 0,
-            direction: "outgoing".to_string(),
-            counterparty_index: 0,
-            query: String::new(),
-            counterparty_id: None,
-            date_from: None,
-            date_to: None,
-        }
-    }
 }
 
 #[derive(Clone, Default)]
 pub struct TaskListState {
     pub query: String,
+    pub filter: String, // "open" | "done" | "all"
 }
 
-#[derive(Clone, Default)]
-pub struct PaymentListState {
-    pub query: String,
-    pub direction_filter: Option<crate::models::payment::PaymentDirection>,
-}
+// ---------------------------------------------------------------------------
+// AppCtx — єдине джерело спільного стану в межах одного процесу
+// ---------------------------------------------------------------------------
 
-/// Спільний контекст додатку — передається через Arc у всі модулі UI.
 pub struct AppCtx {
     pub pool: PgPool,
-    pub active_company_id: Arc<Mutex<uuid::Uuid>>,
-    /// UUID-и контрагентів для фільтру в списку документів.
-    /// Індекс 0 = "Всі контрагенти" (None), індекс n = cp_ids[n-1].
-    pub doc_cp_ids: Arc<Mutex<Vec<uuid::Uuid>>>,
-    // Стани списків — спільні між модулями (companies.rs потребує їх при перемиканні компанії)
+    active_company_id: Arc<Mutex<uuid::Uuid>>,
     pub counterparty_state: Arc<Mutex<CounterpartyListState>>,
-    pub act_state: Arc<Mutex<ActListState>>,
-    pub invoice_state: Arc<Mutex<InvoiceListState>>,
-    pub waybill_state: Arc<Mutex<WaybillListState>>,
-    pub doc_state: Arc<Mutex<DocListState>>,
     pub task_state: Arc<Mutex<TaskListState>>,
-    pub payment_state: Arc<Mutex<PaymentListState>>,
 }
 
 impl AppCtx {
-    /// Читає UUID активної компанії. Безпечний при отруєному mutex.
-    /// Повертає nil UUID якщо компанія ще не обрана — перевіряй `.is_nil()` або використовуй `company_id_opt()`.
+    /// Створює новий контекст з початковим UUID компанії.
+    pub fn new(pool: PgPool, initial_company_id: uuid::Uuid) -> Self {
+        Self {
+            pool,
+            active_company_id: Arc::new(Mutex::new(initial_company_id)),
+            counterparty_state: Arc::new(Mutex::new(CounterpartyListState::default())),
+            task_state: Arc::new(Mutex::new(TaskListState::default())),
+        }
+    }
+
+    // --- Безпечний доступ до pool ---
+
+    pub fn pool(&self) -> &PgPool {
+        &self.pool
+    }
+
+    // --- Безпечний доступ до активної компанії ---
+
+    /// Повертає поточний UUID. Nil = компанія не обрана.
     pub fn company_id(&self) -> uuid::Uuid {
         *self.active_company_id.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    /// Повертає `Some(id)` якщо компанія обрана, або `None` якщо ні.
-    #[allow(dead_code)]
+    /// Повертає `Some(id)` якщо компанія обрана (не nil), `None` інакше.
     pub fn company_id_opt(&self) -> Option<uuid::Uuid> {
         let id = self.company_id();
         if id.is_nil() { None } else { Some(id) }
     }
 
-    /// Встановлює UUID активної компанії. Безпечний при отруєному mutex.
+    /// Встановлює активну компанію.
     pub fn set_company_id(&self, id: uuid::Uuid) {
         *self.active_company_id.lock().unwrap_or_else(|e| e.into_inner()) = id;
+    }
+
+    // --- Зручний клон для callbacks ---
+
+    pub fn company_id_arc(&self) -> Arc<Mutex<uuid::Uuid>> {
+        self.active_company_id.clone()
     }
 }
 
@@ -110,58 +80,50 @@ mod tests {
     use super::*;
     use uuid::Uuid;
 
-    // connect_lazy є sync, але потребує активного tokio runtime.
-    // Повертаємо Runtime разом з AppCtx щоб він залишався живим під час тесту.
-    fn make_ctx() -> (AppCtx, tokio::runtime::Runtime) {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        let pool = rt.block_on(async {
+    fn make_ctx_pool() -> PgPool {
+        let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+        rt.block_on(async {
             sqlx::PgPool::connect_lazy("postgres://test:test@localhost/test").unwrap()
-        });
-        (
-            AppCtx {
-                pool,
-                active_company_id: Arc::new(Mutex::new(Uuid::nil())),
-                doc_cp_ids: Arc::new(Mutex::new(vec![])),
-                counterparty_state: Arc::new(Mutex::new(Default::default())),
-                act_state: Arc::new(Mutex::new(Default::default())),
-                invoice_state: Arc::new(Mutex::new(Default::default())),
-                waybill_state: Arc::new(Mutex::new(Default::default())),
-                doc_state: Arc::new(Mutex::new(Default::default())),
-                task_state: Arc::new(Mutex::new(Default::default())),
-                payment_state: Arc::new(Mutex::new(Default::default())),
-            },
-            rt,
-        )
+        })
     }
 
     #[test]
-    fn company_id_roundtrip() {
-        let (ctx, _rt) = make_ctx();
+    fn company_id_is_initial_value() {
+        let pool = make_ctx_pool();
         let id = Uuid::new_v4();
-        ctx.set_company_id(id);
+        let ctx = AppCtx::new(pool, id);
         assert_eq!(ctx.company_id(), id);
     }
 
     #[test]
-    fn company_id_initial_is_nil() {
-        let (ctx, _rt) = make_ctx();
-        assert!(ctx.company_id().is_nil());
+    fn company_id_roundtrip_through_set() {
+        let pool = make_ctx_pool();
+        let ctx = AppCtx::new(pool, Uuid::nil());
+        let new_id = Uuid::new_v4();
+        ctx.set_company_id(new_id);
+        assert_eq!(ctx.company_id(), new_id);
     }
 
     #[test]
     fn company_id_opt_nil_returns_none() {
-        let (ctx, _rt) = make_ctx();
+        let pool = make_ctx_pool();
+        let ctx = AppCtx::new(pool, Uuid::nil());
         assert!(ctx.company_id_opt().is_none());
     }
 
     #[test]
     fn company_id_opt_set_returns_some() {
-        let (ctx, _rt) = make_ctx();
+        let pool = make_ctx_pool();
+        let ctx = AppCtx::new(pool, Uuid::nil());
         let id = Uuid::new_v4();
         ctx.set_company_id(id);
         assert_eq!(ctx.company_id_opt(), Some(id));
+    }
+
+    #[test]
+    fn pool_accessor_returns_reference() {
+        let pool = make_ctx_pool();
+        let ctx = AppCtx::new(pool.clone(), Uuid::nil());
+        let _pool_ref: &PgPool = ctx.pool();
     }
 }

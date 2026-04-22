@@ -1,9 +1,10 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use slint::{ComponentHandle, ModelRc, VecModel};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use acta::app_ctx::AppCtx;
 use acta::db;
 use crate::ui::helpers::{
     act_row_to_document_item, counterparty_to_details, counterparty_to_item,
@@ -83,23 +84,19 @@ pub fn apply_counterparty_detail_to_ui(ui: &crate::AppWindow, data: Counterparty
     ui.set_cp_payments(ModelRc::new(VecModel::from(data.payments)));
 }
 
-pub fn wire_counterparty_callbacks(
-    ui: &crate::AppWindow,
-    pool: &Arc<PgPool>,
-    company_id: &Arc<Mutex<Uuid>>,
-) {
+/// Підписує всі counterparty callbacks на UI компонент.
+pub fn wire_counterparty_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
     ui.on_cp_selected({
-        let pool = pool.clone();
+        let ctx = ctx.clone();
         let ui_weak = ui.as_weak();
-        let company_id = company_id.clone();
         move |id| {
-            let pool = pool.clone();
+            let ctx = ctx.clone();
             let ui_weak = ui_weak.clone();
-            let cid = *company_id.lock().unwrap();
             let id_str = id.to_string();
             tokio::spawn(async move {
+                let cid = ctx.company_id();
                 if let Ok(cp_id) = Uuid::parse_str(&id_str) {
-                    if let Some(data) = prepare_counterparty_detail(&pool, cid, cp_id).await {
+                    if let Some(data) = prepare_counterparty_detail(ctx.pool(), cid, cp_id).await {
                         let _ = ui_weak.upgrade_in_event_loop(move |ui| {
                             apply_counterparty_detail_to_ui(&ui, data);
                             ui.set_cp_selected_id(id_str.into());
@@ -111,31 +108,29 @@ pub fn wire_counterparty_callbacks(
     });
 
     ui.on_cp_search_changed({
-        let pool = pool.clone();
+        let ctx = ctx.clone();
         let ui_weak = ui.as_weak();
-        let company_id = company_id.clone();
         move |query| {
-            let pool = pool.clone();
+            let ctx = ctx.clone();
             let ui_weak = ui_weak.clone();
-            let cid = *company_id.lock().unwrap();
             let q = query.to_string();
             tokio::spawn(async move {
+                let cid = ctx.company_id();
                 let search = if q.is_empty() { None } else { Some(q.as_str()) };
-                let data = prepare_counterparties_data(&pool, cid, search).await;
-                let _ = ui_weak
-                    .upgrade_in_event_loop(move |ui| apply_counterparties_to_ui(&ui, data));
+                let data = prepare_counterparties_data(ctx.pool(), cid, search).await;
+                let _ = ui_weak.upgrade_in_event_loop(move |ui| apply_counterparties_to_ui(&ui, data));
             });
         }
     });
 
-    ui.on_cp_new(|| {});
-    ui.on_cp_create_doc(|_| {});
-    ui.on_cp_tab_changed(|_| {});
+    // No-op → tracing (Epic 7)
+    ui.on_cp_new(|| tracing::info!("TODO: створення контрагента"));
+    ui.on_cp_create_doc(|id| tracing::info!("TODO: створення документу для контрагента {}", id));
+    ui.on_cp_tab_changed(|t| tracing::debug!("cp_tab_changed: {}", t));
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use acta::models::counterparty::Counterparty;
     use chrono::Utc;
     use uuid::Uuid;

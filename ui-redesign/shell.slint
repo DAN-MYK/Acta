@@ -1,0 +1,925 @@
+// Acta — App Shell: Sidebar navigation + top header + command palette
+// Aesthetic: hairline border between sidebar and main, flat avatar, no gradients.
+
+import { AppTheme } from "design-tokens.slint";
+import { NavScreen } from "types.slint";
+import { Card, VDivider, HDivider, IconButton, KbdHint, SearchInput, Avatar, GhostButton, SecondaryButton } from "components.slint";
+
+// ── Sidebar navigation item ───────────────────────────────────────────────────
+component NavItem inherits Rectangle {
+    in property <string> label;
+    in property <image> icon;
+    in property <bool> active: false;
+    in property <int> badge-count: 0;
+    callback clicked;
+
+    property <bool> hovered: false;
+
+    height: 30px;
+    border-radius: AppTheme.radius-md;
+    background: active ? AppTheme.bg-elevated : (hovered ? AppTheme.bg-hover : transparent);
+    border-width: active ? 1px : 0px;
+    border-color: AppTheme.border;
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 10px;
+        alignment: stretch;
+
+        Image {
+            source: root.icon;
+            width: 15px;
+            height: 15px;
+            colorize: active ? AppTheme.text : AppTheme.text-faint;
+            image-fit: contain;
+            vertical-alignment: center;
+        }
+
+        Text {
+            text: root.label;
+            color: active ? AppTheme.text : AppTheme.text-muted;
+            font-size: AppTheme.font-body;
+            font-family: AppTheme.font-sans;
+            font-weight: active ? 500 : 400;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+
+        if badge-count > 0 : Rectangle {
+            width: max(18px, badge-label.preferred-width + 12px);
+            height: 17px;
+            border-radius: 4px;
+            background: AppTheme.bg-subtle;
+
+            badge-label := Text {
+                text: badge-count;
+                color: AppTheme.text-muted;
+                font-size: 10.5px;
+                font-family: AppTheme.font-mono;
+                font-weight: 600;
+                vertical-alignment: center;
+                horizontal-alignment: center;
+            }
+        }
+    }
+
+    TouchArea {
+        mouse-cursor: pointer;
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.move) {
+                root.hovered = self.has-hover;
+            }
+        }
+        clicked => { root.clicked(); }
+    }
+}
+
+// ── Saved views item ──────────────────────────────────────────────────────────
+component SavedViewItem inherits Rectangle {
+    in property <string> label;
+    in property <int> count;
+    in property <image> star-icon;
+    callback clicked;
+
+    property <bool> hovered: false;
+
+    height: 24px;
+    border-radius: AppTheme.radius-sm;
+    background: hovered ? AppTheme.bg-hover : transparent;
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 8px;
+        alignment: stretch;
+
+        Image {
+            source: root.star-icon;
+            width: 11px;
+            height: 11px;
+            colorize: AppTheme.text-faint;
+            image-fit: contain;
+            vertical-alignment: center;
+        }
+
+        Text {
+            text: root.label;
+            color: hovered ? AppTheme.text : AppTheme.text-muted;
+            font-size: 12px;
+            font-family: AppTheme.font-sans;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+
+        Text {
+            text: root.count;
+            color: AppTheme.text-faint;
+            font-size: 10.5px;
+            font-family: AppTheme.font-mono;
+            vertical-alignment: center;
+        }
+    }
+
+    TouchArea {
+        mouse-cursor: pointer;
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.move) {
+                root.hovered = self.has-hover;
+            }
+        }
+        clicked => { root.clicked(); }
+    }
+}
+
+// ── Palette item ──────────────────────────────────────────────────────────────
+component PaletteItem inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    in property <string> kbd: "";
+    in property <string> meta: "";
+    callback clicked;
+
+    property <bool> hovered: false;
+
+    height: 36px;
+    background: hovered ? AppTheme.bg-subtle : transparent;
+
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        spacing: 10px;
+        alignment: stretch;
+
+        Image {
+            source: root.icon;
+            width: 14px;
+            height: 14px;
+            colorize: hovered ? AppTheme.text : AppTheme.text-muted;
+            image-fit: contain;
+            vertical-alignment: center;
+        }
+
+        Text {
+            text: root.label;
+            color: AppTheme.text;
+            font-size: 13px;
+            font-family: AppTheme.font-sans;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+
+        if meta != "" : Text {
+            text: root.meta;
+            color: AppTheme.text-faint;
+            font-size: 11.5px;
+            font-family: AppTheme.font-mono;
+            vertical-alignment: center;
+        }
+
+        if kbd != "" : Rectangle {
+            height: 18px;
+            min-width: kbd-text.preferred-width + 10px;
+            border-width: 1px;
+            border-color: AppTheme.border;
+            border-radius: 3px;
+            background: AppTheme.bg-subtle;
+
+            kbd-text := Text {
+                text: root.kbd;
+                color: AppTheme.text-faint;
+                font-size: 10px;
+                font-family: AppTheme.font-mono;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    TouchArea {
+        mouse-cursor: pointer;
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.move) {
+                root.hovered = self.has-hover;
+            }
+        }
+        clicked => { root.clicked(); }
+    }
+}
+
+// ── Command Palette ────────────────────────────────────────────────────────────
+export component CommandPalette inherits Rectangle {
+    in-out property <bool> open: false;
+    in property <string> query: "";
+    in property <image> search-icon;
+    in property <image> close-icon;
+    in property <image> enter-icon;
+    callback closed;
+    callback navigated(NavScreen);
+    callback query-changed(string);
+
+    visible: open;
+    x: 0;
+    y: 0;
+    width: 100%;
+    height: 100%;
+    background: #0a0b0d.with-alpha(0.35);
+
+    // Backdrop click to close
+    TouchArea {
+        clicked => { root.closed(); }
+    }
+
+    // Palette box — centered horizontally, near top
+    palette := Rectangle {
+        x: (root.width - self.width) / 2;
+        y: 120px;
+        width: 620px;
+        max-height: 480px;
+        background: AppTheme.bg-elevated;
+        border-width: 1px;
+        border-color: AppTheme.border;
+        border-radius: 12px;
+        // Floating surface — shadow allowed here
+        drop-shadow-blur: 24px;
+        drop-shadow-color: #1e1e1e.with-alpha(0.08);
+
+        // Prevent backdrop click from closing when clicking inside
+        TouchArea { }
+
+        VerticalLayout {
+            // Search input row
+            HorizontalLayout {
+                padding: 14px;
+                padding-top: 14px;
+                padding-bottom: 14px;
+                spacing: 10px;
+                height: 52px;
+
+                Image {
+                    source: root.search-icon;
+                    width: 16px;
+                    height: 16px;
+                    colorize: AppTheme.text-faint;
+                    image-fit: contain;
+                    vertical-alignment: center;
+                }
+
+                search-field := TextInput {
+                    text: root.query;
+                    color: AppTheme.text;
+                    font-size: 14px;
+                    font-family: AppTheme.font-sans;
+                    single-line: true;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    edited => { root.query-changed(self.text); }
+                }
+
+                // Placeholder overlay shown when field is empty
+                if root.query == "" : Text {
+                    text: "Пошук команди, документа, контрагента…";
+                    color: AppTheme.text-faint;
+                    font-size: 14px;
+                    font-family: AppTheme.font-sans;
+                    vertical-alignment: center;
+                    accessible-role: none;
+                }
+
+                Rectangle {
+                    width: 30px;
+                    height: 16px;
+                    border-width: 1px;
+                    border-color: AppTheme.border;
+                    border-radius: 3px;
+                    background: transparent;
+
+                    Text {
+                        text: "esc";
+                        color: AppTheme.text-faint;
+                        font-size: 10px;
+                        font-family: AppTheme.font-mono;
+                        vertical-alignment: center;
+                        horizontal-alignment: center;
+                    }
+                }
+            }
+
+            HDivider { }
+
+            // Navigation shortcuts section
+            VerticalLayout {
+                padding-top: 6px;
+                padding-bottom: 6px;
+
+                // Section label
+                Text {
+                    text: "ПЕРЕХІД";
+                    color: AppTheme.text-faint;
+                    font-size: 10px;
+                    font-family: AppTheme.font-sans;
+                    font-weight: 600;
+                    letter-spacing: 1.2px;
+                    x: 16px;
+                    width: parent.width - 16px;
+                    height: 28px;
+                    vertical-alignment: center;
+                }
+
+                // Nav items
+                palette-nav-home := PaletteItem {
+                    icon: root.enter-icon;
+                    label: "Головна";
+                    kbd: "G H";
+                    clicked => { root.navigated(NavScreen.Dashboard); root.closed(); }
+                }
+                palette-nav-docs := PaletteItem {
+                    icon: root.enter-icon;
+                    label: "Документи";
+                    kbd: "G D";
+                    clicked => { root.navigated(NavScreen.Documents); root.closed(); }
+                }
+                palette-nav-cp := PaletteItem {
+                    icon: root.enter-icon;
+                    label: "Контрагенти";
+                    kbd: "G C";
+                    clicked => { root.navigated(NavScreen.Counterparties); root.closed(); }
+                }
+                palette-nav-pay := PaletteItem {
+                    icon: root.enter-icon;
+                    label: "Платежі";
+                    kbd: "G P";
+                    clicked => { root.navigated(NavScreen.Payments); root.closed(); }
+                }
+                palette-nav-rep := PaletteItem {
+                    icon: root.enter-icon;
+                    label: "Звіти";
+                    kbd: "G R";
+                    clicked => { root.navigated(NavScreen.Reports); root.closed(); }
+                }
+                palette-nav-tasks := PaletteItem {
+                    icon: root.enter-icon;
+                    label: "Задачі";
+                    kbd: "G T";
+                    clicked => { root.navigated(NavScreen.Tasks); root.closed(); }
+                }
+            }
+
+            HDivider { }
+
+            // Footer hints
+            Rectangle {
+                height: 34px;
+                background: AppTheme.bg-subtle;
+                border-radius: 12px;
+
+                HorizontalLayout {
+                    padding-left: 16px;
+                    padding-right: 16px;
+                    spacing: 12px;
+                    alignment: center;
+
+                    HorizontalLayout {
+                        spacing: 4px;
+                        KbdHint { key: "↑"; }
+                        KbdHint { key: "↓"; }
+                        Text {
+                            text: "навігація";
+                            color: AppTheme.text-faint;
+                            font-size: 11px;
+                            font-family: AppTheme.font-sans;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 4px;
+                        KbdHint { key: "↵"; }
+                        Text {
+                            text: "вибрати";
+                            color: AppTheme.text-faint;
+                            font-size: 11px;
+                            font-family: AppTheme.font-sans;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ── Shell ─────────────────────────────────────────────────────────────────────
+export component Shell inherits Rectangle {
+    // Navigation state — set by Rust
+    in-out property <NavScreen> current-screen: NavScreen.Dashboard;
+    in property <string> screen-title: "Головна";
+    in property <string> screen-subtitle: "Огляд фінансового стану компанії";
+
+    // Theme
+    in-out property <bool> is-dark: AppTheme.is-dark;
+
+    // Company info
+    in property <string> company-name: "ТОВ «Альфа-Бізнес»";
+    in property <string> user-name: "Михайло Дан";
+    in property <string> user-role: "Адміністратор";
+    in property <string> user-initials: "МД";
+
+    // Notification badge counts
+    in property <int> documents-badge: 3;
+    in property <int> tasks-badge: 4;
+
+    // Command palette
+    in-out property <bool> cmd-palette-open: false;
+
+    // Icon assets — loaded from project/ui/assets/icons/
+    in property <image> icon-home;
+    in property <image> icon-documents;
+    in property <image> icon-counterparties;
+    in property <image> icon-payments;
+    in property <image> icon-reports;
+    in property <image> icon-tasks;
+    in property <image> icon-settings;
+    in property <image> icon-search;
+    in property <image> icon-bell;
+    in property <image> icon-sun;
+    in property <image> icon-moon;
+    in property <image> icon-chevron-down;
+    in property <image> icon-plus;
+    in property <image> icon-star;
+    in property <image> icon-more;
+    in property <image> icon-close;
+    in property <image> icon-enter;
+    in property <image> logo;
+
+    // Callbacks to Rust
+    callback navigate(NavScreen);
+    callback toggle-theme;
+    callback open-cmd-palette;
+    callback close-cmd-palette;
+
+    background: AppTheme.bg;
+
+    HorizontalLayout {
+        spacing: 0px;
+
+        // ── Sidebar ────────────────────────────────────────────────────────
+        sidebar := Rectangle {
+            width: 224px;
+            background: AppTheme.bg-sidebar;
+
+            // Right hairline border
+            Rectangle {
+                x: parent.width - 1px;
+                y: 0;
+                width: 1px;
+                height: parent.height;
+                background: AppTheme.border;
+            }
+
+            VerticalLayout {
+                padding: 10px;
+                padding-top: 16px;
+                spacing: 0px;
+
+                // ── Company switcher ───────────────────────────────────────
+                company-btn := Rectangle {
+                    height: 44px;
+                    border-radius: AppTheme.radius-md;
+                    background: company-hover.has-hover ? AppTheme.bg-elevated : transparent;
+                    border-width: company-hover.has-hover ? 1px : 0px;
+                    border-color: AppTheme.border;
+
+                    HorizontalLayout {
+                        padding-left: 10px;
+                        padding-right: 10px;
+                        spacing: 10px;
+                        alignment: stretch;
+
+                        // Brand mark — accent square with "A" glyph
+                        Rectangle {
+                            width: 26px;
+                            height: 26px;
+                            border-radius: 6px;
+                            background: AppTheme.accent;
+
+                            Text {
+                                text: "A";
+                                color: #ffffff;
+                                font-size: 14px;
+                                font-family: AppTheme.font-sans;
+                                font-weight: 700;
+                                vertical-alignment: center;
+                                horizontal-alignment: center;
+                            }
+                        }
+
+                        VerticalLayout {
+                            alignment: center;
+                            horizontal-stretch: 1;
+
+                            Text {
+                                text: root.company-name;
+                                color: AppTheme.text;
+                                font-size: 13px;
+                                font-family: AppTheme.font-sans;
+                                font-weight: 500;
+                                overflow: elide;
+                            }
+
+                            Text {
+                                text: "Acta · упр. облік";
+                                color: AppTheme.text-faint;
+                                font-size: 10.5px;
+                                font-family: AppTheme.font-sans;
+                            }
+                        }
+
+                        Image {
+                            source: root.icon-chevron-down;
+                            width: 13px;
+                            height: 13px;
+                            colorize: AppTheme.text-faint;
+                            image-fit: contain;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    company-hover := TouchArea { mouse-cursor: pointer; }
+                }
+
+                // ── Search trigger ─────────────────────────────────────────
+                search-btn := Rectangle {
+                    height: 30px;
+                    border-radius: AppTheme.radius-md;
+                    background: AppTheme.bg-elevated;
+                    border-width: 1px;
+                    border-color: AppTheme.border;
+
+                    HorizontalLayout {
+                        padding-left: 10px;
+                        padding-right: 10px;
+                        spacing: 8px;
+                        alignment: stretch;
+
+                        Image {
+                            source: root.icon-search;
+                            width: 13px;
+                            height: 13px;
+                            colorize: AppTheme.text-faint;
+                            image-fit: contain;
+                            vertical-alignment: center;
+                        }
+
+                        Text {
+                            text: "Пошук…";
+                            color: AppTheme.text-faint;
+                            font-size: 12px;
+                            font-family: AppTheme.font-sans;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                        }
+
+                        HorizontalLayout {
+                            spacing: 2px;
+                            KbdHint { key: "⌘"; }
+                            KbdHint { key: "K"; }
+                        }
+                    }
+
+                    TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.open-cmd-palette(); }
+                    }
+                }
+
+                // ── Primary navigation ─────────────────────────────────────
+                // Epic 10: Keyboard shortcuts — Alt+1..6 для навігації
+                VerticalLayout {
+                    spacing: 1px;
+
+                    nav-home := NavItem {
+                        label: "Головна";
+                        icon: root.icon-home;
+                        active: root.current-screen == NavScreen.Dashboard;
+                        clicked => { root.navigate(NavScreen.Dashboard); }
+                    }
+
+                    nav-docs := NavItem {
+                        label: "Документи";
+                        icon: root.icon-documents;
+                        active: root.current-screen == NavScreen.Documents;
+                        badge-count: root.documents-badge;
+                        clicked => { root.navigate(NavScreen.Documents); }
+                    }
+
+                    nav-cp := NavItem {
+                        label: "Контрагенти";
+                        icon: root.icon-counterparties;
+                        active: root.current-screen == NavScreen.Counterparties;
+                        clicked => { root.navigate(NavScreen.Counterparties); }
+                    }
+
+                    nav-pay := NavItem {
+                        label: "Платежі";
+                        icon: root.icon-payments;
+                        active: root.current-screen == NavScreen.Payments;
+                        clicked => { root.navigate(NavScreen.Payments); }
+                    }
+
+                    nav-rep := NavItem {
+                        label: "Звіти";
+                        icon: root.icon-reports;
+                        active: root.current-screen == NavScreen.Reports;
+                        clicked => { root.navigate(NavScreen.Reports); }
+                    }
+
+                    nav-tasks := NavItem {
+                        label: "Задачі";
+                        icon: root.icon-tasks;
+                        active: root.current-screen == NavScreen.Tasks;
+                        badge-count: root.tasks-badge;
+                        clicked => { root.navigate(NavScreen.Tasks); }
+                    }
+                }
+
+                // Epic 10: Keyboard navigation hotkeys
+                FocusScope {
+                    key-pressed(e) => {
+                        if (e.text == "1" && e.modifiers.control) {
+                            root.navigate(NavScreen.Dashboard);
+                            return accept;
+                        }
+                        if (e.text == "2" && e.modifiers.control) {
+                            root.navigate(NavScreen.Documents);
+                            return accept;
+                        }
+                        if (e.text == "3" && e.modifiers.control) {
+                            root.navigate(NavScreen.Counterparties);
+                            return accept;
+                        }
+                        if (e.text == "4" && e.modifiers.control) {
+                            root.navigate(NavScreen.Payments);
+                            return accept;
+                        }
+                        if (e.text == "5" && e.modifiers.control) {
+                            root.navigate(NavScreen.Reports);
+                            return accept;
+                        }
+                        if (e.text == "6" && e.modifiers.control) {
+                            root.navigate(NavScreen.Tasks);
+                            return accept;
+                        }
+                        if (e.text == "7" && e.modifiers.control) {
+                            root.navigate(NavScreen.Settings);
+                            return accept;
+                        }
+                        // Cmd/Ctrl+K — відкрити Command Palette
+                        if (e.text == "k" && e.modifiers.control) {
+                            root.open-cmd-palette();
+                            return accept;
+                        }
+                        reject
+                    }
+                }
+
+                // ── Saved views / filters ──────────────────────────────────
+                Rectangle {
+                    height: 12px;
+                }
+
+                HorizontalLayout {
+                    padding-left: 10px;
+                    padding-right: 6px;
+                    height: 22px;
+                    alignment: stretch;
+
+                    Text {
+                        text: "ЗБЕРЕЖЕНІ ФІЛЬТРИ";
+                        color: AppTheme.text-faint;
+                        font-size: 10px;
+                        font-family: AppTheme.font-sans;
+                        font-weight: 600;
+                        letter-spacing: 1.4px;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+
+                    Rectangle {
+                        width: 18px;
+                        height: 18px;
+                        border-radius: AppTheme.radius-sm;
+                        background: plus-hover.has-hover ? AppTheme.bg-hover : transparent;
+
+                        Image {
+                            source: root.icon-plus;
+                            width: 10px;
+                            height: 10px;
+                            colorize: AppTheme.text-faint;
+                            image-fit: contain;
+                        }
+                        plus-hover := TouchArea { mouse-cursor: pointer; }
+                    }
+                }
+
+                Rectangle { height: 4px; }
+
+                SavedViewItem {
+                    label: "Прострочені рахунки";
+                    count: 1;
+                    star-icon: root.icon-star;
+                }
+                SavedViewItem {
+                    label: "Акти без підпису";
+                    count: 2;
+                    star-icon: root.icon-star;
+                }
+                SavedViewItem {
+                    label: "Неприв'язані платежі";
+                    count: 2;
+                    star-icon: root.icon-star;
+                }
+                SavedViewItem {
+                    label: "Цей тиждень";
+                    count: 7;
+                    star-icon: root.icon-star;
+                }
+
+                // ── Spacer ─────────────────────────────────────────────────
+                Rectangle { vertical-stretch: 1; }
+
+                // ── Settings nav item ──────────────────────────────────────
+                NavItem {
+                    label: "Налаштування";
+                    icon: root.icon-settings;
+                    active: root.current-screen == NavScreen.Settings;
+                    clicked => { root.navigate(NavScreen.Settings); }
+                }
+
+                Rectangle { height: 4px; }
+
+                // ── User card ──────────────────────────────────────────────
+                Rectangle {
+                    height: 1px;
+                    background: AppTheme.border;
+                }
+
+                Rectangle { height: 10px; }
+
+                HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 4px;
+                    spacing: 10px;
+                    alignment: stretch;
+                    height: 36px;
+
+                    Avatar {
+                        initials: root.user-initials;
+                        size: 26;
+                    }
+
+                    VerticalLayout {
+                        alignment: center;
+                        horizontal-stretch: 1;
+
+                        Text {
+                            text: root.user-name;
+                            color: AppTheme.text;
+                            font-size: 12.5px;
+                            font-family: AppTheme.font-sans;
+                            font-weight: 500;
+                            overflow: elide;
+                        }
+
+                        Text {
+                            text: root.user-role;
+                            color: AppTheme.text-faint;
+                            font-size: 10.5px;
+                            font-family: AppTheme.font-sans;
+                        }
+                    }
+
+                    Rectangle {
+                        width: 22px;
+                        height: 22px;
+                        border-radius: AppTheme.radius-md;
+                        background: more-hover.has-hover ? AppTheme.bg-hover : transparent;
+
+                        Image {
+                            source: root.icon-more;
+                            width: 12px;
+                            height: 12px;
+                            colorize: AppTheme.text-muted;
+                            image-fit: contain;
+                        }
+                        more-hover := TouchArea { mouse-cursor: pointer; }
+                    }
+                }
+            }
+        }
+
+        // ── Main content area ──────────────────────────────────────────────
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 0px;
+
+            // ── Top header bar ─────────────────────────────────────────────
+            header := Rectangle {
+                height: 52px;
+                background: AppTheme.bg;
+                border-radius: 0px;
+
+                // Bottom hairline
+                Rectangle {
+                    x: 0;
+                    y: parent.height - 1px;
+                    width: parent.width;
+                    height: 1px;
+                    background: AppTheme.border;
+                }
+
+                HorizontalLayout {
+                    padding-left: 22px;
+                    padding-right: 20px;
+                    spacing: 12px;
+                    alignment: stretch;
+
+                    VerticalLayout {
+                        alignment: center;
+                        horizontal-stretch: 1;
+
+                        HeadingMd-inner := Text {
+                            text: root.screen-title;
+                            color: AppTheme.text;
+                            font-family: AppTheme.font-serif;
+                            font-size: 20px;
+                            font-weight: 500;
+                        }
+
+                        if root.screen-subtitle != "" : Text {
+                            text: root.screen-subtitle;
+                            color: AppTheme.text-faint;
+                            font-size: 11.5px;
+                            font-family: AppTheme.font-sans;
+                        }
+                    }
+
+                    // Bell icon
+                    Rectangle {
+                        width: 28px;
+                        height: 28px;
+                        border-radius: AppTheme.radius-md;
+                        background: bell-hover.has-hover ? AppTheme.bg-subtle : transparent;
+                        Image {
+                            source: root.icon-bell;
+                            width: 15px;
+                            height: 15px;
+                            colorize: AppTheme.text-muted;
+                            image-fit: contain;
+                        }
+                        bell-hover := TouchArea { mouse-cursor: pointer; }
+                    }
+
+                    // Theme toggle
+                    Rectangle {
+                        width: 28px;
+                        height: 28px;
+                        border-radius: AppTheme.radius-md;
+                        background: theme-hover.has-hover ? AppTheme.bg-subtle : transparent;
+                        Image {
+                            source: root.is-dark ? root.icon-sun : root.icon-moon;
+                            width: 15px;
+                            height: 15px;
+                            colorize: AppTheme.text-muted;
+                            image-fit: contain;
+                        }
+                        theme-hover := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.toggle-theme(); }
+                        }
+                    }
+                }
+            }
+
+            // ── Screen content (injected by App) ───────────────────────────
+            content := Rectangle {
+                vertical-stretch: 1;
+                clip: true;
+                background: AppTheme.bg;
+
+                @children
+            }
+        }
+    }
+
+    // ── Command Palette overlay ────────────────────────────────────────────
+    if cmd-palette-open : CommandPalette {
+        open: root.cmd-palette-open;
+        search-icon: root.icon-search;
+        close-icon: root.icon-close;
+        enter-icon: root.icon-enter;
+        closed => { root.close-cmd-palette(); }
+        navigated(screen) => { root.navigate(screen); }
+    }
+}

@@ -143,8 +143,8 @@ component JournalTableRow inherits Rectangle {
 
         // Debit
         Text {
-            text: data.debit > 0 ? data.debit : "—";
-            color: data.debit > 0 ? AppTheme.text : AppTheme.text-faint;
+            text: data.debit-str != "" ? data.debit-str : "—";
+            color: data.debit-str != "" ? AppTheme.text : AppTheme.text-faint;
             font-family: AppTheme.font-mono;
             font-size: 12px;
             vertical-alignment: center;
@@ -154,8 +154,8 @@ component JournalTableRow inherits Rectangle {
 
         // Credit
         Text {
-            text: data.credit > 0 ? data.credit : "—";
-            color: data.credit > 0 ? AppTheme.text : AppTheme.text-faint;
+            text: data.credit-str != "" ? data.credit-str : "—";
+            color: data.credit-str != "" ? AppTheme.text : AppTheme.text-faint;
             font-family: AppTheme.font-mono;
             font-size: 12px;
             vertical-alignment: center;
@@ -230,7 +230,7 @@ component AccountRow inherits Rectangle {
             }
 
             Text {
-                text: root.account.balance;
+                text: root.account.balance-str;
                 color: AppTheme.text;
                 font-family: AppTheme.font-mono;
                 font-size: 12.5px;

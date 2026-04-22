@@ -1,0 +1,349 @@
+// Acta — Payments screen
+// Flat KPI strip + full payments table with debit/credit columns.
+// No colored arrow icons in squares (per design audit).
+
+import { AppTheme } from "design-tokens.slint";
+import { PaymentItem, Direction } from "types.slint";
+import {
+    Card, HDivider, VDivider, Badge, StatusDot,
+    GhostButton, SecondaryButton, PrimaryButton,
+    HeadingSm
+} from "components.slint";
+
+// ── KPI Metric ────────────────────────────────────────────────────────────────
+component PayMetric inherits VerticalLayout {
+    in property <string> label;
+    in property <string> value;
+    in property <string> sub: "";
+    in property <bool> danger: false;
+
+    horizontal-stretch: 1;
+    padding-right: 20px;
+    spacing: 4px;
+
+    Text {
+        text: root.label;
+        color: AppTheme.text-faint;
+        font-size: 10.5px;
+        font-family: AppTheme.font-sans;
+        font-weight: 600;
+        letter-spacing: 1.2px;
+    }
+
+    HorizontalLayout {
+        spacing: 3px;
+        Text {
+            text: root.value;
+            color: root.danger ? AppTheme.danger : AppTheme.text;
+            font-family: AppTheme.font-serif;
+            font-size: 26px;
+            font-weight: 500;
+            letter-spacing: -0.4px;
+        }
+        Text {
+            text: "₴";
+            color: AppTheme.text-faint;
+            font-family: AppTheme.font-serif;
+            font-size: 15px;
+            font-weight: 400;
+            vertical-alignment: center;
+        }
+    }
+
+    if sub != "" : Text {
+        text: root.sub;
+        color: AppTheme.text-muted;
+        font-size: 11.5px;
+        font-family: AppTheme.font-mono;
+    }
+}
+
+// ── Payment row ───────────────────────────────────────────────────────────────
+component PaymentRow inherits Rectangle {
+    in property <PaymentItem> payment;
+    in property <image> icon-link;
+    callback link-clicked(string);
+
+    property <bool> hovered: false;
+
+    height: 44px;
+    background: hovered ? AppTheme.bg-hover : transparent;
+
+    Rectangle { y: 0; width: root.width; height: 1px; background: AppTheme.border; }
+
+    HorizontalLayout {
+        padding-left: 18px;
+        padding-right: 18px;
+        spacing: 0px;
+        alignment: stretch;
+
+        // Date
+        Text {
+            text: payment.date;
+            color: AppTheme.text-muted;
+            font-family: AppTheme.font-mono;
+            font-size: 11.5px;
+            vertical-alignment: center;
+            width: 90px;
+        }
+
+        // ID
+        Text {
+            text: payment.id;
+            color: AppTheme.accent-text;
+            font-family: AppTheme.font-mono;
+            font-size: 11.5px;
+            vertical-alignment: center;
+            width: 90px;
+        }
+
+        // Counterparty
+        Text {
+            text: payment.counterparty;
+            color: AppTheme.text;
+            font-size: 13px;
+            font-family: AppTheme.font-sans;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+
+        // Account
+        Text {
+            text: payment.account;
+            color: AppTheme.text-muted;
+            font-family: AppTheme.font-mono;
+            font-size: 11.5px;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+
+        // Match / Link
+        Rectangle {
+            horizontal-stretch: 0;
+            width: 180px;
+
+            if payment.matched-doc != "" : HorizontalLayout {
+                spacing: 6px;
+
+                Image {
+                    source: root.icon-link;
+                    width: 11px;
+                    height: 11px;
+                    colorize: AppTheme.success;
+                    image-fit: contain;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: payment.matched-doc;
+                    color: AppTheme.accent-text;
+                    font-family: AppTheme.font-mono;
+                    font-size: 11.5px;
+                    vertical-alignment: center;
+                }
+            }
+
+            if payment.matched-doc == "" : Rectangle {
+                height: 26px;
+                min-width: link-label.preferred-width + 16px;
+                border-radius: AppTheme.radius-md;
+                background: link-hover.has-hover ? AppTheme.bg-hover : transparent;
+                border-width: link-hover.has-hover ? 1px : 0px;
+                border-color: AppTheme.border;
+
+                HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    spacing: 4px;
+
+                    Image {
+                        source: root.icon-link;
+                        width: 11px;
+                        height: 11px;
+                        colorize: AppTheme.text-muted;
+                        image-fit: contain;
+                        vertical-alignment: center;
+                    }
+
+                    link-label := Text {
+                        text: "Прив'язати";
+                        color: AppTheme.text-muted;
+                        font-size: 12px;
+                        font-family: AppTheme.font-sans;
+                        vertical-alignment: center;
+                    }
+                }
+
+                link-hover := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.link-clicked(root.payment.id); }
+                }
+            }
+        }
+
+        // Incoming (debit)
+        Text {
+            text: payment.direction == Direction.In ? payment.amount-str : "—";
+            color: payment.direction == Direction.In ? AppTheme.text : AppTheme.text-faint;
+            font-family: AppTheme.font-mono;
+            font-size: 12px;
+            vertical-alignment: center;
+            horizontal-alignment: right;
+            width: 110px;
+        }
+
+        // Outgoing (credit)
+        Text {
+            text: payment.direction == Direction.Out ? payment.amount-str : "—";
+            color: payment.direction == Direction.Out ? AppTheme.text : AppTheme.text-faint;
+            font-family: AppTheme.font-mono;
+            font-size: 12px;
+            vertical-alignment: center;
+            horizontal-alignment: right;
+            width: 110px;
+        }
+    }
+
+    TouchArea {
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.move) { root.hovered = self.has-hover; }
+        }
+    }
+}
+
+// ── Payments screen ───────────────────────────────────────────────────────────
+export component Payments inherits Rectangle {
+    // Data
+    in property <[PaymentItem]> payments;
+
+    // Pre-formatted KPI strings
+    in property <string> incoming-str;
+    in property <string> outgoing-str;
+    in property <string> net-str;
+    in property <string> unmatched-str;
+    in property <string> incoming-sub;   // "5 платежів"
+    in property <string> outgoing-sub;   // "2 платежі"
+    in property <int> unmatched-count;
+
+    // Icons
+    in property <image> icon-plus;
+    in property <image> icon-link;
+
+    // Callbacks
+    callback import-csv;
+    callback sync-bank;
+    callback new-payment;
+    callback link-payment(string);
+
+    background: AppTheme.bg;
+
+    Flickable {
+        VerticalLayout {
+            padding: 20px;
+            spacing: 20px;
+
+            // ── KPI strip ──────────────────────────────────────────────────
+            Card {
+                padded: false;
+                height: 90px;
+
+                HorizontalLayout {
+                    padding: 20px;
+                    alignment: stretch;
+
+                    PayMetric {
+                        label: "Надходження · квітень";
+                        value: root.incoming-str;
+                        sub: root.incoming-sub;
+                    }
+                    VDivider { }
+                    PayMetric {
+                        label: "Списання";
+                        value: root.outgoing-str;
+                        sub: root.outgoing-sub;
+                    }
+                    VDivider { }
+                    PayMetric {
+                        label: "Чистий потік";
+                        value: root.net-str;
+                    }
+                    VDivider { }
+                    PayMetric {
+                        label: "Не узгоджено";
+                        value: root.unmatched-str;
+                        sub: root.unmatched-count + " платежі";
+                        danger: root.unmatched-count > 0;
+                    }
+                }
+            }
+
+            // ── Payments table ─────────────────────────────────────────────
+            Card {
+                padded: false;
+
+                VerticalLayout {
+                    // Table toolbar
+                    HorizontalLayout {
+                        padding-left: 18px;
+                        padding-right: 18px;
+                        padding-top: 14px;
+                        padding-bottom: 12px;
+                        spacing: 8px;
+                        alignment: stretch;
+                        height: 50px;
+
+                        HeadingSm { text: "Усі платежі"; vertical-alignment: center; }
+
+                        Text {
+                            text: "квітень 2026 · " + root.payments.length;
+                            color: AppTheme.text-faint;
+                            font-size: 11.5px;
+                            font-family: AppTheme.font-sans;
+                            vertical-alignment: center;
+                        }
+
+                        Rectangle { horizontal-stretch: 1; }
+
+                        GhostButton { text: "Фільтр"; small: true; }
+
+                        VDivider { height: 18px; }
+
+                        SecondaryButton { text: "Імпорт CSV"; small: true; clicked => { root.import-csv(); } }
+                        SecondaryButton { text: "Синхронізувати"; small: true; clicked => { root.sync-bank(); } }
+                        PrimaryButton { text: "Новий платіж"; clicked => { root.new-payment(); } }
+                    }
+
+                    // Table header
+                    Rectangle {
+                        height: 36px;
+                        background: AppTheme.bg-subtle;
+
+                        Rectangle { y: 0; width: root.width; height: 1px; background: AppTheme.border; }
+
+                        HorizontalLayout {
+                            padding-left: 18px;
+                            padding-right: 18px;
+                            alignment: stretch;
+
+                            Text { text: "ДАТА";          color: AppTheme.text-faint; font-size: 10.5px; font-family: AppTheme.font-sans; font-weight: 600; letter-spacing: 1.2px; vertical-alignment: center; width: 90px; }
+                            Text { text: "ID";             color: AppTheme.text-faint; font-size: 10.5px; font-family: AppTheme.font-sans; font-weight: 600; letter-spacing: 1.2px; vertical-alignment: center; width: 90px; }
+                            Text { text: "КОНТРАГЕНТ";     color: AppTheme.text-faint; font-size: 10.5px; font-family: AppTheme.font-sans; font-weight: 600; letter-spacing: 1.2px; vertical-alignment: center; horizontal-stretch: 1; }
+                            Text { text: "РАХУНОК";        color: AppTheme.text-faint; font-size: 10.5px; font-family: AppTheme.font-sans; font-weight: 600; letter-spacing: 1.2px; vertical-alignment: center; horizontal-stretch: 1; }
+                            Text { text: "ПРИВʼЯЗКА";      color: AppTheme.text-faint; font-size: 10.5px; font-family: AppTheme.font-sans; font-weight: 600; letter-spacing: 1.2px; vertical-alignment: center; width: 180px; }
+                            Text { text: "НАДХОДЖЕННЯ";    color: AppTheme.text-faint; font-size: 10.5px; font-family: AppTheme.font-sans; font-weight: 600; letter-spacing: 1.2px; vertical-alignment: center; horizontal-alignment: right; width: 110px; }
+                            Text { text: "СПИСАННЯ";       color: AppTheme.text-faint; font-size: 10.5px; font-family: AppTheme.font-sans; font-weight: 600; letter-spacing: 1.2px; vertical-alignment: center; horizontal-alignment: right; width: 110px; }
+                        }
+                    }
+
+                    // Payment rows
+                    for payment in payments : PaymentRow {
+                        payment: payment;
+                        icon-link: root.icon-link;
+                        link-clicked(id) => { root.link-payment(id); }
+                    }
+                }
+            }
+        }
+    }
+}

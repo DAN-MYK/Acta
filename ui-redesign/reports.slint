@@ -140,7 +140,7 @@ component CategoryRow inherits Rectangle {
             HorizontalLayout {
                 spacing: 6px;
                 Text {
-                    text: root.cat.amount;
+                    text: root.cat.amount-str;
                     color: AppTheme.text-muted;
                     font-family: AppTheme.font-mono;
                     font-size: 12px;
@@ -180,12 +180,6 @@ export component Reports inherits Rectangle {
     in property <[ChartBar]> chart-bars;
     in property <[ExpenseCategory]> categories;
     in property <[DrillRow]> drill-rows;
-
-    // Pre-formatted strings
-    in property <string> revenue-str;
-    in property <string> expenses-str;
-    in property <string> profit-str;
-    in property <string> margin-str;
 
     // Drill state
     in-out property <string> drill-category: "";
@@ -253,13 +247,13 @@ export component Reports inherits Rectangle {
                     padding: 20px;
                     alignment: stretch;
 
-                    RepMetric { label: "Дохід";          value: root.revenue-str;  suffix: "₴"; delta: metrics.delta-revenue; }
+                    RepMetric { label: "Дохід";          value: metrics.revenue;   suffix: "₴"; delta: metrics.delta-revenue; }
                     VDivider { }
-                    RepMetric { label: "Витрати";        value: root.expenses-str; suffix: "₴"; delta: metrics.delta-expenses; }
+                    RepMetric { label: "Витрати";        value: metrics.expenses;  suffix: "₴"; delta: metrics.delta-expenses; }
                     VDivider { }
-                    RepMetric { label: "Прибуток";       value: root.profit-str;   suffix: "₴"; delta: metrics.delta-profit; }
+                    RepMetric { label: "Прибуток";       value: metrics.profit;    suffix: "₴"; delta: metrics.delta-profit; }
                     VDivider { }
-                    RepMetric { label: "Рентабельність"; value: root.margin-str;   suffix: "%"; delta: metrics.delta-margin; }
+                    RepMetric { label: "Рентабельність"; value: metrics.margin;    suffix: "%"; delta: metrics.delta-margin; }
                 }
             }
 
@@ -418,7 +412,7 @@ export component Reports inherits Rectangle {
                             Text { text: row.operation;    color: AppTheme.text; font-size: 13px; font-family: AppTheme.font-sans; vertical-alignment: center; horizontal-stretch: 1; }
                             Text { text: row.counterparty; color: AppTheme.text-muted; font-size: 13px; font-family: AppTheme.font-sans; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
                             Text { text: row.doc-id;       color: AppTheme.accent-text; font-family: AppTheme.font-mono; font-size: 11.5px; vertical-alignment: center; width: 120px; }
-                            Text { text: row.amount;       color: AppTheme.text; font-family: AppTheme.font-mono; font-size: 12px; vertical-alignment: center; horizontal-alignment: right; width: 130px; }
+                            Text { text: row.amount-str; color: AppTheme.text; font-family: AppTheme.font-mono; font-size: 12px; vertical-alignment: center; horizontal-alignment: right; width: 130px; }
                         }
                     }
                 }

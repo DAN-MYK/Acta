@@ -1,0 +1,456 @@
+// Acta — Tasks screen
+// Two-column layout: task list (left) + day view calendar (right).
+// Priority indicator: vertical color bar (not colored badge).
+// Clean, no AI-slop decorations.
+
+import { AppTheme } from "design-tokens.slint";
+import { TaskItem, Priority, DayEvent } from "types.slint";
+import {
+    Card, HDivider, VDivider, Badge,
+    GhostButton, SecondaryButton, PrimaryButton,
+    HeadingSm, SectionLabel
+} from "components.slint";
+
+// ── Task KPI metric ───────────────────────────────────────────────────────────
+component TaskMetric inherits VerticalLayout {
+    in property <string> label;
+    in property <string> value;
+    in property <bool> danger: false;
+
+    horizontal-stretch: 1;
+    padding-right: 20px;
+    spacing: 4px;
+
+    Text {
+        text: root.label;
+        color: AppTheme.text-faint;
+        font-size: 10.5px;
+        font-family: AppTheme.font-sans;
+        font-weight: 600;
+        letter-spacing: 1.2px;
+    }
+
+    Text {
+        text: root.value;
+        color: root.danger ? AppTheme.danger : AppTheme.text;
+        font-family: AppTheme.font-serif;
+        font-size: 26px;
+        font-weight: 500;
+    }
+}
+
+// ── Filter button ─────────────────────────────────────────────────────────────
+component FilterBtn inherits Rectangle {
+    in property <string> label;
+    in property <bool> active: false;
+    callback clicked;
+
+    height: 26px;
+    min-width: lbl.preferred-width + 20px;
+    background: active ? AppTheme.bg : transparent;
+    border-radius: 3px;
+    border-width: active ? 1px : 0px;
+    border-color: AppTheme.border;
+
+    lbl := Text {
+        text: root.label;
+        color: active ? AppTheme.text : AppTheme.text-muted;
+        font-size: 11.5px;
+        font-family: AppTheme.font-sans;
+        font-weight: active ? 500 : 400;
+        vertical-alignment: center;
+        horizontal-alignment: center;
+    }
+
+    TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
+// ── Task list item ────────────────────────────────────────────────────────────
+component TaskListItem inherits Rectangle {
+    in property <TaskItem> task;
+    in property <image> check-icon;
+    in property <image> icon-calendar;
+    in property <image> icon-more;
+    callback toggled(string, bool);
+    callback more(string);
+
+    property <bool> hovered: false;
+
+    height: 66px;
+    background: hovered ? AppTheme.bg-hover : transparent;
+
+    Rectangle { y: root.height - 1px; width: root.width; height: 1px; background: AppTheme.border; }
+
+    HorizontalLayout {
+        padding-left: 18px;
+        padding-right: 18px;
+        padding-top: 14px;
+        padding-bottom: 14px;
+        spacing: 12px;
+        alignment: stretch;
+
+        // Checkbox
+        checkbox-rect := Rectangle {
+            width: 16px;
+            height: 16px;
+            border-radius: 4px;
+            border-width: 1.5px;
+            border-color: task.done ? AppTheme.success : AppTheme.border-strong;
+            background: task.done ? AppTheme.success : transparent;
+
+            if task.done : Image {
+                source: root.check-icon;
+                width: 10px;
+                height: 10px;
+                colorize: #ffffff;
+                image-fit: contain;
+            }
+
+            TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.toggled(root.task.id, !root.task.done); }
+            }
+        }
+
+        // Priority bar
+        if !task.done && task.priority == Priority.High : Rectangle {
+            width: 2px;
+            height: root.height - 28px;
+            border-radius: 1px;
+            background: AppTheme.danger;
+        }
+
+        if !task.done && task.priority == Priority.Medium : Rectangle {
+            width: 2px;
+            height: root.height - 28px;
+            border-radius: 1px;
+            background: AppTheme.warning;
+        }
+
+        // Content
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 4px;
+            alignment: center;
+
+            Text {
+                text: task.title;
+                color: task.done ? AppTheme.text-faint : AppTheme.text;
+                font-size: 13.5px;
+                font-family: AppTheme.font-sans;
+                font-weight: 500;
+                // strikethrough when done — Slint doesn't support text-decoration natively,
+                // but we dim the color as visual substitute
+            }
+
+            HorizontalLayout {
+                spacing: 12px;
+
+                if task.due-date != "" : HorizontalLayout {
+                    spacing: 5px;
+
+                    Image { source: root.icon-calendar; width: 11px; height: 11px; colorize: AppTheme.text-faint; image-fit: contain; vertical-alignment: center; }
+                    Text {
+                        text: task.due-date;
+                        color: AppTheme.text-faint;
+                        font-size: 11.5px;
+                        font-family: AppTheme.font-mono;
+                        vertical-alignment: center;
+                    }
+                }
+
+                if task.linked-doc != "" : Text { text: "·"; color: AppTheme.text-faint; font-size: 11.5px; vertical-alignment: center; }
+                if task.linked-doc != "" : Text {
+                    text: task.linked-doc;
+                    color: AppTheme.accent-text;
+                    font-size: 11.5px;
+                    font-family: AppTheme.font-mono;
+                    vertical-alignment: center;
+                }
+
+                if !task.done && task.priority == Priority.High : Text { text: "·"; color: AppTheme.text-faint; font-size: 11.5px; vertical-alignment: center; }
+                if !task.done && task.priority == Priority.High : Text {
+                    text: "ВИСОКИЙ";
+                    color: AppTheme.danger;
+                    font-size: 10.5px;
+                    font-family: AppTheme.font-sans;
+                    font-weight: 600;
+                    letter-spacing: 0.8px;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        // More button
+        Rectangle {
+            width: 28px;
+            height: 28px;
+            border-radius: AppTheme.radius-md;
+            background: more-h.has-hover ? AppTheme.bg-subtle : transparent;
+
+            Image { source: root.icon-more; width: 14px; height: 14px; colorize: AppTheme.text-muted; image-fit: contain; }
+            more-h := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.more(root.task.id); }
+            }
+        }
+    }
+
+    TouchArea {
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.move) { root.hovered = self.has-hover; }
+        }
+    }
+}
+
+// ── Day view event block ──────────────────────────────────────────────────────
+component DayEventBlock inherits Rectangle {
+    in property <DayEvent> event;
+
+    height: event.title == "" ? 32px : 48px;
+    background: transparent;
+
+    HorizontalLayout {
+        padding-left: 18px;
+        padding-right: 18px;
+        padding-top: 2px;
+        padding-bottom: 2px;
+        spacing: 0px;
+
+        // Hour label
+        Text {
+            text: (event.hour < 10 ? "0" : "") + event.hour + ":00";
+            color: AppTheme.text-faint;
+            font-size: 11px;
+            font-family: AppTheme.font-mono;
+            width: 42px;
+            vertical-alignment: top;
+        }
+
+        // Event or line
+        if event.title == "" : Rectangle {
+            height: 1px;
+            background: AppTheme.border;
+            horizontal-stretch: 1;
+        }
+
+        if event.title != "" : Rectangle {
+            horizontal-stretch: 1;
+            border-radius: 6px;
+            background: event.is-primary ? AppTheme.accent-soft : AppTheme.bg-subtle;
+            border-width: 1px;
+            border-color: event.is-primary ? AppTheme.accent : AppTheme.border-strong;
+
+            VerticalLayout {
+                alignment: center;
+                padding: 8px;
+                padding-left: 12px;
+                spacing: 2px;
+
+                Text {
+                    text: event.title;
+                    color: event.is-primary ? AppTheme.accent-text : AppTheme.text;
+                    font-size: 12.5px;
+                    font-family: AppTheme.font-sans;
+                    font-weight: 500;
+                }
+
+                if event.subtitle != "" : Text {
+                    text: event.subtitle;
+                    color: AppTheme.text-muted;
+                    font-size: 11px;
+                    font-family: AppTheme.font-sans;
+                }
+            }
+        }
+    }
+}
+
+// ── Tasks screen ──────────────────────────────────────────────────────────────
+export component Tasks inherits Rectangle {
+    // Data
+    in property <[TaskItem]> open-tasks;
+    in property <[TaskItem]> done-tasks;
+    in property <[TaskItem]> all-tasks;
+    in property <[DayEvent]> day-events;
+
+    // KPI
+    in property <int> open-count;
+    in property <int> high-count;
+    in property <int> done-count;
+    in property <string> today-label;   // "середа · 20 квітня"
+
+    // State
+    in-out property <string> filter: "open";  // "open" | "done" | "all"
+
+    // Icons
+    in property <image> icon-check;
+    in property <image> icon-calendar;
+    in property <image> icon-more;
+    in property <image> icon-plus;
+
+    // Callbacks
+    callback filter-changed(string);
+    callback task-toggled(string, bool);
+    callback task-more(string);
+    callback new-task;
+
+    background: AppTheme.bg;
+
+    property <[TaskItem]> visible-tasks:
+        filter == "done" ? done-tasks :
+        filter == "all"  ? all-tasks  :
+        open-tasks;
+
+    Flickable {
+        VerticalLayout {
+            padding: 20px;
+            spacing: 20px;
+
+            // ── KPI strip ──────────────────────────────────────────────────
+            Card {
+                padded: false;
+                height: 90px;
+
+                HorizontalLayout {
+                    padding: 20px;
+                    alignment: stretch;
+
+                    TaskMetric { label: "Відкритих"; value: root.open-count; }
+                    VDivider { }
+                    TaskMetric { label: "Високий пріоритет"; value: root.high-count; danger: root.high-count > 0; }
+                    VDivider { }
+                    TaskMetric { label: "Зроблено цього тижня"; value: root.done-count; }
+                    VDivider { }
+                    TaskMetric { label: "Сьогодні"; value: "1 зустріч"; }
+                }
+            }
+
+            // ── Two-column: Tasks list + Day view ──────────────────────────
+            HorizontalLayout {
+                spacing: 16px;
+
+                // ── Task list ──────────────────────────────────────────────
+                Card {
+                    horizontal-stretch: 1;
+                    padded: false;
+
+                    VerticalLayout {
+                        // Header + filter
+                        HorizontalLayout {
+                            padding-left: 18px;
+                            padding-right: 18px;
+                            padding-top: 14px;
+                            padding-bottom: 12px;
+                            spacing: 8px;
+                            height: 50px;
+                            alignment: stretch;
+
+                            HeadingSm { text: "Задачі"; vertical-alignment: center; }
+
+                            // Filter pills
+                            Rectangle {
+                                height: 30px;
+                                background: AppTheme.bg-elevated;
+                                border-width: 1px;
+                                border-color: AppTheme.border;
+                                border-radius: AppTheme.radius-sm;
+
+                                HorizontalLayout {
+                                    padding: 2px;
+                                    spacing: 0px;
+
+                                    FilterBtn {
+                                        label: "Відкриті · " + root.open-count;
+                                        active: root.filter == "open";
+                                        clicked => { root.filter = "open"; root.filter-changed("open"); }
+                                    }
+                                    FilterBtn {
+                                        label: "Виконано · " + root.done-count;
+                                        active: root.filter == "done";
+                                        clicked => { root.filter = "done"; root.filter-changed("done"); }
+                                    }
+                                    FilterBtn {
+                                        label: "Усі";
+                                        active: root.filter == "all";
+                                        clicked => { root.filter = "all"; root.filter-changed("all"); }
+                                    }
+                                }
+                            }
+
+                            Rectangle { horizontal-stretch: 1; }
+
+                            PrimaryButton {
+                                text: "Нова задача";
+                                clicked => { root.new-task(); }
+                            }
+                        }
+
+                        HDivider { }
+
+                        // Task rows
+                        for task in visible-tasks : TaskListItem {
+                            task: task;
+                            check-icon: root.icon-check;
+                            icon-calendar: root.icon-calendar;
+                            icon-more: root.icon-more;
+                            toggled(id, done) => { root.task-toggled(id, done); }
+                            more(id) => { root.task-more(id); }
+                        }
+
+                        if visible-tasks.length == 0 : Rectangle {
+                            height: 80px;
+                            Text {
+                                text: "Задач немає";
+                                color: AppTheme.text-faint;
+                                font-size: 13px;
+                                font-family: AppTheme.font-sans;
+                                vertical-alignment: center;
+                                horizontal-alignment: center;
+                            }
+                        }
+                    }
+                }
+
+                // ── Day view ───────────────────────────────────────────────
+                Card {
+                    width: 360px;
+                    padded: false;
+
+                    VerticalLayout {
+                        // Day header
+                        Rectangle {
+                            height: 60px;
+
+                            VerticalLayout {
+                                alignment: center;
+                                padding-left: 18px;
+                                padding-right: 18px;
+                                spacing: 3px;
+
+                                HeadingSm { text: "Сьогодні"; }
+                                Text {
+                                    text: root.today-label;
+                                    color: AppTheme.text-muted;
+                                    font-size: 11.5px;
+                                    font-family: AppTheme.font-mono;
+                                }
+                            }
+
+                            Rectangle { y: root.height - 1px; width: root.width; height: 1px; background: AppTheme.border; }
+                        }
+
+                        // Day events
+                        Rectangle { height: 8px; }
+
+                        for ev in day-events : DayEventBlock {
+                            event: ev;
+                        }
+
+                        Rectangle { height: 8px; }
+                    }
+                }
+            }
+        }
+    }
+}

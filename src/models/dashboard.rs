@@ -111,3 +111,9 @@ pub struct RecentAct {
     /// "ДД.ММ.РРРР"
     pub date: String,
 }
+
+/// Агрегат суми за категорією для екрана звітів.
+pub struct CategoryRevenue {
+    pub label: String,
+    pub amount: Decimal,
+}

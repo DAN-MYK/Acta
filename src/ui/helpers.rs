@@ -1,7 +1,6 @@
 use chrono::NaiveDate;
-use rust_decimal::prelude::ToPrimitive;
+use rust_decimal::Decimal;
 use slint::SharedString;
-use uuid::Uuid;
 
 use acta::models::act::{ActListRow, ActStatus};
 use acta::models::invoice::{InvoiceListRow, InvoiceStatus};
@@ -9,8 +8,81 @@ use acta::models::payment::{PaymentDirection, PaymentListRow};
 use acta::models::task::{Task, TaskPriority, TaskStatus};
 use acta::models::waybill::{WaybillListRow, WaybillStatus};
 
-pub fn decimal_to_f32(d: rust_decimal::Decimal) -> f32 {
-    d.to_f32().unwrap_or(0.0)
+// ---------------------------------------------------------------------------
+// Formatter — грошові суми форматуємо ТІЛЬКИ в Rust, в Slint передаємо string
+// ---------------------------------------------------------------------------
+
+/// Форматує Decimal у рядок для відображення: "1 234,56".
+/// Використовує український формат: пробіл як роздільник тисяч, кома — десяткові.
+pub fn format_money(d: Decimal) -> String {
+    // Перетворюємо на string з 2 знаками після коми
+    let s = d.to_string();
+
+    // Перевіряємо чи є десяткова частина
+    let parts: Vec<&str> = s.split('.').collect();
+    let int_part = parts[0];
+    let dec_part = if parts.len() > 1 { parts[1] } else { "00" };
+
+    // Pad decimal to 2 digits
+    let dec_padded: String = match dec_part.len() {
+        0 => "00".to_string(),
+        1 => {
+            let mut p = dec_part.to_string();
+            p.push('0');
+            p
+        }
+        n if n > 2 => dec_part[..2].to_string(),
+        _ => dec_part.to_string(),
+    };
+
+    // Додаємо пробіли як роздільник тисяч
+    let with_sep = format_thousands(int_part, true);
+
+    if dec_padded == "00" {
+        with_sep
+    } else {
+        format!("{},{}", with_sep, dec_padded)
+    }
+}
+
+/// Форматує ціле число з роздільником тисяч.
+/// `allow_sign` — чи дозволяти мінус на початку.
+fn format_thousands(s: &str, allow_sign: bool) -> String {
+    if s.is_empty() {
+        return "0".to_string();
+    }
+
+    let (sign, digits) = if allow_sign && s.starts_with('-') {
+        ("-", &s[1..])
+    } else {
+        ("", s)
+    };
+
+    if digits.is_empty() {
+        return format!("{}0", sign);
+    }
+
+    let mut result = String::new();
+    let len = digits.len();
+
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (len - i) % 3 == 0 {
+            result.push(' ');
+        }
+        result.push(c);
+    }
+
+    format!("{}{}", sign, result)
+}
+
+/// Форматує Decimal у рядок для KPI: "50 000" (без копійок).
+pub fn format_money_round(d: Decimal) -> String {
+    format_thousands(&d.to_string(), true)
+}
+
+/// Форматує Decimal із знаком ₴: "50 000 ₴".
+pub fn format_money_ua(d: Decimal) -> String {
+    format!("{} ₴", format_money(d))
 }
 
 pub fn date_to_str(d: NaiveDate) -> SharedString {
@@ -40,7 +112,6 @@ pub fn waybill_status_to_slint(s: &WaybillStatus) -> crate::DocumentStatus {
         WaybillStatus::Draft => crate::DocumentStatus::Draft,
         WaybillStatus::Issued => crate::DocumentStatus::Issued,
         WaybillStatus::Signed => crate::DocumentStatus::Signed,
-        // Delivered — найближчий фінальний стан у Slint (немає Delivered variant)
         WaybillStatus::Delivered => crate::DocumentStatus::Paid,
     }
 }
@@ -52,7 +123,7 @@ pub fn act_row_to_document_item(r: &ActListRow) -> crate::DocumentItem {
         number: r.number.clone().into(),
         date: date_to_str(r.date),
         counterparty: r.counterparty_name.clone().into(),
-        amount: decimal_to_f32(r.total_amount),
+        amount_str: format_money_ua(r.total_amount).into(),
         status: act_status_to_slint(&r.status),
         linked_id: SharedString::default(),
     }
@@ -65,7 +136,7 @@ pub fn invoice_row_to_document_item(r: &InvoiceListRow) -> crate::DocumentItem {
         number: r.number.clone().into(),
         date: date_to_str(r.date),
         counterparty: r.counterparty_name.clone().into(),
-        amount: decimal_to_f32(r.total_amount),
+        amount_str: format_money_ua(r.total_amount).into(),
         status: invoice_status_to_slint(&r.status),
         linked_id: SharedString::default(),
     }
@@ -78,7 +149,7 @@ pub fn waybill_row_to_document_item(r: &WaybillListRow) -> crate::DocumentItem {
         number: r.number.clone().into(),
         date: date_to_str(r.date),
         counterparty: r.counterparty_name.clone().into(),
-        amount: decimal_to_f32(r.total_amount),
+        amount_str: format_money_ua(r.total_amount).into(),
         status: waybill_status_to_slint(&r.status),
         linked_id: SharedString::default(),
     }
@@ -90,7 +161,7 @@ pub fn counterparty_to_item(c: &acta::models::counterparty::Counterparty) -> cra
         name: c.name.clone().into(),
         edrpou: c.edrpou.clone().unwrap_or_default().into(),
         kind: SharedString::default(),
-        balance: 0.0,
+        balance_str: "0".into(),
         doc_count: 0,
         overdue_count: 0,
     }
@@ -111,10 +182,11 @@ pub fn counterparty_to_details(c: &acta::models::counterparty::Counterparty) -> 
         phone: c.phone.clone().unwrap_or_default().into(),
         email: c.email.clone().unwrap_or_default().into(),
         client_since: SharedString::default(),
-        balance: 0.0,
+        balance_str: "0".into(),
+        balance_is_negative: false,
         doc_count: 0,
         overdue_count: 0,
-        overdue_amount: 0.0,
+        overdue_amount_str: "0".into(),
         last_contact_days: 0,
         last_contact_date: SharedString::default(),
     }
@@ -125,7 +197,7 @@ pub fn payment_row_to_item(r: &PaymentListRow) -> crate::PaymentItem {
         id: r.id.to_string().into(),
         date: r.date.clone().into(),
         counterparty: r.counterparty_name.clone().unwrap_or_default().into(),
-        amount: decimal_to_f32(r.amount),
+        amount_str: format_money_ua(r.amount).into(),
         direction: match r.direction {
             PaymentDirection::Income => crate::Direction::In,
             PaymentDirection::Expense => crate::Direction::Out,
@@ -144,7 +216,6 @@ pub fn task_to_item(t: &Task) -> crate::TaskItem {
             .map(|d| d.with_timezone(&chrono::Local).date_naive().format("%d.%m.%Y").to_string())
             .unwrap_or_default()
             .into(),
-        // Cancelled теж відображається як "виконано" — TaskItem.done є bool без Cancelled варіанту
         done: t.status == TaskStatus::Done || t.status == TaskStatus::Cancelled,
         priority: match t.priority {
             TaskPriority::High | TaskPriority::Critical => crate::Priority::High,
@@ -178,9 +249,40 @@ mod tests {
     }
 
     #[test]
-    fn decimal_to_f32_handles_zero_and_positive() {
-        assert_eq!(decimal_to_f32(dec!(0)), 0.0_f32);
-        assert!((decimal_to_f32(dec!(1234.56)) - 1234.56_f32).abs() < 0.01);
+    fn format_money_zero() {
+        assert_eq!(format_money(dec!(0)), "0");
+    }
+
+    #[test]
+    fn format_money_whole() {
+        assert_eq!(format_money(dec!(50000)), "50 000");
+    }
+
+    #[test]
+    fn format_money_with_cents() {
+        assert_eq!(format_money(dec!(1234.56)), "1 234,56");
+    }
+
+    #[test]
+    fn format_money_one_digit_cents() {
+        assert_eq!(format_money(dec!(100.5)), "100,50");
+    }
+
+    #[test]
+    fn format_money_large() {
+        assert_eq!(format_money(dec!(1234567.89)), "1 234 567,89");
+    }
+
+    #[test]
+    fn format_money_round_whole() {
+        assert_eq!(format_money_round(dec!(50000)), "50 000");
+    }
+
+    #[test]
+    fn format_money_ua_has_currency() {
+        let s = format_money_ua(dec!(100));
+        assert!(s.contains("₴"), "має місти символ ₴: {}", s);
+        assert!(s.contains("100"), "має місти число: {}", s);
     }
 
     #[test]
@@ -204,7 +306,7 @@ mod tests {
         assert!(item.id.as_str().starts_with("act:"));
         assert_eq!(item.number.as_str(), "АКТ-2026-001");
         assert_eq!(item.kind, crate::DocumentKind::Act);
-        assert!((item.amount - 1234.56_f32).abs() < 0.01);
+        assert_eq!(item.amount_str.as_str(), "1 234,56 ₴");
         assert_eq!(item.status, crate::DocumentStatus::Issued);
         assert_eq!(item.date.as_str(), "21.04.2026");
     }
@@ -223,6 +325,7 @@ mod tests {
         let item = invoice_row_to_document_item(&row);
         assert!(item.id.as_str().starts_with("inv:"));
         assert_eq!(item.kind, crate::DocumentKind::Invoice);
+        assert_eq!(item.amount_str.as_str(), "500 ₴");
     }
 
     #[test]
@@ -240,6 +343,7 @@ mod tests {
         };
         let item = payment_row_to_item(&row);
         assert_eq!(item.direction, crate::Direction::In);
+        assert_eq!(item.amount_str.as_str(), "100 ₴");
     }
 
     #[test]

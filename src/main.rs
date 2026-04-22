@@ -1,16 +1,18 @@
-// Acta — програма управлінського обліку
+// Acta - програма управлінського обліку.
 //
-// Підключаємо Rust типи, згенеровані з .slint файлів.
-// Після цього доступний AppWindow (та інші export компоненти).
+// main.rs містить лише bootstrap: ініціалізацію runtime, БД, AppCtx та запуск UI.
+// Уся orchestration-логіка винесена в окремі wire_* модулі.
+
 slint::include_modules!();
 
 mod ui;
 
 use anyhow::Result;
 use slint::ComponentHandle;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use uuid::Uuid;
 
+/// Повертає першу компанію або nil UUID, якщо компаній ще немає.
 async fn get_first_company_id(pool: &sqlx::PgPool) -> Uuid {
     sqlx::query_scalar::<_, Uuid>("SELECT id FROM companies ORDER BY created_at LIMIT 1")
         .fetch_optional(pool)
@@ -27,10 +29,10 @@ fn main() -> Result<()> {
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
-    let _rt_guard = rt.enter();
+    let _guard = rt.enter();
 
-    let database_url =
-        std::env::var("DATABASE_URL").expect("DATABASE_URL не задано. Перевір .env файл.");
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL не задано. Перевір .env файл.");
 
     let pool = rt.block_on(
         sqlx::postgres::PgPoolOptions::new()
@@ -42,116 +44,124 @@ fn main() -> Result<()> {
     tracing::info!("Міграції застосовано.");
 
     let company_id = rt.block_on(get_first_company_id(&pool));
-    let active_company_id: Arc<Mutex<Uuid>> = Arc::new(Mutex::new(company_id));
+    let ctx = Arc::new(acta::app_ctx::AppCtx::new(pool, company_id));
 
-    let pool = Arc::new(pool);
-
-    tokio::spawn(acta::notifications::reminder_loop(pool.clone()));
+    {
+        let pool = Arc::new(ctx.pool().clone());
+        tokio::spawn(acta::notifications::reminder_loop(pool));
+    }
 
     let ui = AppWindow::new()?;
 
-    // ── Початкове завантаження даних (паралельно) ────────────────────────────
-    let (dash_data, doc_data, cp_data, pay_data, task_data) = rt.block_on(async {
+    let cid = ctx.company_id();
+    let (dash, docs, counterparties, payments, tasks, reports, settings) = rt.block_on(async {
         tokio::join!(
-            ui::dashboard::prepare_dashboard_data(&pool, company_id),
-            ui::documents::prepare_documents_data(&pool, company_id, None, None),
-            ui::counterparties::prepare_counterparties_data(&pool, company_id, None),
-            ui::payments::prepare_payments_data(&pool, company_id),
-            ui::tasks::prepare_tasks_data(&pool),
+            ui::dashboard::prepare_dashboard_data(ctx.pool(), cid),
+            ui::documents::prepare_documents_data(ctx.pool(), cid, None, None),
+            ui::counterparties::prepare_counterparties_data(ctx.pool(), cid, None),
+            ui::payments::prepare_payments_data(ctx.pool(), cid),
+            ui::tasks::prepare_tasks_data(ctx.pool()),
+            ui::reports::prepare_reports_data(ctx.pool(), cid, 1, None),
+            ui::settings::prepare_settings_data(ctx.pool(), cid),
         )
     });
 
-    ui::dashboard::apply_dashboard_to_ui(&ui, dash_data);
-    ui::documents::apply_documents_to_ui(&ui, doc_data);
-    ui::counterparties::apply_counterparties_to_ui(&ui, cp_data);
-    ui::payments::apply_payments_to_ui(&ui, pay_data);
-    ui::tasks::apply_tasks_to_ui(&ui, task_data);
-    ui::settings::apply_settings_to_ui(&ui);
+    ui::dashboard::apply_dashboard_to_ui(&ui, dash);
+    ui::documents::apply_documents_to_ui(&ui, docs);
+    ui::counterparties::apply_counterparties_to_ui(&ui, counterparties);
+    ui::payments::apply_payments_to_ui(&ui, payments);
+    ui::tasks::apply_tasks_to_ui(&ui, tasks);
+    ui::reports::apply_reports_to_ui(&ui, reports);
+    ui::settings::apply_settings_to_ui(&ui, settings);
 
     ui.set_company_name("Acta".into());
     ui.set_user_name("Адміністратор".into());
     ui.set_user_initials("АД".into());
 
-    // ── Навігація ────────────────────────────────────────────────────────────
+    wire_navigation(&ui, &ctx);
+    ui::documents::wire_document_callbacks(&ui, &ctx);
+    ui::counterparties::wire_counterparty_callbacks(&ui, &ctx);
+    ui::tasks::wire_task_callbacks(&ui, &ctx);
+    ui::reports::wire_reports_callbacks(&ui, &ctx);
+    ui::settings::wire_settings_callbacks(&ui, &ctx);
+    wire_stub_callbacks(&ui);
+
+    ui.run()?;
+    Ok(())
+}
+
+fn wire_navigation(ui: &AppWindow, ctx: &Arc<acta::app_ctx::AppCtx>) {
     ui.on_nav_changed({
-        let pool = pool.clone();
+        let ctx = ctx.clone();
         let ui_weak = ui.as_weak();
-        let company_id = active_company_id.clone();
         move |screen| {
-            let pool = pool.clone();
+            let ctx = ctx.clone();
             let ui_weak = ui_weak.clone();
-            let cid = *company_id.lock().unwrap();
             tokio::spawn(async move {
+                let cid = ctx.company_id();
                 match screen {
                     NavScreen::Dashboard => {
-                        let data = ui::dashboard::prepare_dashboard_data(&pool, cid).await;
+                        let data = ui::dashboard::prepare_dashboard_data(ctx.pool(), cid).await;
                         let _ = ui_weak.upgrade_in_event_loop(move |ui| {
                             ui::dashboard::apply_dashboard_to_ui(&ui, data);
                         });
                     }
                     NavScreen::Documents => {
                         let data =
-                            ui::documents::prepare_documents_data(&pool, cid, None, None).await;
+                            ui::documents::prepare_documents_data(ctx.pool(), cid, None, None)
+                                .await;
                         let _ = ui_weak.upgrade_in_event_loop(move |ui| {
                             ui::documents::apply_documents_to_ui(&ui, data);
                         });
                     }
                     NavScreen::Counterparties => {
                         let data =
-                            ui::counterparties::prepare_counterparties_data(&pool, cid, None).await;
+                            ui::counterparties::prepare_counterparties_data(ctx.pool(), cid, None)
+                                .await;
                         let _ = ui_weak.upgrade_in_event_loop(move |ui| {
                             ui::counterparties::apply_counterparties_to_ui(&ui, data);
                         });
                     }
                     NavScreen::Payments => {
-                        let data = ui::payments::prepare_payments_data(&pool, cid).await;
+                        let data = ui::payments::prepare_payments_data(ctx.pool(), cid).await;
                         let _ = ui_weak.upgrade_in_event_loop(move |ui| {
                             ui::payments::apply_payments_to_ui(&ui, data);
                         });
                     }
+                    NavScreen::Reports => {
+                        let data =
+                            ui::reports::prepare_reports_data(ctx.pool(), cid, 1, None).await;
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            ui::reports::apply_reports_to_ui(&ui, data);
+                        });
+                    }
                     NavScreen::Tasks => {
-                        let data = ui::tasks::prepare_tasks_data(&pool).await;
+                        let data = ui::tasks::prepare_tasks_data(ctx.pool()).await;
                         let _ = ui_weak.upgrade_in_event_loop(move |ui| {
                             ui::tasks::apply_tasks_to_ui(&ui, data);
                         });
                     }
-                    _ => {}
+                    NavScreen::Settings => {
+                        let data = ui::settings::prepare_settings_data(ctx.pool(), cid).await;
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            ui::settings::apply_settings_to_ui(&ui, data);
+                        });
+                    }
                 }
             });
         }
     });
+}
 
-    // ── Документи ────────────────────────────────────────────────────────────
-    ui::documents::wire_document_callbacks(&ui, &pool, &active_company_id);
+/// Явні TODO-маркери для ще не реалізованих сценаріїв.
+fn wire_stub_callbacks(ui: &AppWindow) {
+    ui.on_pay_import_csv(|| tracing::info!("TODO: pay_import_csv"));
+    ui.on_pay_sync_bank(|| tracing::info!("TODO: pay_sync_bank"));
+    ui.on_pay_new(|| tracing::info!("TODO: pay_new"));
+    ui.on_pay_link(|id| tracing::info!("TODO: pay_link({id})"));
 
-    // ── Контрагенти ──────────────────────────────────────────────────────────
-    ui::counterparties::wire_counterparty_callbacks(&ui, &pool, &active_company_id);
-
-    // ── Завдання ─────────────────────────────────────────────────────────────
-    ui::tasks::wire_task_callbacks(&ui, &pool);
-
-    // ── Заглушки для нереалізованих callback'ів ──────────────────────────────
-    ui.on_pay_import_csv(|| {});
-    ui.on_pay_sync_bank(|| {});
-    ui.on_pay_new(|| {});
-    ui.on_pay_link(|_| {});
-    ui.on_rep_period_changed(|_| {});
-    ui.on_rep_category_drilled(|_| {});
-    ui.on_rep_export_csv(|| {});
-    ui.on_rep_export_pdf(|| {});
-    ui.on_settings_section_changed(|_| {});
-    ui.on_settings_dark_mode_toggled(|_| {});
-    ui.on_settings_density_changed(|_| {});
-    ui.on_settings_company_saved(|_| {});
-    ui.on_settings_integration_configure(|_| {});
-    ui.on_settings_team_invite(|| {});
-    ui.on_settings_backup_now(|| {});
-    ui.on_settings_backup_download(|| {});
-    ui.on_palette_query_changed(|_| {});
-    ui.on_palette_item_activated(|_| {});
-
-    ui.run()?;
-    Ok(())
+    ui.on_palette_query_changed(|query| tracing::info!("TODO: palette_query_changed({query})"));
+    ui.on_palette_item_activated(|item| tracing::info!("TODO: palette_item_activated({item})"));
 }
 
 #[cfg(test)]
@@ -164,7 +174,7 @@ mod tests {
         let rt = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
-            .expect("tokio runtime повинен будуватись без помилок");
+            .expect("tokio runtime повинен будуватися без помилок");
 
         let result = rt.block_on(async { 6u32 + 7 });
         assert_eq!(result, 13);
