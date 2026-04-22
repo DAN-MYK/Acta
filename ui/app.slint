@@ -38,6 +38,7 @@ import { Toast } from "components/toast.slint";
 import { Sidebar } from "components/sidebar.slint";
 import { PageFade } from "components/shared.slint";
 import { CommandPalette } from "components/CommandPalette.slint";
+import { SkipNav } from "components/skip_nav.slint";
 
 // ── MainWindow — головне вікно ───────────────────────────────────────────────
 export component MainWindow inherits Window {
@@ -493,6 +494,11 @@ export component MainWindow inherits Window {
             }
         }
 
+    skip-nav := SkipNav {
+        width: parent.width;
+        activated => { content-fs.focus(); }
+    }
+
     HorizontalLayout {
 
 
@@ -512,6 +518,11 @@ export component MainWindow inherits Window {
             vertical-stretch: 1;
             background: Theme.bg-page;
             clip: true;
+
+            content-fs := FocusScope {
+                width: parent.width;
+                height: parent.height;
+            }
 
             // ── Контрагенти — список ────────────────────────────────────────
             if AppState.current-feature == "counterparties" && !root.show-cp-form : PageFade {
