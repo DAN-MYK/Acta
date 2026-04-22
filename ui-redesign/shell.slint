@@ -460,6 +460,190 @@ export component CommandPalette inherits Rectangle {
     }
 }
 
+// ── Keyboard Help Overlay ─────────────────────────────────────────────────────
+// Shows keyboard shortcuts cheatsheet. Triggered by Ctrl+/.
+component KeyboardHelp {
+    in-out property <bool> open: false;
+    callback closed;
+
+    visible: open;
+    x: 0; y: 0;
+    width: 100%;
+    height: 100%;
+
+    // backdrop
+    Rectangle {
+        background: #0a0b0d.with-alpha(0.35);
+    }
+
+    // Backdrop click to close
+    TouchArea {
+        clicked => { root.closed(); }
+    }
+
+    // Focus trap — grabs focus when open, Escape closes
+    help-scope := FocusScope {
+        width: parent.width;
+        height: parent.height;
+        init => { self.focus(); }
+        key-pressed(e) => {
+            if e.text == Key.Escape {
+                root.closed();
+                accept
+            } else {
+                reject
+            }
+        }
+    }
+
+    // Dialog box
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: 560px;
+        background: AppTheme.bg-elevated;
+        border-width: 1px;
+        border-color: AppTheme.border;
+        border-radius: 12px;
+        drop-shadow-blur: 24px;
+        drop-shadow-color: #1e1e1e.with-alpha(0.08);
+
+        // prevent backdrop click when clicking inside dialog
+        TouchArea { }
+
+        VerticalLayout {
+            padding: 24px;
+            spacing: 16px;
+
+            // ── Header ────────────────────────────────────────────────────
+            HorizontalLayout {
+                alignment: stretch;
+                height: 24px;
+
+                Text {
+                    text: "Гарячі клавіші";
+                    font-size: 15px;
+                    font-family: AppTheme.font-sans;
+                    font-weight: 600;
+                    color: AppTheme.text;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+
+                // Esc badge
+                Rectangle {
+                    width: 28px;
+                    height: 18px;
+                    border-radius: 3px;
+                    border-width: 1px;
+                    border-color: AppTheme.border;
+                    background: AppTheme.bg-subtle;
+
+                    Text {
+                        text: "esc";
+                        font-size: 10px;
+                        font-family: AppTheme.font-mono;
+                        color: AppTheme.text-faint;
+                        vertical-alignment: center;
+                        horizontal-alignment: center;
+                    }
+                }
+            }
+
+            HDivider { }
+
+            // ── Two-column layout ─────────────────────────────────────────
+            HorizontalLayout {
+                spacing: 24px;
+
+                // ── Column 1: Navigation ──────────────────────────────────
+                VerticalLayout {
+                    spacing: 6px;
+                    horizontal-stretch: 1;
+
+                    Text {
+                        text: "НАВІГАЦІЯ";
+                        color: AppTheme.text-faint;
+                        font-size: 10px;
+                        font-family: AppTheme.font-sans;
+                        font-weight: 600;
+                        letter-spacing: 1.2px;
+                        height: 22px;
+                        vertical-alignment: center;
+                    }
+
+                    for row in [
+                        { k: "Ctrl+1", d: "Головна" },
+                        { k: "Ctrl+2", d: "Документи" },
+                        { k: "Ctrl+3", d: "Контрагенти" },
+                        { k: "Ctrl+4", d: "Платежі" },
+                        { k: "Ctrl+5", d: "Звіти" },
+                        { k: "Ctrl+6", d: "Задачі" },
+                        { k: "Ctrl+7", d: "Налаштування" },
+                    ] : HorizontalLayout {
+                        spacing: 10px;
+                        height: 24px;
+                        alignment: stretch;
+
+                        KbdHint { key: row.k; }
+
+                        Text {
+                            text: row.d;
+                            color: AppTheme.text-muted;
+                            font-size: 12px;
+                            font-family: AppTheme.font-sans;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                        }
+                    }
+                }
+
+                // ── Column 2: Actions ─────────────────────────────────────
+                VerticalLayout {
+                    spacing: 6px;
+                    horizontal-stretch: 1;
+
+                    Text {
+                        text: "ДІЇ";
+                        color: AppTheme.text-faint;
+                        font-size: 10px;
+                        font-family: AppTheme.font-sans;
+                        font-weight: 600;
+                        letter-spacing: 1.2px;
+                        height: 22px;
+                        vertical-alignment: center;
+                    }
+
+                    for row in [
+                        { k: "Ctrl+K", d: "Командна палітра" },
+                        { k: "Ctrl+/", d: "Гарячі клавіші" },
+                        { k: "Tab",    d: "Наступний елемент" },
+                        { k: "Shift+Tab", d: "Попередній елемент" },
+                        { k: "Enter",  d: "Підтвердити / відкрити" },
+                        { k: "Esc",    d: "Закрити / скасувати" },
+                        { k: "G H",    d: "Палітра → Головна" },
+                    ] : HorizontalLayout {
+                        spacing: 10px;
+                        height: 24px;
+                        alignment: stretch;
+
+                        KbdHint { key: row.k; }
+
+                        Text {
+                            text: row.d;
+                            color: AppTheme.text-muted;
+                            font-size: 12px;
+                            font-family: AppTheme.font-sans;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 // ── Shell ─────────────────────────────────────────────────────────────────────
 export component Shell inherits Rectangle {
     // Navigation state — set by Rust
@@ -482,6 +666,9 @@ export component Shell inherits Rectangle {
 
     // Command palette
     in-out property <bool> cmd-palette-open: false;
+
+    // Keyboard shortcuts help overlay
+    private property <bool> shortcuts-open: false;
 
     // Icon assets — loaded from project/ui/assets/icons/
     in property <image> icon-home;
@@ -738,6 +925,11 @@ export component Shell inherits Rectangle {
                             root.open-cmd-palette();
                             return accept;
                         }
+                        // Ctrl+/ — відкрити/закрити підказку гарячих клавіш
+                        if (e.text == "/" && e.modifiers.control) {
+                            root.shortcuts-open = !root.shortcuts-open;
+                            return accept;
+                        }
                         reject
                     }
                 }
@@ -985,5 +1177,11 @@ export component Shell inherits Rectangle {
         enter-icon: root.icon-enter;
         closed => { root.close-cmd-palette(); }
         navigated(screen) => { root.navigate(screen); }
+    }
+
+    // ── Keyboard Help overlay ──────────────────────────────────────────────
+    if shortcuts-open : KeyboardHelp {
+        open: root.shortcuts-open;
+        closed => { root.shortcuts-open = false; }
     }
 }
