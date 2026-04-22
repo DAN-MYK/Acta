@@ -193,14 +193,14 @@ pub async fn update(
 /// Повертає `true` якщо запис знайдено та оновлено.
 pub async fn archive(pool: &PgPool, id: Uuid) -> Result<bool> {
     // execute() повертає PgQueryResult — rows_affected() показує скільки рядків змінено
-    let affected = sqlx::query!(
+    let affected = sqlx::query(
         r#"
         UPDATE counterparties
         SET is_archived = TRUE, updated_at = NOW()
         WHERE id = $1
         "#,
-        id
     )
+    .bind(id)
     .execute(pool)
     .await?
     .rows_affected();

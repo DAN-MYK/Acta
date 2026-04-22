@@ -8,7 +8,7 @@ slint::include_modules!();
 mod ui;
 
 use anyhow::Result;
-use slint::ComponentHandle;
+use slint::{ComponentHandle, ModelRc, VecModel};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -73,6 +73,8 @@ fn main() -> Result<()> {
     ui::tasks::apply_tasks_to_ui(&ui, tasks);
     ui::reports::apply_reports_to_ui(&ui, reports);
     ui::settings::apply_settings_to_ui(&ui, settings);
+    ui.set_cp_doc_chains(ModelRc::new(VecModel::<DocChainGroup>::default()));
+    ui.set_doc_chain_steps(ModelRc::new(VecModel::<ChainStep>::default()));
 
     ui.set_company_name("Acta".into());
     ui.set_user_name("Адміністратор".into());
@@ -156,6 +158,21 @@ fn wire_navigation(ui: &AppWindow, ctx: &Arc<acta::app_ctx::AppCtx>) {
 
 /// Явні TODO-маркери для ще не реалізованих сценаріїв.
 fn wire_stub_callbacks(ui: &AppWindow) {
+    ui.on_inbox_action(|id, kind| {
+        tracing::info!("TODO: inbox_action(doc={id}, kind={kind})");
+    });
+    ui.on_doc_chain_load({
+        let ui_weak = ui.as_weak();
+        move |id| {
+            tracing::info!("TODO: doc_chain_load({id})");
+            let _ = ui_weak.upgrade_in_event_loop(|ui| {
+                ui.set_doc_chain_steps(ModelRc::new(VecModel::<ChainStep>::default()));
+            });
+        }
+    });
+    ui.on_doc_chain_create(|doc_type, source_id| {
+        tracing::info!("TODO: doc_chain_create(type={doc_type}, source={source_id})");
+    });
     ui.on_palette_query_changed(|query| tracing::info!("TODO: palette_query_changed({query})"));
     ui.on_palette_item_activated(|item| tracing::info!("TODO: palette_item_activated({item})"));
 }

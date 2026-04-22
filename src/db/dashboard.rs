@@ -28,32 +28,43 @@ pub async fn get_kpi_summary(pool: &PgPool, company_id: Uuid) -> Result<KpiSumma
         active_counterparties: i64,
     }
 
-    let row = sqlx::query_as!(
-        Row,
+    impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Row {
+        fn from_row(r: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
+            use sqlx::Row as _;
+            Ok(Self {
+                revenue_this_month: r.try_get("revenue_this_month")?,
+                unpaid_total: r.try_get("unpaid_total")?,
+                acts_this_month: r.try_get("acts_this_month")?,
+                active_counterparties: r.try_get("active_counterparties")?,
+            })
+        }
+    }
+
+    let row = sqlx::query_as::<_, Row>(
         r#"
         SELECT
             COALESCE(SUM(total_amount) FILTER (
                 WHERE status = 'paid'
                   AND date_trunc('month', date) = date_trunc('month', CURRENT_DATE)
-            ), 0) AS "revenue_this_month!: Decimal",
+            ), 0) AS revenue_this_month,
 
             COALESCE(SUM(total_amount) FILTER (
                 WHERE status IN ('issued', 'signed')
-            ), 0) AS "unpaid_total!: Decimal",
+            ), 0) AS unpaid_total,
 
             COUNT(*) FILTER (
                 WHERE date_trunc('month', date) = date_trunc('month', CURRENT_DATE)
-            ) AS "acts_this_month!: i64",
+            ) AS acts_this_month,
 
             (SELECT COUNT(*) FROM counterparties
              WHERE company_id = $1 AND is_archived = FALSE
-            ) AS "active_counterparties!: i64"
+            ) AS active_counterparties
 
         FROM acts
         WHERE company_id = $1
         "#,
-        company_id
     )
+    .bind(company_id)
     .fetch_one(pool)
     .await?;
 
@@ -80,23 +91,33 @@ pub async fn revenue_by_month(
         amount: Decimal,
     }
 
-    let rows = sqlx::query_as!(
-        Row,
+    impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Row {
+        fn from_row(r: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
+            use sqlx::Row as _;
+            Ok(Self {
+                month_num: r.try_get("month_num")?,
+                year_num: r.try_get("year_num")?,
+                amount: r.try_get("amount")?,
+            })
+        }
+    }
+
+    let rows = sqlx::query_as::<_, Row>(
         r#"
         SELECT
-            EXTRACT(MONTH FROM date_trunc('month', date))::int AS "month_num!: i32",
-            EXTRACT(YEAR  FROM date_trunc('month', date))::int AS "year_num!: i32",
+            EXTRACT(MONTH FROM date_trunc('month', date))::int AS month_num,
+            EXTRACT(YEAR  FROM date_trunc('month', date))::int AS year_num,
             COALESCE(SUM(total_amount) FILTER (WHERE status = 'paid'), 0)
-                AS "amount!: Decimal"
+                AS amount
         FROM acts
         WHERE company_id = $1
           AND date >= date_trunc('month', CURRENT_DATE) - ($2::int - 1) * INTERVAL '1 month'
         GROUP BY date_trunc('month', date)
         ORDER BY date_trunc('month', date) ASC
         "#,
-        company_id,
-        months as i32,
     )
+    .bind(company_id)
+    .bind(months as i32)
     .fetch_all(pool)
     .await?;
 
@@ -133,19 +154,28 @@ pub async fn acts_status_distribution(
         count: i64,
     }
 
-    let rows = sqlx::query_as!(
-        Row,
+    impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Row {
+        fn from_row(r: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
+            use sqlx::Row as _;
+            Ok(Self {
+                status: r.try_get("status")?,
+                count: r.try_get("count")?,
+            })
+        }
+    }
+
+    let rows = sqlx::query_as::<_, Row>(
         r#"
         SELECT
-            status::text AS "status!: String",
-            COUNT(*)     AS "count!: i64"
+            status::text AS status,
+            COUNT(*)::bigint AS count
         FROM acts
         WHERE company_id = $1
           AND date_trunc('month', date) = date_trunc('month', CURRENT_DATE)
         GROUP BY status
         "#,
-        company_id
     )
+    .bind(company_id)
     .fetch_all(pool)
     .await?;
 
@@ -174,15 +204,27 @@ pub async fn upcoming_payments(
         is_overdue: bool,
     }
 
-    let rows = sqlx::query_as!(
-        Row,
+    impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Row {
+        fn from_row(r: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
+            use sqlx::Row as _;
+            Ok(Self {
+                date_day: r.try_get("date_day")?,
+                date_month: r.try_get("date_month")?,
+                contractor: r.try_get("contractor")?,
+                amount: r.try_get("amount")?,
+                is_overdue: r.try_get("is_overdue")?,
+            })
+        }
+    }
+
+    let rows = sqlx::query_as::<_, Row>(
         r#"
         SELECT
-            EXTRACT(DAY   FROM a.expected_payment_date)::int AS "date_day!: i32",
-            EXTRACT(MONTH FROM a.expected_payment_date)::int AS "date_month!: i32",
-            c.name                                           AS "contractor!: String",
-            a.total_amount                                   AS "amount!: Decimal",
-            a.expected_payment_date <= CURRENT_DATE          AS "is_overdue!: bool"
+            EXTRACT(DAY   FROM a.expected_payment_date)::int AS date_day,
+            EXTRACT(MONTH FROM a.expected_payment_date)::int AS date_month,
+            c.name                                           AS contractor,
+            a.total_amount                                   AS amount,
+            a.expected_payment_date <= CURRENT_DATE          AS is_overdue
         FROM acts a
         JOIN counterparties c ON c.id = a.counterparty_id
         WHERE a.company_id = $1
@@ -193,9 +235,9 @@ pub async fn upcoming_payments(
             a.expected_payment_date ASC
         LIMIT $2
         "#,
-        company_id,
-        limit,
     )
+    .bind(company_id)
+    .bind(limit)
     .fetch_all(pool)
     .await?;
 
@@ -233,24 +275,36 @@ pub async fn get_recent_acts(
         date: String,
     }
 
-    let rows = sqlx::query_as!(
-        Row,
+    impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Row {
+        fn from_row(r: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
+            use sqlx::Row as _;
+            Ok(Self {
+                num: r.try_get("num")?,
+                contractor: r.try_get("contractor")?,
+                amount: r.try_get("amount")?,
+                status: r.try_get("status")?,
+                date: r.try_get("date")?,
+            })
+        }
+    }
+
+    let rows = sqlx::query_as::<_, Row>(
         r#"
         SELECT
-            a.number          AS "num!: String",
-            c.name            AS "contractor!: String",
-            a.total_amount    AS "amount!: Decimal",
-            a.status::text    AS "status!: String",
-            TO_CHAR(a.date, 'DD.MM.YYYY') AS "date!: String"
+            a.number          AS num,
+            c.name            AS contractor,
+            a.total_amount    AS amount,
+            a.status::text    AS status,
+            TO_CHAR(a.date, 'DD.MM.YYYY') AS date
         FROM acts a
         JOIN counterparties c ON c.id = a.counterparty_id
         WHERE a.company_id = $1
         ORDER BY a.created_at DESC
         LIMIT $2
         "#,
-        company_id,
-        limit,
     )
+    .bind(company_id)
+    .bind(limit)
     .fetch_all(pool)
     .await?;
 
@@ -330,7 +384,6 @@ pub async fn inbox_items(pool: &PgPool, company_id: Uuid) -> Result<Vec<InboxRow
         LIMIT 20
         "#,
     )
-    .bind(company_id)
     .bind(company_id)
     .fetch_all(pool)
     .await
