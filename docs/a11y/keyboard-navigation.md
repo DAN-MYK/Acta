@@ -31,7 +31,7 @@
 | Елемент | Контраст | Норма WCAG AA |
 |---------|----------|---------------|
 | Text main on bg | ✅ | ≥ 4.5:1 |
-| Text muted on bg | ⚠️ | Може бути < 4.5:1 — перевірити |
+| Text muted on bg | ✅ | 4.93:1 / 4.64:1 — #696A71 (виправлено) |
 | Success/WARNING/Danger | ✅ | Колір + іконка (не тільки колір) |
 | StatusDot + Badge | ✅ | Подвійне кодування (колір + текст) |
 
@@ -47,7 +47,7 @@
 2. ✅ Search input — `accessible-label` додано (всі 7 списків + CommandPalette)
 3. ✅ Table rows — `accessible-role: list-item` + `accessible-label` додано (всі 6 списків)
 4. ✅ Focus після закриття Command Palette — вже реалізовано `fs-global.focus()` у app.slint
-5. ⚠️ `Text muted` може не проходити WCAG AA contrast — потребує перевірки
+5. ✅ `Text muted` — оновлено до #696A71 (4.93:1 на bg-page, 4.64:1 на sidebar-bg)
 6. ❌ Немає skip-link для keyboard users
 
 ## Пріоритети виправлень
@@ -68,4 +68,4 @@
 - Skip navigation link
 - Focus trap всередині діалогів
 - Keyboard shortcuts cheatsheet (Cmd+/ → показати)
-- Перевірити `Text muted` на WCAG AA контраст (≥ 4.5:1)
+- ✅ `Text muted` — перевірено та виправлено (#696A71, ≥ 4.5:1 на всіх фонах)
