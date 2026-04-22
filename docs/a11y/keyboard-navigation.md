@@ -2,7 +2,9 @@
 
 > Перевірено: 2026-04-22
 > Оновлено: 2026-04-22
-> Статус: P1 виконано — accessible-label/role додані; залишаються P2
+> Статус: P1 + P2 (контраст, skip nav) виконано в `ui-redesign/`; залишається P2-T4 (shortcuts cheatsheet)
+>
+> **Важливо:** Компільований UI — `ui-redesign/` (build.rs). Усі accessibility зміни застосовано там.
 
 ## Навігація клавіатурою
 
@@ -43,12 +45,14 @@
 
 ## Відомі проблеми
 
-1. ✅ Sidebar nav items — `accessible-label` / `accessible-role: button` додано
-2. ✅ Search input — `accessible-label` додано (всі 7 списків + CommandPalette)
-3. ✅ Table rows — `accessible-role: list-item` + `accessible-label` додано (всі 6 списків)
-4. ✅ Focus після закриття Command Palette — вже реалізовано `fs-global.focus()` у app.slint
-5. ✅ `Text muted` — оновлено до #696A71 (4.93:1 на bg-page, 4.64:1 на sidebar-bg)
-6. ❌ Немає skip-link для keyboard users
+1. ✅ Sidebar nav items — `accessible-label` / `accessible-role: button` → `ui-redesign/shell.slint` NavItem
+2. ✅ Search input — `accessible-label` → `ui-redesign/components.slint` SearchInput + shell CommandPalette
+3. ✅ Table rows — `accessible-role: list-item` + `accessible-label` → documents, counterparties, payments, tasks
+4. ✅ Focus після закриття Command Palette — реалізовано в ui-redesign/shell.slint
+5. ✅ `text-faint` — оновлено до #696A71 (4.87:1 на bg, 4.58:1 на sidebar-bg) → `ui-redesign/design-tokens.slint`
+6. ✅ Skip navigation link — `SkipNav` компонент у `ui-redesign/shell.slint`
+7. ✅ `IconButton` — `accessible-role: button` + `accessible-label: tooltip` → `ui-redesign/components.slint`
+8. N/A Focus trap — `ui-redesign/` використовує screen-based навігацію без modal overlays
 
 ## Пріоритети виправлень
 
@@ -65,7 +69,7 @@
 - Focus return після закриття палітри — ✅ вже був реалізований
 
 ### P2 (поліпшення)
-- Skip navigation link
-- Focus trap всередині діалогів
-- Keyboard shortcuts cheatsheet (Cmd+/ → показати)
-- ✅ `Text muted` — перевірено та виправлено (#696A71, ≥ 4.5:1 на всіх фонах)
+- ✅ Skip navigation link — реалізовано в `ui-redesign/shell.slint`
+- N/A Focus trap — screen-based архітектура (немає modal overlays)
+- ❌ Keyboard shortcuts cheatsheet (Ctrl+/ → показати)
+- ✅ `text-faint` — виправлено (#696A71, ≥ 4.5:1 на всіх фонах)
