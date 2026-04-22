@@ -78,6 +78,8 @@ component TaskListItem inherits Rectangle {
 
     height: 66px;
     background: hovered ? AppTheme.bg-hover : transparent;
+    accessible-role: list-item;
+    accessible-label: task.title + (task.due-date != "" ? ", " + task.due-date : "") + ", " + (task.priority == Priority.High ? "Високий пріоритет" : task.priority == Priority.Medium ? "Середній пріоритет" : "Низький пріоритет") + (task.done ? ", Виконано" : ", Відкрито");
 
     Rectangle { y: root.height - 1px; width: root.width; height: 1px; background: AppTheme.border; }
 

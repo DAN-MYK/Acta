@@ -68,6 +68,8 @@ component PaymentRow inherits Rectangle {
 
     height: 44px;
     background: hovered ? AppTheme.bg-hover : transparent;
+    accessible-role: list-item;
+    accessible-label: payment.date + ", " + payment.counterparty + ", " + payment.amount-str + ", " + (payment.direction == Direction.In ? "Надходження" : "Списання");
 
     Rectangle { y: 0; width: root.width; height: 1px; background: AppTheme.border; }
 

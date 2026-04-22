@@ -24,6 +24,8 @@ component CpListItem inherits Rectangle {
         active  ? AppTheme.accent-soft :
         hovered ? AppTheme.bg-hover    :
         transparent;
+    accessible-role: list-item;
+    accessible-label: cp.name + ", " + cp.kind + ", ЄДРПОУ " + cp.edrpou;
 
     // Left accent bar when active
     if active : Rectangle {

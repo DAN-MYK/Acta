@@ -149,6 +149,8 @@ component DocRow inherits Rectangle {
     height: chain-expanded ? 136px : 46px;
     animate height { duration: 150ms; easing: ease-out; }
     background: hovered ? AppTheme.bg-subtle : (selected ? AppTheme.accent-soft : transparent);
+    accessible-role: list-item;
+    accessible-label: doc.number + ", " + (doc.kind == DocumentKind.Invoice ? "Рахунок" : doc.kind == DocumentKind.Act ? "Акт вик. робіт" : "Видаткова накладна") + ", " + doc.date + ", " + doc.counterparty + ", " + doc.amount-str + ", " + (doc.status == DocumentStatus.Draft ? "Чернетка" : doc.status == DocumentStatus.Issued ? "Виставлено" : doc.status == DocumentStatus.Signed ? "Підписано" : doc.status == DocumentStatus.Paid ? "Оплачено" : doc.status == DocumentStatus.Overdue ? "Прострочено" : "Частково");
 
     // Top hairline
     Rectangle {
