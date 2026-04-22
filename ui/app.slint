@@ -1032,6 +1032,21 @@ export component MainWindow inherits Window {
     if root.show-counterparty-card : Rectangle {
         background: Theme.overlay;
 
+        // ── Focus trap for counterparty card ────────────────────────────────────
+        counterparty-dialog-trap := FocusScope {
+            width: parent.width;
+            height: parent.height;
+            init => { self.focus(); }
+            key-pressed(e) => {
+                if e.text == Key.Escape {
+                    root.counterparty-card-close-clicked();
+                    accept
+                } else {
+                    reject
+                }
+            }
+        }
+
         Rectangle {
             width: parent.width - Theme.modal-overlay-padding * 2;
             height: parent.height - Theme.modal-overlay-padding * 2;
@@ -1075,6 +1090,21 @@ export component MainWindow inherits Window {
     if root.show-act-card : Rectangle {
         background: Theme.overlay;
 
+        // ── Focus trap for act card ────────────────────────────────────────────
+        act-dialog-trap := FocusScope {
+            width: parent.width;
+            height: parent.height;
+            init => { self.focus(); }
+            key-pressed(e) => {
+                if e.text == Key.Escape {
+                    root.act-card-close-clicked();
+                    accept
+                } else {
+                    reject
+                }
+            }
+        }
+
         Rectangle {
             width: parent.width - Theme.modal-overlay-padding * 2;
             height: parent.height - Theme.modal-overlay-padding * 2;
@@ -1111,6 +1141,21 @@ export component MainWindow inherits Window {
     // ── Overlay: форма контрагента ────────────────────────────────────────────
     if root.show-cp-form : Rectangle {
         background: Theme.overlay;
+
+        // ── Focus trap for counterparty form ───────────────────────────────────
+        cp-form-dialog-trap := FocusScope {
+            width: parent.width;
+            height: parent.height;
+            init => { self.focus(); }
+            key-pressed(e) => {
+                if e.text == Key.Escape {
+                    root.cp-form-cancel();
+                    accept
+                } else {
+                    reject
+                }
+            }
+        }
 
         Rectangle {
             width: min(parent.width - Theme.modal-overlay-padding * 2, Theme.modal-max-width);
