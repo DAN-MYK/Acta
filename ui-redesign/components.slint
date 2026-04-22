@@ -208,6 +208,9 @@ export component IconButton inherits Rectangle {
     in property <string> tooltip: "";
     callback clicked;
 
+    accessible-role: button;
+    accessible-label: root.tooltip;
+
     property <bool> hovered: false;
 
     width: 28px;
@@ -237,6 +240,7 @@ export component IconButton inherits Rectangle {
 // ── SearchInput ───────────────────────────────────────────────────────────────
 export component SearchInput inherits Rectangle {
     in property <string> placeholder: "Пошук…";
+    in property <string> label: "Пошук";
     in-out property <string> value: "";
     in property <image> search-icon;
     callback edited(string);
@@ -270,6 +274,7 @@ export component SearchInput inherits Rectangle {
             font-family: AppTheme.font-sans;
             single-line: true;
             vertical-alignment: center;
+            accessible-label: root.label;
             edited => { root.edited(self.text); }
         }
 
