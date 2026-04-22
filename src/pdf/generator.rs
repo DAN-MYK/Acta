@@ -434,6 +434,13 @@ mod tests {
             .unwrap_or(false)
     }
 
+    // Typst запускається як зовнішній процес і пише кеш у спільну директорію.
+    // Паралельний запуск двох typst-процесів з одним шаблоном спричиняє race.
+    fn typst_lock() -> &'static std::sync::Mutex<()> {
+        static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+        LOCK.get_or_init(|| std::sync::Mutex::new(()))
+    }
+
     // ─── amount_to_words ──────────────────────────────────────────────────────
 
     #[test]
@@ -565,6 +572,7 @@ mod tests {
             eprintln!("пропуск: typst не встановлено");
             return;
         }
+        let _guard = typst_lock().lock().unwrap();
 
         let out = std::env::temp_dir().join("acta_test_act_generate.pdf");
         generate_act_pdf(&sample_act_data(), &out)
@@ -587,6 +595,7 @@ mod tests {
             eprintln!("пропуск: typst не встановлено");
             return;
         }
+        let _guard = typst_lock().lock().unwrap();
 
         let out = std::env::temp_dir().join("АКТ-2026-001.pdf");
         generate_act_pdf(&sample_act_data(), &out).unwrap();
@@ -602,6 +611,7 @@ mod tests {
             eprintln!("пропуск: typst не встановлено");
             return;
         }
+        let _guard = typst_lock().lock().unwrap();
 
         let out = std::env::temp_dir().join("acta_test_invoice_generate.pdf");
         generate_invoice_pdf(&sample_invoice_data(), &out)
@@ -623,6 +633,7 @@ mod tests {
             eprintln!("пропуск: typst не встановлено");
             return;
         }
+        let _guard = typst_lock().lock().unwrap();
 
         // Перевірка що шаблон приймає ненульовий ПДВ без помилки
         let mut data = sample_invoice_data();
