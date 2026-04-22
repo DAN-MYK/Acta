@@ -495,7 +495,6 @@ export component MainWindow inherits Window {
         }
 
     skip-nav := SkipNav {
-        width: parent.width;
         activated => { content-fs.focus(); }
     }
 
@@ -519,6 +518,7 @@ export component MainWindow inherits Window {
             background: Theme.bg-page;
             clip: true;
 
+            // Якір фокусу: Tab з цього FocusScope переходить до першого елементу сторінки нижче
             content-fs := FocusScope {
                 width: parent.width;
                 height: parent.height;
