@@ -170,6 +170,7 @@ export component CounterpartyList {
                             padding-right: 8px;
 
                             search-input := TextInput {
+                                accessible-label: "Пошук контрагентів";
                                 vertical-alignment: center;
                                 font-size: Theme.font-sm;
                                 color: Theme.text-primary;
@@ -275,6 +276,9 @@ export component CounterpartyList {
                         vertical-stretch: 1;
 
                         for row[i] in root.rows : Rectangle {
+                            accessible-role: list-item;
+                            accessible-label: "\{row[0].text}, \{row[1].text}";
+
                             property <bool> is-archived: i < root.row-archived.length && root.row-archived[i];
 
                             height: 52px;

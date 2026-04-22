@@ -140,6 +140,7 @@ export component PaymentList {
                                 vertical-alignment: center;
                             }
                             search-edit := TextInput {
+                                accessible-label: "Пошук платежів";
                                 font-size: Theme.font-md;
                                 color: Theme.text-primary;
                                 horizontal-stretch: 1;
@@ -263,6 +264,9 @@ export component PaymentList {
                             vertical-stretch: 1;
 
                             for row[i] in root.rows: Rectangle {
+                                accessible-role: list-item;
+                                accessible-label: "Платіж \{row.date}, \{row.counterparty}, \{row.amount}, \{row.bank}";
+
                                 height: Theme.row-height;
                                 background: root.selected-row == i
                                     ? Theme.row-selected

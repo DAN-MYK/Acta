@@ -432,6 +432,9 @@ export component DocumentList {
                             vertical-stretch: 1;
 
                             for row[i] in root.rows: Rectangle {
+                                accessible-role: list-item;
+                                accessible-label: "\{row.doc-type} \{row.number}, \{row.date}, \{row.counterparty}, \{row.amount}, \{row.status}";
+
                                 height: Theme.row-height;
                                 background: root.hovered-row == i
                                     ? Theme.row-hover

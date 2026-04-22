@@ -106,6 +106,7 @@ export component WaybillList {
                         padding-right: Theme.space-3;
 
                         search-input := TextInput {
+                            accessible-label: "Пошук накладних за номером або контрагентом";
                             vertical-alignment: center;
                             font-size: Theme.font-md;
                             color: Theme.text-primary;
@@ -170,6 +171,9 @@ export component WaybillList {
                             vertical-stretch: 1;
 
                             for row[i] in root.rows : Rectangle {
+                                accessible-role: list-item;
+                                accessible-label: "Накладна \{row.num}, \{row.date}, \{row.counterparty}, \{row.amount}, \{row.status-label}";
+
                                 property <color> badge-color:
                                     row.status == WaybillStatus.delivered ? Theme.success :
                                     row.status == WaybillStatus.signed    ? Theme.primary :

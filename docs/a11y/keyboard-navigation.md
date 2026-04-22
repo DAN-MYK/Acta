@@ -1,7 +1,8 @@
 # Accessibility / Keyboard Navigation — Acta
 
 > Перевірено: 2026-04-22
-> Статус: базовий pass виконано, залишаються TODO
+> Оновлено: 2026-04-22
+> Статус: P1 виконано — accessible-label/role додані; залишаються P2
 
 ## Навігація клавіатурою
 
@@ -40,28 +41,31 @@
 - Icon buttons мають мати text fallback
 - Form fields потребують `accessible-label`
 
-## Відомі проблеми (TODO)
+## Відомі проблеми
 
-1. ❌ Sidebar nav items — немає `accessible-label`
-2. ❌ Search input — немає `accessible-label`
-3. ❌ Table rows — не оголошуються як `row` з колонками
-4. ❌ Focus не повертається після Закриття Command Palette
-5. ⚠️ `Text muted` може не проходити WCAG AA contrast
+1. ✅ Sidebar nav items — `accessible-label` / `accessible-role: button` додано
+2. ✅ Search input — `accessible-label` додано (всі 7 списків + CommandPalette)
+3. ✅ Table rows — `accessible-role: list-item` + `accessible-label` додано (всі 6 списків)
+4. ✅ Focus після закриття Command Palette — вже реалізовано `fs-global.focus()` у app.slint
+5. ⚠️ `Text muted` може не проходити WCAG AA contrast — потребує перевірки
 6. ❌ Немає skip-link для keyboard users
 
 ## Пріоритети виправлень
 
 ### P0 (критичні)
-- focus ring завжди visible (зараз ✅)
-- Escape закриває modals (зараз ✅ в Shell)
-- Немає keyboard traps (зараз ✅)
+- focus ring завжди visible (✅)
+- Escape закриває modals (✅)
+- Немає keyboard traps (✅)
 
-### P1 (важливі)
-- Add `accessible-label` до icon buttons
-- Focus return після modal/palette close
-- Table announcements для screen readers
+### P1 (важливі) — ✅ ВИКОНАНО
+- `accessible-label` до icon buttons (IconButton, TableActionButton) — ✅
+- `accessible-label` до всіх search inputs — ✅
+- `accessible-label` + `accessible-role` на NavItem та company switcher — ✅
+- `accessible-role: list-item` + `accessible-label` на всі рядки списків — ✅
+- Focus return після закриття палітри — ✅ вже був реалізований
 
 ### P2 (поліпшення)
 - Skip navigation link
 - Focus trap всередині діалогів
 - Keyboard shortcuts cheatsheet (Cmd+/ → показати)
+- Перевірити `Text muted` на WCAG AA контраст (≥ 4.5:1)

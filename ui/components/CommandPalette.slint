@@ -75,6 +75,7 @@ export component CommandPalette {
                     }
 
                     search-input := TextInput {
+                        accessible-label: "Пошук команд";
                         horizontal-stretch: 1;
                         vertical-alignment: center;
                         font-size: Theme.font-lg;
@@ -158,6 +159,8 @@ export component CommandPalette {
                         }
 
                         close-ta := TouchArea {
+                            accessible-role: button;
+                            accessible-label: "Закрити палітру";
                             mouse-cursor: pointer;
                             clicked => { root.closed(); }
                         }

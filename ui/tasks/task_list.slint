@@ -199,6 +199,7 @@ export component TaskList {
                             padding-right: 8px;
 
                             search-input := TextInput {
+                                accessible-label: "Пошук завдань";
                                 vertical-alignment: center;
                                 font-size: Theme.font-sm;
                                 color: Theme.text-primary;
@@ -308,6 +309,9 @@ export component TaskList {
                                 vertical-stretch: 1;
 
                                 for row[i] in root.rows : Rectangle {
+                                    accessible-role: list-item;
+                                    accessible-label: "Завдання: \{row.title}, пріоритет: \{row.priority-label}, термін: \{row.due-date}, статус: \{row.status-label}";
+
                                     property <bool> is-open: row.status == TaskStatus.open || row.status == TaskStatus.in_progress;
                                     property <bool> show-row:
                                         root.active-tab == 2 ||

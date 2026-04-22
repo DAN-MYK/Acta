@@ -10,6 +10,10 @@ component NavItem {
     in property <length> indent: 0px;
     callback clicked;
 
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-enabled: !root.disabled;
+
     height: Theme.nav-item-height;
     min-width: 0;
 
@@ -152,6 +156,8 @@ export component Sidebar {
                 animate background { duration: 100ms; easing: ease; }
 
                 switch-touch := TouchArea {
+                    accessible-role: button;
+                    accessible-label: "Змінити компанію — \{root.active-company-name}";
                     mouse-cursor: pointer;
                     clicked => { root.switch-company(); }
 

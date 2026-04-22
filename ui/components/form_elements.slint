@@ -118,7 +118,12 @@ export component IconButton inherits Rectangle {
     in property <image> icon;
     in property <color> icon-color: Theme.text-primary;
     in property <bool> disabled: false;
+    in property <string> label: "";
     callback clicked;
+
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-enabled: !root.disabled;
 
     width: Theme.icon-lg + Theme.space-4;
     height: self.width;
@@ -147,7 +152,11 @@ export component IconButton inherits Rectangle {
 export component TableActionButton inherits Rectangle {
     in property <image> icon;
     in property <color> hover-bg: Theme.btn-action-bg;
+    in property <string> label: "";
     callback clicked;
+
+    accessible-role: button;
+    accessible-label: root.label;
 
     width: Theme.action-btn-size;
     height: Theme.action-btn-size;
