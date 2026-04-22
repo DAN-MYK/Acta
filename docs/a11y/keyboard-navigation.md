@@ -2,7 +2,7 @@
 
 > Перевірено: 2026-04-22
 > Оновлено: 2026-04-22
-> Статус: P1 + P2 (контраст, skip nav) виконано в `ui-redesign/`; залишається P2-T4 (shortcuts cheatsheet)
+> Статус: P1 + P2 повністю виконано в `ui-redesign/`
 >
 > **Важливо:** Компільований UI — `ui-redesign/` (build.rs). Усі accessibility зміни застосовано там.
 
@@ -71,5 +71,5 @@
 ### P2 (поліпшення)
 - ✅ Skip navigation link — реалізовано в `ui-redesign/shell.slint`
 - N/A Focus trap — screen-based архітектура (немає modal overlays)
-- ❌ Keyboard shortcuts cheatsheet (Ctrl+/ → показати)
+- ✅ Keyboard shortcuts cheatsheet (Ctrl+/ → показати) — реалізовано в `ui-redesign/shell.slint`
 - ✅ `text-faint` — виправлено (#696A71, ≥ 4.5:1 на всіх фонах)
