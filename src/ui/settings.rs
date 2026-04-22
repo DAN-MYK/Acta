@@ -1,7 +1,15 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
-use slint::{ModelRc, VecModel};
+use anyhow::{Result, anyhow};
+use chrono::Local;
+use notify_rust::{Notification, Timeout};
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use slint::{ComponentHandle, ModelRc, VecModel};
 use sqlx::PgPool;
+use tokio::fs;
+use tokio::process::Command;
 use uuid::Uuid;
 
 use acta::app_ctx::AppCtx;
@@ -15,6 +23,14 @@ pub struct SettingsData {
     pub numbering_rows: Vec<crate::NumberingRow>,
     pub last_backup_label: String,
     pub last_backup_file: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct InviteDraft {
+    name: String,
+    email: String,
+    role: String,
+    last_active: String,
 }
 
 /// Перетворює `Company` з БД у `CompanyInfo` для Slint.
@@ -76,21 +92,20 @@ fn default_company_info() -> crate::CompanyInfo {
     }
 }
 
-fn default_integrations() -> Vec<crate::IntegrationItem> {
-    vec![
-        crate::IntegrationItem {
-            label: "BAS".into(),
-            description: "Імпорт документів та довідників".into(),
-            tag: "bas".into(),
-            enabled: false,
-        },
-        crate::IntegrationItem {
-            label: "Банк".into(),
-            description: "Синхронізація виписок та звірка платежів".into(),
-            tag: "bank".into(),
-            enabled: false,
-        },
-    ]
+fn integrations_dir() -> PathBuf {
+    PathBuf::from("storage/integrations")
+}
+
+fn integration_config_path(tag: &str) -> PathBuf {
+    integrations_dir().join(format!("{tag}.json"))
+}
+
+fn team_invites_dir() -> PathBuf {
+    PathBuf::from("storage/team/invites")
+}
+
+fn backups_dir() -> PathBuf {
+    PathBuf::from("storage/backups")
 }
 
 fn default_numbering_rows() -> Vec<crate::NumberingRow> {
@@ -110,21 +125,242 @@ fn default_numbering_rows() -> Vec<crate::NumberingRow> {
     ]
 }
 
+fn notify_user(summary: &str, body: &str) {
+    let _ = Notification::new()
+        .appname("Acta")
+        .summary(summary)
+        .body(body)
+        .timeout(Timeout::Milliseconds(6_000))
+        .show();
+}
+
+async fn load_integrations() -> Vec<crate::IntegrationItem> {
+    let _ = fs::create_dir_all(integrations_dir()).await;
+
+    vec![
+        crate::IntegrationItem {
+            label: "BAS".into(),
+            description: "Імпорт документів та довідників".into(),
+            tag: "bas".into(),
+            enabled: fs::metadata(integration_config_path("bas")).await.is_ok(),
+        },
+        crate::IntegrationItem {
+            label: "Банк".into(),
+            description: "Синхронізація виписок та звірка платежів".into(),
+            tag: "bank".into(),
+            enabled: fs::metadata(integration_config_path("bank")).await.is_ok(),
+        },
+    ]
+}
+
+async fn load_team_members(company: Option<&Company>) -> Vec<crate::TeamMember> {
+    let mut members = Vec::new();
+
+    if let Some(company) = company {
+        members.push(crate::TeamMember {
+            name: company
+                .director_name
+                .clone()
+                .unwrap_or_else(|| "Власник компанії".to_string())
+                .into(),
+            email: company
+                .email
+                .clone()
+                .unwrap_or_else(|| "local-owner@acta".to_string())
+                .into(),
+            role: "Owner".into(),
+            last_active: "Локально".into(),
+        });
+    }
+
+    let _ = fs::create_dir_all(team_invites_dir()).await;
+    if let Ok(mut entries) = fs::read_dir(team_invites_dir()).await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let path = entry.path();
+            if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+                continue;
+            }
+
+            if let Ok(text) = fs::read_to_string(&path).await {
+                if let Ok(invite) = serde_json::from_str::<InviteDraft>(&text) {
+                    members.push(crate::TeamMember {
+                        name: invite.name.into(),
+                        email: invite.email.into(),
+                        role: invite.role.into(),
+                        last_active: invite.last_active.into(),
+                    });
+                }
+            }
+        }
+    }
+
+    members
+}
+
+async fn last_backup_info() -> (String, String) {
+    let _ = fs::create_dir_all(backups_dir()).await;
+    let Ok(mut entries) = fs::read_dir(backups_dir()).await else {
+        return (
+            "Ще не створювався".to_string(),
+            "Локальний бекап не знайдено".to_string(),
+        );
+    };
+
+    let mut newest: Option<(std::time::SystemTime, PathBuf, u64)> = None;
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        let path = entry.path();
+        let Ok(metadata) = entry.metadata().await else {
+            continue;
+        };
+        if !metadata.is_file() {
+            continue;
+        }
+
+        let modified = metadata.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+        let len = metadata.len();
+        match &newest {
+            Some((current, _, _)) if modified <= *current => {}
+            _ => newest = Some((modified, path, len)),
+        }
+    }
+
+    if let Some((modified, path, len)) = newest {
+        let modified: chrono::DateTime<Local> = modified.into();
+        let label = modified.format("%d.%m.%Y %H:%M").to_string();
+        let file = format!(
+            "{} · {:.1} KB",
+            path.file_name().and_then(|name| name.to_str()).unwrap_or_default(),
+            len as f64 / 1024.0
+        );
+        (label, file)
+    } else {
+        (
+            "Ще не створювався".to_string(),
+            "Локальний бекап не знайдено".to_string(),
+        )
+    }
+}
+
+async fn write_integration_config(tag: &str) -> Result<PathBuf> {
+    let dir = integrations_dir();
+    fs::create_dir_all(&dir).await?;
+
+    let path = integration_config_path(tag);
+    let template = match tag {
+        "bas" => json!({
+            "type": "bas",
+            "input_dir": "./bas-export",
+            "enabled": true
+        }),
+        "bank" => json!({
+            "type": "bank",
+            "import_dir": "./storage/import/bank",
+            "enabled": true
+        }),
+        other => {
+            return Err(anyhow!("Невідома інтеграція: {other}"));
+        }
+    };
+
+    fs::write(&path, serde_json::to_string_pretty(&template)?).await?;
+    Ok(path)
+}
+
+async fn create_invite_draft() -> Result<PathBuf> {
+    let dir = team_invites_dir();
+    fs::create_dir_all(&dir).await?;
+
+    let now = Local::now();
+    let stamp = now.format("%Y%m%d-%H%M%S").to_string();
+    let path = dir.join(format!("invite-{stamp}.json"));
+    let draft = InviteDraft {
+        name: "Нове запрошення".to_string(),
+        email: format!("pending-{stamp}@local"),
+        role: "Спостерігач".to_string(),
+        last_active: "Очікує надсилання".to_string(),
+    };
+
+    fs::write(&path, serde_json::to_string_pretty(&draft)?).await?;
+    Ok(path)
+}
+
+async fn create_backup_snapshot(company_id: Uuid) -> Result<PathBuf> {
+    fs::create_dir_all(backups_dir()).await?;
+    let stamp = Local::now().format("%Y%m%d-%H%M%S").to_string();
+    let sql_path = backups_dir().join(format!("acta-backup-{stamp}.sql"));
+
+    if let Ok(database_url) = std::env::var("DATABASE_URL") {
+        match Command::new("pg_dump")
+            .arg("--dbname")
+            .arg(&database_url)
+            .arg("--file")
+            .arg(&sql_path)
+            .output()
+            .await
+        {
+            Ok(output) if output.status.success() => return Ok(sql_path),
+            Ok(output) => {
+                tracing::warn!(
+                    "settings: pg_dump fallback engaged: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+            Err(error) => {
+                tracing::warn!("settings: pg_dump unavailable: {error}");
+            }
+        }
+    }
+
+    let json_path = backups_dir().join(format!("acta-backup-{stamp}.json"));
+    let payload = json!({
+        "mode": "partial",
+        "created_at": Local::now().to_rfc3339(),
+        "company_id": company_id,
+        "note": "pg_dump недоступний, тому створено локальний JSON snapshot."
+    });
+    fs::write(&json_path, serde_json::to_string_pretty(&payload)?).await?;
+    Ok(json_path)
+}
+
+async fn open_latest_backup() -> Result<PathBuf> {
+    let (label, file) = last_backup_info().await;
+    if label == "Ще не створювався" {
+        return Err(anyhow!("Ще немає жодної резервної копії"));
+    }
+
+    let file_name = file
+        .split('·')
+        .next()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| anyhow!("Не вдалося визначити ім'я файлу резервної копії"))?;
+    let path = backups_dir().join(file_name);
+
+    let open_path = path.clone();
+    let _ = tokio::task::spawn_blocking(move || open::that(open_path)).await;
+    Ok(path)
+}
+
 pub async fn prepare_settings_data(pool: &PgPool, company_id: Uuid) -> SettingsData {
-    let company_info = db::companies::get_by_id(pool, company_id)
+    let company = db::companies::get_by_id(pool, company_id)
         .await
         .ok()
-        .flatten()
-        .map(|company| company_to_info(&company))
+        .flatten();
+    let company_info = company
+        .as_ref()
+        .map(company_to_info)
         .unwrap_or_else(default_company_info);
+    let integrations = load_integrations().await;
+    let team_members = load_team_members(company.as_ref()).await;
+    let (last_backup_label, last_backup_file) = last_backup_info().await;
 
     SettingsData {
         company_info,
-        integrations: default_integrations(),
-        team_members: vec![],
+        integrations,
+        team_members,
         numbering_rows: default_numbering_rows(),
-        last_backup_label: "Ще не створювався".to_string(),
-        last_backup_file: "Локальний бекап не знайдено".to_string(),
+        last_backup_label,
+        last_backup_file,
     }
 }
 
@@ -140,16 +376,29 @@ pub fn apply_settings_to_ui(ui: &crate::AppWindow, data: SettingsData) {
 pub fn wire_settings_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
     ui.on_settings_company_saved({
         let ctx = ctx.clone();
+        let ui_weak = ui.as_weak();
         move |info| {
             let ctx = ctx.clone();
+            let ui_weak = ui_weak.clone();
             let update = info_to_update(&info);
 
             tokio::spawn(async move {
                 let company_id = ctx.company_id();
                 match db::companies::update(ctx.pool(), company_id, &update).await {
-                    Ok(Some(_)) => tracing::info!("settings: company saved"),
+                    Ok(Some(company)) => {
+                        tracing::info!("settings: company saved");
+                        let data = prepare_settings_data(ctx.pool(), ctx.company_id()).await;
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| apply_settings_to_ui(&ui, data));
+                        notify_user(
+                            "Налаштування компанії збережено",
+                            &format!("Оновлено профіль '{}'", company.name),
+                        );
+                    }
                     Ok(None) => tracing::warn!("settings: company not found id={company_id}"),
-                    Err(error) => tracing::error!("settings: save failed: {error}"),
+                    Err(error) => {
+                        tracing::error!("settings: save failed: {error}");
+                        notify_user("Помилка збереження компанії", &error.to_string());
+                    }
                 }
             });
         }
@@ -164,12 +413,96 @@ pub fn wire_settings_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
     ui.on_settings_density_changed(|density| {
         tracing::info!("settings: density_changed({density})");
     });
-    ui.on_settings_integration_configure(|integration| {
-        tracing::info!("TODO: settings_integration_configure({integration})");
+
+    ui.on_settings_integration_configure({
+        let ctx = ctx.clone();
+        let ui_weak = ui.as_weak();
+        move |integration| {
+            let ctx = ctx.clone();
+            let ui_weak = ui_weak.clone();
+            let tag = integration.to_string().to_lowercase();
+            tokio::spawn(async move {
+                match write_integration_config(&tag).await {
+                    Ok(path) => {
+                        let data = prepare_settings_data(ctx.pool(), ctx.company_id()).await;
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| apply_settings_to_ui(&ui, data));
+                        notify_user(
+                            "Інтеграцію налаштовано",
+                            &format!("Створено конфіг: {}", path.display()),
+                        );
+                    }
+                    Err(error) => {
+                        tracing::error!("settings: integration configure failed: {error}");
+                        notify_user("Помилка інтеграції", &error.to_string());
+                    }
+                }
+            });
+        }
     });
-    ui.on_settings_team_invite(|| tracing::info!("TODO: settings_team_invite"));
-    ui.on_settings_backup_now(|| tracing::info!("TODO: settings_backup_now"));
-    ui.on_settings_backup_download(|| tracing::info!("TODO: settings_backup_download"));
+
+    ui.on_settings_team_invite({
+        let ctx = ctx.clone();
+        let ui_weak = ui.as_weak();
+        move || {
+            let ctx = ctx.clone();
+            let ui_weak = ui_weak.clone();
+            tokio::spawn(async move {
+                match create_invite_draft().await {
+                    Ok(path) => {
+                        let data = prepare_settings_data(ctx.pool(), ctx.company_id()).await;
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| apply_settings_to_ui(&ui, data));
+                        notify_user(
+                            "Чернетку запрошення створено",
+                            &format!("Відредагуйте файл {}", path.display()),
+                        );
+                    }
+                    Err(error) => {
+                        tracing::error!("settings: team invite failed: {error}");
+                        notify_user("Помилка створення запрошення", &error.to_string());
+                    }
+                }
+            });
+        }
+    });
+
+    ui.on_settings_backup_now({
+        let ctx = ctx.clone();
+        let ui_weak = ui.as_weak();
+        move || {
+            let ctx = ctx.clone();
+            let ui_weak = ui_weak.clone();
+            tokio::spawn(async move {
+                match create_backup_snapshot(ctx.company_id()).await {
+                    Ok(path) => {
+                        let data = prepare_settings_data(ctx.pool(), ctx.company_id()).await;
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| apply_settings_to_ui(&ui, data));
+                        notify_user(
+                            "Резервну копію створено",
+                            &format!("Файл збережено: {}", path.display()),
+                        );
+                    }
+                    Err(error) => {
+                        tracing::error!("settings: backup failed: {error}");
+                        notify_user("Помилка створення backup", &error.to_string());
+                    }
+                }
+            });
+        }
+    });
+
+    ui.on_settings_backup_download(|| {
+        tokio::spawn(async move {
+            match open_latest_backup().await {
+                Ok(path) => {
+                    notify_user("Відкрито резервну копію", &path.display().to_string());
+                }
+                Err(error) => {
+                    tracing::error!("settings: backup open failed: {error}");
+                    notify_user("Помилка відкриття backup", &error.to_string());
+                }
+            }
+        });
+    });
 }
 
 #[cfg(test)]

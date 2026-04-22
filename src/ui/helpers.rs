@@ -202,7 +202,11 @@ pub fn payment_row_to_item(r: &PaymentListRow) -> crate::PaymentItem {
             PaymentDirection::Income => crate::Direction::In,
             PaymentDirection::Expense => crate::Direction::Out,
         },
-        matched_doc: SharedString::default(),
+        matched_doc: if r.is_reconciled {
+            "Звірено".into()
+        } else {
+            SharedString::default()
+        },
         account: r.bank_name.clone().unwrap_or_default().into(),
     }
 }

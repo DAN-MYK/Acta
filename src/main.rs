@@ -81,6 +81,7 @@ fn main() -> Result<()> {
     wire_navigation(&ui, &ctx);
     ui::documents::wire_document_callbacks(&ui, &ctx);
     ui::counterparties::wire_counterparty_callbacks(&ui, &ctx);
+    ui::payments::wire_payment_callbacks(&ui, &ctx);
     ui::tasks::wire_task_callbacks(&ui, &ctx);
     ui::reports::wire_reports_callbacks(&ui, &ctx);
     ui::settings::wire_settings_callbacks(&ui, &ctx);
@@ -155,11 +156,6 @@ fn wire_navigation(ui: &AppWindow, ctx: &Arc<acta::app_ctx::AppCtx>) {
 
 /// Явні TODO-маркери для ще не реалізованих сценаріїв.
 fn wire_stub_callbacks(ui: &AppWindow) {
-    ui.on_pay_import_csv(|| tracing::info!("TODO: pay_import_csv"));
-    ui.on_pay_sync_bank(|| tracing::info!("TODO: pay_sync_bank"));
-    ui.on_pay_new(|| tracing::info!("TODO: pay_new"));
-    ui.on_pay_link(|id| tracing::info!("TODO: pay_link({id})"));
-
     ui.on_palette_query_changed(|query| tracing::info!("TODO: palette_query_changed({query})"));
     ui.on_palette_item_activated(|item| tracing::info!("TODO: palette_item_activated({item})"));
 }

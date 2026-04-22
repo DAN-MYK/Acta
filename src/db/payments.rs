@@ -177,6 +177,44 @@ pub async fn payment_kpi(pool: &PgPool, company_id: Uuid) -> Result<PaymentKpi> 
     })
 }
 
+/// Перевіряє, чи платіж із таким підписом уже імпортовано.
+pub async fn exists_imported_row(
+    pool: &PgPool,
+    company_id: Uuid,
+    date: chrono::NaiveDate,
+    amount: rust_decimal::Decimal,
+    direction: PaymentDirection,
+    bank_ref: Option<&str>,
+    description: &str,
+) -> Result<bool> {
+    let exists = sqlx::query_scalar::<_, bool>(
+        r#"
+        SELECT EXISTS(
+            SELECT 1
+            FROM payments
+            WHERE company_id = $1
+              AND date = $2
+              AND amount = $3
+              AND direction = $4
+              AND (
+                    ($5::text IS NOT NULL AND bank_ref = $5::text)
+                 OR ($5::text IS NULL AND COALESCE(description, '') = $6)
+              )
+        )
+        "#,
+    )
+    .bind(company_id)
+    .bind(date)
+    .bind(amount)
+    .bind(direction)
+    .bind(bank_ref)
+    .bind(description)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(exists)
+}
+
 /// Отримати платіж за ID.
 pub async fn list_by_counterparty(
     pool: &PgPool,
