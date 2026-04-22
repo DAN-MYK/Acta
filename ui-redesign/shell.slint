@@ -5,6 +5,52 @@ import { AppTheme } from "design-tokens.slint";
 import { NavScreen } from "types.slint";
 import { Card, VDivider, HDivider, IconButton, KbdHint, SearchInput, Avatar, GhostButton, SecondaryButton } from "components.slint";
 
+// ── Skip Navigation ───────────────────────────────────────────────────────────
+component SkipNav inherits Rectangle {
+    callback activated;
+
+    height: scope.has-focus ? 36px : 1px;
+    clip: true;
+    z: 200;
+    background: transparent;
+
+    scope := FocusScope {
+        width: parent.width;
+        height: 36px;
+        accessible-role: button;
+        accessible-label: "Перейти до основного контенту";
+        key-pressed(e) => {
+            if e.text == "\n" || e.text == " " {
+                root.activated();
+                accept
+            } else {
+                reject
+            }
+        }
+    }
+
+    Rectangle {
+        visible: scope.has-focus;
+        background: AppTheme.accent;
+        border-radius: AppTheme.radius-md;
+        border-width: 2px;
+        border-color: AppTheme.accent-hover;
+        width: 220px;
+        height: 36px;
+        x: AppTheme.sp-2;
+        y: 0;
+
+        Text {
+            text: "Перейти до основного контенту";
+            color: #ffffff;
+            font-size: 12px;
+            font-family: AppTheme.font-sans;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+        }
+    }
+}
+
 // ── Sidebar navigation item ───────────────────────────────────────────────────
 component NavItem inherits Rectangle {
     in property <string> label;
@@ -12,6 +58,9 @@ component NavItem inherits Rectangle {
     in property <bool> active: false;
     in property <int> badge-count: 0;
     callback clicked;
+
+    accessible-role: button;
+    accessible-label: root.label;
 
     property <bool> hovered: false;
 
@@ -274,6 +323,7 @@ export component CommandPalette inherits Rectangle {
                     single-line: true;
                     vertical-alignment: center;
                     horizontal-stretch: 1;
+                    accessible-label: "Пошук команд";
                     edited => { root.query-changed(self.text); }
                 }
 
@@ -464,6 +514,10 @@ export component Shell inherits Rectangle {
     HorizontalLayout {
         spacing: 0px;
 
+        skip-nav := SkipNav {
+            activated => { content-area.focus(); }
+        }
+
         // ── Sidebar ────────────────────────────────────────────────────────
         sidebar := Rectangle {
             width: 224px;
@@ -546,7 +600,11 @@ export component Shell inherits Rectangle {
                         }
                     }
 
-                    company-hover := TouchArea { mouse-cursor: pointer; }
+                    company-hover := TouchArea {
+                        mouse-cursor: pointer;
+                        accessible-role: button;
+                        accessible-label: "Компанія: \{root.company-name}";
+                    }
                 }
 
                 // ── Search trigger ─────────────────────────────────────────
@@ -907,6 +965,12 @@ export component Shell inherits Rectangle {
                 vertical-stretch: 1;
                 clip: true;
                 background: AppTheme.bg;
+
+                content-area := FocusScope {
+                    width: parent.width;
+                    height: parent.height;
+                    // Якір фокусу: Tab з цього FocusScope переходить до першого елементу екрану нижче
+                }
 
                 @children
             }
