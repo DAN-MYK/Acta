@@ -1,7 +1,8 @@
 # UI Roadmap — привести Slint UI до вигляду прототипу
 
 > Прототип: `C:\Users\MykhailoDan\Downloads\Acta` (React+Babel)
-> Поточний UI: `ui/` (Slint)
+> Канонічний UI: `ui-redesign/` (Slint)
+> `ui/` збережено лише як legacy reference під час міграції
 
 ---
 
