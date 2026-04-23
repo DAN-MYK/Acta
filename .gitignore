@@ -2,6 +2,7 @@
 .env
 .claude/
 .claude/worktrees/
+.worktrees/
 
 # Тимчасові файли
 temp_*.ps1
