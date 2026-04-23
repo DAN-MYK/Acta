@@ -126,7 +126,7 @@ async fn acts_create_and_status_flow_in_db() -> Result<()> {
             counterparty_id: cp.id,
             contract_id: None,
             category_id: None,
-            direction: "outgoing".to_string(),
+            direction: models::DocumentDirection::Outgoing,
             date: Utc::now().date_naive(),
             expected_payment_date: None,
             status: models::ActStatus::Draft,
@@ -215,7 +215,7 @@ async fn acts_change_status_rejects_skipping_forward_transition() -> Result<()> 
             counterparty_id: cp.id,
             contract_id: None,
             category_id: None,
-            direction: "outgoing".to_string(),
+            direction: models::DocumentDirection::Outgoing,
             date: Utc::now().date_naive(),
             expected_payment_date: None,
             status: models::ActStatus::Draft,
@@ -278,7 +278,7 @@ async fn acts_change_status_rejects_same_status_transition() -> Result<()> {
             counterparty_id: cp.id,
             contract_id: None,
             category_id: None,
-            direction: "outgoing".to_string(),
+            direction: models::DocumentDirection::Outgoing,
             date: Utc::now().date_naive(),
             expected_payment_date: None,
             status: models::ActStatus::Draft,
@@ -341,7 +341,7 @@ async fn acts_change_status_rejects_transition_from_paid() -> Result<()> {
             counterparty_id: cp.id,
             contract_id: None,
             category_id: None,
-            direction: "outgoing".to_string(),
+            direction: models::DocumentDirection::Outgoing,
             date: Utc::now().date_naive(),
             expected_payment_date: None,
             status: models::ActStatus::Draft,
@@ -408,7 +408,7 @@ async fn acts_advance_status_on_paid_returns_error() -> Result<()> {
             counterparty_id: cp.id,
             contract_id: None,
             category_id: None,
-            direction: "outgoing".to_string(),
+            direction: models::DocumentDirection::Outgoing,
             date: Utc::now().date_naive(),
             expected_payment_date: None,
             status: models::ActStatus::Draft,
@@ -644,7 +644,7 @@ async fn tasks_list_by_act_returns_only_related_tasks() -> Result<()> {
             counterparty_id: cp.id,
             contract_id: None,
             category_id: None,
-            direction: "outgoing".to_string(),
+            direction: models::DocumentDirection::Outgoing,
             date: Utc::now().date_naive(),
             expected_payment_date: None,
             status: models::ActStatus::Draft,
@@ -944,7 +944,7 @@ async fn companies_summary_counts_real_acts_in_db() -> Result<()> {
             counterparty_id: cp.id,
             contract_id: None,
             category_id: None,
-            direction: "outgoing".to_string(),
+            direction: models::DocumentDirection::Outgoing,
             date: Utc::now().date_naive(),
             expected_payment_date: None,
             status: models::ActStatus::Draft,
@@ -968,7 +968,7 @@ async fn companies_summary_counts_real_acts_in_db() -> Result<()> {
             counterparty_id: cp.id,
             contract_id: None,
             category_id: None,
-            direction: "outgoing".to_string(),
+            direction: models::DocumentDirection::Outgoing,
             date: Utc::now().date_naive(),
             expected_payment_date: None,
             status: models::ActStatus::Issued,
@@ -1150,7 +1150,7 @@ async fn invoices_create_update_and_status_flow_in_db() -> Result<()> {
             counterparty_id: cp.id,
             contract_id: None,
             category_id: None,
-            direction: "outgoing".to_string(),
+            direction: models::DocumentDirection::Outgoing,
             date: Utc::now().date_naive(),
             expected_payment_date: None,
             notes: Some("integration invoice".to_string()),
@@ -1292,7 +1292,7 @@ async fn invoices_change_status_rejects_skipping_forward_transition() -> Result<
             counterparty_id: cp.id,
             contract_id: None,
             category_id: None,
-            direction: "outgoing".to_string(),
+            direction: models::DocumentDirection::Outgoing,
             date: Utc::now().date_naive(),
             expected_payment_date: None,
             notes: None,
@@ -1355,7 +1355,7 @@ async fn invoices_change_status_rejects_same_status_transition() -> Result<()> {
             counterparty_id: cp.id,
             contract_id: None,
             category_id: None,
-            direction: "outgoing".to_string(),
+            direction: models::DocumentDirection::Outgoing,
             date: Utc::now().date_naive(),
             expected_payment_date: None,
             notes: None,
@@ -1418,7 +1418,7 @@ async fn invoices_change_status_rejects_transition_from_paid() -> Result<()> {
             counterparty_id: cp.id,
             contract_id: None,
             category_id: None,
-            direction: "outgoing".to_string(),
+            direction: models::DocumentDirection::Outgoing,
             date: Utc::now().date_naive(),
             expected_payment_date: None,
             notes: None,
@@ -1485,7 +1485,7 @@ async fn invoices_advance_status_on_paid_returns_error() -> Result<()> {
             counterparty_id: cp.id,
             contract_id: None,
             category_id: None,
-            direction: "outgoing".to_string(),
+            direction: models::DocumentDirection::Outgoing,
             date: Utc::now().date_naive(),
             expected_payment_date: None,
             notes: None,
@@ -1570,7 +1570,7 @@ async fn invoices_create_keeps_vat_amount_zero_by_current_contract() -> Result<(
             counterparty_id: cp.id,
             contract_id: None,
             category_id: None,
-            direction: "outgoing".to_string(),
+            direction: models::DocumentDirection::Outgoing,
             date: Utc::now().date_naive(),
             expected_payment_date: None,
             notes: None,
@@ -1634,7 +1634,7 @@ async fn invoices_generate_next_number_uses_numeric_suffix() -> Result<()> {
             counterparty_id: cp.id,
             contract_id: None,
             category_id: None,
-            direction: "outgoing".to_string(),
+            direction: models::DocumentDirection::Outgoing,
             date: Utc::now().date_naive(),
             expected_payment_date: None,
             notes: None,
@@ -1658,7 +1658,7 @@ async fn invoices_generate_next_number_uses_numeric_suffix() -> Result<()> {
             counterparty_id: cp.id,
             contract_id: None,
             category_id: None,
-            direction: "outgoing".to_string(),
+            direction: models::DocumentDirection::Outgoing,
             date: Utc::now().date_naive(),
             expected_payment_date: None,
             notes: None,
@@ -1725,7 +1725,7 @@ async fn invoices_list_filtered_respects_status_and_search() -> Result<()> {
             counterparty_id: cp.id,
             contract_id: None,
             category_id: None,
-            direction: "outgoing".to_string(),
+            direction: models::DocumentDirection::Outgoing,
             date: Utc::now().date_naive(),
             expected_payment_date: None,
             notes: None,
@@ -1749,7 +1749,7 @@ async fn invoices_list_filtered_respects_status_and_search() -> Result<()> {
             counterparty_id: cp.id,
             contract_id: None,
             category_id: None,
-            direction: "outgoing".to_string(),
+            direction: models::DocumentDirection::Outgoing,
             date: Utc::now().date_naive(),
             expected_payment_date: None,
             notes: None,
@@ -1846,7 +1846,7 @@ async fn invoices_advance_status_fails_for_final_status() -> Result<()> {
             counterparty_id: cp.id,
             contract_id: None,
             category_id: None,
-            direction: "outgoing".to_string(),
+            direction: models::DocumentDirection::Outgoing,
             date: Utc::now().date_naive(),
             expected_payment_date: None,
             notes: None,
@@ -2178,7 +2178,7 @@ async fn payments_link_act_and_link_invoice_in_db() -> Result<()> {
             counterparty_id:       cp.id,
             contract_id:           None,
             category_id:           None,
-            direction:             "outgoing".to_string(),
+            direction:             models::DocumentDirection::Outgoing,
             date:                  Utc::now().date_naive(),
             expected_payment_date: None,
             status:                models::ActStatus::Draft,
@@ -2202,7 +2202,7 @@ async fn payments_link_act_and_link_invoice_in_db() -> Result<()> {
             counterparty_id:       cp.id,
             contract_id:           None,
             category_id:           None,
-            direction:             "outgoing".to_string(),
+            direction:             models::DocumentDirection::Outgoing,
             date:                  Utc::now().date_naive(),
             expected_payment_date: None,
             notes:                 None,
@@ -2503,7 +2503,7 @@ async fn make_act(
             counterparty_id:       cp_id,
             contract_id:           None,
             category_id:           None,
-            direction:             "outgoing".to_string(),
+            direction:             models::DocumentDirection::Outgoing,
             date:                  Utc::now().date_naive(),
             expected_payment_date,
             status:                models::ActStatus::Draft,
@@ -3094,7 +3094,7 @@ async fn categories_crud_and_archive_in_db() -> Result<()> {
         &pool,
         models::NewCategory {
             name:       "Консалтинг".to_string(),
-            kind:       "income".to_string(),
+            kind:       models::CategoryKind::Income,
             parent_id:  None,
             company_id,
         },
@@ -3102,7 +3102,7 @@ async fn categories_crud_and_archive_in_db() -> Result<()> {
     .await?;
 
     assert_eq!(cat.name, "Консалтинг");
-    assert_eq!(cat.kind, "income");
+    assert_eq!(cat.kind, models::CategoryKind::Income);
     assert!(!cat.is_archived);
 
     // list: присутня
@@ -3127,7 +3127,7 @@ async fn categories_crud_and_archive_in_db() -> Result<()> {
     assert!(row.is_archived);
 
     // list_for_select / list_all_for_select виключають архівовані
-    let sel = db::categories::list_for_select(&pool, company_id, "income").await?;
+    let sel = db::categories::list_for_select(&pool, company_id, models::CategoryKind::Income).await?;
     assert!(!sel.iter().any(|c| c.id == cat.id));
 
     let all_sel = db::categories::list_all_for_select(&pool, company_id).await?;
@@ -3149,7 +3149,7 @@ async fn categories_hierarchy_and_select_depth() -> Result<()> {
     let parent = db::categories::create(
         &pool,
         models::NewCategory {
-            name: "Розробка".to_string(), kind: "income".to_string(),
+            name: "Розробка".to_string(), kind: models::CategoryKind::Income,
             parent_id: None, company_id,
         },
     )
@@ -3158,7 +3158,7 @@ async fn categories_hierarchy_and_select_depth() -> Result<()> {
     let child = db::categories::create(
         &pool,
         models::NewCategory {
-            name: "Мобільна розробка".to_string(), kind: "income".to_string(),
+            name: "Мобільна розробка".to_string(), kind: models::CategoryKind::Income,
             parent_id: Some(parent.id), company_id,
         },
     )
@@ -3167,14 +3167,14 @@ async fn categories_hierarchy_and_select_depth() -> Result<()> {
     let expense = db::categories::create(
         &pool,
         models::NewCategory {
-            name: "Оренда".to_string(), kind: "expense".to_string(),
+            name: "Оренда".to_string(), kind: models::CategoryKind::Expense,
             parent_id: None, company_id,
         },
     )
     .await?;
 
-    // list_for_select("income"): тільки income, depth коректний
-    let income = db::categories::list_for_select(&pool, company_id, "income").await?;
+    // list_for_select(Income): тільки income, depth коректний
+    let income = db::categories::list_for_select(&pool, company_id, models::CategoryKind::Income).await?;
     assert_eq!(income.len(), 2);
 
     let p = income.iter().find(|c| c.id == parent.id).expect("батько");
@@ -3208,8 +3208,8 @@ async fn categories_seed_defaults_creates_standard_entries() -> Result<()> {
 
     db::categories::seed_defaults(&pool, company_id).await?;
 
-    let income  = db::categories::list_for_select(&pool, company_id, "income").await?;
-    let expense = db::categories::list_for_select(&pool, company_id, "expense").await?;
+    let income  = db::categories::list_for_select(&pool, company_id, models::CategoryKind::Income).await?;
+    let expense = db::categories::list_for_select(&pool, company_id, models::CategoryKind::Expense).await?;
     let all     = db::categories::list_all_for_select(&pool, company_id).await?;
 
     assert_eq!(income.len(),  4, "4 income: Розробка ПЗ, Консалтинг, Тех. підтримка, Навчання");
@@ -3279,7 +3279,7 @@ async fn acts_generate_next_number_uses_numeric_max() -> Result<()> {
                 counterparty_id:       cp.id,
                 contract_id:           None,
                 category_id:           None,
-                direction:             "outgoing".to_string(),
+                direction:             models::DocumentDirection::Outgoing,
                 date:                  Utc::now().date_naive(),
                 expected_payment_date: None,
                 status:                models::ActStatus::Draft,
@@ -3371,7 +3371,7 @@ async fn acts_get_kpi_aggregates_this_month_and_overdue() -> Result<()> {
             counterparty_id:       cp.id,
             contract_id:           None,
             category_id:           None,
-            direction:             "outgoing".to_string(),
+            direction:             models::DocumentDirection::Outgoing,
             date:                  today,
             expected_payment_date: None,
             status:                models::ActStatus::Draft,
@@ -3391,7 +3391,7 @@ async fn acts_get_kpi_aggregates_this_month_and_overdue() -> Result<()> {
             counterparty_id:       cp.id,
             contract_id:           None,
             category_id:           None,
-            direction:             "outgoing".to_string(),
+            direction:             models::DocumentDirection::Outgoing,
             date:                  today,
             expected_payment_date: None,
             status:                models::ActStatus::Draft,
@@ -3414,7 +3414,7 @@ async fn acts_get_kpi_aggregates_this_month_and_overdue() -> Result<()> {
             counterparty_id:       cp.id,
             contract_id:           None,
             category_id:           None,
-            direction:             "outgoing".to_string(),
+            direction:             models::DocumentDirection::Outgoing,
             date:                  today,
             expected_payment_date: None,
             status:                models::ActStatus::Draft,
@@ -3437,7 +3437,7 @@ async fn acts_get_kpi_aggregates_this_month_and_overdue() -> Result<()> {
             counterparty_id:       cp.id,
             contract_id:           None,
             category_id:           None,
-            direction:             "outgoing".to_string(),
+            direction:             models::DocumentDirection::Outgoing,
             date:                  overdue_date,
             expected_payment_date: None,
             status:                models::ActStatus::Draft,
@@ -3514,7 +3514,7 @@ async fn acts_update_with_items_replaces_positions_and_recalculates_total() -> R
             counterparty_id:       cp.id,
             contract_id:           None,
             category_id:           None,
-            direction:             "outgoing".to_string(),
+            direction:             models::DocumentDirection::Outgoing,
             date:                  Utc::now().date_naive(),
             expected_payment_date: None,
             status:                models::ActStatus::Draft,

@@ -1,14 +1,14 @@
 // Epic 2: UI test safety net
 //
-// Headless-тести для callback-контракту канонічного `ui-redesign`.
-// Тут перевіряємо wiring і стабільність Slint contract без залежності від legacy `ui/`.
+// Headless-тести для callback-контракту канонічного Slint UI у `ui/`.
+// Тут перевіряємо wiring і стабільність Slint contract.
 
 slint::include_modules!();
 
 mod shell_test_components {
     slint::slint! {
-        import { Shell, CommandPalette } from "../ui-redesign/shell.slint";
-        import { NavScreen as ShellScreen } from "../ui-redesign/types.slint";
+        import { Shell, CommandPalette } from "../ui/shell.slint";
+        import { NavScreen as ShellScreen } from "../ui/types.slint";
 
         export component TestShellHost inherits Window {
             callback navigate-id(string);

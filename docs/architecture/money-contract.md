@@ -16,8 +16,8 @@
 
 ## Де `float` дозволений
 
-- [ui-redesign/types.slint](/C:/Users/MykhailoDan/apps/Acta/ui-redesign/types.slint) у `ChartBar.rev-h` / `ChartBar.exp-h`
-- sparkline arrays у [ui-redesign/dashboard.slint](/C:/Users/MykhailoDan/apps/Acta/ui-redesign/dashboard.slint), бо це normalized render data
+- [ui/types.slint](/C:/Users/MykhailoDan/apps/Acta/ui/types.slint) у `ChartBar.rev-h` / `ChartBar.exp-h`
+- sparkline arrays у [ui/dashboard.slint](/C:/Users/MykhailoDan/apps/Acta/ui/dashboard.slint), бо це normalized render data
 
 Це render-only значення в діапазоні `0.0..1.0`, а не бізнесові суми.
 

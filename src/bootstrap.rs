@@ -256,6 +256,7 @@ pub fn build_ui(rt: &Runtime, ctx: &Arc<AppCtx>) -> Result<AppWindow> {
         company_name: "Acta".into(),
         user_name: "Адміністратор".into(),
         user_initials: "АД".into(),
+        user_role: "Адміністратор".into(),
         documents_badge: 0,
         tasks_badge: 0,
     });

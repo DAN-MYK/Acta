@@ -4,10 +4,11 @@
 // Підтримує ієрархію: parent_id вказує на батьківську категорію.
 
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Тип категорії: дохід або видаток.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, Serialize, Deserialize)]
 #[sqlx(type_name = "VARCHAR", rename_all = "lowercase")]
 pub enum CategoryKind {
     #[sqlx(rename = "income")]
@@ -55,7 +56,7 @@ impl TryFrom<String> for CategoryKind {
 pub struct Category {
     pub id:          Uuid,
     pub name:        String,
-    /// "income" або "expense"
+    /// Тип: дохід або видаток.
     pub kind:        CategoryKind,
     pub parent_id:   Option<Uuid>,
     pub company_id:  Uuid,

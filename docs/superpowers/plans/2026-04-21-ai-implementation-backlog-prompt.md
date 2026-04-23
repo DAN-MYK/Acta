@@ -19,8 +19,8 @@
   - tokio
   - rust_decimal
 - Поточний стан:
-  - новий UI живе в `ui-redesign/`
-  - `build.rs` уже компілює `ui-redesign/app.slint`
+  - новий UI живе в `ui/`
+  - `build.rs` уже компілює `ui/app.slint`
   - старі UI-тести більше не відповідають поточному Slint contract
   - у UI-contract ще є бізнес-критичні `float` для money-facing даних
   - orchestration частково живе в `src/main.rs`
@@ -34,7 +34,7 @@
 
 Після завершення роботи система має відповідати таким умовам:
 
-1. `ui-redesign` є єдиним канонічним UI.
+1. `ui` є єдиним канонічним UI.
 2. UI test suite працює проти нового Slint contract.
 3. Бізнес-критичні грошові значення не передаються в Slint як `float`, окрім суто chart/render use cases.
 4. `main.rs` не містить зайвої orchestration-логіки.
@@ -83,7 +83,7 @@
 
 Виконуй роботу строго в такій черговості:
 
-1. Канонізувати `ui-redesign`.
+1. Канонізувати `ui`.
 2. Відновити UI test safety net.
 3. Очистити money contract у Rust/Slint.
 4. Консолідувати application state і прибрати orchestration із `main.rs`.
@@ -101,15 +101,15 @@
 
 ## 5. Implementation Backlog
 
-### Epic 1. Канонізувати `ui-redesign` як єдиний UI
+### Epic 1. Канонізувати `ui` як єдиний UI
 
-#### Task 1.1. Зафіксувати `ui-redesign` як єдине джерело істини
+#### Task 1.1. Зафіксувати `ui` як єдине джерело істини
 
 **Ціль:**
-- прибрати двозначність між старим `ui/` і новим `ui-redesign/`
+- прибрати двозначність між старим `ui/` і новим `ui/`
 
 **Acceptance Criteria:**
-1. У збірці та документації зафіксовано, що `ui-redesign` є канонічним UI.
+1. У збірці та документації зафіксовано, що `ui` є канонічним UI.
 2. Не залишається активних runtime assumptions про старий UI.
 3. Legacy-посилання або ізольовані, або прибрані.
 
@@ -163,7 +163,7 @@
 
 ### Epic 3. Очистити фінансовий UI-contract
 
-#### Task 3.1. Провести аудит money fields у `ui-redesign/types.slint`
+#### Task 3.1. Провести аудит money fields у `ui/types.slint`
 
 **Ціль:**
 - відокремити money display fields від chart/render numeric fields
@@ -317,12 +317,12 @@
 
 ### Epic 10. Accessibility та keyboard navigation pass
 
-> **Цей блок обов'язковий після стабілізації `ui-redesign`.**
+> **Цей блок обов'язковий після стабілізації `ui`.**
 
 #### Task 10.1. Провести accessibility audit нового UI
 
 **Acceptance Criteria:**
-1. Перевірені всі ключові екрани `ui-redesign`.
+1. Перевірені всі ключові екрани `ui`.
 2. Задокументовані проблеми з focus, tab order, key actions, focus visibility.
 
 #### Task 10.2. Налаштувати keyboard navigation
@@ -477,7 +477,7 @@ sqlx migrate run
 
 1. `cargo check` проходить.
 2. `cargo test` проходить або є чітко пояснені тимчасові винятки, узгоджені з реальним станом проєкту.
-3. UI tests працюють проти `ui-redesign`.
+3. UI tests працюють проти `ui`.
 4. Бізнес-критичні money values більше не течуть у Slint як `float`.
 5. `main.rs` виконує роль bootstrap, а не application coordinator-god-file.
 6. Є один канонічний state-management path.
@@ -520,7 +520,7 @@ sqlx migrate run
 Обов'язково:
 1. Працюй українською.
 2. Не обмежуйся аналізом — доводь зміни до compile/test-ready стану.
-3. Канонічний UI — ui-redesign.
+3. Канонічний UI — ui.
 4. Віднови UI tests під новий Slint contract.
 5. Прибери money-facing float contract із UI всюди, де це не chart-only.
 6. Винеси orchestration із main.rs у канонічний state/controller layer.

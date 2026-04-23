@@ -648,8 +648,26 @@ component KeyboardHelp {
 export component Shell inherits Rectangle {
     // Navigation state — set by Rust
     in-out property <NavScreen> current-screen: NavScreen.Dashboard;
-    in property <string> screen-title: "Головна";
-    in property <string> screen-subtitle: "Огляд фінансового стану компанії";
+
+    private property <string> screen-title:
+        current-screen == NavScreen.Dashboard      ? "Головна" :
+        current-screen == NavScreen.Documents      ? "Документи" :
+        current-screen == NavScreen.Counterparties ? "Контрагенти" :
+        current-screen == NavScreen.Payments       ? "Платежі" :
+        current-screen == NavScreen.Reports        ? "Звіти" :
+        current-screen == NavScreen.Tasks          ? "Задачі" :
+        current-screen == NavScreen.Settings       ? "Налаштування" :
+        "Головна";
+
+    private property <string> screen-subtitle:
+        current-screen == NavScreen.Dashboard      ? "Огляд фінансового стану компанії" :
+        current-screen == NavScreen.Documents      ? "Акти, накладні та рахунки" :
+        current-screen == NavScreen.Counterparties ? "Клієнти та постачальники" :
+        current-screen == NavScreen.Payments       ? "Надходження та витрати" :
+        current-screen == NavScreen.Reports        ? "Аналіз доходів і витрат" :
+        current-screen == NavScreen.Tasks          ? "Завдання та нагадування" :
+        current-screen == NavScreen.Settings       ? "Налаштування системи" :
+        "";
 
     // Theme
     in-out property <bool> is-dark: AppTheme.is-dark;
@@ -966,6 +984,8 @@ export component Shell inherits Rectangle {
                         background: plus-hover.has-hover ? AppTheme.bg-hover : transparent;
 
                         Image {
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
                             source: root.icon-plus;
                             width: 10px;
                             height: 10px;
@@ -1060,6 +1080,8 @@ export component Shell inherits Rectangle {
                         background: more-hover.has-hover ? AppTheme.bg-hover : transparent;
 
                         Image {
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
                             source: root.icon-more;
                             width: 12px;
                             height: 12px;
@@ -1125,6 +1147,8 @@ export component Shell inherits Rectangle {
                         border-radius: AppTheme.radius-md;
                         background: bell-hover.has-hover ? AppTheme.bg-subtle : transparent;
                         Image {
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
                             source: root.icon-bell;
                             width: 15px;
                             height: 15px;
@@ -1141,6 +1165,8 @@ export component Shell inherits Rectangle {
                         border-radius: AppTheme.radius-md;
                         background: theme-hover.has-hover ? AppTheme.bg-subtle : transparent;
                         Image {
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
                             source: root.is-dark ? root.icon-sun : root.icon-moon;
                             width: 15px;
                             height: 15px;

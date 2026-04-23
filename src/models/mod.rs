@@ -17,7 +17,7 @@ pub use act::{Act, ActItem, ActListRow, ActStatus, NewAct, NewActItem, UpdateAct
 #[allow(unused_imports)]
 pub use shared::DocumentDirection;
 #[allow(unused_imports)]
-pub use category::{Category, CategorySelectItem, NewCategory, UpdateCategory};
+pub use category::{Category, CategoryKind, CategorySelectItem, NewCategory, UpdateCategory};
 #[allow(unused_imports)]
 pub use company::{Company, CompanySummary, NewCompany, UpdateCompany};
 #[allow(unused_imports)]
@@ -40,7 +40,7 @@ pub use document_template::{DocumentTemplate, NewDocumentTemplate, TemplateListR
 
 #[cfg(test)]
 mod tests {
-    use super::{ActStatus, NewCounterparty, TaskPriority, TaskStatus};
+    use super::{ActStatus, CategoryKind, DocumentDirection, NewCounterparty, TaskPriority, TaskStatus};
 
     #[test]
     fn reexports_are_available_for_consumers() {
@@ -62,5 +62,12 @@ mod tests {
             bas_id: None,
         };
         assert_eq!(cp.name, "ТОВ Реекспорт");
+    }
+
+    #[test]
+    fn category_kind_and_direction_are_reexported() {
+        assert_eq!(CategoryKind::Income.as_str(), "income");
+        assert_eq!(CategoryKind::Expense.as_str(), "expense");
+        assert_eq!(DocumentDirection::Outgoing.as_str(), "outgoing");
     }
 }

@@ -8,7 +8,6 @@
 // Кожен екран має власний .slint файл — тут ТІЛЬКИ wiring.
 
 import { AppTheme } from "design-tokens.slint";
-import { NavScreen } from "types.slint";
 import { Icons } from "icons.slint";
 import { Shell } from "shell.slint";
 import { Dashboard } from "dashboard.slint";
@@ -18,16 +17,11 @@ import { Payments } from "payments.slint";
 import { Reports } from "reports.slint";
 import { Tasks } from "tasks.slint";
 import { Settings } from "settings.slint";
-
-// ── Типи даних (імпортовані для property declarations) ─────────────────────
 import {
-    DocumentItem, CounterpartyItem, PaymentItem, TaskItem,
-    AccountItem, DashboardMetrics, JournalRow,
-    CounterpartyDetails, ReportMetrics, ExpenseCategory, DrillRow,
-    CompanyInfo, IntegrationItem, TeamMember, NumberingRow, DayEvent,
-    ChartBar, InboxItem, ChainStep, DocChainGroup,
+    NavScreen,
     ShellChrome, DashboardViewData, DocumentsViewData, CounterpartiesViewData,
     PaymentsViewData, ReportsViewData, TasksViewData, SettingsViewData,
+    CompanyInfo,
 } from "types.slint";
 
 // ── AppWindow ─────────────────────────────────────────────────────────────────
@@ -35,8 +29,8 @@ export component AppWindow inherits Window {
     title: "Acta";
     preferred-width: 1440px;
     preferred-height: 900px;
-    min-width: 1024px;
-    min-height: 640px;
+    min-width: 1440px;
+    min-height: 900px;
     background: AppTheme.bg;
 
     // ── Navigation ───────────────────────────────────────────────────────
@@ -55,7 +49,7 @@ export component AppWindow inherits Window {
     in property <TasksViewData> tasks-screen;
     in property <SettingsViewData> settings-screen;
 
-    // ── Dashboard callbacks ─────────────────────────────────────────────
+    // ── Screen callbacks ────────────────────────────────────────────────
     callback inbox-action(string, string);
     in-out property <int> docs-page: 1;
     callback doc-search-changed(string);
@@ -119,6 +113,7 @@ export component AppWindow inherits Window {
         company-name: root.shell.company-name;
         user-name: root.shell.user-name;
         user-initials: root.shell.user-initials;
+        user-role: root.shell.user-role;
         documents-badge: root.shell.documents-badge;
         tasks-badge: root.shell.tasks-badge;
         is-dark: AppTheme.is-dark;

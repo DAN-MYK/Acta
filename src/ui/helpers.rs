@@ -261,13 +261,14 @@ mod tests {
     use acta::models::act::{ActListRow, ActStatus};
     use acta::models::invoice::{InvoiceListRow, InvoiceStatus};
     use acta::models::payment::{PaymentListRow, PaymentDirection};
+    use acta::models::shared::DocumentDirection;
     use uuid::Uuid;
 
     fn sample_act_row() -> ActListRow {
         ActListRow {
             id: Uuid::nil(),
             number: "АКТ-2026-001".to_string(),
-            direction: "out".to_string(),
+            direction: DocumentDirection::Outgoing,
             date: NaiveDate::from_ymd_opt(2026, 4, 21).unwrap(),
             counterparty_name: "ТОВ Тест".to_string(),
             total_amount: dec!(1234.56),
@@ -361,7 +362,7 @@ mod tests {
         let row = InvoiceListRow {
             id: Uuid::nil(),
             number: "РАХ-001".to_string(),
-            direction: "in".to_string(),
+            direction: DocumentDirection::Incoming,
             date: NaiveDate::from_ymd_opt(2026, 1, 5).unwrap(),
             counterparty_name: "ФОП Іванов".to_string(),
             total_amount: dec!(500.00),

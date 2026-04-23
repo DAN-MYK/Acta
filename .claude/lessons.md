@@ -77,6 +77,14 @@ ui.on_callback(move |...| {
 **Що сталось:** При генерації наступного номеру акту (generate_next_number) спокусливо використати `MAX(number)` як рядок. Але лексикографічний MAX дає "АКТ-2026-9" > "АКТ-2026-10" — неправильний результат.
 **Правило:** НІКОЛИ не покладатись на лексикографічний MAX для рядків з числовим суфіксом. ЗАВЖДИ парсити числову частину: `s.rsplit_once('-').and_then(|(_, n)| n.parse::<u32>().ok())`, знаходити числовий максимум, і форматувати з нулями: `format!("{:03}", max + 1)`.
 
+## [2026-04-23] filter_map + .ok()? на рядках з БД — silent data loss
+**Що сталось:** `list_for_select` та `list_all_for_select` у db/categories.rs мали проміжний `Row { kind: String }` і конвертували через `.filter_map(|r| CategoryKind::try_from(r.kind).ok())`. Рядок з невідомим `kind` у БД мовчки пропускався — без помилки, без логу. Caller отримував скорочений список.
+**Правило:** НІКОЛИ не використовувати `filter_map + .ok()?` для конвертації enum-полів з БД рядків. ЗАВЖДИ використовувати `CategoryKind` (або будь-який enum що реалізує `sqlx::Type`) напряму у `Row.kind` — sqlx декодує і повертає `Err` при невідомому значенні. Якщо `filter_map` необхідний — замінювати `.ok()?` на `.map_err(|e| anyhow!(e))?` щоб propagate помилку.
+
+## [2026-04-23] cargo build --tests НЕ еквівалентно cargo test --lib + cargo test --bin
+**Що сталось:** `cargo test --lib` успішно компілював 150 тестів навіть коли `tests/db_integration.rs` і `src/ui/helpers.rs` (бінарний модуль) мали помилки типів. Lib тести і integration/binary тести компілюються окремо — помилка в одному не блокує інший.
+**Правило:** ЗАВЖДИ запускати `cargo build --tests` (не тільки `--lib`) для перевірки повної компіляції. Для підтвердження "all tests passing" потрібен `cargo test` без флагів або принаймні `cargo build --tests` з успішним `Finished`.
+
 ## [2026-04-08] upgrade_in_event_loop до ui.run() — "flash of empty content"
 **Що сталось:** Початкове завантаження даних викликало `reload_*()` з `block_on` до `ui.run()`. Всередині `reload_*` використовувався `upgrade_in_event_loop` — він лише ставить closure у чергу event loop, не виконує одразу. Вікно відкривалось порожнім, дані з'являлись після першого кадру.
 **Правило:** НІКОЛИ не використовувати `upgrade_in_event_loop` для початкового завантаження даних до `ui.run()`. ЗАВЖДИ розділяти reload функції на `prepare_*_data` (async, повертає Send-safe struct) та `apply_*_to_ui(&MainWindow, data)` (sync, викликає `ui.set_*()`). У `block_on` до `ui.run()` — викликати `prepare_*` паралельно через `tokio::join!`, потім `apply_*(&ui, data)` напряму. `reload_*` (для callbacks з `tokio::spawn`) використовує `upgrade_in_event_loop(|ui| apply_*(ui, data))`.

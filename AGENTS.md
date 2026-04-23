@@ -59,9 +59,8 @@
 - Коментарі та документація **українською мовою**.
 
 ### Архітектурні рішення (від 2026-04-22)
-- **Канонічний UI** — `ui-redesign/app.slint` (не `ui/`). Компілюється через `build.rs`.
-- **Legacy UI** — legacy Slint-шар у `ui/` прибрано з репозиторію. Історичний контекст і правила міграції зафіксовані в `docs/architecture/ui-canonicalization.md`.
-- **Icon Bundle** — `ui-redesign/icons.slint`, імпортується як `{ Icons }`.
+- **Канонічний UI** — `ui/app.slint`. Компілюється через `build.rs`.
+- **Icon Bundle** — `ui/icons.slint`, імпортується як `{ Icons }`.
 - **Money Contract** — грошові суми передаються в Slint як `string` (pre-formatted у Rust). У `types.slint` коментар `MONEY CONTRACT RULE` документує правило: `float` тільки для `ChartBar.rev-h/exp-h` (normalized 0.0–1.0).
 - **Formatter** — `src/ui/helpers.rs` містить `format_money()`, `format_money_round()`, `format_money_ua()` замість старого `decimal_to_f32()`.
 - **AppCtx** — `src/app_ctx.rs`. Канонічний контейнер для `PgPool` + `active_company_id`. Передається `&Arc<AppCtx>` у wire_* функції.
@@ -110,7 +109,7 @@ acta/
 │   ├── models/    ← Rust структури
 │   ├── pdf/       ← Typst генерація
 │   └── import/    ← Парсери BAS, банків
-├── ui-redesign/   ← канонічний Slint UI
+├── ui/            ← канонічний Slint UI
 ├── templates/     ← .typ шаблони Typst
 ├── migrations/    ← sqlx міграції
 └── storage/       ← файли на диску

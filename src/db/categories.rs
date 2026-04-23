@@ -36,7 +36,7 @@ pub async fn list_for_select(
     struct Row {
         id:        Uuid,
         name:      String,
-        kind:      String,
+        kind:      CategoryKind,
         parent_id: Option<Uuid>,
     }
 
@@ -69,14 +69,11 @@ pub async fn list_for_select(
 
     Ok(rows
         .into_iter()
-        .filter_map(|r| {
-            let kind = CategoryKind::try_from(r.kind.to_string()).ok()?;
-            Some(CategorySelectItem {
-                id:    r.id,
-                name:  r.name,
-                kind,
-                depth: if r.parent_id.is_some() { 1 } else { 0 },
-            })
+        .map(|r| CategorySelectItem {
+            id:    r.id,
+            name:  r.name,
+            kind:  r.kind,
+            depth: if r.parent_id.is_some() { 1 } else { 0 },
         })
         .collect())
 }
@@ -89,7 +86,7 @@ pub async fn list_all_for_select(
     struct Row {
         id:        Uuid,
         name:      String,
-        kind:      String,
+        kind:      CategoryKind,
         parent_id: Option<Uuid>,
     }
 
@@ -120,14 +117,11 @@ pub async fn list_all_for_select(
 
     Ok(rows
         .into_iter()
-        .filter_map(|r| {
-            let kind = CategoryKind::try_from(r.kind.to_string()).ok()?;
-            Some(CategorySelectItem {
-                id:    r.id,
-                name:  r.name,
-                kind,
-                depth: if r.parent_id.is_some() { 1 } else { 0 },
-            })
+        .map(|r| CategorySelectItem {
+            id:    r.id,
+            name:  r.name,
+            kind:  r.kind,
+            depth: if r.parent_id.is_some() { 1 } else { 0 },
         })
         .collect())
 }
@@ -202,18 +196,19 @@ pub async fn seed_defaults(pool: &PgPool, company_id: Uuid) -> Result<()> {
         sqlx::query(
             r#"
             INSERT INTO categories (name, kind, company_id)
-            SELECT $1, 'income', $2
+            SELECT $1, $3, $2
             WHERE NOT EXISTS (
                 SELECT 1
                 FROM categories
                 WHERE company_id = $2
-                  AND kind = 'income'
+                  AND kind = $3
                   AND name = $1
             )
             "#,
         )
         .bind(name)
         .bind(company_id)
+        .bind(CategoryKind::Income)
         .execute(pool)
         .await?;
     }
@@ -222,18 +217,19 @@ pub async fn seed_defaults(pool: &PgPool, company_id: Uuid) -> Result<()> {
         sqlx::query(
             r#"
             INSERT INTO categories (name, kind, company_id)
-            SELECT $1, 'expense', $2
+            SELECT $1, $3, $2
             WHERE NOT EXISTS (
                 SELECT 1
                 FROM categories
                 WHERE company_id = $2
-                  AND kind = 'expense'
+                  AND kind = $3
                   AND name = $1
             )
             "#,
         )
         .bind(name)
         .bind(company_id)
+        .bind(CategoryKind::Expense)
         .execute(pool)
         .await?;
     }
