@@ -69,11 +69,14 @@ pub async fn list_for_select(
 
     Ok(rows
         .into_iter()
-        .map(|r| CategorySelectItem {
-            id:    r.id,
-            name:  r.name,
-            kind:  r.kind,
-            depth: if r.parent_id.is_some() { 1 } else { 0 },
+        .filter_map(|r| {
+            let kind = r.kind.try_into().ok()?;
+            Some(CategorySelectItem {
+                id:    r.id,
+                name:  r.name,
+                kind,
+                depth: if r.parent_id.is_some() { 1 } else { 0 },
+            })
         })
         .collect())
 }
@@ -117,11 +120,14 @@ pub async fn list_all_for_select(
 
     Ok(rows
         .into_iter()
-        .map(|r| CategorySelectItem {
-            id:    r.id,
-            name:  r.name,
-            kind:  r.kind,
-            depth: if r.parent_id.is_some() { 1 } else { 0 },
+        .filter_map(|r| {
+            let kind = r.kind.try_into().ok()?;
+            Some(CategorySelectItem {
+                id:    r.id,
+                name:  r.name,
+                kind,
+                depth: if r.parent_id.is_some() { 1 } else { 0 },
+            })
         })
         .collect())
 }
