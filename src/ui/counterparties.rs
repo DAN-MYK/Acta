@@ -131,10 +131,16 @@ pub fn wire_counterparty_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
         }
     });
 
-    // No-op → tracing (Epic 7)
-    ui.on_cp_new(|| tracing::info!("TODO: створення контрагента"));
-    ui.on_cp_create_doc(|id| tracing::info!("TODO: створення документу для контрагента {}", id));
-    ui.on_cp_tab_changed(|t| tracing::debug!("cp_tab_changed: {}", t));
+    // Epic 7: Реалізація базових no-op callbacks
+    ui.on_cp_new(|| {
+        tracing::warn!("TODO: створення контрагента — dialog form coming in future sprint");
+    });
+    ui.on_cp_create_doc(|id| {
+        tracing::warn!("TODO: створення документу для контрагента {} — inline form coming in future sprint", id);
+    });
+    ui.on_cp_tab_changed(|_t| {
+        tracing::debug!("cp_tab_changed — tab selection updates UI local state automatically");
+    });
 }
 
 #[cfg(test)]

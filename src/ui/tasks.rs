@@ -124,10 +124,23 @@ pub fn wire_task_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
         }
     });
 
-    // Epic 7: no-op → явний tracing
-    ui.on_task_filter_changed(|f| tracing::info!("TODO: task_filter_changed: {}", f));
-    ui.on_task_new(|| tracing::info!("TODO: створення нового завдання"));
-    ui.on_task_more(|id| tracing::info!("TODO: показати більше про завдання {}", id));
+    // Epic 7: Реалізація базових no-op callbacks
+    ui.on_task_filter_changed({
+        let ctx = ctx.clone();
+        move |filter| {
+            ctx.update_task_state(|state| {
+                state.filter = filter.to_string();
+            });
+            tracing::debug!("task_filter_changed: {} — UI list selection updates automatically", filter);
+        }
+    });
+
+    ui.on_task_new(|| {
+        tracing::warn!("TODO: створення нового завдання — UI form coming in future sprint");
+    });
+    ui.on_task_more(|id| {
+        tracing::warn!("TODO: показати більше про завдання {} — detail view coming in future sprint", id);
+    });
 }
 
 #[cfg(test)]

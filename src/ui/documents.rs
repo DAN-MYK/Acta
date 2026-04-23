@@ -169,11 +169,19 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
         }
     });
 
-    // No-op → tracing (Epic 7)
-    ui.on_doc_new(|| tracing::info!("TODO: створення нового документа"));
-    ui.on_doc_open(|id| tracing::info!("TODO: відкриття документа {}", id));
-    ui.on_doc_toggled(|id, sel| tracing::debug!("doc_toggled: {} = {}", id, sel));
-    ui.on_doc_page_changed(|p| tracing::debug!("doc_page_changed: {}", p));
+    // Epic 7: Реалізація базових no-op callbacks
+    ui.on_doc_new(|| {
+        tracing::warn!("TODO: створення нового документа — dialog form coming in future sprint");
+    });
+    ui.on_doc_open(|id| {
+        tracing::warn!("TODO: відкриття документа {} — detail view coming in future sprint", id);
+    });
+    ui.on_doc_toggled(|_id, _sel| {
+        tracing::debug!("doc_toggled — document selection updates UI local state automatically");
+    });
+    ui.on_doc_page_changed(|_p| {
+        tracing::debug!("doc_page_changed — pagination updates UI local state automatically");
+    });
 }
 
 // ────────────────────────────────────────────────────────────────────────────
