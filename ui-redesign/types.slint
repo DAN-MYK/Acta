@@ -3,7 +3,7 @@
 //
 // MONEY CONTRACT RULE:
 //   - Грошові суми ТІЛЬКИ як `string` (pre-formatted у Rust)
-//   - `float` дозволено ТІЛЬКИ для: ChartBar (normalized 0.0–1.0), MonthlyData (charts)
+//   - `float` дозволено ТІЛЬКИ для: ChartBar (normalized 0.0–1.0)
 //   - Ніколи не використовуй float для сум, балансів, чи грошових відображень
 
 export enum NavScreen {
@@ -84,12 +84,6 @@ export struct TaskItem {
     done: bool,
     priority: Priority,
     linked-doc: string,    // document id or ""
-}
-
-export struct MonthlyData {
-    month: string,         // abbreviated month name in Ukrainian
-    revenue: float,
-    expenses: float,
 }
 
 export struct AccountItem {

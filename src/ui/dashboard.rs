@@ -1,4 +1,3 @@
-use rust_decimal::prelude::ToPrimitive;
 use slint::{ModelRc, VecModel};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -6,7 +5,9 @@ use uuid::Uuid;
 use acta::db;
 use acta::models::dashboard::{KpiSummary, MonthRevenue, RecentAct};
 
-use crate::ui::helpers::{format_money, format_money_round, task_to_item};
+use crate::ui::helpers::{
+    format_money, format_money_round, max_chart_value, normalize_chart_value, task_to_item,
+};
 
 pub struct DashboardData {
     pub revenue_str: String,
@@ -59,21 +60,13 @@ pub fn inbox_item_from_row(
 }
 
 pub fn revenue_months_to_chart_bars(months: &[MonthRevenue]) -> Vec<crate::ChartBar> {
-    let max = months
-        .iter()
-        .filter_map(|m| m.amount.to_f64())
-        .fold(0.0_f64, f64::max);
+    let max = max_chart_value(months.iter().map(|month| &month.amount));
 
     months
         .iter()
         .map(|m| {
-            let rev_h = if max > 0.0 {
-                (m.amount.to_f64().unwrap_or(0.0) / max) as f32
-            } else {
-                0.0
-            };
             crate::ChartBar {
-                rev_h,
+                rev_h: normalize_chart_value(m.amount, max),
                 exp_h: 0.0,
                 month: m.month_label().into(),
             }

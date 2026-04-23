@@ -12,7 +12,7 @@ use tokio::fs;
 use tokio::process::Command;
 use uuid::Uuid;
 
-use acta::app_ctx::AppCtx;
+use acta::app_ctx::{AppCtx, AppScreen};
 use acta::db;
 use acta::models::company::{Company, UpdateCompany};
 
@@ -387,8 +387,7 @@ pub fn wire_settings_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                 match db::companies::update(ctx.pool(), company_id, &update).await {
                     Ok(Some(company)) => {
                         tracing::info!("settings: company saved");
-                        let data = prepare_settings_data(ctx.pool(), ctx.company_id()).await;
-                        let _ = ui_weak.upgrade_in_event_loop(move |ui| apply_settings_to_ui(&ui, data));
+                        crate::bootstrap::refresh_screen(ui_weak.clone(), ctx.clone(), AppScreen::Settings).await;
                         notify_user(
                             "Налаштування компанії збережено",
                             &format!("Оновлено профіль '{}'", company.name),
@@ -424,8 +423,7 @@ pub fn wire_settings_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
             tokio::spawn(async move {
                 match write_integration_config(&tag).await {
                     Ok(path) => {
-                        let data = prepare_settings_data(ctx.pool(), ctx.company_id()).await;
-                        let _ = ui_weak.upgrade_in_event_loop(move |ui| apply_settings_to_ui(&ui, data));
+                        crate::bootstrap::refresh_screen(ui_weak.clone(), ctx.clone(), AppScreen::Settings).await;
                         notify_user(
                             "Інтеграцію налаштовано",
                             &format!("Створено конфіг: {}", path.display()),
@@ -449,8 +447,7 @@ pub fn wire_settings_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
             tokio::spawn(async move {
                 match create_invite_draft().await {
                     Ok(path) => {
-                        let data = prepare_settings_data(ctx.pool(), ctx.company_id()).await;
-                        let _ = ui_weak.upgrade_in_event_loop(move |ui| apply_settings_to_ui(&ui, data));
+                        crate::bootstrap::refresh_screen(ui_weak.clone(), ctx.clone(), AppScreen::Settings).await;
                         notify_user(
                             "Чернетку запрошення створено",
                             &format!("Відредагуйте файл {}", path.display()),
@@ -474,8 +471,7 @@ pub fn wire_settings_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
             tokio::spawn(async move {
                 match create_backup_snapshot(ctx.company_id()).await {
                     Ok(path) => {
-                        let data = prepare_settings_data(ctx.pool(), ctx.company_id()).await;
-                        let _ = ui_weak.upgrade_in_event_loop(move |ui| apply_settings_to_ui(&ui, data));
+                        crate::bootstrap::refresh_screen(ui_weak.clone(), ctx.clone(), AppScreen::Settings).await;
                         notify_user(
                             "Резервну копію створено",
                             &format!("Файл збережено: {}", path.display()),

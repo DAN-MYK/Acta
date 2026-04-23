@@ -3,7 +3,7 @@ use slint::{ComponentHandle, ModelRc, VecModel};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use acta::app_ctx::AppCtx;
+use acta::app_ctx::{AppCtx, AppScreen};
 use acta::db;
 use acta::models::task::TaskStatus;
 use crate::ui::helpers::task_to_item;
@@ -115,8 +115,7 @@ pub fn wire_task_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                     };
                     let _ = db::tasks::set_status(ctx.pool(), uuid, new_status).await;
                 }
-                let data = prepare_tasks_data(ctx.pool()).await;
-                let _ = ui_weak.upgrade_in_event_loop(move |ui| apply_tasks_to_ui(&ui, data));
+                crate::bootstrap::refresh_screen(ui_weak, ctx, AppScreen::Tasks).await;
             });
         }
     });

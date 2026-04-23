@@ -4,7 +4,7 @@ use slint::{ComponentHandle, ModelRc, VecModel};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use acta::app_ctx::AppCtx;
+use acta::app_ctx::{AppCtx, AppScreen};
 use acta::db;
 use crate::ui::helpers::{
     act_row_to_document_item, invoice_row_to_document_item, waybill_row_to_document_item,
@@ -89,12 +89,10 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
             let ctx = ctx.clone();
             let ui_weak = ui_weak.clone();
             let q = query.to_string();
-            tokio::spawn(async move {
-                let cid = ctx.company_id();
-                let search = if q.is_empty() { None } else { Some(q.as_str()) };
-                let data = prepare_documents_data(ctx.pool(), cid, search, None).await;
-                let _ = ui_weak.upgrade_in_event_loop(move |ui| apply_documents_to_ui(&ui, data));
+            ctx.update_documents_state(|state| {
+                state.query = q;
             });
+            crate::bootstrap::spawn_refresh_screen(ui_weak.clone(), ctx.clone(), AppScreen::Documents);
         }
     });
 
@@ -105,12 +103,10 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
             let ctx = ctx.clone();
             let ui_weak = ui_weak.clone();
             let t = tab.to_string();
-            tokio::spawn(async move {
-                let cid = ctx.company_id();
-                let tab_opt = if t == "all" { None } else { Some(t.as_str()) };
-                let data = prepare_documents_data(ctx.pool(), cid, None, tab_opt).await;
-                let _ = ui_weak.upgrade_in_event_loop(move |ui| apply_documents_to_ui(&ui, data));
+            ctx.update_documents_state(|state| {
+                state.tab = t;
             });
+            crate::bootstrap::spawn_refresh_screen(ui_weak.clone(), ctx.clone(), AppScreen::Documents);
         }
     });
 
@@ -122,7 +118,6 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
             let ui_weak = ui_weak.clone();
             let id = id.to_string();
             tokio::spawn(async move {
-                let cid = ctx.company_id();
                 if let Some(uuid_str) = id.strip_prefix("act:") {
                     if let Ok(uuid) = Uuid::parse_str(uuid_str) {
                         let _ = db::acts::advance_status(ctx.pool(), uuid).await;
@@ -136,8 +131,7 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                         let _ = db::waybills::advance_status(ctx.pool(), uuid).await;
                     }
                 }
-                let data = prepare_documents_data(ctx.pool(), cid, None, None).await;
-                let _ = ui_weak.upgrade_in_event_loop(move |ui| apply_documents_to_ui(&ui, data));
+                crate::bootstrap::refresh_screen(ui_weak, ctx, AppScreen::Documents).await;
             });
         }
     });
@@ -150,7 +144,6 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
             let ui_weak = ui_weak.clone();
             let id = id.to_string();
             tokio::spawn(async move {
-                let cid = ctx.company_id();
                 if let Some(uuid_str) = id.strip_prefix("act:") {
                     if let Ok(uuid) = Uuid::parse_str(uuid_str) {
                         let _ = db::acts::delete(ctx.pool(), uuid).await;
@@ -164,8 +157,7 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                         let _ = db::waybills::delete(ctx.pool(), uuid).await;
                     }
                 }
-                let data = prepare_documents_data(ctx.pool(), cid, None, None).await;
-                let _ = ui_weak.upgrade_in_event_loop(move |ui| apply_documents_to_ui(&ui, data));
+                crate::bootstrap::refresh_screen(ui_weak, ctx, AppScreen::Documents).await;
             });
         }
     });

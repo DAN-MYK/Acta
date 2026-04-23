@@ -6,10 +6,20 @@ use sqlx::PgPool;
 use tokio::runtime::Runtime;
 use uuid::Uuid;
 
-use acta::app_ctx::AppCtx;
+use acta::app_ctx::{AppCtx, AppScreen};
 
 use crate::ui;
 use crate::{AppWindow, ChainStep, DocChainGroup, NavScreen};
+
+struct InitialUiData {
+    dashboard: ui::dashboard::DashboardData,
+    documents: ui::documents::DocumentsData,
+    counterparties: ui::counterparties::CounterpartiesData,
+    payments: ui::payments::PaymentsData,
+    tasks: ui::tasks::TasksData,
+    reports: ui::reports::ReportsData,
+    settings: ui::settings::SettingsData,
+}
 
 /// Повертає першу компанію або nil UUID, якщо компаній ще немає.
 async fn get_first_company_id(pool: &PgPool) -> Uuid {
@@ -52,30 +62,194 @@ pub fn spawn_background_tasks(ctx: &Arc<AppCtx>) {
     tokio::spawn(acta::notifications::reminder_loop(pool));
 }
 
+fn map_nav_screen(screen: NavScreen) -> AppScreen {
+    match screen {
+        NavScreen::Dashboard => AppScreen::Dashboard,
+        NavScreen::Documents => AppScreen::Documents,
+        NavScreen::Counterparties => AppScreen::Counterparties,
+        NavScreen::Payments => AppScreen::Payments,
+        NavScreen::Reports => AppScreen::Reports,
+        NavScreen::Tasks => AppScreen::Tasks,
+        NavScreen::Settings => AppScreen::Settings,
+    }
+}
+
+async fn load_initial_ui_data(ctx: &AppCtx) -> InitialUiData {
+    let company_id = ctx.company_id();
+    let documents_state = ctx.documents_state_snapshot();
+    let counterparty_state = ctx.counterparty_state_snapshot();
+    let reports_state = ctx.reports_state_snapshot();
+
+    let (
+        dashboard,
+        documents,
+        counterparties,
+        payments,
+        tasks,
+        reports,
+        settings,
+    ) = tokio::join!(
+        ui::dashboard::prepare_dashboard_data(ctx.pool(), company_id),
+        ui::documents::prepare_documents_data(
+            ctx.pool(),
+            company_id,
+            if documents_state.query.is_empty() {
+                None
+            } else {
+                Some(documents_state.query.as_str())
+            },
+            if documents_state.tab == "all" {
+                None
+            } else {
+                Some(documents_state.tab.as_str())
+            },
+        ),
+        ui::counterparties::prepare_counterparties_data(
+            ctx.pool(),
+            company_id,
+            if counterparty_state.query.is_empty() {
+                None
+            } else {
+                Some(counterparty_state.query.as_str())
+            },
+        ),
+        ui::payments::prepare_payments_data(ctx.pool(), company_id),
+        ui::tasks::prepare_tasks_data(ctx.pool()),
+        ui::reports::prepare_reports_data(
+            ctx.pool(),
+            company_id,
+            reports_state.period,
+            if reports_state.drill_category.is_empty() {
+                None
+            } else {
+                Some(reports_state.drill_category.as_str())
+            },
+        ),
+        ui::settings::prepare_settings_data(ctx.pool(), company_id),
+    );
+
+    InitialUiData {
+        dashboard,
+        documents,
+        counterparties,
+        payments,
+        tasks,
+        reports,
+        settings,
+    }
+}
+
+fn apply_initial_ui_data(ui: &AppWindow, data: InitialUiData) {
+    ui::dashboard::apply_dashboard_to_ui(ui, data.dashboard);
+    ui::documents::apply_documents_to_ui(ui, data.documents);
+    ui::counterparties::apply_counterparties_to_ui(ui, data.counterparties);
+    ui::payments::apply_payments_to_ui(ui, data.payments);
+    ui::tasks::apply_tasks_to_ui(ui, data.tasks);
+    ui::reports::apply_reports_to_ui(ui, data.reports);
+    ui::settings::apply_settings_to_ui(ui, data.settings);
+}
+
+pub async fn refresh_screen(ui_weak: slint::Weak<AppWindow>, ctx: Arc<AppCtx>, screen: AppScreen) {
+    let company_id = ctx.company_id();
+
+    match screen {
+        AppScreen::Dashboard => {
+            let data = ui::dashboard::prepare_dashboard_data(ctx.pool(), company_id).await;
+            let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                ui::dashboard::apply_dashboard_to_ui(&ui, data);
+            });
+        }
+        AppScreen::Documents => {
+            let state = ctx.documents_state_snapshot();
+            let data = ui::documents::prepare_documents_data(
+                ctx.pool(),
+                company_id,
+                if state.query.is_empty() {
+                    None
+                } else {
+                    Some(state.query.as_str())
+                },
+                if state.tab == "all" {
+                    None
+                } else {
+                    Some(state.tab.as_str())
+                },
+            )
+            .await;
+            let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                ui::documents::apply_documents_to_ui(&ui, data);
+            });
+        }
+        AppScreen::Counterparties => {
+            let state = ctx.counterparty_state_snapshot();
+            let data = ui::counterparties::prepare_counterparties_data(
+                ctx.pool(),
+                company_id,
+                if state.query.is_empty() {
+                    None
+                } else {
+                    Some(state.query.as_str())
+                },
+            )
+            .await;
+            let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                ui::counterparties::apply_counterparties_to_ui(&ui, data);
+            });
+        }
+        AppScreen::Payments => {
+            let data = ui::payments::prepare_payments_data(ctx.pool(), company_id).await;
+            let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                ui::payments::apply_payments_to_ui(&ui, data);
+            });
+        }
+        AppScreen::Reports => {
+            let state = ctx.reports_state_snapshot();
+            let data = ui::reports::prepare_reports_data(
+                ctx.pool(),
+                company_id,
+                state.period,
+                if state.drill_category.is_empty() {
+                    None
+                } else {
+                    Some(state.drill_category.as_str())
+                },
+            )
+            .await;
+            let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                ui::reports::apply_reports_to_ui(&ui, data);
+            });
+        }
+        AppScreen::Tasks => {
+            let data = ui::tasks::prepare_tasks_data(ctx.pool()).await;
+            let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                ui::tasks::apply_tasks_to_ui(&ui, data);
+            });
+        }
+        AppScreen::Settings => {
+            let data = ui::settings::prepare_settings_data(ctx.pool(), company_id).await;
+            let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                ui::settings::apply_settings_to_ui(&ui, data);
+            });
+        }
+    }
+}
+
+pub async fn refresh_current_screen(ui_weak: slint::Weak<AppWindow>, ctx: Arc<AppCtx>) {
+    let screen = ctx.active_screen();
+    refresh_screen(ui_weak, ctx, screen).await;
+}
+
+pub fn spawn_refresh_screen(ui_weak: slint::Weak<AppWindow>, ctx: Arc<AppCtx>, screen: AppScreen) {
+    tokio::spawn(async move {
+        refresh_screen(ui_weak, ctx, screen).await;
+    });
+}
+
 /// Створює вікно та наповнює його стартовими даними.
 pub fn build_ui(rt: &Runtime, ctx: &Arc<AppCtx>) -> Result<AppWindow> {
     let ui = AppWindow::new()?;
-    let cid = ctx.company_id();
-
-    let (dash, docs, counterparties, payments, tasks, reports, settings) = rt.block_on(async {
-        tokio::join!(
-            ui::dashboard::prepare_dashboard_data(ctx.pool(), cid),
-            ui::documents::prepare_documents_data(ctx.pool(), cid, None, None),
-            ui::counterparties::prepare_counterparties_data(ctx.pool(), cid, None),
-            ui::payments::prepare_payments_data(ctx.pool(), cid),
-            ui::tasks::prepare_tasks_data(ctx.pool()),
-            ui::reports::prepare_reports_data(ctx.pool(), cid, 1, None),
-            ui::settings::prepare_settings_data(ctx.pool(), cid),
-        )
-    });
-
-    ui::dashboard::apply_dashboard_to_ui(&ui, dash);
-    ui::documents::apply_documents_to_ui(&ui, docs);
-    ui::counterparties::apply_counterparties_to_ui(&ui, counterparties);
-    ui::payments::apply_payments_to_ui(&ui, payments);
-    ui::tasks::apply_tasks_to_ui(&ui, tasks);
-    ui::reports::apply_reports_to_ui(&ui, reports);
-    ui::settings::apply_settings_to_ui(&ui, settings);
+    let data = rt.block_on(load_initial_ui_data(ctx));
+    apply_initial_ui_data(&ui, data);
     ui.set_cp_doc_chains(ModelRc::new(VecModel::<DocChainGroup>::default()));
     ui.set_doc_chain_steps(ModelRc::new(VecModel::<ChainStep>::default()));
 
@@ -103,59 +277,12 @@ fn wire_navigation(ui: &AppWindow, ctx: &Arc<AppCtx>) {
         let ctx = ctx.clone();
         let ui_weak = ui.as_weak();
         move |screen| {
+            let app_screen = map_nav_screen(screen);
+            ctx.set_active_screen(app_screen);
             let ctx = ctx.clone();
             let ui_weak = ui_weak.clone();
             tokio::spawn(async move {
-                let cid = ctx.company_id();
-                match screen {
-                    NavScreen::Dashboard => {
-                        let data = ui::dashboard::prepare_dashboard_data(ctx.pool(), cid).await;
-                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
-                            ui::dashboard::apply_dashboard_to_ui(&ui, data);
-                        });
-                    }
-                    NavScreen::Documents => {
-                        let data =
-                            ui::documents::prepare_documents_data(ctx.pool(), cid, None, None)
-                                .await;
-                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
-                            ui::documents::apply_documents_to_ui(&ui, data);
-                        });
-                    }
-                    NavScreen::Counterparties => {
-                        let data =
-                            ui::counterparties::prepare_counterparties_data(ctx.pool(), cid, None)
-                                .await;
-                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
-                            ui::counterparties::apply_counterparties_to_ui(&ui, data);
-                        });
-                    }
-                    NavScreen::Payments => {
-                        let data = ui::payments::prepare_payments_data(ctx.pool(), cid).await;
-                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
-                            ui::payments::apply_payments_to_ui(&ui, data);
-                        });
-                    }
-                    NavScreen::Reports => {
-                        let data =
-                            ui::reports::prepare_reports_data(ctx.pool(), cid, 1, None).await;
-                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
-                            ui::reports::apply_reports_to_ui(&ui, data);
-                        });
-                    }
-                    NavScreen::Tasks => {
-                        let data = ui::tasks::prepare_tasks_data(ctx.pool()).await;
-                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
-                            ui::tasks::apply_tasks_to_ui(&ui, data);
-                        });
-                    }
-                    NavScreen::Settings => {
-                        let data = ui::settings::prepare_settings_data(ctx.pool(), cid).await;
-                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
-                            ui::settings::apply_settings_to_ui(&ui, data);
-                        });
-                    }
-                }
+                refresh_current_screen(ui_weak, ctx).await;
             });
         }
     });

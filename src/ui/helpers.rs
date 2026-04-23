@@ -1,4 +1,5 @@
 use chrono::NaiveDate;
+use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 use slint::SharedString;
 
@@ -83,6 +84,28 @@ pub fn format_money_round(d: Decimal) -> String {
 /// Форматує Decimal із знаком ₴: "50 000 ₴".
 pub fn format_money_ua(d: Decimal) -> String {
     format!("{} ₴", format_money(d))
+}
+
+/// Нормалізує значення для chart/render use cases у діапазон 0.0..1.0.
+/// Money-facing display ніколи не має проходити через цей helper.
+pub fn normalize_chart_value(value: Decimal, max_value: Decimal) -> f32 {
+    if max_value <= Decimal::ZERO {
+        return 0.0;
+    }
+
+    (value / max_value).to_f32().unwrap_or(0.0)
+}
+
+/// Повертає максимум для значень, що використовуються лише в chart geometry.
+pub fn max_chart_value<'a, I>(values: I) -> Decimal
+where
+    I: IntoIterator<Item = &'a Decimal>,
+{
+    values
+        .into_iter()
+        .copied()
+        .max()
+        .unwrap_or(Decimal::ZERO)
 }
 
 pub fn date_to_str(d: NaiveDate) -> SharedString {
@@ -287,6 +310,24 @@ mod tests {
         let s = format_money_ua(dec!(100));
         assert!(s.contains("₴"), "має місти символ ₴: {}", s);
         assert!(s.contains("100"), "має місти число: {}", s);
+    }
+
+    #[test]
+    fn normalize_chart_value_scales_against_max() {
+        assert!((normalize_chart_value(dec!(50), dec!(200)) - 0.25).abs() < 0.001);
+        assert!((normalize_chart_value(dec!(200), dec!(200)) - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn normalize_chart_value_returns_zero_for_empty_max() {
+        assert_eq!(normalize_chart_value(dec!(50), dec!(0)), 0.0);
+    }
+
+    #[test]
+    fn max_chart_value_returns_decimal_max_or_zero() {
+        let values = [dec!(10), dec!(250), dec!(75)];
+        assert_eq!(max_chart_value(values.iter()), dec!(250));
+        assert_eq!(max_chart_value([].iter()), dec!(0));
     }
 
     #[test]

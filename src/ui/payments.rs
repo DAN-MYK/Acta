@@ -8,7 +8,7 @@ use sqlx::PgPool;
 use tokio::fs;
 use uuid::Uuid;
 
-use acta::app_ctx::AppCtx;
+use acta::app_ctx::{AppCtx, AppScreen};
 use acta::db;
 use acta::db::payments::PaymentKpi;
 use acta::import::bank_csv::{
@@ -68,10 +68,7 @@ fn notify_user(summary: &str, body: &str) {
 }
 
 async fn reload_payments(ui_weak: slint::Weak<crate::AppWindow>, ctx: Arc<AppCtx>) {
-    let data = prepare_payments_data(ctx.pool(), ctx.company_id()).await;
-    let _ = ui_weak.upgrade_in_event_loop(move |ui| {
-        apply_payments_to_ui(&ui, data);
-    });
+    crate::bootstrap::refresh_screen(ui_weak, ctx, AppScreen::Payments).await;
 }
 
 fn bank_import_dir() -> PathBuf {

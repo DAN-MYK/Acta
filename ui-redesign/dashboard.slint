@@ -5,7 +5,7 @@
 
 import { AppTheme } from "design-tokens.slint";
 import {
-    DashboardMetrics, MonthlyData, JournalRow, AccountItem, TaskItem, Priority,
+    DashboardMetrics, JournalRow, AccountItem, TaskItem, Priority,
     InboxItem, ChartBar
 } from "types.slint";
 import {
@@ -467,7 +467,6 @@ component InboxView inherits Rectangle {
 export component Dashboard inherits Rectangle {
     // ── Data bindings from Rust ────────────────────────────────────────────
     in property <DashboardMetrics> metrics;
-    in property <[MonthlyData]> monthly;
     in property <[ChartBar]> chart-bars; // normalized by Rust
     in property <[JournalRow]> journal;
     in property <[AccountItem]> accounts;

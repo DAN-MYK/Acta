@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use anyhow::{Context, Result, anyhow};
 use notify_rust::{Notification, Timeout};
@@ -11,23 +11,17 @@ use tokio::fs;
 use tokio::process::Command;
 use uuid::Uuid;
 
-use acta::app_ctx::AppCtx;
+use acta::app_ctx::{AppCtx, AppScreen};
 use acta::db;
 use acta::models::dashboard::{CategoryRevenue, MonthRevenue};
 
-use crate::ui::helpers::format_money_round;
+use crate::ui::helpers::{format_money_round, max_chart_value, normalize_chart_value};
 
 pub struct ReportsData {
     pub metrics: crate::ReportMetrics,
     pub chart_bars: Vec<crate::ChartBar>,
     pub categories: Vec<crate::ExpenseCategory>,
     pub drill_rows: Vec<crate::DrillRow>,
-}
-
-#[derive(Clone, Default)]
-struct ReportsUiState {
-    period: i32,
-    drill_category: String,
 }
 
 fn notify_user(summary: &str, body: &str) {
@@ -72,14 +66,8 @@ fn period_to_months(period: i32) -> u32 {
 }
 
 fn build_chart_bars(revenue: &[MonthRevenue], expenses: &[MonthRevenue]) -> Vec<crate::ChartBar> {
-    let max_revenue = revenue
-        .iter()
-        .filter_map(|row| row.amount.to_f64())
-        .fold(0.0_f64, f64::max);
-    let max_expenses = expenses
-        .iter()
-        .filter_map(|row| row.amount.to_f64())
-        .fold(0.0_f64, f64::max);
+    let max_revenue = max_chart_value(revenue.iter().map(|row| &row.amount));
+    let max_expenses = max_chart_value(expenses.iter().map(|row| &row.amount));
     let max_value = max_revenue.max(max_expenses);
 
     revenue
@@ -91,20 +79,9 @@ fn build_chart_bars(revenue: &[MonthRevenue], expenses: &[MonthRevenue]) -> Vec<
                 .map(|row| row.amount)
                 .unwrap_or(Decimal::ZERO);
 
-            let rev_h = if max_value > 0.0 {
-                (revenue_row.amount.to_f64().unwrap_or(0.0) / max_value) as f32
-            } else {
-                0.0
-            };
-            let exp_h = if max_value > 0.0 {
-                (expense_amount.to_f64().unwrap_or(0.0) / max_value) as f32
-            } else {
-                0.0
-            };
-
             crate::ChartBar {
-                rev_h,
-                exp_h,
+                rev_h: normalize_chart_value(revenue_row.amount, max_value),
+                exp_h: normalize_chart_value(expense_amount, max_value),
                 month: revenue_row.month_label().into(),
             }
         })
@@ -377,71 +354,37 @@ async fn export_reports_pdf(
 }
 
 pub fn wire_reports_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
-    let state = Arc::new(Mutex::new(ReportsUiState {
-        period: 1,
-        drill_category: String::new(),
-    }));
-
     ui.on_rep_period_changed({
         let ctx = ctx.clone();
         let ui_weak = ui.as_weak();
-        let state = state.clone();
         move |period| {
-            {
-                let mut current = state.lock().unwrap_or_else(|error| error.into_inner());
-                current.period = period;
-                current.drill_category.clear();
-            }
-
-            let ctx = ctx.clone();
-            let ui_weak = ui_weak.clone();
-            tokio::spawn(async move {
-                let data = prepare_reports_data(ctx.pool(), ctx.company_id(), period, None).await;
-                let _ = ui_weak.upgrade_in_event_loop(move |ui| {
-                    apply_reports_to_ui(&ui, data);
-                });
+            ctx.update_reports_state(|state| {
+                state.period = period;
+                state.drill_category.clear();
             });
+            crate::bootstrap::spawn_refresh_screen(ui_weak.clone(), ctx.clone(), AppScreen::Reports);
         }
     });
 
     ui.on_rep_category_drilled({
         let ctx = ctx.clone();
         let ui_weak = ui.as_weak();
-        let state = state.clone();
         move |category| {
-            let (period, category_string) = {
-                let mut current = state.lock().unwrap_or_else(|error| error.into_inner());
-                current.drill_category = category.to_string();
-                (current.period, current.drill_category.clone())
-            };
-
-            let ctx = ctx.clone();
-            let ui_weak = ui_weak.clone();
-            tokio::spawn(async move {
-                let selected = if category_string.is_empty() {
-                    None
-                } else {
-                    Some(category_string.as_str())
-                };
-                let data = prepare_reports_data(ctx.pool(), ctx.company_id(), period, selected).await;
-                let _ = ui_weak.upgrade_in_event_loop(move |ui| {
-                    apply_reports_to_ui(&ui, data);
-                });
+            ctx.update_reports_state(|state| {
+                state.drill_category = category.to_string();
             });
+            crate::bootstrap::spawn_refresh_screen(ui_weak.clone(), ctx.clone(), AppScreen::Reports);
         }
     });
 
     ui.on_rep_export_csv({
         let ctx = ctx.clone();
-        let state = state.clone();
         move || {
             let ctx = ctx.clone();
-            let state = state.clone();
             tokio::spawn(async move {
-                let (period, drill) = {
-                    let current = state.lock().unwrap_or_else(|error| error.into_inner());
-                    (current.period, current.drill_category.clone())
-                };
+                let state = ctx.reports_state_snapshot();
+                let period = state.period;
+                let drill = state.drill_category;
                 let drill = if drill.is_empty() { None } else { Some(drill.as_str()) };
                 match export_reports_csv(ctx.pool(), ctx.company_id(), period, drill).await {
                     Ok(path) => notify_user("CSV-звіт збережено", &path.display().to_string()),
@@ -456,15 +399,12 @@ pub fn wire_reports_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
 
     ui.on_rep_export_pdf({
         let ctx = ctx.clone();
-        let state = state.clone();
         move || {
             let ctx = ctx.clone();
-            let state = state.clone();
             tokio::spawn(async move {
-                let (period, drill) = {
-                    let current = state.lock().unwrap_or_else(|error| error.into_inner());
-                    (current.period, current.drill_category.clone())
-                };
+                let state = ctx.reports_state_snapshot();
+                let period = state.period;
+                let drill = state.drill_category;
                 let drill = if drill.is_empty() { None } else { Some(drill.as_str()) };
                 match export_reports_pdf(ctx.pool(), ctx.company_id(), period, drill).await {
                     Ok(path) => notify_user("PDF-звіт збережено", &path.display().to_string()),
@@ -508,5 +448,37 @@ mod tests {
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].percent, 75);
         assert_eq!(result[1].percent, 25);
+    }
+
+    #[test]
+    fn build_chart_bars_normalizes_against_largest_series_value() {
+        let revenue = vec![
+            MonthRevenue { month_num: 1, year: 2026, amount: dec!(100) },
+            MonthRevenue { month_num: 2, year: 2026, amount: dec!(200) },
+        ];
+        let expenses = vec![
+            MonthRevenue { month_num: 1, year: 2026, amount: dec!(50) },
+            MonthRevenue { month_num: 2, year: 2026, amount: dec!(300) },
+        ];
+
+        let bars = build_chart_bars(&revenue, &expenses);
+
+        assert_eq!(bars.len(), 2);
+        assert!((bars[0].rev_h - (100.0 / 300.0)).abs() < 0.01);
+        assert!((bars[0].exp_h - (50.0 / 300.0)).abs() < 0.01);
+        assert!((bars[1].rev_h - (200.0 / 300.0)).abs() < 0.01);
+        assert!((bars[1].exp_h - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn build_chart_bars_returns_zero_heights_when_all_values_are_zero() {
+        let revenue = vec![MonthRevenue { month_num: 1, year: 2026, amount: dec!(0) }];
+        let expenses = vec![MonthRevenue { month_num: 1, year: 2026, amount: dec!(0) }];
+
+        let bars = build_chart_bars(&revenue, &expenses);
+
+        assert_eq!(bars.len(), 1);
+        assert_eq!(bars[0].rev_h, 0.0);
+        assert_eq!(bars[0].exp_h, 0.0);
     }
 }

@@ -4,7 +4,7 @@ use slint::{ComponentHandle, ModelRc, VecModel};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use acta::app_ctx::AppCtx;
+use acta::app_ctx::{AppCtx, AppScreen};
 use acta::db;
 use crate::ui::helpers::{
     act_row_to_document_item, counterparty_to_details, counterparty_to_item,
@@ -114,12 +114,10 @@ pub fn wire_counterparty_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
             let ctx = ctx.clone();
             let ui_weak = ui_weak.clone();
             let q = query.to_string();
-            tokio::spawn(async move {
-                let cid = ctx.company_id();
-                let search = if q.is_empty() { None } else { Some(q.as_str()) };
-                let data = prepare_counterparties_data(ctx.pool(), cid, search).await;
-                let _ = ui_weak.upgrade_in_event_loop(move |ui| apply_counterparties_to_ui(&ui, data));
+            ctx.update_counterparty_state(|state| {
+                state.query = q;
             });
+            crate::bootstrap::spawn_refresh_screen(ui_weak.clone(), ctx.clone(), AppScreen::Counterparties);
         }
     });
 

@@ -324,18 +324,18 @@ pub async fn create(pool: &PgPool, company_id: Uuid, data: &NewAct) -> Result<Ac
         let amount = (item.quantity * item.unit_price).round_dp(2);
         total += amount;
 
-        sqlx::query!(
+        sqlx::query(
             r#"
             INSERT INTO act_items (act_id, description, quantity, unit, unit_price, amount)
             VALUES ($1, $2, $3, $4, $5, $6)
             "#,
-            act.id,
-            item.description,
-            item.quantity,
-            item.unit,
-            item.unit_price,
-            amount,
         )
+        .bind(act.id)
+        .bind(&item.description)
+        .bind(item.quantity)
+        .bind(&item.unit)
+        .bind(item.unit_price)
+        .bind(amount)
         .execute(&mut *tx)
         .await?;
     }
@@ -396,25 +396,27 @@ pub async fn update(pool: &PgPool, id: Uuid, data: &UpdateAct) -> Result<Option<
 /// Дозволені переходи: Draft → Issued → Signed → Paid (лише вперед).
 /// Повертає помилку при спробі перескочити статус або піти назад.
 pub async fn change_status(pool: &PgPool, id: Uuid, new_status: ActStatus) -> Result<Option<Act>> {
+    use sqlx::Row;
+
     // Читаємо поточний статус — потрібен для валідації переходу
-    let current = sqlx::query!(
-        r#"SELECT status AS "status: ActStatus" FROM acts WHERE id = $1"#,
-        id
-    )
-    .fetch_optional(pool)
-    .await?;
+    let current = sqlx::query(r#"SELECT status FROM acts WHERE id = $1"#)
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
 
     let Some(row) = current else {
         return Ok(None);
     };
 
+    let current_status: ActStatus = row.try_get("status")?;
+
     // Перевіряємо що новий статус — наступний дозволений
-    if !row.status.can_transition_to(&new_status) {
+    if !current_status.can_transition_to(&new_status) {
         bail!(
             "Недопустимий перехід статусу: '{}' → '{}'. Очікувалось: '{}'",
-            row.status,
+            current_status,
             new_status,
-            row.status
+            current_status
                 .next()
                 .map(|s: ActStatus| s.to_string())
                 .unwrap_or_else(|| "(фінальний статус)".into())
@@ -496,7 +498,8 @@ pub async fn update_with_items(
     };
 
     // 2. Видаляємо всі старі позиції
-    sqlx::query!("DELETE FROM act_items WHERE act_id = $1", id)
+    sqlx::query("DELETE FROM act_items WHERE act_id = $1")
+        .bind(id)
         .execute(&mut *tx)
         .await?;
 
@@ -507,18 +510,18 @@ pub async fn update_with_items(
         let amount = (item.quantity * item.unit_price).round_dp(2);
         total += amount;
 
-        sqlx::query!(
+        sqlx::query(
             r#"
             INSERT INTO act_items (act_id, description, quantity, unit, unit_price, amount)
             VALUES ($1, $2, $3, $4, $5, $6)
             "#,
-            act.id,
-            item.description,
-            item.quantity,
-            item.unit,
-            item.unit_price,
-            amount,
         )
+        .bind(act.id)
+        .bind(&item.description)
+        .bind(item.quantity)
+        .bind(&item.unit)
+        .bind(item.unit_price)
+        .bind(amount)
         .execute(&mut *tx)
         .await?;
     }
@@ -545,19 +548,20 @@ pub async fn update_with_items(
 /// Перевести акт до наступного статусу (зручна обгортка над `change_status`).
 /// Повертає помилку якщо акт вже у фінальному статусі "Оплачено".
 pub async fn advance_status(pool: &PgPool, id: Uuid) -> Result<Option<Act>> {
-    let current = sqlx::query!(
-        r#"SELECT status AS "status: ActStatus" FROM acts WHERE id = $1"#,
-        id
-    )
-    .fetch_optional(pool)
-    .await?;
+    use sqlx::Row;
+
+    let current = sqlx::query(r#"SELECT status FROM acts WHERE id = $1"#)
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
 
     let Some(row) = current else {
         return Ok(None);
     };
 
-    let Some(next) = row.status.next() else {
-        bail!("Акт вже в фінальному статусі '{}'", row.status);
+    let current_status: ActStatus = row.try_get("status")?;
+    let Some(next) = current_status.next() else {
+        bail!("Акт вже в фінальному статусі '{}'", current_status);
     };
 
     change_status(pool, id, next).await
