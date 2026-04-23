@@ -1,4 +1,6 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, Serialize, Deserialize)]
 #[sqlx(type_name = "VARCHAR", rename_all = "lowercase")]
 pub enum DocumentDirection {
     #[sqlx(rename = "outgoing")]

@@ -7,6 +7,8 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::models::DocumentDirection;
+
 /// Статус акту виконаних робіт.
 ///
 /// `sqlx::Type` + `type_name = "act_status"` — зв'язує цей enum з PostgreSQL ENUM типом.
@@ -83,7 +85,7 @@ pub struct Act {
     pub counterparty_id: Uuid,
     pub contract_id: Option<Uuid>,
     pub category_id: Option<Uuid>,
-    pub direction: String,
+    pub direction: DocumentDirection,
     pub date: NaiveDate,
     pub expected_payment_date: Option<NaiveDate>,
     pub total_amount: Decimal,
@@ -119,7 +121,7 @@ pub struct ActItem {
 pub struct ActListRow {
     pub id: Uuid,
     pub number: String,
-    pub direction: String,
+    pub direction: DocumentDirection,
     pub date: NaiveDate,
     pub counterparty_name: String,
     pub total_amount: Decimal,
@@ -132,7 +134,7 @@ pub struct NewAct {
     pub counterparty_id: Uuid,
     pub contract_id: Option<Uuid>,
     pub category_id: Option<Uuid>,
-    pub direction: String,
+    pub direction: DocumentDirection,
     pub date: NaiveDate,
     pub expected_payment_date: Option<NaiveDate>,
     pub status: ActStatus,
