@@ -75,13 +75,23 @@ pub async fn prepare_counterparty_detail(
 }
 
 pub fn apply_counterparties_to_ui(ui: &crate::AppWindow, data: CounterpartiesData) {
-    ui.set_counterparties(ModelRc::new(VecModel::from(data.items)));
+    let previous = ui.get_counterparties_screen();
+    ui.set_counterparties_screen(crate::CounterpartiesViewData {
+        items: ModelRc::new(VecModel::from(data.items)),
+        detail: previous.detail,
+        documents: previous.documents,
+        payments: previous.payments,
+    });
 }
 
 pub fn apply_counterparty_detail_to_ui(ui: &crate::AppWindow, data: CounterpartyDetailData) {
-    ui.set_cp_detail(data.detail);
-    ui.set_cp_documents(ModelRc::new(VecModel::from(data.documents)));
-    ui.set_cp_payments(ModelRc::new(VecModel::from(data.payments)));
+    let previous = ui.get_counterparties_screen();
+    ui.set_counterparties_screen(crate::CounterpartiesViewData {
+        items: previous.items,
+        detail: data.detail,
+        documents: ModelRc::new(VecModel::from(data.documents)),
+        payments: ModelRc::new(VecModel::from(data.payments)),
+    });
 }
 
 /// Підписує всі counterparty callbacks на UI компонент.

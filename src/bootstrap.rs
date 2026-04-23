@@ -250,12 +250,23 @@ pub fn build_ui(rt: &Runtime, ctx: &Arc<AppCtx>) -> Result<AppWindow> {
     let ui = AppWindow::new()?;
     let data = rt.block_on(load_initial_ui_data(ctx));
     apply_initial_ui_data(&ui, data);
-    ui.set_cp_doc_chains(ModelRc::new(VecModel::<DocChainGroup>::default()));
-    ui.set_doc_chain_steps(ModelRc::new(VecModel::<ChainStep>::default()));
+    let documents = ui.get_documents();
+    ui.set_documents(crate::DocumentsViewData {
+        items: documents.items,
+        selected_ids: documents.selected_ids,
+        total_count: documents.total_count,
+        page_count: if documents.page_count > 0 { documents.page_count } else { 1 },
+        chain_steps: ModelRc::new(VecModel::<ChainStep>::default()),
+        cp_doc_chains: ModelRc::new(VecModel::<DocChainGroup>::default()),
+    });
 
-    ui.set_company_name("Acta".into());
-    ui.set_user_name("Адміністратор".into());
-    ui.set_user_initials("АД".into());
+    ui.set_shell(crate::ShellChrome {
+        company_name: "Acta".into(),
+        user_name: "Адміністратор".into(),
+        user_initials: "АД".into(),
+        documents_badge: 0,
+        tasks_badge: 0,
+    });
 
     Ok(ui)
 }
@@ -298,7 +309,15 @@ fn wire_stub_callbacks(ui: &AppWindow) {
         move |id| {
             tracing::info!("TODO: doc_chain_load({id})");
             let _ = ui_weak.upgrade_in_event_loop(|ui| {
-                ui.set_doc_chain_steps(ModelRc::new(VecModel::<ChainStep>::default()));
+                let documents = ui.get_documents();
+                ui.set_documents(crate::DocumentsViewData {
+                    items: documents.items,
+                    selected_ids: documents.selected_ids,
+                    total_count: documents.total_count,
+                    page_count: documents.page_count,
+                    chain_steps: ModelRc::new(VecModel::<ChainStep>::default()),
+                    cp_doc_chains: documents.cp_doc_chains,
+                });
             });
         }
     });

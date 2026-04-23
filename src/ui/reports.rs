@@ -245,10 +245,12 @@ pub async fn prepare_reports_data(
 }
 
 pub fn apply_reports_to_ui(ui: &crate::AppWindow, data: ReportsData) {
-    ui.set_rep_metrics(data.metrics);
-    ui.set_rep_chart_bars(ModelRc::new(VecModel::from(data.chart_bars)));
-    ui.set_rep_categories(ModelRc::new(VecModel::from(data.categories)));
-    ui.set_rep_drill_rows(ModelRc::new(VecModel::from(data.drill_rows)));
+    ui.set_reports_screen(crate::ReportsViewData {
+        metrics: data.metrics,
+        chart_bars: ModelRc::new(VecModel::from(data.chart_bars)),
+        categories: ModelRc::new(VecModel::from(data.categories)),
+        drill_rows: ModelRc::new(VecModel::from(data.drill_rows)),
+    });
 }
 
 async fn export_reports_csv(

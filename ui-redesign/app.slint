@@ -26,6 +26,8 @@ import {
     CounterpartyDetails, ReportMetrics, ExpenseCategory, DrillRow,
     CompanyInfo, IntegrationItem, TeamMember, NumberingRow, DayEvent,
     ChartBar, InboxItem, ChainStep, DocChainGroup,
+    ShellChrome, DashboardViewData, DocumentsViewData, CounterpartiesViewData,
+    PaymentsViewData, ReportsViewData, TasksViewData, SettingsViewData,
 } from "types.slint";
 
 // ── AppWindow ─────────────────────────────────────────────────────────────────
@@ -42,32 +44,20 @@ export component AppWindow inherits Window {
     callback nav-changed(NavScreen);
 
     // ── Shell info ───────────────────────────────────────────────────────
-    in property <string> company-name: "ТОВ «Альфа-Бізнес»";
-    in property <string> user-name: "Михайло Дзюба";
-    in property <string> user-initials: "МД";
-    in property <int> documents-badge: 0;
-    in property <int> tasks-badge: 0;
+    in property <ShellChrome> shell;
 
-    // ── Dashboard ────────────────────────────────────────────────────────
-    in property <DashboardMetrics> dash-metrics;
-    in property <[ChartBar]> dash-chart-bars;
-    in property <[JournalRow]> dash-journal;
-    in property <[AccountItem]> dash-accounts;
-    in property <[TaskItem]> dash-tasks;
-    in property <string> dash-revenue-str;
-    in property <string> dash-expenses-str;
-    in property <string> dash-net-str;
-    in property <string> dash-outstanding-str;
-    in property <string> dash-overdue-str;
-    in property <[InboxItem]> dash-inbox;
+    // ── Screen contracts ────────────────────────────────────────────────
+    in property <DashboardViewData> dashboard;
+    in property <DocumentsViewData> documents;
+    in property <CounterpartiesViewData> counterparties-screen;
+    in property <PaymentsViewData> payments-screen;
+    in property <ReportsViewData> reports-screen;
+    in property <TasksViewData> tasks-screen;
+    in property <SettingsViewData> settings-screen;
+
+    // ── Dashboard callbacks ─────────────────────────────────────────────
     callback inbox-action(string, string);
-
-    // ── Documents ────────────────────────────────────────────────────────
-    in property <[DocumentItem]> all-documents;
-    in property <[string]> docs-selected-ids;
-    in property <int> docs-total-count;
     in-out property <int> docs-page: 1;
-    in property <int> docs-page-count: 1;
     callback doc-search-changed(string);
     callback doc-tab-changed(string);
     callback doc-toggled(string, bool);
@@ -76,69 +66,25 @@ export component AppWindow inherits Window {
     callback doc-delete(string);
     callback doc-new;
     callback doc-page-changed(int);
-
-    // ── DocChain ─────────────────────────────────────────────────────────
-    in property <[ChainStep]> doc-chain-steps;
-    in property <[DocChainGroup]> cp-doc-chains;
     callback doc-chain-load(string);
     callback doc-chain-create(string, string);
-
-    // ── Counterparties ───────────────────────────────────────────────────
-    in property <[CounterpartyItem]> counterparties;
-    in property <CounterpartyDetails> cp-detail;
-    in property <[DocumentItem]> cp-documents;
-    in property <[PaymentItem]> cp-payments;
     callback cp-selected(string);
     callback cp-search-changed(string);
     callback cp-new;
     callback cp-create-doc(string);
     callback cp-tab-changed(string);
-
-    // ── Payments ─────────────────────────────────────────────────────────
-    in property <[PaymentItem]> payments;
-    in property <string> pay-incoming-str;
-    in property <string> pay-outgoing-str;
-    in property <string> pay-net-str;
-    in property <string> pay-unmatched-str;
-    in property <string> pay-incoming-sub;
-    in property <string> pay-outgoing-sub;
-    in property <int> pay-unmatched-count;
     callback pay-import-csv;
     callback pay-sync-bank;
     callback pay-new;
     callback pay-link(string);
-
-    // ── Reports ──────────────────────────────────────────────────────────
-    in property <ReportMetrics> rep-metrics;
-    in property <[ChartBar]> rep-chart-bars;
-    in property <[ExpenseCategory]> rep-categories;
-    in property <[DrillRow]> rep-drill-rows;
     callback rep-period-changed(int);
     callback rep-category-drilled(string);
     callback rep-export-csv;
     callback rep-export-pdf;
-
-    // ── Tasks ────────────────────────────────────────────────────────────
-    in property <[TaskItem]> tasks-open;
-    in property <[TaskItem]> tasks-done;
-    in property <[TaskItem]> tasks-all;
-    in property <[DayEvent]> day-events;
-    in property <int> tasks-open-count;
-    in property <int> tasks-high-count;
-    in property <int> tasks-done-count;
-    in property <string> tasks-today-label;
     callback task-toggled(string, bool);
     callback task-more(string);
     callback task-new;
     callback task-filter-changed(string);
-
-    // ── Settings ─────────────────────────────────────────────────────────
-    in property <CompanyInfo> company-info;
-    in property <[IntegrationItem]> integrations;
-    in property <[TeamMember]> team-members;
-    in property <[NumberingRow]> numbering-rows;
-    in property <string> last-backup-label;
-    in property <string> last-backup-file;
     callback settings-section-changed(string);
     callback settings-dark-mode-toggled(bool);
     callback settings-density-changed(int);
@@ -170,11 +116,11 @@ export component AppWindow inherits Window {
         height: root.height;
 
         current-screen: root.current-screen;
-        company-name: root.company-name;
-        user-name: root.user-name;
-        user-initials: root.user-initials;
-        documents-badge: root.documents-badge;
-        tasks-badge: root.tasks-badge;
+        company-name: root.shell.company-name;
+        user-name: root.shell.user-name;
+        user-initials: root.shell.user-initials;
+        documents-badge: root.shell.documents-badge;
+        tasks-badge: root.shell.tasks-badge;
         is-dark: AppTheme.is-dark;
         cmd-palette-open: root.palette-open;
 
@@ -217,23 +163,23 @@ export component AppWindow inherits Window {
             width: 100%;
             height: 100%;
 
-            metrics: root.dash-metrics;
-            chart-bars: root.dash-chart-bars;
-            journal: root.dash-journal;
-            accounts: root.dash-accounts;
-            tasks: root.dash-tasks;
-            revenue-str: root.dash-revenue-str;
-            expenses-str: root.dash-expenses-str;
-            net-str: root.dash-net-str;
-            outstanding-str: root.dash-outstanding-str;
-            overdue-str: root.dash-overdue-str;
+            metrics: root.dashboard.metrics;
+            chart-bars: root.dashboard.chart-bars;
+            journal: root.dashboard.journal;
+            accounts: root.dashboard.accounts;
+            tasks: root.dashboard.tasks;
+            revenue-str: root.dashboard.revenue-str;
+            expenses-str: root.dashboard.expenses-str;
+            net-str: root.dashboard.net-str;
+            outstanding-str: root.dashboard.outstanding-str;
+            overdue-str: root.dashboard.overdue-str;
 
             icon-check: Icons.check;
             icon-plus: Icons.plus;
             icon-arrow-right: Icons.arrow-right;
             icon-chevron-down: Icons.sort;
 
-            inbox: root.dash-inbox;
+            inbox: root.dashboard.inbox;
             inbox-action(id, kind) => { root.inbox-action(id, kind); }
             task-toggled(id, done) => { root.task-toggled(id, done); }
             new-task => { root.task-new(); }
@@ -243,12 +189,12 @@ export component AppWindow inherits Window {
             width: 100%;
             height: 100%;
 
-            all-docs: root.all-documents;
+            all-docs: root.documents.items;
             search-query: root.docs-search-state;
-            selected-ids: root.docs-selected-ids;
-            total-count: root.docs-total-count;
+            selected-ids: root.documents.selected-ids;
+            total-count: root.documents.total-count;
             page: root.docs-page;
-            total-pages: root.docs-page-count;
+            total-pages: root.documents.page-count;
 
             icon-search: Icons.search;
             icon-more: Icons.more;
@@ -262,7 +208,7 @@ export component AppWindow inherits Window {
             icon-chevron-left: Icons.arrow-left;
             icon-chevron-right: Icons.arrow-right;
             icon-close: Icons.close;
-            chain-steps: root.doc-chain-steps;
+            chain-steps: root.documents.chain-steps;
 
             search-changed(q) => { root.docs-search-state = q; root.doc-search-changed(q); }
             tab-changed(t) => { root.docs-tab-state = t; root.doc-tab-changed(t); }
@@ -280,10 +226,10 @@ export component AppWindow inherits Window {
             width: 100%;
             height: 100%;
 
-            list: root.counterparties;
-            detail: root.cp-detail;
-            detail-docs: root.cp-documents;
-            detail-payments: root.cp-payments;
+            list: root.counterparties-screen.items;
+            detail: root.counterparties-screen.detail;
+            detail-docs: root.counterparties-screen.documents;
+            detail-payments: root.counterparties-screen.payments;
             selected-id: root.cp-selected-id;
             search-query: root.cp-search;
             active-tab: root.cp-detail-tab-state;
@@ -296,7 +242,7 @@ export component AppWindow inherits Window {
             icon-more: Icons.more;
             icon-edit: Icons.edit;
 
-            doc-chains: root.cp-doc-chains;
+            doc-chains: root.documents.cp-doc-chains;
 
             select(id) => { root.cp-selected-id = id; root.cp-selected(id); }
             search-changed(q) => { root.cp-search = q; root.cp-search-changed(q); }
@@ -310,14 +256,14 @@ export component AppWindow inherits Window {
             width: 100%;
             height: 100%;
 
-            payments: root.payments;
-            incoming-str: root.pay-incoming-str;
-            outgoing-str: root.pay-outgoing-str;
-            net-str: root.pay-net-str;
-            unmatched-str: root.pay-unmatched-str;
-            incoming-sub: root.pay-incoming-sub;
-            outgoing-sub: root.pay-outgoing-sub;
-            unmatched-count: root.pay-unmatched-count;
+            payments: root.payments-screen.items;
+            incoming-str: root.payments-screen.incoming-str;
+            outgoing-str: root.payments-screen.outgoing-str;
+            net-str: root.payments-screen.net-str;
+            unmatched-str: root.payments-screen.unmatched-str;
+            incoming-sub: root.payments-screen.incoming-sub;
+            outgoing-sub: root.payments-screen.outgoing-sub;
+            unmatched-count: root.payments-screen.unmatched-count;
 
             icon-plus: Icons.plus;
             icon-link: Icons.link;
@@ -332,10 +278,10 @@ export component AppWindow inherits Window {
             width: 100%;
             height: 100%;
 
-            metrics: root.rep-metrics;
-            chart-bars: root.rep-chart-bars;
-            categories: root.rep-categories;
-            drill-rows: root.rep-drill-rows;
+            metrics: root.reports-screen.metrics;
+            chart-bars: root.reports-screen.chart-bars;
+            categories: root.reports-screen.categories;
+            drill-rows: root.reports-screen.drill-rows;
             drill-category: root.rep-drill-state;
             period: root.rep-period-state;
 
@@ -353,14 +299,14 @@ export component AppWindow inherits Window {
             width: 100%;
             height: 100%;
 
-            open-tasks: root.tasks-open;
-            done-tasks: root.tasks-done;
-            all-tasks: root.tasks-all;
-            day-events: root.day-events;
-            open-count: root.tasks-open-count;
-            high-count: root.tasks-high-count;
-            done-count: root.tasks-done-count;
-            today-label: root.tasks-today-label;
+            open-tasks: root.tasks-screen.open;
+            done-tasks: root.tasks-screen.done;
+            all-tasks: root.tasks-screen.all;
+            day-events: root.tasks-screen.day-events;
+            open-count: root.tasks-screen.open-count;
+            high-count: root.tasks-screen.high-count;
+            done-count: root.tasks-screen.done-count;
+            today-label: root.tasks-screen.today-label;
             filter: root.tasks-filter-state;
 
             icon-check: Icons.check;
@@ -378,14 +324,14 @@ export component AppWindow inherits Window {
             width: 100%;
             height: 100%;
 
-            company: root.company-info;
-            integrations: root.integrations;
-            team: root.team-members;
-            numbering: root.numbering-rows;
+            company: root.settings-screen.company-info;
+            integrations: root.settings-screen.integrations;
+            team: root.settings-screen.team-members;
+            numbering: root.settings-screen.numbering-rows;
             section: root.settings-section-state;
             dark-mode: AppTheme.is-dark;
-            last-backup-label: root.last-backup-label;
-            last-backup-file: root.last-backup-file;
+            last-backup-label: root.settings-screen.last-backup-label;
+            last-backup-file: root.settings-screen.last-backup-file;
 
             icon-more: Icons.more;
             icon-plus: Icons.plus;

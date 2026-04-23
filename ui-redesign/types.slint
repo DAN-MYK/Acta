@@ -92,6 +92,16 @@ export struct AccountItem {
     balance-str: string,    // pre-formatted by Rust
 }
 
+// ── Shell chrome model ──────────────────────────────────────────────────────
+
+export struct ShellChrome {
+    company-name: string,
+    user-name: string,
+    user-initials: string,
+    documents-badge: int,
+    tasks-badge: int,
+}
+
 // ── Dashboard model ──────────────────────────────────────────────────────────
 
 export struct DashboardMetrics {
@@ -115,6 +125,49 @@ export struct JournalRow {
     is-credit: bool,        // true = credit side
     status-label: string,
     status-tone: string,    // "success" | "warning" | "danger" | "muted" | "info"
+}
+
+export struct ChartBar {
+    rev-h: float,    // revenue bar height 0.0–1.0
+    exp-h: float,    // expenses bar height 0.0–1.0
+    month: string,   // abbreviated label "Січ", "Лют", etc.
+}
+
+export struct InboxItem {
+    kind: string,          // "overdue" | "unsigned" | "act-needed" | "unmatched"
+    doc-id: string,
+    doc-number: string,
+    counterparty: string,
+    amount-str: string,    // pre-formatted Rust
+    age-days: int,
+    action-label: string,  // "Нагадати" | "Підписати" | "Поєднати"
+}
+
+export struct ChainStep {
+    doc-type: string,    // "invoice" | "act" | "waybill"
+    doc-number: string,  // "" якщо документ відсутній
+    amount-str: string,  // pre-formatted Rust
+    status: string,      // "draft"|"issued"|"signed"|"paid"|"overdue"|""
+    exists: bool,
+}
+
+export struct DocChainGroup {
+    doc-id: string,      // ID батьківського документа
+    steps: [ChainStep],
+}
+
+export struct DashboardViewData {
+    metrics: DashboardMetrics,
+    chart-bars: [ChartBar],
+    journal: [JournalRow],
+    accounts: [AccountItem],
+    tasks: [TaskItem],
+    revenue-str: string,
+    expenses-str: string,
+    net-str: string,
+    outstanding-str: string,
+    overdue-str: string,
+    inbox: [InboxItem],
 }
 
 // ── Counterparty detail model ────────────────────────────────────────────────
@@ -142,6 +195,22 @@ export struct CounterpartyDetails {
     last-contact-date: string,
 }
 
+export struct DocumentsViewData {
+    items: [DocumentItem],
+    selected-ids: [string],
+    total-count: int,
+    page-count: int,
+    chain-steps: [ChainStep],
+    cp-doc-chains: [DocChainGroup],
+}
+
+export struct CounterpartiesViewData {
+    items: [CounterpartyItem],
+    detail: CounterpartyDetails,
+    documents: [DocumentItem],
+    payments: [PaymentItem],
+}
+
 // ── Report model ─────────────────────────────────────────────────────────────
 
 export struct ReportMetrics {
@@ -167,6 +236,24 @@ export struct DrillRow {
     counterparty: string,
     doc-id: string,
     amount-str: string,    // pre-formatted by Rust
+}
+
+export struct PaymentsViewData {
+    items: [PaymentItem],
+    incoming-str: string,
+    outgoing-str: string,
+    net-str: string,
+    unmatched-str: string,
+    incoming-sub: string,
+    outgoing-sub: string,
+    unmatched-count: int,
+}
+
+export struct ReportsViewData {
+    metrics: ReportMetrics,
+    chart-bars: [ChartBar],
+    categories: [ExpenseCategory],
+    drill-rows: [DrillRow],
 }
 
 // ── Settings model ───────────────────────────────────────────────────────────
@@ -205,6 +292,15 @@ export struct NumberingRow {
     next-number: int,
 }
 
+export struct SettingsViewData {
+    company-info: CompanyInfo,
+    integrations: [IntegrationItem],
+    team-members: [TeamMember],
+    numbering-rows: [NumberingRow],
+    last-backup-label: string,
+    last-backup-file: string,
+}
+
 // ── Calendar / Day view ──────────────────────────────────────────────────────
 
 export struct DayEvent {
@@ -214,38 +310,13 @@ export struct DayEvent {
     is-primary: bool,
 }
 
-// ── Dashboard Inbox ──────────────────────────────────────────────────────────
-
-export struct InboxItem {
-    kind: string,          // "overdue" | "unsigned" | "act-needed" | "unmatched"
-    doc-id: string,
-    doc-number: string,
-    counterparty: string,
-    amount-str: string,    // pre-formatted Rust
-    age-days: int,
-    action-label: string,  // "Нагадати" | "Підписати" | "Поєднати"
-}
-
-// ── DocChain ─────────────────────────────────────────────────────────────────
-
-export struct ChainStep {
-    doc-type: string,    // "invoice" | "act" | "waybill"
-    doc-number: string,  // "" якщо документ відсутній
-    amount-str: string,  // pre-formatted Rust
-    status: string,      // "draft"|"issued"|"signed"|"paid"|"overdue"|""
-    exists: bool,
-}
-
-export struct DocChainGroup {
-    doc-id: string,      // ID батьківського документа
-    steps: [ChainStep],
-}
-
-// ── Chart bar ────────────────────────────────────────────────────────────────
-// Named type to replace anonymous {rev-h,exp-h,month} — necessary for Rust access.
-
-export struct ChartBar {
-    rev-h: float,    // revenue bar height 0.0–1.0
-    exp-h: float,    // expenses bar height 0.0–1.0
-    month: string,   // abbreviated label "Січ", "Лют", etc.
+export struct TasksViewData {
+    open: [TaskItem],
+    done: [TaskItem],
+    all: [TaskItem],
+    day-events: [DayEvent],
+    open-count: int,
+    high-count: int,
+    done-count: int,
+    today-label: string,
 }

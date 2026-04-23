@@ -48,14 +48,16 @@ pub async fn prepare_payments_data(pool: &PgPool, company_id: Uuid) -> PaymentsD
 pub fn apply_payments_to_ui(ui: &crate::AppWindow, data: PaymentsData) {
     let net = data.kpi.incoming_month - data.kpi.outgoing_month;
 
-    ui.set_payments(ModelRc::new(VecModel::from(data.items)));
-    ui.set_pay_incoming_str(format_money_round(data.kpi.incoming_month).into());
-    ui.set_pay_outgoing_str(format_money_round(data.kpi.outgoing_month).into());
-    ui.set_pay_net_str(format_money_round(net).into());
-    ui.set_pay_unmatched_count(data.kpi.unmatched_count as i32);
-    ui.set_pay_unmatched_str(data.kpi.unmatched_count.to_string().into());
-    ui.set_pay_incoming_sub("поточний місяць".into());
-    ui.set_pay_outgoing_sub("поточний місяць".into());
+    ui.set_payments_screen(crate::PaymentsViewData {
+        items: ModelRc::new(VecModel::from(data.items)),
+        incoming_str: format_money_round(data.kpi.incoming_month).into(),
+        outgoing_str: format_money_round(data.kpi.outgoing_month).into(),
+        net_str: format_money_round(net).into(),
+        unmatched_str: data.kpi.unmatched_count.to_string().into(),
+        incoming_sub: "поточний місяць".into(),
+        outgoing_sub: "поточний місяць".into(),
+        unmatched_count: data.kpi.unmatched_count as i32,
+    });
 }
 
 fn notify_user(summary: &str, body: &str) {

@@ -75,8 +75,15 @@ pub async fn prepare_documents_data(
 }
 
 pub fn apply_documents_to_ui(ui: &crate::AppWindow, data: DocumentsData) {
-    ui.set_docs_total_count(data.total);
-    ui.set_all_documents(ModelRc::new(VecModel::from(data.items)));
+    let previous = ui.get_documents();
+    ui.set_documents(crate::DocumentsViewData {
+        items: ModelRc::new(VecModel::from(data.items)),
+        selected_ids: previous.selected_ids,
+        total_count: data.total,
+        page_count: if previous.page_count > 0 { previous.page_count } else { 1 },
+        chain_steps: previous.chain_steps,
+        cp_doc_chains: previous.cp_doc_chains,
+    });
 }
 
 /// Підписує всі document callbacks на UI компонент.

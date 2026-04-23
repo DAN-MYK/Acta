@@ -365,12 +365,14 @@ pub async fn prepare_settings_data(pool: &PgPool, company_id: Uuid) -> SettingsD
 }
 
 pub fn apply_settings_to_ui(ui: &crate::AppWindow, data: SettingsData) {
-    ui.set_company_info(data.company_info);
-    ui.set_integrations(ModelRc::new(VecModel::from(data.integrations)));
-    ui.set_team_members(ModelRc::new(VecModel::from(data.team_members)));
-    ui.set_numbering_rows(ModelRc::new(VecModel::from(data.numbering_rows)));
-    ui.set_last_backup_label(data.last_backup_label.into());
-    ui.set_last_backup_file(data.last_backup_file.into());
+    ui.set_settings_screen(crate::SettingsViewData {
+        company_info: data.company_info,
+        integrations: ModelRc::new(VecModel::from(data.integrations)),
+        team_members: ModelRc::new(VecModel::from(data.team_members)),
+        numbering_rows: ModelRc::new(VecModel::from(data.numbering_rows)),
+        last_backup_label: data.last_backup_label.into(),
+        last_backup_file: data.last_backup_file.into(),
+    });
 }
 
 pub fn wire_settings_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {

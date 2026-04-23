@@ -25,8 +25,6 @@
 
 Усі нові UI-зміни, callback-и, screen contracts і accessibility-оновлення потрібно вносити тільки в `ui-redesign/`.
 
-Усі нові UI-зміни, callback-и, screen contracts і accessibility-оновлення потрібно вносити тільки в `ui-redesign/`.
-
 Legacy Slint-дерево в `ui/` та legacy Rust presenter-шар для старого `MainWindow`
 в `src/ui/{acts,companies,invoices,waybills}.rs` уже прибрано з репозиторію.
 Історичний контекст по міграції збережено лише в документації.

@@ -137,17 +137,19 @@ pub fn apply_dashboard_to_ui(ui: &crate::AppWindow, data: DashboardData) {
         delta_net: data.delta_net_str.clone().into(),
     };
 
-    ui.set_dash_metrics(metrics);
-    ui.set_dash_revenue_str(data.revenue_str.into());
-    ui.set_dash_expenses_str(data.expenses_str.into());
-    ui.set_dash_net_str(data.net_str.into());
-    ui.set_dash_outstanding_str(data.outstanding_str.into());
-    ui.set_dash_overdue_str(data.overdue_str.into());
-    ui.set_dash_journal(ModelRc::new(VecModel::from(data.journal)));
-    ui.set_dash_tasks(ModelRc::new(VecModel::from(data.tasks)));
-    ui.set_dash_inbox(ModelRc::new(VecModel::from(data.inbox)));
-    ui.set_dash_chart_bars(ModelRc::new(VecModel::from(data.chart_bars)));
-    ui.set_dash_accounts(ModelRc::new(VecModel::<crate::AccountItem>::default()));
+    ui.set_dashboard(crate::DashboardViewData {
+        metrics,
+        chart_bars: ModelRc::new(VecModel::from(data.chart_bars)),
+        journal: ModelRc::new(VecModel::from(data.journal)),
+        accounts: ModelRc::new(VecModel::<crate::AccountItem>::default()),
+        tasks: ModelRc::new(VecModel::from(data.tasks)),
+        revenue_str: data.revenue_str.into(),
+        expenses_str: data.expenses_str.into(),
+        net_str: data.net_str.into(),
+        outstanding_str: data.outstanding_str.into(),
+        overdue_str: data.overdue_str.into(),
+        inbox: ModelRc::new(VecModel::from(data.inbox)),
+    });
 }
 
 #[cfg(test)]

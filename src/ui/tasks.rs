@@ -66,14 +66,16 @@ pub fn apply_tasks_to_ui(ui: &crate::AppWindow, data: TasksData) {
         .filter(|t| t.priority == crate::Priority::High)
         .count() as i32;
 
-    ui.set_tasks_open_count(data.open.len() as i32);
-    ui.set_tasks_done_count(data.done.len() as i32);
-    ui.set_tasks_high_count(high_count);
-    ui.set_tasks_today_label(today_label());
-    ui.set_tasks_open(ModelRc::new(VecModel::from(data.open)));
-    ui.set_tasks_done(ModelRc::new(VecModel::from(data.done)));
-    ui.set_tasks_all(ModelRc::new(VecModel::from(data.all)));
-    ui.set_day_events(ModelRc::new(VecModel::<crate::DayEvent>::default()));
+    ui.set_tasks_screen(crate::TasksViewData {
+        open: ModelRc::new(VecModel::from(data.open)),
+        done: ModelRc::new(VecModel::from(data.done)),
+        all: ModelRc::new(VecModel::from(data.all)),
+        day_events: ModelRc::new(VecModel::<crate::DayEvent>::default()),
+        open_count: data.open.len() as i32,
+        high_count,
+        done_count: data.done.len() as i32,
+        today_label: today_label(),
+    });
 }
 
 fn today_label() -> slint::SharedString {
