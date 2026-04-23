@@ -7,6 +7,8 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::models::DocumentDirection;
+
 /// Статус видаткової накладної.
 ///
 /// `sqlx::Type` + `type_name = "waybill_status"` — зв'язує з PostgreSQL ENUM.
@@ -76,7 +78,7 @@ pub struct Waybill {
     pub counterparty_id: Uuid,
     pub contract_id: Option<Uuid>,
     pub category_id: Option<Uuid>,
-    pub direction: String,
+    pub direction: DocumentDirection,
     pub date: NaiveDate,
     pub total_amount: Decimal,
     pub status: WaybillStatus,
@@ -107,7 +109,7 @@ pub struct WaybillItem {
 pub struct WaybillListRow {
     pub id: Uuid,
     pub number: String,
-    pub direction: String,
+    pub direction: DocumentDirection,
     pub date: NaiveDate,
     pub counterparty_name: String,
     pub total_amount: Decimal,
