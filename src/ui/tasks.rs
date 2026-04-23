@@ -124,22 +124,18 @@ pub fn wire_task_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
         }
     });
 
-    // Epic 7: Реалізація базових no-op callbacks
-    ui.on_task_filter_changed({
-        let ctx = ctx.clone();
-        move |filter| {
-            ctx.update_task_state(|state| {
-                state.filter = filter.to_string();
-            });
-            tracing::debug!("task_filter_changed: {} — UI list selection updates automatically", filter);
-        }
+    // Epic 7: Фільтрація завдань — чисто клієнтська сторона Slint.
+    // Компонент Tasks має три моделі (open/done/all), обирає потрібну за поточною вкладкою.
+    // Rust-side оновлення state тут не потрібне — DB запит однаково повертає всі три групи.
+    ui.on_task_filter_changed(|filter| {
+        tracing::debug!("task_filter_changed: {} — вибір списку відбувається у Slint-компоненті", filter);
     });
 
     ui.on_task_new(|| {
-        tracing::warn!("TODO: створення нового завдання — UI form coming in future sprint");
+        tracing::warn!("TODO: створення нового завдання — форма планується у наступному спринті");
     });
     ui.on_task_more(|id| {
-        tracing::warn!("TODO: показати більше про завдання {} — detail view coming in future sprint", id);
+        tracing::warn!("TODO: показати більше про завдання {} — детальний вигляд планується у наступному спринті", id);
     });
 }
 

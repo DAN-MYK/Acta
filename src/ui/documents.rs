@@ -21,9 +21,7 @@ pub async fn prepare_documents_data(
     search: Option<&str>,
     tab: Option<&str>,
 ) -> DocumentsData {
-    let include_acts     = !matches!(tab, Some("invoice") | Some("waybill"));
-    let include_invoices = !matches!(tab, Some("act")     | Some("waybill"));
-    let include_waybills = !matches!(tab, Some("act")     | Some("invoice"));
+    let (include_acts, include_invoices, include_waybills) = tab_includes(tab);
 
     let (acts, invoices, waybills) = tokio::join!(
         async {
@@ -76,13 +74,16 @@ pub async fn prepare_documents_data(
 
 pub fn apply_documents_to_ui(ui: &crate::AppWindow, data: DocumentsData) {
     let previous = ui.get_documents();
+    // chain_steps і cp_doc_chains завжди перестворюються порожніми: on_doc_chain_load
+    // сам створює новий VecModel при завантаженні ланцюга. Це прибирає потребу у
+    // подвійному set_documents у bootstrap::build_ui для ініціалізації цих полів.
     ui.set_documents(crate::DocumentsViewData {
         items: ModelRc::new(VecModel::from(data.items)),
         selected_ids: previous.selected_ids,
         total_count: data.total,
         page_count: if previous.page_count > 0 { previous.page_count } else { 1 },
-        chain_steps: previous.chain_steps,
-        cp_doc_chains: previous.cp_doc_chains,
+        chain_steps: ModelRc::new(VecModel::<crate::ChainStep>::default()),
+        cp_doc_chains: ModelRc::new(VecModel::<crate::DocChainGroup>::default()),
     });
 }
 
@@ -171,25 +172,25 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
 
     // Epic 7: Реалізація базових no-op callbacks
     ui.on_doc_new(|| {
-        tracing::warn!("TODO: створення нового документа — dialog form coming in future sprint");
+        tracing::warn!("TODO: створення нового документа — форма планується у наступному спринті");
     });
     ui.on_doc_open(|id| {
-        tracing::warn!("TODO: відкриття документа {} — detail view coming in future sprint", id);
+        tracing::warn!("TODO: відкриття документа {} — детальний вигляд планується у наступному спринті", id);
     });
     ui.on_doc_toggled(|_id, _sel| {
-        tracing::debug!("doc_toggled — document selection updates UI local state automatically");
+        tracing::debug!("doc_toggled — вибір рядку зберігається у локальному стані Slint-компоненту");
     });
     ui.on_doc_page_changed(|_p| {
-        tracing::debug!("doc_page_changed — pagination updates UI local state automatically");
+        tracing::debug!("doc_page_changed — пагінація зберігається у локальному стані Slint-компоненту");
     });
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Epic 9: Presenter-layer tests
+// Presenter helpers — shared between production code and tests
 // ────────────────────────────────────────────────────────────────────────────
 
 /// Визначає які типи документів включити за значенням вкладки.
-#[cfg(test)]
+/// Використовується в prepare_documents_data та unit-тестах.
 fn tab_includes(tab: Option<&str>) -> (bool, bool, bool) {
     let include_acts     = !matches!(tab, Some("invoice") | Some("waybill"));
     let include_invoices = !matches!(tab, Some("act")     | Some("waybill"));
@@ -234,7 +235,7 @@ mod tests {
     }
 
     #[test]
-    fn tab_invoice_excludes_invoices() {
+    fn tab_invoice_shows_only_invoices() {
         let (acts, inv, wb) = tab_includes(Some("invoice"));
         assert!(!acts);
         assert!(inv);
@@ -242,7 +243,7 @@ mod tests {
     }
 
     #[test]
-    fn tab_act_excludes_acts() {
+    fn tab_act_shows_only_acts() {
         let (acts, inv, wb) = tab_includes(Some("act"));
         assert!(acts);
         assert!(!inv);

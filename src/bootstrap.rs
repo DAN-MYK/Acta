@@ -9,7 +9,7 @@ use uuid::Uuid;
 use acta::app_ctx::{AppCtx, AppScreen};
 
 use crate::ui;
-use crate::{AppWindow, ChainStep, DocChainGroup, NavScreen};
+use crate::{AppWindow, ChainStep, NavScreen};
 
 struct InitialUiData {
     dashboard: ui::dashboard::DashboardData,
@@ -249,16 +249,8 @@ pub fn spawn_refresh_screen(ui_weak: slint::Weak<AppWindow>, ctx: Arc<AppCtx>, s
 pub fn build_ui(rt: &Runtime, ctx: &Arc<AppCtx>) -> Result<AppWindow> {
     let ui = AppWindow::new()?;
     let data = rt.block_on(load_initial_ui_data(ctx));
+    // apply_documents_to_ui всередині ініціалізує chain_steps/cp_doc_chains порожніми VecModel-ами.
     apply_initial_ui_data(&ui, data);
-    let documents = ui.get_documents();
-    ui.set_documents(crate::DocumentsViewData {
-        items: documents.items,
-        selected_ids: documents.selected_ids,
-        total_count: documents.total_count,
-        page_count: if documents.page_count > 0 { documents.page_count } else { 1 },
-        chain_steps: ModelRc::new(VecModel::<ChainStep>::default()),
-        cp_doc_chains: ModelRc::new(VecModel::<DocChainGroup>::default()),
-    });
 
     ui.set_shell(crate::ShellChrome {
         company_name: "Acta".into(),
