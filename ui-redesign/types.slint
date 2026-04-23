@@ -370,3 +370,20 @@ export struct TasksViewData {
     done-count: int,
     today-label: string,
 }
+
+// ── Category model ───────────────────────────────────────────────────────────
+
+export struct Category {
+    id: string,
+    name: string,
+    kind: CategoryKind,
+    parent-id: string,     // empty if no parent
+    is-archived: bool,
+}
+
+export struct CategorySelectItem {
+    id: string,
+    name: string,
+    kind: CategoryKind,
+    depth: int,            // 0 = top level, 1 = subcategory
+}
