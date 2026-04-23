@@ -23,6 +23,7 @@ pub struct ActKpi {
 }
 
 use crate::models::act::{Act, ActItem, ActListRow, ActStatus, NewAct, NewActItem, UpdateAct};
+use crate::models::DocumentDirection;
 
 fn count_index_for_status(status: &ActStatus) -> usize {
     match status {
@@ -117,7 +118,7 @@ pub async fn list_filtered(
     pool: &PgPool,
     company_id: Uuid,
     status_filter: Option<ActStatus>,
-    direction: Option<&str>,
+    direction: Option<DocumentDirection>,
     search_query: Option<&str>,
     counterparty_id: Option<Uuid>,
     date_from: Option<chrono::NaiveDate>,
