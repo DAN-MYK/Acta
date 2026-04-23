@@ -10,6 +10,7 @@ use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::models::DocumentDirection;
 use crate::models::waybill::{
     Waybill, WaybillItem, WaybillListRow, WaybillStatus, NewWaybill, NewWaybillItem, UpdateWaybill,
 };
@@ -69,7 +70,7 @@ pub async fn list_filtered(
     pool: &PgPool,
     company_id: Uuid,
     status_filter: Option<WaybillStatus>,
-    direction: Option<&str>,
+    direction: Option<DocumentDirection>,
     search_query: Option<&str>,
     counterparty_id: Option<Uuid>,
     date_from: Option<chrono::NaiveDate>,

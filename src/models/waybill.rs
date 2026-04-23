@@ -122,7 +122,7 @@ pub struct NewWaybill {
     pub counterparty_id: Uuid,
     pub contract_id: Option<Uuid>,
     pub category_id: Option<Uuid>,
-    pub direction: String,
+    pub direction: DocumentDirection,
     pub date: NaiveDate,
     pub notes: Option<String>,
     pub bas_id: Option<String>,
