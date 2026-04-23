@@ -56,7 +56,7 @@ pub struct Category {
     pub id:          Uuid,
     pub name:        String,
     /// "income" або "expense"
-    pub kind:        String,
+    pub kind:        CategoryKind,
     pub parent_id:   Option<Uuid>,
     pub company_id:  Uuid,
     pub is_archived: bool,
@@ -85,7 +85,7 @@ pub struct UpdateCategory {
 pub struct CategorySelectItem {
     pub id:       Uuid,
     pub name:     String,
-    pub kind:     String,
+    pub kind:     CategoryKind,
     pub depth:    u8,    // 0 — верхній рівень, 1 — підкатегорія
 }
 
