@@ -12,8 +12,11 @@ use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::models::invoice::{
-    Invoice, InvoiceItem, InvoiceListRow, InvoiceStatus, NewInvoice, NewInvoiceItem, UpdateInvoice,
+use crate::models::{
+    invoice::{
+        Invoice, InvoiceItem, InvoiceListRow, InvoiceStatus, NewInvoice, NewInvoiceItem, UpdateInvoice,
+    },
+    DocumentDirection,
 };
 
 /// Згенерувати наступний номер рахунку у форматі "РАХ-РРРР-NNN".
@@ -76,7 +79,7 @@ pub async fn list_filtered(
     pool: &PgPool,
     company_id: Uuid,
     status_filter: Option<InvoiceStatus>,
-    direction: Option<&str>,
+    direction: Option<DocumentDirection>,
     search_query: Option<&str>,
     counterparty_id: Option<Uuid>,
     date_from: Option<chrono::NaiveDate>,
