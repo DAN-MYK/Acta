@@ -68,7 +68,7 @@ pub struct Category {
 #[derive(Debug, Clone)]
 pub struct NewCategory {
     pub name:       String,
-    pub kind:       String,
+    pub kind:       CategoryKind,
     pub parent_id:  Option<Uuid>,
     pub company_id: Uuid,
 }

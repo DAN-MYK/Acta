@@ -31,7 +31,7 @@ pub async fn list(pool: &PgPool, company_id: Uuid) -> Result<Vec<Category>> {
 pub async fn list_for_select(
     pool: &PgPool,
     company_id: Uuid,
-    kind: &str,
+    kind: CategoryKind,
 ) -> Result<Vec<CategorySelectItem>> {
     struct Row {
         id:        Uuid,
