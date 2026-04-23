@@ -8,11 +8,14 @@ pub mod dashboard;
 pub mod document_template;
 pub mod invoice;
 pub mod payment;
+pub mod shared;
 pub mod task;
 pub mod waybill;
 
 #[allow(unused_imports)]
 pub use act::{Act, ActItem, ActListRow, ActStatus, NewAct, NewActItem, UpdateAct};
+#[allow(unused_imports)]
+pub use shared::DocumentDirection;
 #[allow(unused_imports)]
 pub use category::{Category, CategorySelectItem, NewCategory, UpdateCategory};
 #[allow(unused_imports)]
