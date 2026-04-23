@@ -44,7 +44,77 @@ export enum Direction {
     Out,  // Списання
 }
 
+export enum DocumentDirection {
+    outgoing,
+    incoming,
+}
+
+export enum CategoryKind {
+    income,
+    expense,
+}
+
 // ── Shared item structs ──────────────────────────────────────────────────────
+
+export struct Act {
+    id: string,
+    number: string,
+    direction: DocumentDirection,
+    date: string,          // "dd.mm.yyyy"
+    counterparty: string,
+    amount-str: string,    // pre-formatted by Rust
+    status: DocumentStatus,
+}
+
+export struct ActListRow {
+    id: string,
+    number: string,
+    direction: DocumentDirection,
+    date: string,          // "dd.mm.yyyy"
+    counterparty-name: string,
+    total-amount-str: string,  // pre-formatted by Rust
+    status: DocumentStatus,
+}
+
+export struct Invoice {
+    id: string,
+    number: string,
+    direction: DocumentDirection,
+    date: string,          // "dd.mm.yyyy"
+    counterparty: string,
+    amount-str: string,    // pre-formatted by Rust
+    status: DocumentStatus,
+}
+
+export struct InvoiceListRow {
+    id: string,
+    number: string,
+    direction: DocumentDirection,
+    date: string,          // "dd.mm.yyyy"
+    counterparty-name: string,
+    total-amount-str: string,  // pre-formatted by Rust
+    status: DocumentStatus,
+}
+
+export struct Waybill {
+    id: string,
+    number: string,
+    direction: DocumentDirection,
+    date: string,          // "dd.mm.yyyy"
+    counterparty: string,
+    amount-str: string,    // pre-formatted by Rust
+    status: DocumentStatus,
+}
+
+export struct WaybillListRow {
+    id: string,
+    number: string,
+    direction: DocumentDirection,
+    date: string,          // "dd.mm.yyyy"
+    counterparty-name: string,
+    total-amount-str: string,  // pre-formatted by Rust
+    status: DocumentStatus,
+}
 
 export struct DocumentItem {
     id: string,
