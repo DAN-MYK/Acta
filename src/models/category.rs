@@ -116,4 +116,15 @@ mod tests {
             Ok(CategoryKind::Expense)
         );
     }
+
+    #[test]
+    fn test_category_kind_display() {
+        assert_eq!(CategoryKind::Income.to_string(), "Дохід");
+        assert_eq!(CategoryKind::Expense.to_string(), "Видаток");
+    }
+
+    #[test]
+    fn test_category_kind_try_from_invalid() {
+        assert!(CategoryKind::try_from("invalid".to_string()).is_err());
+    }
 }
