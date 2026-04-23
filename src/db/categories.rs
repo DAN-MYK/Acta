@@ -7,7 +7,7 @@ use anyhow::Result;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::models::category::{Category, CategorySelectItem, NewCategory, UpdateCategory};
+use crate::models::category::{Category, CategoryKind, CategorySelectItem, NewCategory, UpdateCategory};
 
 /// Всі категорії компанії (включаючи архівовані).
 pub async fn list(pool: &PgPool, company_id: Uuid) -> Result<Vec<Category>> {
@@ -70,7 +70,7 @@ pub async fn list_for_select(
     Ok(rows
         .into_iter()
         .filter_map(|r| {
-            let kind = r.kind.try_into().ok()?;
+            let kind = CategoryKind::try_from(r.kind.to_string()).ok()?;
             Some(CategorySelectItem {
                 id:    r.id,
                 name:  r.name,
@@ -121,7 +121,7 @@ pub async fn list_all_for_select(
     Ok(rows
         .into_iter()
         .filter_map(|r| {
-            let kind = r.kind.try_into().ok()?;
+            let kind = CategoryKind::try_from(r.kind.to_string()).ok()?;
             Some(CategorySelectItem {
                 id:    r.id,
                 name:  r.name,
