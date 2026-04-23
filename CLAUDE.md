@@ -93,3 +93,22 @@ cargo test
 
 ## Уроки (поповнювати при помилках)
 @.claude/lessons.md
+
+## Відомі технічні борги (виправити у майбутньому)
+
+### [2026-04-23] Read-Modify-Write на ViewData — latent fragility
+**Де:** `src/ui/documents.rs:apply_documents_to_ui`, `src/ui/counterparties.rs:apply_counterparties_to_ui`  
+**Проблема:** Патерн `let previous = ui.get_documents(); ui.set_documents(... previous.fields ...)` не є атомарним.
+Зараз безпечний бо всі apply-функції викликаються лише з Slint event thread (через `upgrade_in_event_loop`).
+Якщо у майбутньому додати другий паралельний запит що теж викликає `apply_documents_to_ui` — можливий race condition.  
+**Виправлення:** Передавати в apply-функції явні поля замість read-back з UI, або гарантувати single writer через архітектуру.
+
+### [2026-04-23] ShellChrome hardcoded — не відображає реальну компанію
+**Де:** `src/bootstrap.rs:build_ui` (~рядок 263)  
+**Проблема:** `company_name: "Acta"`, `user_name: "Адміністратор"` — статичні рядки. Не оновлюються при зміні компанії через налаштування.  
+**Виправлення:** Завантажувати з `SettingsData.company_info.short_name` у `apply_initial_ui_data`, і оновлювати через `wire_settings_callbacks` при `settings-company-saved`.
+
+### [2026-04-23] Відсутні тести на data wiring (не тільки callback wiring)
+**Де:** `tests/ui_events.rs`  
+**Проблема:** Тести перевіряють що callbacks зареєстровані, але не перевіряють що дані правильно потрапляють у Slint properties (`tasks-screen.open-count`, `shell.company-name` тощо). Якщо field name зміниться — Slint compile впіймає, але якщо property просто відключиться — тест не помітить.  
+**Виправлення:** Додати тести у Epic 9 presenter layer: після `apply_*_to_ui` перевіряти що `ui.get_tasks_screen().open_count == expected`.
