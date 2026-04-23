@@ -29,3 +29,17 @@ Feature callbacks не повинні будувати другий парале
 - `spawn_refresh_screen()` як безпечний async entrypoint з UI callback-ів
 
 Це прибирає дублювання між initial load, navigation refresh і feature-triggered reload.
+
+## UI contract після Epic 6
+
+`AppWindow` більше не повинен розростатися через flat data properties під кожен екран.
+Канонічний підхід для redesign:
+
+- shell/chrome дані йдуть окремим `ShellChrome`
+- screen data йде через feature-specific view models:
+  `DashboardViewData`, `DocumentsViewData`, `CounterpartiesViewData`,
+  `PaymentsViewData`, `ReportsViewData`, `TasksViewData`, `SettingsViewData`
+- screen-local UI state на кшталт активної вкладки, пошуку чи drill selection
+  лишається локальним `AppWindow`/screen state, якщо це не shared runtime snapshot
+
+Це зменшує surface area root component і відділяє shell contract від feature payload-ів.

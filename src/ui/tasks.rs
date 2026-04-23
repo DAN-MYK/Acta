@@ -60,6 +60,8 @@ pub async fn prepare_tasks_data(pool: &PgPool) -> TasksData {
 }
 
 pub fn apply_tasks_to_ui(ui: &crate::AppWindow, data: TasksData) {
+    let open_count = data.open.len() as i32;
+    let done_count = data.done.len() as i32;
     let high_count = data
         .open
         .iter()
@@ -71,9 +73,9 @@ pub fn apply_tasks_to_ui(ui: &crate::AppWindow, data: TasksData) {
         done: ModelRc::new(VecModel::from(data.done)),
         all: ModelRc::new(VecModel::from(data.all)),
         day_events: ModelRc::new(VecModel::<crate::DayEvent>::default()),
-        open_count: data.open.len() as i32,
+        open_count,
         high_count,
-        done_count: data.done.len() as i32,
+        done_count,
         today_label: today_label(),
     });
 }
