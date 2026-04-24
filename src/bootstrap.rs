@@ -383,6 +383,9 @@ fn wire_stub_callbacks(ui: &AppWindow) {
                 let documents = ui.get_documents();
                 ui.set_documents(crate::DocumentsViewData {
                     items: documents.items,
+                    invoice_items: documents.invoice_items,
+                    act_items: documents.act_items,
+                    waybill_items: documents.waybill_items,
                     selected_ids: documents.selected_ids,
                     total_count: documents.total_count,
                     page_count: documents.page_count,

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use slint::{ComponentHandle, ModelRc, VecModel};
+use slint::{ComponentHandle, Model, ModelRc, VecModel};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -19,32 +19,14 @@ pub async fn prepare_documents_data(
     pool: &PgPool,
     company_id: Uuid,
     search: Option<&str>,
-    tab: Option<&str>,
+    _tab: Option<&str>,
 ) -> DocumentsData {
-    let (include_acts, include_invoices, include_waybills) = tab_includes(tab);
-
+    // Завжди завантажуємо всі типи — фільтрування по вкладці робиться на клієнті
+    // через invoice-items / act-items / waybill-items та visible-rows у Slint.
     let (acts, invoices, waybills) = tokio::join!(
-        async {
-            if include_acts {
-                db::acts::list_filtered(pool, company_id, None, None, search, None, None, None).await
-            } else {
-                Ok(vec![])
-            }
-        },
-        async {
-            if include_invoices {
-                db::invoices::list_filtered(pool, company_id, None, None, search, None, None, None).await
-            } else {
-                Ok(vec![])
-            }
-        },
-        async {
-            if include_waybills {
-                db::waybills::list_filtered(pool, company_id, None, None, search, None, None, None).await
-            } else {
-                Ok(vec![])
-            }
-        },
+        db::acts::list_filtered(pool, company_id, None, None, search, None, None, None),
+        db::invoices::list_filtered(pool, company_id, None, None, search, None, None, None),
+        db::waybills::list_filtered(pool, company_id, None, None, search, None, None, None),
     );
 
     let mut combined: Vec<(chrono::NaiveDate, crate::DocumentItem)> = vec![];
@@ -81,7 +63,7 @@ pub fn apply_documents_to_ui(ui: &crate::AppWindow, data: DocumentsData) {
         .items
         .into_iter()
         .map(|mut item| {
-            item.selected = selected_ids.iter().any(|id| *id == item.id);
+            item.selected = selected_ids.iter().any(|id| id == item.id);
             item
         })
         .collect();
@@ -207,8 +189,26 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
     ui.on_doc_open(|id| {
         tracing::warn!("TODO: відкриття документа {} — детальний вигляд планується у наступному спринті", id);
     });
+    ui.on_doc_edit(|id| {
+        tracing::warn!("TODO: редагування документа {} — форма редагування планується у наступному спринті", id);
+    });
     ui.on_doc_toggled(|_id, _sel| {
         tracing::debug!("doc_toggled — вибір рядку зберігається у локальному стані Slint-компоненту");
+    });
+    ui.on_doc_selection_cleared(|| {
+        tracing::debug!("doc_selection_cleared — очищення вибору в UI");
+    });
+    ui.on_doc_more_actions(|id| {
+        tracing::warn!("TODO: doc_more_actions({}) — контекстне меню планується у наступному спринті", id);
+    });
+    ui.on_doc_bulk_send(|| {
+        tracing::warn!("TODO: doc_bulk_send — масове надсилання планується у наступному спринті");
+    });
+    ui.on_doc_bulk_archive(|| {
+        tracing::warn!("TODO: doc_bulk_archive — масове архівування планується у наступному спринті");
+    });
+    ui.on_doc_bulk_delete(|| {
+        tracing::warn!("TODO: doc_bulk_delete — масове видалення планується у наступному спринті");
     });
     ui.on_doc_page_changed(|_p| {
         tracing::debug!("doc_page_changed — пагінація зберігається у локальному стані Slint-компоненту");
@@ -309,6 +309,7 @@ mod tests {
                 amount_str: "1 000 ₴".into(),
                 status: crate::DocumentStatus::Issued,
                 linked_id: "".into(),
+                selected: false,
             },
             crate::DocumentItem {
                 id: "inv:2".into(),
@@ -319,6 +320,7 @@ mod tests {
                 amount_str: "2 000 ₴".into(),
                 status: crate::DocumentStatus::Draft,
                 linked_id: "".into(),
+                selected: false,
             },
         ];
         let data = super::DocumentsData {

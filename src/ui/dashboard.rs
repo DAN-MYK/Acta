@@ -167,8 +167,8 @@ pub fn apply_dashboard_to_ui(ui: &crate::AppWindow, data: DashboardData) {
         ytd_total_str: data.ytd_total_str.into(),
         ytd_revenue_str: data.ytd_revenue_str.into(),
         ytd_expenses_str: data.ytd_expenses_str.into(),
-        spark_revenue: data.spark_revenue.into(),
-        spark_expenses: data.spark_expenses.into(),
+        spark_revenue: ModelRc::new(VecModel::from(data.spark_revenue)),
+        spark_expenses: ModelRc::new(VecModel::from(data.spark_expenses)),
         inbox: ModelRc::new(VecModel::from(data.inbox)),
     });
 }
