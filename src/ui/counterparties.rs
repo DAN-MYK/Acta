@@ -113,7 +113,7 @@ pub fn apply_counterparties_to_ui(ui: &crate::AppWindow, data: CounterpartiesDat
 
 pub fn apply_counterparty_detail_to_ui(ui: &crate::AppWindow, data: CounterpartyDetailData) {
     ui.set_counterparty_detail(crate::CounterpartyDetailViewData {
-        detail: data.detail,
+        info: data.detail,
         documents: ModelRc::new(VecModel::from(data.documents)),
         payments: ModelRc::new(VecModel::from(data.payments)),
     });

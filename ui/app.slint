@@ -266,15 +266,15 @@ export component AppWindow inherits Window {
             height: 100%;
 
             list: root.counterparties-screen.items;
-            detail: root.counterparty-detail.detail;
+            info: root.counterparty-detail.info;
             detail-docs: root.counterparty-detail.documents;
             detail-payments: root.counterparty-detail.payments;
             selected-id: root.cp-selected-id;
             search-query: root.cp-search;
             active-tab: root.cp-detail-tab-state;
-            detail-balance-str: self.detail.balance-str;
-            detail-balance-is-negative: self.detail.balance-is-negative;
-            detail-overdue-str: self.detail.overdue-amount-str;
+            detail-balance-str: self.info.balance-str;
+            detail-balance-is-negative: self.info.balance-is-negative;
+            detail-overdue-str: self.info.overdue-amount-str;
 
             icon-search: Icons.search;
             icon-plus: Icons.plus;

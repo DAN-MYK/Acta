@@ -203,7 +203,7 @@ component DetailTab inherits Rectangle {
 export component Counterparties inherits Rectangle {
     // Data
     in property <[CounterpartyItem]> list;
-    in property <CounterpartyDetails> detail;
+    in property <CounterpartyDetails> info;
     in property <[DocumentItem]> detail-docs;
     in property <[PaymentItem]> detail-payments;
 
@@ -308,7 +308,7 @@ export component Counterparties inherits Rectangle {
                                     spacing: 6px;
 
                                     Text {
-                                        text: detail.kind == "ФОП" ? "ФІЗИЧНА ОСОБА-ПІДПРИЄМЕЦЬ" : "ЮРИДИЧНА ОСОБА";
+                                        text: info.kind == "ФОП" ? "ФІЗИЧНА ОСОБА-ПІДПРИЄМЕЦЬ" : "ЮРИДИЧНА ОСОБА";
                                         color: AppTheme.text-faint;
                                         font-size: 10.5px;
                                         font-family: AppTheme.font-sans;
@@ -316,20 +316,20 @@ export component Counterparties inherits Rectangle {
                                         letter-spacing: 1.2px;
                                     }
 
-                                    HeadingLg { text: detail.name; }
+                                    HeadingLg { text: info.name; }
 
                                     HorizontalLayout {
                                         spacing: 20px;
 
                                         Text {
-                                            text: "ЄДРПОУ " + detail.edrpou;
+                                            text: "ЄДРПОУ " + info.edrpou;
                                             color: AppTheme.text-muted;
                                             font-size: 12.5px;
                                             font-family: AppTheme.font-mono;
                                         }
 
                                         Text {
-                                            text: "Клієнт з " + detail.client-since;
+                                            text: "Клієнт з " + info.client-since;
                                             color: AppTheme.text-muted;
                                             font-size: 12.5px;
                                             font-family: AppTheme.font-sans;
@@ -370,21 +370,21 @@ export component Counterparties inherits Rectangle {
                                 VDivider { }
                                 CpMetric {
                                     label: "Документів";
-                                    value: detail.doc-count;
+                                    value: info.doc-count;
                                     sub: "документів";
                                 }
                                 VDivider { }
                                 CpMetric {
                                     label: "Прострочено";
-                                    value: detail.overdue-count;
-                                    sub: detail.overdue-amount-str;
-                                    danger: detail.overdue-count > 0;
+                                    value: info.overdue-count;
+                                    sub: info.overdue-amount-str;
+                                    danger: info.overdue-count > 0;
                                 }
                                 VDivider { }
                                 CpMetric {
                                     label: "Останній контакт";
-                                    value: detail.last-contact-days + " дн.";
-                                    sub: detail.last-contact-date;
+                                    value: info.last-contact-days + " дн.";
+                                    sub: info.last-contact-date;
                                 }
                             }
                         }
@@ -561,39 +561,39 @@ export component Counterparties inherits Rectangle {
                             spacing: 14px;
                             Row {
                                 Text { text: "Повна назва"; color: AppTheme.text-faint; font-size: 11.5px; }
-                                Text { text: detail.name; color: AppTheme.text; font-size: 13px; font-family: AppTheme.font-sans; }
+                                Text { text: info.name; color: AppTheme.text; font-size: 13px; font-family: AppTheme.font-sans; }
                             }
                             Row {
                                 Text { text: "ЄДРПОУ"; color: AppTheme.text-faint; font-size: 11.5px; }
-                                Text { text: detail.edrpou; color: AppTheme.text; font-size: 13px; font-family: AppTheme.font-mono; }
+                                Text { text: info.edrpou; color: AppTheme.text; font-size: 13px; font-family: AppTheme.font-mono; }
                             }
                             Row {
                                 Text { text: "ІПН"; color: AppTheme.text-faint; font-size: 11.5px; }
-                                Text { text: detail.ipn; color: AppTheme.text; font-size: 13px; font-family: AppTheme.font-mono; }
+                                Text { text: info.ipn; color: AppTheme.text; font-size: 13px; font-family: AppTheme.font-mono; }
                             }
                             Row {
                                 Text { text: "IBAN"; color: AppTheme.text-faint; font-size: 11.5px; }
-                                Text { text: detail.iban; color: AppTheme.text; font-size: 13px; font-family: AppTheme.font-mono; }
+                                Text { text: info.iban; color: AppTheme.text; font-size: 13px; font-family: AppTheme.font-mono; }
                             }
                             Row {
                                 Text { text: "Банк"; color: AppTheme.text-faint; font-size: 11.5px; }
-                                Text { text: detail.bank; color: AppTheme.text; font-size: 13px; font-family: AppTheme.font-sans; }
+                                Text { text: info.bank; color: AppTheme.text; font-size: 13px; font-family: AppTheme.font-sans; }
                             }
                             Row {
                                 Text { text: "Юр. адреса"; color: AppTheme.text-faint; font-size: 11.5px; }
-                                Text { text: detail.address; color: AppTheme.text; font-size: 13px; font-family: AppTheme.font-sans; }
+                                Text { text: info.address; color: AppTheme.text; font-size: 13px; font-family: AppTheme.font-sans; }
                             }
                             Row {
                                 Text { text: "Директор"; color: AppTheme.text-faint; font-size: 11.5px; }
-                                Text { text: detail.director; color: AppTheme.text; font-size: 13px; font-family: AppTheme.font-sans; }
+                                Text { text: info.director; color: AppTheme.text; font-size: 13px; font-family: AppTheme.font-sans; }
                             }
                             Row {
                                 Text { text: "Телефон"; color: AppTheme.text-faint; font-size: 11.5px; }
-                                Text { text: detail.phone; color: AppTheme.text; font-size: 13px; font-family: AppTheme.font-mono; }
+                                Text { text: info.phone; color: AppTheme.text; font-size: 13px; font-family: AppTheme.font-mono; }
                             }
                             Row {
                                 Text { text: "Email"; color: AppTheme.text-faint; font-size: 11.5px; }
-                                Text { text: detail.email; color: AppTheme.text; font-size: 13px; font-family: AppTheme.font-mono; }
+                                Text { text: info.email; color: AppTheme.text; font-size: 13px; font-family: AppTheme.font-mono; }
                             }
                         }
                     }
