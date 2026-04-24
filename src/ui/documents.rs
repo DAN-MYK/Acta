@@ -215,22 +215,8 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
     });
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Presenter helpers — shared between production code and tests
-// ────────────────────────────────────────────────────────────────────────────
-
-/// Визначає які типи документів включити за значенням вкладки.
-/// Використовується в prepare_documents_data та unit-тестах.
-fn tab_includes(tab: Option<&str>) -> (bool, bool, bool) {
-    let include_acts     = !matches!(tab, Some("invoice") | Some("waybill"));
-    let include_invoices = !matches!(tab, Some("act")     | Some("waybill"));
-    let include_waybills = !matches!(tab, Some("act")     | Some("invoice"));
-    (include_acts, include_invoices, include_waybills)
-}
-
 #[cfg(test)]
 mod tests {
-    use super::tab_includes;
     use chrono::NaiveDate;
 
     #[test]
@@ -244,48 +230,6 @@ mod tests {
         sorted.sort_by(|a, b| b.0.cmp(&a.0));
         assert_eq!(sorted[0].1, "B");
         assert_eq!(sorted[2].1, "C");
-    }
-
-    // ── Tab filtering ───────────────────────────────────────────────
-
-    #[test]
-    fn tab_all_includes_everything() {
-        let (acts, inv, wb) = tab_includes(None);
-        assert!(acts);
-        assert!(inv);
-        assert!(wb);
-    }
-
-    #[test]
-    fn tab_all_string_includes_everything() {
-        let (acts, inv, wb) = tab_includes(Some("all"));
-        assert!(acts);
-        assert!(inv);
-        assert!(wb);
-    }
-
-    #[test]
-    fn tab_invoice_shows_only_invoices() {
-        let (acts, inv, wb) = tab_includes(Some("invoice"));
-        assert!(!acts);
-        assert!(inv);
-        assert!(!wb);
-    }
-
-    #[test]
-    fn tab_act_shows_only_acts() {
-        let (acts, inv, wb) = tab_includes(Some("act"));
-        assert!(acts);
-        assert!(!inv);
-        assert!(!wb);
-    }
-
-    #[test]
-    fn tab_waybill_only_waybills() {
-        let (acts, inv, wb) = tab_includes(Some("waybill"));
-        assert!(!acts);
-        assert!(!inv);
-        assert!(wb);
     }
 
     // ── Empty states ────────────────────────────────────────────────
