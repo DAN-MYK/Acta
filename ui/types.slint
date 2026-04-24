@@ -65,6 +65,7 @@ export struct DocumentItem {
     amount-str: string,    // pre-formatted by Rust
     status: DocumentStatus,
     linked-id: string,     // linked document id or ""
+    selected: bool,        // true if document is currently selected
 }
 
 export struct CounterpartyItem {
@@ -212,12 +213,21 @@ export struct DashboardViewData {
     chart-bars: [ChartBar],
     journal: [JournalRow],
     accounts: [AccountItem],
+    accounts-total: string,              // pre-formatted total balance
     tasks: [TaskItem],
     revenue-str: string,
     expenses-str: string,
     net-str: string,
     outstanding-str: string,
     overdue-str: string,
+    delta-revenue-str: string,           // e.g. "+13.4%"
+    delta-expenses-str: string,
+    delta-net-str: string,
+    ytd-total-str: string,               // year-to-date total
+    ytd-revenue-str: string,
+    ytd-expenses-str: string,
+    spark-revenue: [float],              // normalized 0.0-1.0 for sparkline
+    spark-expenses: [float],             // normalized 0.0-1.0 for sparkline
     inbox: [InboxItem],
 }
 
@@ -248,6 +258,9 @@ export struct CounterpartyDetails {
 
 export struct DocumentsViewData {
     items: [DocumentItem],
+    invoice-items: [DocumentItem],
+    act-items: [DocumentItem],
+    waybill-items: [DocumentItem],
     selected-ids: [string],
     total-count: int,
     page-count: int,

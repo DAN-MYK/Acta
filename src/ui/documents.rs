@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use slint::{ComponentHandle, ModelRc, VecModel};
+use slint::{ComponentHandle, Model, ModelRc, VecModel};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -19,32 +19,14 @@ pub async fn prepare_documents_data(
     pool: &PgPool,
     company_id: Uuid,
     search: Option<&str>,
-    tab: Option<&str>,
+    _tab: Option<&str>,
 ) -> DocumentsData {
-    let (include_acts, include_invoices, include_waybills) = tab_includes(tab);
-
+    // Завжди завантажуємо всі типи — фільтрування по вкладці робиться на клієнті
+    // через invoice-items / act-items / waybill-items та visible-rows у Slint.
     let (acts, invoices, waybills) = tokio::join!(
-        async {
-            if include_acts {
-                db::acts::list_filtered(pool, company_id, None, None, search, None, None, None).await
-            } else {
-                Ok(vec![])
-            }
-        },
-        async {
-            if include_invoices {
-                db::invoices::list_filtered(pool, company_id, None, None, search, None, None, None).await
-            } else {
-                Ok(vec![])
-            }
-        },
-        async {
-            if include_waybills {
-                db::waybills::list_filtered(pool, company_id, None, None, search, None, None, None).await
-            } else {
-                Ok(vec![])
-            }
-        },
+        db::acts::list_filtered(pool, company_id, None, None, search, None, None, None),
+        db::invoices::list_filtered(pool, company_id, None, None, search, None, None, None),
+        db::waybills::list_filtered(pool, company_id, None, None, search, None, None, None),
     );
 
     let mut combined: Vec<(chrono::NaiveDate, crate::DocumentItem)> = vec![];
@@ -74,12 +56,42 @@ pub async fn prepare_documents_data(
 
 pub fn apply_documents_to_ui(ui: &crate::AppWindow, data: DocumentsData) {
     let previous = ui.get_documents();
+    let selected_ids = previous.selected_ids.clone();
+
+    // Обчислюємо selected статус для кожного документа
+    let items_with_selection: Vec<crate::DocumentItem> = data
+        .items
+        .into_iter()
+        .map(|mut item| {
+            item.selected = selected_ids.iter().any(|id| id == item.id);
+            item
+        })
+        .collect();
+
+    // Розділяємо документи за типами для tab-specific списків
+    let mut invoice_items = vec![];
+    let mut act_items = vec![];
+    let mut waybill_items = vec![];
+
+    for item in items_with_selection.iter() {
+        if item.id.starts_with("inv:") {
+            invoice_items.push(item.clone());
+        } else if item.id.starts_with("act:") {
+            act_items.push(item.clone());
+        } else if item.id.starts_with("wbl:") {
+            waybill_items.push(item.clone());
+        }
+    }
+
     // chain_steps і cp_doc_chains завжди перестворюються порожніми: on_doc_chain_load
     // сам створює новий VecModel при завантаженні ланцюга. Це прибирає потребу у
     // подвійному set_documents у bootstrap::build_ui для ініціалізації цих полів.
     ui.set_documents(crate::DocumentsViewData {
-        items: ModelRc::new(VecModel::from(data.items)),
-        selected_ids: previous.selected_ids,
+        items: ModelRc::new(VecModel::from(items_with_selection)),
+        invoice_items: ModelRc::new(VecModel::from(invoice_items)),
+        act_items: ModelRc::new(VecModel::from(act_items)),
+        waybill_items: ModelRc::new(VecModel::from(waybill_items)),
+        selected_ids,
         total_count: data.total,
         page_count: if previous.page_count > 0 { previous.page_count } else { 1 },
         chain_steps: ModelRc::new(VecModel::<crate::ChainStep>::default()),
@@ -177,30 +189,34 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
     ui.on_doc_open(|id| {
         tracing::warn!("TODO: відкриття документа {} — детальний вигляд планується у наступному спринті", id);
     });
+    ui.on_doc_edit(|id| {
+        tracing::warn!("TODO: редагування документа {} — форма редагування планується у наступному спринті", id);
+    });
     ui.on_doc_toggled(|_id, _sel| {
         tracing::debug!("doc_toggled — вибір рядку зберігається у локальному стані Slint-компоненту");
+    });
+    ui.on_doc_selection_cleared(|| {
+        tracing::debug!("doc_selection_cleared — очищення вибору в UI");
+    });
+    ui.on_doc_more_actions(|id| {
+        tracing::warn!("TODO: doc_more_actions({}) — контекстне меню планується у наступному спринті", id);
+    });
+    ui.on_doc_bulk_send(|| {
+        tracing::warn!("TODO: doc_bulk_send — масове надсилання планується у наступному спринті");
+    });
+    ui.on_doc_bulk_archive(|| {
+        tracing::warn!("TODO: doc_bulk_archive — масове архівування планується у наступному спринті");
+    });
+    ui.on_doc_bulk_delete(|| {
+        tracing::warn!("TODO: doc_bulk_delete — масове видалення планується у наступному спринті");
     });
     ui.on_doc_page_changed(|_p| {
         tracing::debug!("doc_page_changed — пагінація зберігається у локальному стані Slint-компоненту");
     });
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Presenter helpers — shared between production code and tests
-// ────────────────────────────────────────────────────────────────────────────
-
-/// Визначає які типи документів включити за значенням вкладки.
-/// Використовується в prepare_documents_data та unit-тестах.
-fn tab_includes(tab: Option<&str>) -> (bool, bool, bool) {
-    let include_acts     = !matches!(tab, Some("invoice") | Some("waybill"));
-    let include_invoices = !matches!(tab, Some("act")     | Some("waybill"));
-    let include_waybills = !matches!(tab, Some("act")     | Some("invoice"));
-    (include_acts, include_invoices, include_waybills)
-}
-
 #[cfg(test)]
 mod tests {
-    use super::tab_includes;
     use chrono::NaiveDate;
 
     #[test]
@@ -214,48 +230,6 @@ mod tests {
         sorted.sort_by(|a, b| b.0.cmp(&a.0));
         assert_eq!(sorted[0].1, "B");
         assert_eq!(sorted[2].1, "C");
-    }
-
-    // ── Tab filtering ───────────────────────────────────────────────
-
-    #[test]
-    fn tab_all_includes_everything() {
-        let (acts, inv, wb) = tab_includes(None);
-        assert!(acts);
-        assert!(inv);
-        assert!(wb);
-    }
-
-    #[test]
-    fn tab_all_string_includes_everything() {
-        let (acts, inv, wb) = tab_includes(Some("all"));
-        assert!(acts);
-        assert!(inv);
-        assert!(wb);
-    }
-
-    #[test]
-    fn tab_invoice_shows_only_invoices() {
-        let (acts, inv, wb) = tab_includes(Some("invoice"));
-        assert!(!acts);
-        assert!(inv);
-        assert!(!wb);
-    }
-
-    #[test]
-    fn tab_act_shows_only_acts() {
-        let (acts, inv, wb) = tab_includes(Some("act"));
-        assert!(acts);
-        assert!(!inv);
-        assert!(!wb);
-    }
-
-    #[test]
-    fn tab_waybill_only_waybills() {
-        let (acts, inv, wb) = tab_includes(Some("waybill"));
-        assert!(!acts);
-        assert!(!inv);
-        assert!(wb);
     }
 
     // ── Empty states ────────────────────────────────────────────────
@@ -279,6 +253,7 @@ mod tests {
                 amount_str: "1 000 ₴".into(),
                 status: crate::DocumentStatus::Issued,
                 linked_id: "".into(),
+                selected: false,
             },
             crate::DocumentItem {
                 id: "inv:2".into(),
@@ -289,6 +264,7 @@ mod tests {
                 amount_str: "2 000 ₴".into(),
                 status: crate::DocumentStatus::Draft,
                 linked_id: "".into(),
+                selected: false,
             },
         ];
         let data = super::DocumentsData {
