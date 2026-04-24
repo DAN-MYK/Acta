@@ -24,18 +24,18 @@ component KpiMetric inherits VerticalLayout {
     in property <bool> danger: false;
     in property <[float]> sparkline-data;  // normalized 0..1
 
-    spacing: 4px;
+    spacing: 6px;
     horizontal-stretch: 1;
     padding-right: 20px;
 
-    Text {
-        text: root.label;
-        color: AppTheme.text-faint;
-        font-size: 10.5px;
-        font-family: AppTheme.font-sans;
-        font-weight: 600;
-        letter-spacing: 1.2px;
-    }
+        Text {
+            text: root.label;
+            color: AppTheme.text-faint;
+            font-size: 10px;
+            font-family: AppTheme.font-sans;
+            font-weight: 600;
+            letter-spacing: 1.4px;
+        }
 
     HorizontalLayout {
         spacing: 4px;
@@ -45,7 +45,7 @@ component KpiMetric inherits VerticalLayout {
             text: root.value;
             color: root.danger ? AppTheme.danger : AppTheme.text;
             font-family: AppTheme.font-serif;
-            font-size: 28px;
+            font-size: 30px;
             font-weight: 500;
             letter-spacing: -0.4px;
         }
@@ -54,7 +54,7 @@ component KpiMetric inherits VerticalLayout {
             text: root.currency;
             color: AppTheme.text-faint;
             font-family: AppTheme.font-serif;
-            font-size: 16px;
+            font-size: 15px;
             font-weight: 400;
             vertical-alignment: center;
         }
@@ -63,7 +63,7 @@ component KpiMetric inherits VerticalLayout {
     if delta != "" : Text {
         text: root.delta;
         color: AppTheme.text-muted;
-        font-size: 11px;
+        font-size: 10.5px;
         font-family: AppTheme.font-mono;
     }
 
@@ -446,6 +446,51 @@ component InboxEmpty inherits VerticalLayout {
     }
 }
 
+component EmptyBlock inherits Rectangle {
+    in property <string> title;
+    in property <string> body;
+    in property <string> tone: "muted";
+
+    property <color> panel-bg:
+        tone == "accent" ? AppTheme.accent-soft :
+        AppTheme.bg-stripe;
+
+    property <color> panel-fg:
+        tone == "accent" ? AppTheme.accent-text :
+        AppTheme.text-muted;
+
+    border-radius: AppTheme.radius-xl;
+    border-width: 1px;
+    border-color: tone == "accent" ? AppTheme.accent-soft : AppTheme.border;
+    background: panel-bg;
+    min-height: 112px;
+
+    VerticalLayout {
+        padding: 18px;
+        spacing: 6px;
+        alignment: center;
+
+        Text {
+            text: root.title;
+            color: AppTheme.text;
+            font-size: 13px;
+            font-family: AppTheme.font-sans;
+            font-weight: 600;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+
+        Text {
+            text: root.body;
+            color: root.panel-fg;
+            font-size: 11.5px;
+            font-family: AppTheme.font-sans;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+    }
+}
+
 // ── InboxView ─────────────────────────────────────────────────────────────────
 component InboxView inherits Rectangle {
     in property <[InboxItem]> items;
@@ -501,6 +546,12 @@ export component Dashboard inherits Rectangle {
     in property <[InboxItem]> inbox;
     callback inbox-action(string, string);
     property <string> mode-state: "journal";
+    private property <bool> metrics-empty:
+        root.revenue-str == "0" &&
+        root.expenses-str == "0" &&
+        root.net-str == "0" &&
+        root.outstanding-str == "0" &&
+        root.overdue-str == "0";
 
     // Callbacks
     callback task-toggled(string, bool);
@@ -512,29 +563,92 @@ export component Dashboard inherits Rectangle {
 
     // Main scroll area
     Flickable {
-        viewport-height: content-col.preferred-height + 40px;
+        viewport-height: content-col.preferred-height + 56px;
 
         HorizontalLayout {
-            padding: 20px;
-            padding-right: 22px;
-            spacing: 20px;
+            padding: 28px;
+            padding-right: 28px;
+            spacing: 24px;
             alignment: stretch;
 
             // ── Left column (metrics + chart + journal) ────────────────────
             content-col := VerticalLayout {
                 horizontal-stretch: 1;
-                spacing: 20px;
+                spacing: 24px;
+
+                Card {
+                    border-radius: AppTheme.radius-2xl;
+
+                    HorizontalLayout {
+                        padding: 22px;
+                        spacing: 16px;
+                        alignment: stretch;
+
+                        VerticalLayout {
+                            spacing: 6px;
+                            horizontal-stretch: 1;
+
+                            SectionLabel { label: "ФІНАНСОВИЙ ОГЛЯД"; }
+
+                            Text {
+                                text: "Операційна картина за місяць, рух коштів і останні проводки в одному місці.";
+                                color: AppTheme.text-muted;
+                                font-size: 13px;
+                                font-family: AppTheme.font-sans;
+                                wrap: word-wrap;
+                            }
+                        }
+
+                        Rectangle {
+                            width: 220px;
+                            border-radius: AppTheme.radius-xl;
+                            background: AppTheme.accent-soft;
+
+                            VerticalLayout {
+                                padding: 16px;
+                                spacing: 6px;
+                                alignment: center;
+
+                                Text {
+                                    text: "Чистий результат";
+                                    color: AppTheme.accent-text;
+                                    font-size: 11px;
+                                    font-family: AppTheme.font-sans;
+                                    font-weight: 600;
+                                    letter-spacing: 1.2px;
+                                }
+
+                                Text {
+                                    text: root.net-str + " ₴";
+                                    color: AppTheme.text;
+                                    font-size: 24px;
+                                    font-family: AppTheme.font-serif;
+                                    font-weight: 500;
+                                }
+
+                                Text {
+                                    text: root.delta-net-str != "" ? root.delta-net-str : "без змін до попереднього періоду";
+                                    color: AppTheme.text-muted;
+                                    font-size: 10.5px;
+                                    font-family: AppTheme.font-mono;
+                                    horizontal-alignment: center;
+                                    wrap: word-wrap;
+                                }
+                            }
+                        }
+                    }
+                }
 
                 // ── Mode toggle ────────────────────────────────────────────
                 HorizontalLayout {
-                    spacing: 2px; alignment: start; height: 32px;
+                    spacing: 6px; alignment: start; height: 36px;
 
                     Rectangle {
-                        width: journal-btn.preferred-width + 20px; height: 28px;
-                        border-radius: AppTheme.radius-md;
+                        width: journal-btn.preferred-width + 24px; height: 34px;
+                        border-radius: AppTheme.radius-lg;
                         background: mode-state == "journal" ? AppTheme.bg-elevated : transparent;
-                        border-width: mode-state == "journal" ? 1px : 0px;
-                        border-color: AppTheme.border;
+                        border-width: 1px;
+                        border-color: mode-state == "journal" ? AppTheme.border-strong : transparent;
 
                         journal-btn := Text {
                             text: "Огляд";
@@ -547,11 +661,11 @@ export component Dashboard inherits Rectangle {
                     }
 
                     Rectangle {
-                        width: inbox-btn.preferred-width + 20px; height: 28px;
-                        border-radius: AppTheme.radius-md;
+                        width: inbox-btn.preferred-width + 24px; height: 34px;
+                        border-radius: AppTheme.radius-lg;
                         background: mode-state == "inbox" ? AppTheme.bg-elevated : transparent;
-                        border-width: mode-state == "inbox" ? 1px : 0px;
-                        border-color: AppTheme.border;
+                        border-width: 1px;
+                        border-color: mode-state == "inbox" ? AppTheme.border-strong : transparent;
 
                         inbox-btn := Text {
                             text: root.inbox.length > 0 ? "Вхідні (" + root.inbox.length + ")" : "Вхідні";
@@ -565,19 +679,20 @@ export component Dashboard inherits Rectangle {
                 }
 
                 if mode-state == "journal" : VerticalLayout {
-                    spacing: 20px;
+                    spacing: 24px;
                     horizontal-stretch: 1;
 
                     // ── KPI Metric strip ───────────────────────────────────────
                     Card {
                         padded: false;
-                        height: 110px;
+                        border-radius: AppTheme.radius-2xl;
+                        height: 132px;
 
                         HorizontalLayout {
-                            padding-top: 20px;
-                            padding-bottom: 20px;
-                            padding-left: 4px;
-                            padding-right: 4px;
+                            padding-top: 24px;
+                            padding-bottom: 24px;
+                            padding-left: 12px;
+                            padding-right: 12px;
                             alignment: stretch;
 
                             KpiMetric {
@@ -623,10 +738,12 @@ export component Dashboard inherits Rectangle {
 
                     // ── Cash flow chart ────────────────────────────────────────
                     Card {
-                        height: 260px;
+                        border-radius: AppTheme.radius-2xl;
+                        height: metrics-empty ? 236px : 294px;
 
                         VerticalLayout {
-                            spacing: 4px;
+                            padding: 20px;
+                            spacing: 12px;
 
                             HorizontalLayout {
                                 alignment: stretch;
@@ -683,7 +800,7 @@ export component Dashboard inherits Rectangle {
                                 }
                             }
 
-                            HorizontalLayout {
+                            if !root.metrics-empty : HorizontalLayout {
                                 spacing: 4px;
 
                                 Text {
@@ -728,9 +845,15 @@ export component Dashboard inherits Rectangle {
                                 }
                             }
 
-                            BarChart {
+                            if root.metrics-empty : EmptyBlock {
+                                title: "Ще немає руху коштів";
+                                body: "Після першого імпорту банку або створення документа тут з'явиться динаміка доходів і витрат.";
+                                tone: "accent";
+                            }
+
+                            if !root.metrics-empty : BarChart {
                                 bars: root.chart-bars;
-                                height: 180px;
+                                height: 196px;
                             }
                         }
                     }
@@ -738,6 +861,7 @@ export component Dashboard inherits Rectangle {
                     // ── Journal ────────────────────────────────────────────────
                     Card {
                         padded: false;
+                        border-radius: AppTheme.radius-2xl;
 
                         VerticalLayout {
                             // Header
@@ -748,7 +872,7 @@ export component Dashboard inherits Rectangle {
                                 padding-bottom: 12px;
                                 spacing: 12px;
                                 alignment: stretch;
-                                height: 50px;
+                                height: 56px;
 
                                 HeadingSm { text: "Журнал операцій"; vertical-alignment: center; }
 
@@ -870,9 +994,26 @@ export component Dashboard inherits Rectangle {
                             }
 
                             // Journal rows
-                            for row[i] in journal : JournalTableRow {
-                                data: row;
-                                even: Math.mod(i, 2) == 0;
+                            if root.journal.length == 0 : Rectangle {
+                                height: 120px;
+                                background: AppTheme.bg-elevated;
+
+                                EmptyBlock {
+                                    x: 18px;
+                                    y: 18px;
+                                    width: parent.width - 36px;
+                                    title: "Журнал поки порожній";
+                                    body: "Щойно з'являться перші акти, накладні або платежі, тут буде історія останніх операцій.";
+                                }
+                            }
+
+                            if root.journal.length > 0 : VerticalLayout {
+                                spacing: 0px;
+
+                                for row[i] in journal : JournalTableRow {
+                                    data: row;
+                                    even: Math.mod(i, 2) == 0;
+                                }
                             }
                         }
                     }
@@ -887,11 +1028,12 @@ export component Dashboard inherits Rectangle {
 
             // ── Right sidebar (320px) ──────────────────────────────────────
             sidebar-col := VerticalLayout {
-                width: 320px;
-                spacing: 20px;
+                width: 340px;
+                spacing: 24px;
 
                 // ── Bank accounts ──────────────────────────────────────────
                 Card {
+                    border-radius: AppTheme.radius-2xl;
                     VerticalLayout {
                         HorizontalLayout {
                             alignment: stretch;
@@ -915,17 +1057,26 @@ export component Dashboard inherits Rectangle {
                             }
                         }
 
-                        for account in accounts : AccountRow {
-                            account: account;
+                        if root.accounts.length == 0 : EmptyBlock {
+                            title: "Немає підключених рахунків";
+                            body: "Додай перший банківський рахунок або імпортуй виписку, щоб бачити залишки та рух коштів.";
+                        }
+
+                        if root.accounts.length > 0 : VerticalLayout {
+                            spacing: 0px;
+
+                            for account in accounts : AccountRow {
+                                account: account;
+                            }
                         }
 
                         // Total row
-                        Rectangle {
+                        if root.accounts.length > 0 : Rectangle {
                             height: 1px;
                             background: AppTheme.border-strong;
                         }
 
-                        HorizontalLayout {
+                        if root.accounts.length > 0 : HorizontalLayout {
                             padding-top: 12px;
                             alignment: stretch;
 
@@ -965,6 +1116,7 @@ export component Dashboard inherits Rectangle {
 
                 // ── Tasks ──────────────────────────────────────────────────
                 Card {
+                    border-radius: AppTheme.radius-2xl;
                     VerticalLayout {
                         // Tasks header
                         HorizontalLayout {
@@ -1000,17 +1152,27 @@ export component Dashboard inherits Rectangle {
                         }
 
                         // Task items
-                        for task in tasks : DashboardTaskItem {
-                            task: task;
-                            check-icon: root.icon-check;
-                            toggled(id, done) => { root.task-toggled(id, done); }
+                        if root.tasks.length == 0 : EmptyBlock {
+                            title: "Немає активних задач";
+                            body: "Створи першу задачу для підписання документів, нагадувань або перевірки оплат.";
+                            tone: "accent";
+                        }
+
+                        if root.tasks.length > 0 : VerticalLayout {
+                            spacing: 0px;
+
+                            for task in tasks : DashboardTaskItem {
+                                task: task;
+                                check-icon: root.icon-check;
+                                toggled(id, done) => { root.task-toggled(id, done); }
+                            }
                         }
 
                         // Footer: link to all tasks
                         HorizontalLayout {
                             padding-top: 10px;
 
-                            Rectangle {
+                            if root.tasks.length > 0 : Rectangle {
                                 height: 1px;
                                 y: 0;
                                 background: AppTheme.border;

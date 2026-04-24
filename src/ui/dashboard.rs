@@ -78,7 +78,7 @@ pub async fn prepare_dashboard_data(pool: &PgPool, company_id: Uuid) -> Dashboar
     let (kpi_res, recent_res, tasks_res, inbox_res, rev_months_res) = tokio::join!(
         db::dashboard::get_kpi_summary(pool, company_id),
         db::dashboard::get_recent_acts(pool, company_id, 20),
-        db::tasks::list_open(pool),
+        db::tasks::list_open(pool, company_id),
         db::dashboard::inbox_items(pool, company_id),
         db::dashboard::revenue_by_month(pool, company_id, 6),
     );

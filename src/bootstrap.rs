@@ -1,12 +1,14 @@
 use std::sync::Arc;
 
 use anyhow::Result;
+use chrono::{Duration, Utc};
 use slint::{ComponentHandle, ModelRc, VecModel};
 use sqlx::PgPool;
 use tokio::runtime::Runtime;
 use uuid::Uuid;
 
 use acta::app_ctx::{AppCtx, AppScreen};
+use acta::models::{NewTask, TaskPriority, TaskStatus};
 
 use crate::ui;
 use crate::{AppWindow, ChainStep, NavScreen};
@@ -114,7 +116,7 @@ async fn load_initial_ui_data(ctx: &AppCtx) -> InitialUiData {
             },
         ),
         ui::payments::prepare_payments_data(ctx.pool(), company_id),
-        ui::tasks::prepare_tasks_data(ctx.pool()),
+        ui::tasks::prepare_tasks_data(ctx.pool(), company_id),
         ui::reports::prepare_reports_data(
             ctx.pool(),
             company_id,
@@ -220,7 +222,7 @@ pub async fn refresh_screen(ui_weak: slint::Weak<AppWindow>, ctx: Arc<AppCtx>, s
             });
         }
         AppScreen::Tasks => {
-            let data = ui::tasks::prepare_tasks_data(ctx.pool()).await;
+            let data = ui::tasks::prepare_tasks_data(ctx.pool(), company_id).await;
             let _ = ui_weak.upgrade_in_event_loop(move |ui| {
                 ui::tasks::apply_tasks_to_ui(&ui, data);
             });
@@ -273,6 +275,7 @@ pub fn wire_app(ui: &AppWindow, ctx: &Arc<AppCtx>) {
     ui::tasks::wire_task_callbacks(ui, ctx);
     ui::reports::wire_reports_callbacks(ui, ctx);
     ui::settings::wire_settings_callbacks(ui, ctx);
+    wire_inbox_callbacks(ui, ctx);
     wire_stub_callbacks(ui);
 }
 
@@ -293,10 +296,85 @@ fn wire_navigation(ui: &AppWindow, ctx: &Arc<AppCtx>) {
 }
 
 /// Явні TODO-маркери для ще не реалізованих сценаріїв.
-fn wire_stub_callbacks(ui: &AppWindow) {
-    ui.on_inbox_action(|id, kind| {
-        tracing::info!("TODO: inbox_action(doc={id}, kind={kind})");
+fn prefixed_uuid(id: &str, prefix: &str) -> Option<Uuid> {
+    id.strip_prefix(prefix).and_then(|value| Uuid::parse_str(value).ok())
+}
+
+async fn create_overdue_act_reminder(ctx: &AppCtx, act_id: Uuid) -> Result<()> {
+    let Some((act, _items)) = acta::db::acts::get_by_id(ctx.pool(), act_id).await? else {
+        tracing::warn!("inbox_action: act {act_id} не знайдено для нагадування");
+        return Ok(());
+    };
+
+    let title = format!("Нагадати про оплату акту {}", act.number);
+    let already_open = acta::db::tasks::list_by_act(ctx.pool(), act_id)
+        .await?
+        .into_iter()
+        .any(|task| {
+            matches!(task.status, TaskStatus::Open | TaskStatus::InProgress)
+                && task.title == title
+        });
+
+    if already_open {
+        tracing::info!("inbox_action: задача-нагадування для акту {act_id} вже існує");
+        return Ok(());
+    }
+
+    let reminder_at = Utc::now() + Duration::hours(2);
+    let task = NewTask {
+        title,
+        description: Some("Створено з Inbox на головному екрані.".to_string()),
+        priority: TaskPriority::High,
+        due_date: Some(reminder_at),
+        reminder_at: Some(reminder_at),
+        counterparty_id: None,
+        act_id: Some(act_id),
+    };
+
+    acta::db::tasks::create(ctx.pool(), ctx.company_id(), &task).await?;
+    Ok(())
+}
+
+fn wire_inbox_callbacks(ui: &AppWindow, ctx: &Arc<AppCtx>) {
+    ui.on_inbox_action({
+        let ctx = ctx.clone();
+        let ui_weak = ui.as_weak();
+        move |id, kind| {
+            let ctx = ctx.clone();
+            let ui_weak = ui_weak.clone();
+            let id = id.to_string();
+            let kind = kind.to_string();
+
+            tokio::spawn(async move {
+                match kind.as_str() {
+                    "overdue" => {
+                        if let Some(act_id) = prefixed_uuid(&id, "act:") {
+                            if let Err(err) = create_overdue_act_reminder(&ctx, act_id).await {
+                                tracing::error!("inbox_action: не вдалося створити нагадування: {err}");
+                            }
+                            refresh_screen(ui_weak.clone(), ctx.clone(), AppScreen::Dashboard).await;
+                            refresh_screen(ui_weak, ctx, AppScreen::Tasks).await;
+                        } else {
+                            tracing::warn!("inbox_action: некоректний id простроченого акту: {id}");
+                        }
+                    }
+                    "unmatched" => {
+                        ctx.set_active_screen(AppScreen::Payments);
+                        let _ = ui_weak.upgrade_in_event_loop(|ui| {
+                            ui.set_current_screen(NavScreen::Payments);
+                        });
+                        refresh_screen(ui_weak, ctx, AppScreen::Payments).await;
+                    }
+                    other => {
+                        tracing::info!("inbox_action: дія '{other}' для {id} ще не підтримується");
+                    }
+                }
+            });
+        }
     });
+}
+
+fn wire_stub_callbacks(ui: &AppWindow) {
     ui.on_doc_chain_load({
         let ui_weak = ui.as_weak();
         move |id| {

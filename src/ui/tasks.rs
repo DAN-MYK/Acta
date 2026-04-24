@@ -3,7 +3,7 @@ use slint::{ComponentHandle, ModelRc, VecModel};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use acta::app_ctx::{AppCtx, AppScreen};
+use acta::app_ctx::AppCtx;
 use acta::db;
 use acta::models::task::TaskStatus;
 use crate::ui::helpers::task_to_item;
@@ -31,10 +31,10 @@ pub struct TasksData {
     pub all: Vec<crate::TaskItem>,
 }
 
-pub async fn prepare_tasks_data(pool: &PgPool) -> TasksData {
+pub async fn prepare_tasks_data(pool: &PgPool, company_id: Uuid) -> TasksData {
     let (open_res, all_res) = tokio::join!(
-        db::tasks::list_open(pool),
-        db::tasks::list_all(pool),
+        db::tasks::list_open(pool, company_id),
+        db::tasks::list_all(pool, company_id),
     );
 
     let all_tasks = all_res.unwrap_or_default();
@@ -119,7 +119,7 @@ pub fn wire_task_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                     };
                     let _ = db::tasks::set_status(ctx.pool(), uuid, new_status).await;
                 }
-                crate::bootstrap::refresh_screen(ui_weak, ctx, AppScreen::Tasks).await;
+                crate::bootstrap::refresh_current_screen(ui_weak, ctx).await;
             });
         }
     });

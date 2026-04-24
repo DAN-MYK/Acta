@@ -497,7 +497,7 @@ async fn tasks_create_update_and_delete_in_db() -> Result<()> {
     let created = db::tasks::create(&pool, DEFAULT_COMPANY_ID, &new_task).await?;
     assert_eq!(created.status, models::TaskStatus::Open);
 
-    let open_tasks = db::tasks::list_open(&pool).await?;
+    let open_tasks = db::tasks::list_open(&pool, DEFAULT_COMPANY_ID).await?;
     assert!(open_tasks.iter().any(|t| t.id == created.id));
 
     let due = db::tasks::due_reminders(&pool).await?;
@@ -786,7 +786,7 @@ async fn tasks_due_reminders_and_list_open_filter_correctly() -> Result<()> {
         .await?
         .expect("done task updated");
 
-    let open_tasks = db::tasks::list_open(&pool).await?;
+    let open_tasks = db::tasks::list_open(&pool, DEFAULT_COMPANY_ID).await?;
     let urgent_pos = open_tasks.iter().position(|t| t.id == urgent.id).expect("urgent in open list");
     let later_pos = open_tasks.iter().position(|t| t.id == later.id).expect("later in open list");
     assert!(urgent_pos < later_pos);
@@ -805,6 +805,81 @@ async fn tasks_due_reminders_and_list_open_filter_correctly() -> Result<()> {
     }
     sqlx::query("DELETE FROM counterparties WHERE id = $1")
         .bind(cp.id)
+        .execute(&pool)
+        .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn tasks_list_queries_are_scoped_to_company() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let suffix = unique_suffix();
+    let other_company = db::companies::create(
+        &pool,
+        &models::NewCompany {
+            name: format!("Р†Рў РљРѕРјРїР°РЅС–СЏ Tasks Scope {suffix}"),
+            short_name: Some(format!("ITS-{suffix}")),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: Some(format!("4{}", &suffix[..9])),
+            iban: None,
+            legal_address: None,
+            director_name: None,
+            tax_system: Some("simplified".to_string()),
+            is_vat_payer: false,
+        },
+    )
+    .await?;
+
+    let task_default = db::tasks::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewTask {
+            title: format!("Р—Р°РґР°С‡Р° default company {suffix}"),
+            description: None,
+            priority: models::TaskPriority::Normal,
+            due_date: None,
+            reminder_at: None,
+            counterparty_id: None,
+            act_id: None,
+        },
+    )
+    .await?;
+
+    let task_other = db::tasks::create(
+        &pool,
+        other_company.id,
+        &models::NewTask {
+            title: format!("Р—Р°РґР°С‡Р° other company {suffix}"),
+            description: None,
+            priority: models::TaskPriority::Normal,
+            due_date: None,
+            reminder_at: None,
+            counterparty_id: None,
+            act_id: None,
+        },
+    )
+    .await?;
+
+    let default_open = db::tasks::list_open(&pool, DEFAULT_COMPANY_ID).await?;
+    assert!(default_open.iter().any(|task| task.id == task_default.id));
+    assert!(!default_open.iter().any(|task| task.id == task_other.id));
+
+    let other_all = db::tasks::list_all(&pool, other_company.id).await?;
+    assert!(other_all.iter().any(|task| task.id == task_other.id));
+    assert!(!other_all.iter().any(|task| task.id == task_default.id));
+
+    for id in [task_default.id, task_other.id] {
+        sqlx::query("DELETE FROM tasks WHERE id = $1")
+            .bind(id)
+            .execute(&pool)
+            .await?;
+    }
+    sqlx::query("DELETE FROM companies WHERE id = $1")
+        .bind(other_company.id)
         .execute(&pool)
         .await?;
 
