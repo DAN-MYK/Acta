@@ -70,12 +70,10 @@ pub fn revenue_months_to_chart_bars(months: &[MonthRevenue]) -> Vec<crate::Chart
 
     months
         .iter()
-        .map(|m| {
-            crate::ChartBar {
-                rev_h: normalize_chart_value(m.amount, max),
-                exp_h: 0.0,
-                month: m.month_label().into(),
-            }
+        .map(|m| crate::ChartBar {
+            rev_h: normalize_chart_value(m.amount, max),
+            exp_h: 0.0,
+            month: m.month_label().into(),
         })
         .collect()
 }
@@ -108,10 +106,17 @@ pub async fn prepare_dashboard_data(pool: &PgPool, company_id: Uuid) -> Dashboar
     let task_items: Vec<crate::TaskItem> = tasks.iter().map(task_to_item).collect();
     let inbox: Vec<crate::InboxItem> = inbox_rows
         .iter()
-        .map(|r| inbox_item_from_row(
-            &r.doc_id, &r.doc_number, &r.counterparty,
-            r.amount, r.age_days, &r.kind, &r.action_label,
-        ))
+        .map(|r| {
+            inbox_item_from_row(
+                &r.doc_id,
+                &r.doc_number,
+                &r.counterparty,
+                r.amount,
+                r.age_days,
+                &r.kind,
+                &r.action_label,
+            )
+        })
         .collect();
     let chart_bars = revenue_months_to_chart_bars(&rev_months);
 
@@ -194,7 +199,11 @@ mod tests {
         assert_eq!(item.counterparty.as_str(), "ТОВ Тест");
         assert_eq!(item.age_days, 45);
         assert_eq!(item.action_label.as_str(), "Нагадати");
-        assert!(item.amount_str.contains("15 000"), "amount: {}", item.amount_str);
+        assert!(
+            item.amount_str.contains("15 000"),
+            "amount: {}",
+            item.amount_str
+        );
     }
 
     #[test]
@@ -203,9 +212,21 @@ mod tests {
         use rust_decimal_macros::dec;
 
         let months = vec![
-            MonthRevenue { month_num: 1, year: 2026, amount: dec!(1000) },
-            MonthRevenue { month_num: 2, year: 2026, amount: dec!(2000) },
-            MonthRevenue { month_num: 3, year: 2026, amount: dec!(0) },
+            MonthRevenue {
+                month_num: 1,
+                year: 2026,
+                amount: dec!(1000),
+            },
+            MonthRevenue {
+                month_num: 2,
+                year: 2026,
+                amount: dec!(2000),
+            },
+            MonthRevenue {
+                month_num: 3,
+                year: 2026,
+                amount: dec!(0),
+            },
         ];
         let bars = revenue_months_to_chart_bars(&months);
         assert_eq!(bars.len(), 3);

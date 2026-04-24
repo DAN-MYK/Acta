@@ -7,7 +7,9 @@ use anyhow::Result;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::models::category::{Category, CategoryKind, CategorySelectItem, NewCategory, UpdateCategory};
+use crate::models::category::{
+    Category, CategoryKind, CategorySelectItem, NewCategory, UpdateCategory,
+};
 
 /// Всі категорії компанії (включаючи архівовані).
 pub async fn list(pool: &PgPool, company_id: Uuid) -> Result<Vec<Category>> {
@@ -34,9 +36,9 @@ pub async fn list_for_select(
     kind: CategoryKind,
 ) -> Result<Vec<CategorySelectItem>> {
     struct Row {
-        id:        Uuid,
-        name:      String,
-        kind:      CategoryKind,
+        id: Uuid,
+        name: String,
+        kind: CategoryKind,
         parent_id: Option<Uuid>,
     }
 
@@ -44,9 +46,9 @@ pub async fn list_for_select(
         fn from_row(row: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
             use sqlx::Row;
             Ok(Self {
-                id:        row.try_get("id")?,
-                name:      row.try_get("name")?,
-                kind:      row.try_get("kind")?,
+                id: row.try_get("id")?,
+                name: row.try_get("name")?,
+                kind: row.try_get("kind")?,
                 parent_id: row.try_get("parent_id")?,
             })
         }
@@ -70,9 +72,9 @@ pub async fn list_for_select(
     Ok(rows
         .into_iter()
         .map(|r| CategorySelectItem {
-            id:    r.id,
-            name:  r.name,
-            kind:  r.kind,
+            id: r.id,
+            name: r.name,
+            kind: r.kind,
             depth: if r.parent_id.is_some() { 1 } else { 0 },
         })
         .collect())
@@ -84,9 +86,9 @@ pub async fn list_all_for_select(
     company_id: Uuid,
 ) -> Result<Vec<CategorySelectItem>> {
     struct Row {
-        id:        Uuid,
-        name:      String,
-        kind:      CategoryKind,
+        id: Uuid,
+        name: String,
+        kind: CategoryKind,
         parent_id: Option<Uuid>,
     }
 
@@ -94,9 +96,9 @@ pub async fn list_all_for_select(
         fn from_row(row: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
             use sqlx::Row;
             Ok(Self {
-                id:        row.try_get("id")?,
-                name:      row.try_get("name")?,
-                kind:      row.try_get("kind")?,
+                id: row.try_get("id")?,
+                name: row.try_get("name")?,
+                kind: row.try_get("kind")?,
                 parent_id: row.try_get("parent_id")?,
             })
         }
@@ -118,9 +120,9 @@ pub async fn list_all_for_select(
     Ok(rows
         .into_iter()
         .map(|r| CategorySelectItem {
-            id:    r.id,
-            name:  r.name,
-            kind:  r.kind,
+            id: r.id,
+            name: r.name,
+            kind: r.kind,
             depth: if r.parent_id.is_some() { 1 } else { 0 },
         })
         .collect())

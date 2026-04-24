@@ -6,7 +6,7 @@
 // Транзакційна вставка: create() та update_with_items() відкривають транзакцію,
 // вставляють заголовок + позиції, перераховують total_amount, потім commit.
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 use chrono::Datelike;
 use rust_decimal::Decimal;
 use sqlx::PgPool;
@@ -14,7 +14,8 @@ use uuid::Uuid;
 
 use crate::models::{
     invoice::{
-        Invoice, InvoiceItem, InvoiceListRow, InvoiceStatus, NewInvoice, NewInvoiceItem, UpdateInvoice,
+        Invoice, InvoiceItem, InvoiceListRow, InvoiceStatus, NewInvoice, NewInvoiceItem,
+        UpdateInvoice,
     },
     DocumentDirection,
 };
@@ -49,7 +50,10 @@ pub async fn generate_next_number(pool: &PgPool, company_id: Uuid) -> Result<Str
 }
 
 /// Отримати активних контрагентів компанії для ComboBox у формі накладної.
-pub async fn counterparties_for_select(pool: &PgPool, company_id: Uuid) -> Result<Vec<(Uuid, String)>> {
+pub async fn counterparties_for_select(
+    pool: &PgPool,
+    company_id: Uuid,
+) -> Result<Vec<(Uuid, String)>> {
     use sqlx::Row;
     let rows = sqlx::query(
         "SELECT id, name FROM counterparties WHERE is_archived = FALSE AND company_id = $1 ORDER BY name",
@@ -58,7 +62,10 @@ pub async fn counterparties_for_select(pool: &PgPool, company_id: Uuid) -> Resul
     .fetch_all(pool)
     .await?;
 
-    Ok(rows.into_iter().map(|r| (r.get("id"), r.get("name"))).collect())
+    Ok(rows
+        .into_iter()
+        .map(|r| (r.get("id"), r.get("name")))
+        .collect())
 }
 
 /// Отримати список накладних компанії. `status_filter = None` → всі.
@@ -67,7 +74,17 @@ pub async fn list(
     company_id: Uuid,
     status_filter: Option<InvoiceStatus>,
 ) -> Result<Vec<InvoiceListRow>> {
-    list_filtered(pool, company_id, status_filter, None, None, None, None, None).await
+    list_filtered(
+        pool,
+        company_id,
+        status_filter,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .await
 }
 
 /// Список накладних з фільтром за статусом, текстовим пошуком,
@@ -131,7 +148,10 @@ pub async fn list_filtered(
         qb.push(" LIMIT 100");
     }
 
-    let rows = qb.build_query_as::<InvoiceListRow>().fetch_all(pool).await?;
+    let rows = qb
+        .build_query_as::<InvoiceListRow>()
+        .fetch_all(pool)
+        .await?;
     Ok(rows)
 }
 
@@ -352,12 +372,11 @@ pub async fn change_status(
     id: Uuid,
     new_status: InvoiceStatus,
 ) -> Result<Option<Invoice>> {
-    let current = sqlx::query_scalar::<_, InvoiceStatus>(
-        "SELECT status FROM invoices WHERE id = $1",
-    )
-        .bind(id)
-        .fetch_optional(pool)
-        .await?;
+    let current =
+        sqlx::query_scalar::<_, InvoiceStatus>("SELECT status FROM invoices WHERE id = $1")
+            .bind(id)
+            .fetch_optional(pool)
+            .await?;
 
     let Some(current) = current else {
         return Ok(None);
@@ -396,12 +415,11 @@ pub async fn change_status(
 
 /// Перевести накладну до наступного статусу (зручна обгортка над `change_status`).
 pub async fn advance_status(pool: &PgPool, id: Uuid) -> Result<Option<Invoice>> {
-    let current = sqlx::query_scalar::<_, InvoiceStatus>(
-        "SELECT status FROM invoices WHERE id = $1",
-    )
-        .bind(id)
-        .fetch_optional(pool)
-        .await?;
+    let current =
+        sqlx::query_scalar::<_, InvoiceStatus>("SELECT status FROM invoices WHERE id = $1")
+            .bind(id)
+            .fetch_optional(pool)
+            .await?;
 
     let Some(current) = current else {
         return Ok(None);
@@ -459,10 +477,10 @@ pub async fn count_by_status(pool: &PgPool, company_id: Uuid) -> Result<Vec<i32>
         let status: InvoiceStatus = row.get("status");
         let cnt: i32 = row.get("cnt");
         let idx = match status {
-            InvoiceStatus::Draft  => 1,
+            InvoiceStatus::Draft => 1,
             InvoiceStatus::Issued => 2,
             InvoiceStatus::Signed => 3,
-            InvoiceStatus::Paid   => 4,
+            InvoiceStatus::Paid => 4,
         };
         counts[idx] = cnt;
         counts[0] += cnt;
@@ -472,11 +490,11 @@ pub async fn count_by_status(pool: &PgPool, company_id: Uuid) -> Result<Vec<i32>
 
 /// Повернути KPI-агрегати для сторінки списку рахунків.
 pub async fn get_kpi(pool: &PgPool, company_id: Uuid) -> Result<InvoiceKpi> {
-    use sqlx::Row;
     use chrono::Datelike;
+    use sqlx::Row;
     let today = chrono::Utc::now().date_naive();
-    let first_of_month = chrono::NaiveDate::from_ymd_opt(today.year(), today.month(), 1)
-        .unwrap_or(today);
+    let first_of_month =
+        chrono::NaiveDate::from_ymd_opt(today.year(), today.month(), 1).unwrap_or(today);
     let overdue_threshold = today - chrono::Duration::days(30);
 
     let row = sqlx::query(
@@ -498,9 +516,9 @@ pub async fn get_kpi(pool: &PgPool, company_id: Uuid) -> Result<InvoiceKpi> {
 
     Ok(InvoiceKpi {
         invoices_this_month: row.get::<i64, _>("invoices_this_month"),
-        revenue_this_month:  row.get::<Decimal, _>("revenue_this_month"),
-        unpaid_total:        row.get::<Decimal, _>("unpaid_total"),
-        overdue_count:       row.get::<i64, _>("overdue_count"),
+        revenue_this_month: row.get::<Decimal, _>("revenue_this_month"),
+        unpaid_total: row.get::<Decimal, _>("unpaid_total"),
+        overdue_count: row.get::<i64, _>("overdue_count"),
     })
 }
 

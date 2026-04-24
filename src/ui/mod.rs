@@ -1,9 +1,9 @@
 // Presenter-layer модулі для канонічного Slint contract із `ui/app.slint`.
-pub mod helpers;
+pub mod counterparties;
 pub mod dashboard;
 pub mod documents;
-pub mod counterparties;
+pub mod helpers;
 pub mod payments;
 pub mod reports;
-pub mod tasks;
 pub mod settings;
+pub mod tasks;

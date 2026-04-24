@@ -1,4 +1,4 @@
-﻿use anyhow::Result;
+use anyhow::Result;
 use sqlx::postgres::PgPoolOptions;
 
 const CLEANUP_SQL: &str = r#"
@@ -115,13 +115,27 @@ mod tests {
     fn cleanup_statements_cover_all_demo_entities() {
         let statements = cleanup_statements();
         assert_eq!(statements.len(), 7);
-        assert!(statements.iter().any(|sql| sql.contains("DELETE FROM tasks")));
-        assert!(statements.iter().any(|sql| sql.contains("DELETE FROM payments")));
-        assert!(statements.iter().any(|sql| sql.contains("DELETE FROM payment_schedule")));
-        assert!(statements.iter().any(|sql| sql.contains("DELETE FROM acts")));
-        assert!(statements.iter().any(|sql| sql.contains("DELETE FROM invoices")));
-        assert!(statements.iter().any(|sql| sql.contains("DELETE FROM counterparties")));
-        assert!(statements.iter().any(|sql| sql.contains("DELETE FROM companies")));
+        assert!(statements
+            .iter()
+            .any(|sql| sql.contains("DELETE FROM tasks")));
+        assert!(statements
+            .iter()
+            .any(|sql| sql.contains("DELETE FROM payments")));
+        assert!(statements
+            .iter()
+            .any(|sql| sql.contains("DELETE FROM payment_schedule")));
+        assert!(statements
+            .iter()
+            .any(|sql| sql.contains("DELETE FROM acts")));
+        assert!(statements
+            .iter()
+            .any(|sql| sql.contains("DELETE FROM invoices")));
+        assert!(statements
+            .iter()
+            .any(|sql| sql.contains("DELETE FROM counterparties")));
+        assert!(statements
+            .iter()
+            .any(|sql| sql.contains("DELETE FROM companies")));
     }
 
     #[test]

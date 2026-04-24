@@ -378,51 +378,51 @@ mod tests {
 
     fn sample_company(prefix: &str) -> PdfCompany {
         PdfCompany {
-            name:    format!("{prefix} ФОП Тестовий"),
-            edrpou:  "1234567890".into(),
-            iban:    "UA123456789012345678901234567".into(),
+            name: format!("{prefix} ФОП Тестовий"),
+            edrpou: "1234567890".into(),
+            iban: "UA123456789012345678901234567".into(),
             address: "м. Київ, вул. Тестова, 1".into(),
         }
     }
 
     fn sample_act_data() -> PdfActData {
         PdfActData {
-            number:      "АКТ-2026-001".into(),
-            date:        "15.04.2026".into(),
-            company:     sample_company("Виконавець"),
-            client:      sample_company("Замовник"),
-            items:       vec![PdfActItem {
-                num:    1,
-                name:   "Розробка програмного забезпечення".into(),
-                qty:    "1.0000".into(),
-                unit:   "послуга".into(),
-                price:  "45000.00".into(),
+            number: "АКТ-2026-001".into(),
+            date: "15.04.2026".into(),
+            company: sample_company("Виконавець"),
+            client: sample_company("Замовник"),
+            items: vec![PdfActItem {
+                num: 1,
+                name: "Розробка програмного забезпечення".into(),
+                qty: "1.0000".into(),
+                unit: "послуга".into(),
+                price: "45000.00".into(),
                 amount: "45000.00".into(),
             }],
-            total:       "45000.00".into(),
+            total: "45000.00".into(),
             total_words: "сорок п'ять тисяч гривень 00 копійок".into(),
-            notes:       String::new(),
+            notes: String::new(),
         }
     }
 
     fn sample_invoice_data() -> PdfInvoiceData {
         PdfInvoiceData {
-            number:      "РАХ-2026-001".into(),
-            date:        "15.04.2026".into(),
-            company:     sample_company("Виконавець"),
-            client:      sample_company("Замовник"),
-            items:       vec![PdfInvoiceItem {
-                num:    1,
-                name:   "Товар тестовий".into(),
-                qty:    "2.0000".into(),
-                unit:   "шт".into(),
-                price:  "500.00".into(),
+            number: "РАХ-2026-001".into(),
+            date: "15.04.2026".into(),
+            company: sample_company("Виконавець"),
+            client: sample_company("Замовник"),
+            items: vec![PdfInvoiceItem {
+                num: 1,
+                name: "Товар тестовий".into(),
+                qty: "2.0000".into(),
+                unit: "шт".into(),
+                price: "500.00".into(),
                 amount: "1000.00".into(),
             }],
-            total:       "1000.00".into(),
-            vat_amount:  "0.00".into(),
+            total: "1000.00".into(),
+            vat_amount: "0.00".into(),
             total_words: "одна тисяча гривень 00 копійок".into(),
-            notes:       String::new(),
+            notes: String::new(),
         }
     }
 
@@ -519,7 +519,16 @@ mod tests {
     #[test]
     fn pdf_act_data_json_contains_all_top_level_keys() {
         let json = serde_json::to_value(&sample_act_data()).unwrap();
-        for key in ["number", "date", "company", "client", "items", "total", "total_words", "notes"] {
+        for key in [
+            "number",
+            "date",
+            "company",
+            "client",
+            "items",
+            "total",
+            "total_words",
+            "notes",
+        ] {
             assert!(json.get(key).is_some(), "відсутній ключ: {key}");
         }
     }
@@ -530,15 +539,24 @@ mod tests {
         let items = json["items"].as_array().unwrap();
         assert_eq!(items.len(), 1);
         // Суми мають бути рядками, а не числами (Typst отримує "45000.00")
-        assert!(items[0]["amount"].is_string(), "amount у позиції має бути рядком");
-        assert!(items[0]["price"].is_string(), "price у позиції має бути рядком");
+        assert!(
+            items[0]["amount"].is_string(),
+            "amount у позиції має бути рядком"
+        );
+        assert!(
+            items[0]["price"].is_string(),
+            "price у позиції має бути рядком"
+        );
         assert_eq!(items[0]["num"].as_u64().unwrap(), 1);
     }
 
     #[test]
     fn pdf_act_data_total_is_string_not_number() {
         let json = serde_json::to_value(&sample_act_data()).unwrap();
-        assert!(json["total"].is_string(), "total має бути рядком для Typst-шаблону");
+        assert!(
+            json["total"].is_string(),
+            "total має бути рядком для Typst-шаблону"
+        );
     }
 
     // ─── JSON-сериалізація PdfInvoiceData ────────────────────────────────────
@@ -546,7 +564,10 @@ mod tests {
     #[test]
     fn pdf_invoice_data_json_contains_vat_amount_key() {
         let json = serde_json::to_value(&sample_invoice_data()).unwrap();
-        assert!(json.get("vat_amount").is_some(), "відсутній ключ vat_amount");
+        assert!(
+            json.get("vat_amount").is_some(),
+            "відсутній ключ vat_amount"
+        );
     }
 
     #[test]
@@ -559,7 +580,17 @@ mod tests {
     #[test]
     fn pdf_invoice_data_json_contains_all_top_level_keys() {
         let json = serde_json::to_value(&sample_invoice_data()).unwrap();
-        for key in ["number", "date", "company", "client", "items", "total", "vat_amount", "total_words", "notes"] {
+        for key in [
+            "number",
+            "date",
+            "company",
+            "client",
+            "items",
+            "total",
+            "vat_amount",
+            "total_words",
+            "notes",
+        ] {
             assert!(json.get(key).is_some(), "відсутній ключ: {key}");
         }
     }

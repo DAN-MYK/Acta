@@ -139,7 +139,11 @@ mod app_window_contract {
         ui.invoke_nav_changed(NavScreen::Reports);
 
         assert!(fired.get(), "nav: callback має викликатись");
-        assert_eq!(screen.get(), NavScreen::Reports, "nav: екран має передаватись");
+        assert_eq!(
+            screen.get(),
+            NavScreen::Reports,
+            "nav: екран має передаватись"
+        );
     }
 
     fn inbox() {
@@ -264,6 +268,52 @@ mod app_window_contract {
         }
         ui.invoke_doc_new();
         assert!(fired.get(), "doc: new");
+
+        let fired = capture_bool();
+        {
+            let fired = fired.clone();
+            ui.on_doc_selection_cleared(move || fired.set(true));
+        }
+        ui.invoke_doc_selection_cleared();
+        assert!(fired.get(), "doc: selection-cleared");
+
+        let fired = capture_bool();
+        let doc_id = capture_string();
+        {
+            let fired = fired.clone();
+            let doc_id_capture = doc_id.clone();
+            ui.on_doc_more_actions(move |id| {
+                fired.set(true);
+                *doc_id_capture.borrow_mut() = id;
+            });
+        }
+        ui.invoke_doc_more_actions("act:uuid-more".into());
+        assert!(fired.get(), "doc: more-actions");
+        assert_eq!(doc_id.borrow().as_str(), "act:uuid-more");
+
+        let fired = capture_bool();
+        {
+            let fired = fired.clone();
+            ui.on_doc_bulk_send(move || fired.set(true));
+        }
+        ui.invoke_doc_bulk_send();
+        assert!(fired.get(), "doc: bulk-send");
+
+        let fired = capture_bool();
+        {
+            let fired = fired.clone();
+            ui.on_doc_bulk_archive(move || fired.set(true));
+        }
+        ui.invoke_doc_bulk_archive();
+        assert!(fired.get(), "doc: bulk-archive");
+
+        let fired = capture_bool();
+        {
+            let fired = fired.clone();
+            ui.on_doc_bulk_delete(move || fired.set(true));
+        }
+        ui.invoke_doc_bulk_delete();
+        assert!(fired.get(), "doc: bulk-delete");
 
         let fired = capture_bool();
         let page = capture_i32(0);
@@ -512,6 +562,37 @@ mod app_window_contract {
         }
         ui.invoke_task_new();
         assert!(fired.get(), "task: new");
+
+        let fired = capture_bool();
+        let title = capture_string();
+        let priority = capture_string();
+        let due = capture_string();
+        let reminder = capture_string();
+        {
+            let fired = fired.clone();
+            let title_capture = title.clone();
+            let priority_capture = priority.clone();
+            let due_capture = due.clone();
+            let reminder_capture = reminder.clone();
+            ui.on_task_save(move |task_title, task_priority, task_due, task_reminder| {
+                fired.set(true);
+                *title_capture.borrow_mut() = task_title;
+                *priority_capture.borrow_mut() = task_priority;
+                *due_capture.borrow_mut() = task_due;
+                *reminder_capture.borrow_mut() = task_reminder;
+            });
+        }
+        ui.invoke_task_save(
+            "Перевірити оплату".into(),
+            "high".into(),
+            "24.04.2026".into(),
+            "".into(),
+        );
+        assert!(fired.get(), "task: save");
+        assert_eq!(title.borrow().as_str(), "Перевірити оплату");
+        assert_eq!(priority.borrow().as_str(), "high");
+        assert_eq!(due.borrow().as_str(), "24.04.2026");
+        assert_eq!(reminder.borrow().as_str(), "");
 
         let fired = capture_bool();
         let filter = capture_string();

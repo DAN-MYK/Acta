@@ -4,7 +4,7 @@
 // перераховує total_amount, і лише тоді робить commit.
 // Якщо будь-який крок провалився — транзакція автоматично відкатується при drop().
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 use chrono::{Datelike, Duration}; // .year(), Duration для дат
 use rust_decimal::Decimal;
 use sqlx::PgPool;
@@ -53,7 +53,7 @@ pub async fn generate_next_number(pool: &PgPool, company_id: Uuid) -> Result<Str
     // Отримуємо всі номери актів поточного року для цієї компанії.
     // Runtime-style query — не потребує cargo sqlx prepare.
     let rows = sqlx::query(
-        r#"SELECT number FROM acts WHERE company_id = $1 AND EXTRACT(YEAR FROM date)::int = $2"#
+        r#"SELECT number FROM acts WHERE company_id = $1 AND EXTRACT(YEAR FROM date)::int = $2"#,
     )
     .bind(company_id)
     .bind(year as i32)
@@ -87,7 +87,10 @@ pub async fn generate_next_number(pool: &PgPool, company_id: Uuid) -> Result<Str
 ///
 /// Чому не використовуємо повну структуру Counterparty:
 ///   Для ComboBox потрібні лише id та name — зайві поля марно вантажили б мережу.
-pub async fn counterparties_for_select(pool: &PgPool, company_id: Uuid) -> Result<Vec<(Uuid, String)>> {
+pub async fn counterparties_for_select(
+    pool: &PgPool,
+    company_id: Uuid,
+) -> Result<Vec<(Uuid, String)>> {
     use sqlx::Row;
     let rows = sqlx::query(
         "SELECT id, name FROM counterparties WHERE is_archived = FALSE AND company_id = $1 ORDER BY name"
@@ -97,7 +100,10 @@ pub async fn counterparties_for_select(pool: &PgPool, company_id: Uuid) -> Resul
     .await?;
 
     // Перетворюємо результат у Vec<(Uuid, String)>
-    let result = rows.into_iter().map(|r| (r.get("id"), r.get("name"))).collect();
+    let result = rows
+        .into_iter()
+        .map(|r| (r.get("id"), r.get("name")))
+        .collect();
     Ok(result)
 }
 
@@ -105,8 +111,22 @@ pub async fn counterparties_for_select(pool: &PgPool, company_id: Uuid) -> Resul
 ///
 /// `status_filter = None`  → усі акти.
 /// `status_filter = Some(s)` → лише акти з вказаним статусом.
-pub async fn list(pool: &PgPool, company_id: Uuid, status_filter: Option<ActStatus>) -> Result<Vec<ActListRow>> {
-    list_filtered(pool, company_id, status_filter, None, None, None, None, None).await
+pub async fn list(
+    pool: &PgPool,
+    company_id: Uuid,
+    status_filter: Option<ActStatus>,
+) -> Result<Vec<ActListRow>> {
+    list_filtered(
+        pool,
+        company_id,
+        status_filter,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .await
 }
 
 /// Отримати список актів компанії з фільтром за статусом, текстовим пошуком,
@@ -211,8 +231,8 @@ pub async fn get_kpi(pool: &PgPool, company_id: Uuid) -> Result<ActKpi> {
     use sqlx::Row;
 
     let today = chrono::Utc::now().date_naive();
-    let first_of_month = chrono::NaiveDate::from_ymd_opt(today.year(), today.month(), 1)
-        .unwrap_or(today);
+    let first_of_month =
+        chrono::NaiveDate::from_ymd_opt(today.year(), today.month(), 1).unwrap_or(today);
     let overdue_threshold = today - Duration::days(30);
 
     let row = sqlx::query(
@@ -233,10 +253,10 @@ pub async fn get_kpi(pool: &PgPool, company_id: Uuid) -> Result<ActKpi> {
     .await?;
 
     Ok(ActKpi {
-        acts_this_month:    row.get::<i64, _>("acts_this_month"),
+        acts_this_month: row.get::<i64, _>("acts_this_month"),
         revenue_this_month: row.get::<Decimal, _>("revenue_this_month"),
-        unpaid_total:       row.get::<Decimal, _>("unpaid_total"),
-        overdue_count:      row.get::<i64, _>("overdue_count"),
+        unpaid_total: row.get::<Decimal, _>("unpaid_total"),
+        overdue_count: row.get::<i64, _>("overdue_count"),
     })
 }
 
@@ -298,7 +318,7 @@ pub async fn create(pool: &PgPool, company_id: Uuid, data: &NewAct) -> Result<Ac
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
            RETURNING id, number, counterparty_id, contract_id, category_id, direction,
                      date, expected_payment_date, total_amount,
-                     status, notes, bas_id, created_at, updated_at"#
+                     status, notes, bas_id, created_at, updated_at"#,
     )
     .bind(company_id)
     .bind(&data.number)
@@ -347,7 +367,7 @@ pub async fn create(pool: &PgPool, company_id: Uuid, data: &NewAct) -> Result<Ac
            WHERE id = $1
            RETURNING id, number, counterparty_id, contract_id, category_id, direction,
                      date, expected_payment_date, total_amount,
-                     status, notes, bas_id, created_at, updated_at"#
+                     status, notes, bas_id, created_at, updated_at"#,
     )
     .bind(act.id)
     .bind(total)

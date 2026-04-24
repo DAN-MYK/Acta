@@ -9,7 +9,6 @@ use uuid::Uuid;
 
 use crate::models::company::{Company, CompanySummary, NewCompany, UpdateCompany};
 
-
 /// Всі активні (не архівовані) компанії, відсортовані за назвою.
 /// Використовується для списку вибору активної компанії.
 pub async fn list(pool: &PgPool) -> Result<Vec<Company>> {
@@ -17,7 +16,7 @@ pub async fn list(pool: &PgPool) -> Result<Vec<Company>> {
         "SELECT id, name, short_name, edrpou, ipn, iban, legal_address, actual_address,
                 phone, email, director_name, accountant_name, tax_system, is_vat_payer,
                 logo_path, notes, is_archived, created_at, updated_at
-         FROM companies WHERE is_archived = FALSE ORDER BY name"
+         FROM companies WHERE is_archived = FALSE ORDER BY name",
     )
     .fetch_all(pool)
     .await?)
@@ -38,7 +37,7 @@ pub async fn list_with_summary(pool: &PgPool) -> Result<Vec<CompanySummary>> {
            LEFT JOIN acts a ON a.company_id = c.id
            WHERE c.is_archived = FALSE
            GROUP BY c.id, c.name, c.short_name, c.edrpou, c.is_vat_payer
-           ORDER BY c.name"#
+           ORDER BY c.name"#,
     )
     .fetch_all(pool)
     .await?)
@@ -50,7 +49,7 @@ pub async fn list_all(pool: &PgPool) -> Result<Vec<Company>> {
         "SELECT id, name, short_name, edrpou, ipn, iban, legal_address, actual_address,
                 phone, email, director_name, accountant_name, tax_system, is_vat_payer,
                 logo_path, notes, is_archived, created_at, updated_at
-         FROM companies ORDER BY name"
+         FROM companies ORDER BY name",
     )
     .fetch_all(pool)
     .await?)
@@ -62,7 +61,7 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<Company>> {
         "SELECT id, name, short_name, edrpou, ipn, iban, legal_address, actual_address,
                 phone, email, director_name, accountant_name, tax_system, is_vat_payer,
                 logo_path, notes, is_archived, created_at, updated_at
-         FROM companies WHERE id = $1"
+         FROM companies WHERE id = $1",
     )
     .bind(id)
     .fetch_optional(pool)
@@ -101,7 +100,7 @@ pub async fn update(pool: &PgPool, id: Uuid, c: &UpdateCompany) -> Result<Option
            WHERE id = $1
            RETURNING id, name, short_name, edrpou, ipn, iban, legal_address, actual_address,
                      phone, email, director_name, accountant_name, tax_system, is_vat_payer,
-                     logo_path, notes, is_archived, created_at, updated_at"#
+                     logo_path, notes, is_archived, created_at, updated_at"#,
     )
     .bind(id)
     .bind(&c.name)
@@ -121,13 +120,12 @@ pub async fn update(pool: &PgPool, id: Uuid, c: &UpdateCompany) -> Result<Option
 /// Архівувати компанію (м'яке видалення).
 /// Повертає `true` якщо запис знайдено та оновлено.
 pub async fn archive(pool: &PgPool, id: Uuid) -> Result<bool> {
-    let affected = sqlx::query(
-        "UPDATE companies SET is_archived = TRUE, updated_at = NOW() WHERE id = $1"
-    )
-    .bind(id)
-    .execute(pool)
-    .await?
-    .rows_affected();
+    let affected =
+        sqlx::query("UPDATE companies SET is_archived = TRUE, updated_at = NOW() WHERE id = $1")
+            .bind(id)
+            .execute(pool)
+            .await?
+            .rows_affected();
     Ok(affected > 0)
 }
 

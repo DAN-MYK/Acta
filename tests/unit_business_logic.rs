@@ -63,8 +63,14 @@ fn pdf_amount_to_words_handles_zero() {
 
 #[test]
 fn pdf_amount_to_words_handles_teens_and_feminine_forms() {
-    assert_eq!(amount_to_words(&dec!(11.00)), "одинадцять гривень 00 копійок");
-    assert_eq!(amount_to_words(&dec!(21.00)), "двадцять одна гривня 00 копійок");
+    assert_eq!(
+        amount_to_words(&dec!(11.00)),
+        "одинадцять гривень 00 копійок"
+    );
+    assert_eq!(
+        amount_to_words(&dec!(21.00)),
+        "двадцять одна гривня 00 копійок"
+    );
 }
 
 #[test]
@@ -123,7 +129,10 @@ fn parse_date_ui_valid_returns_some() {
     use chrono::NaiveDate;
     let result = NaiveDate::parse_from_str("15.04.2026", "%d.%m.%Y");
     assert!(result.is_ok());
-    assert_eq!(result.unwrap(), NaiveDate::from_ymd_opt(2026, 4, 15).unwrap());
+    assert_eq!(
+        result.unwrap(),
+        NaiveDate::from_ymd_opt(2026, 4, 15).unwrap()
+    );
 }
 
 #[test]
@@ -135,7 +144,11 @@ fn parse_date_ui_invalid_returns_none() {
 #[test]
 fn parse_opt_uuid_empty_returns_none() {
     let s = "";
-    let result: Option<uuid::Uuid> = if s.trim().is_empty() { None } else { uuid::Uuid::parse_str(s).ok() };
+    let result: Option<uuid::Uuid> = if s.trim().is_empty() {
+        None
+    } else {
+        uuid::Uuid::parse_str(s).ok()
+    };
     assert!(result.is_none());
 }
 
@@ -143,6 +156,10 @@ fn parse_opt_uuid_empty_returns_none() {
 fn parse_opt_uuid_valid_returns_some() {
     let id = uuid::Uuid::new_v4();
     let s = id.to_string();
-    let result: Option<uuid::Uuid> = if s.trim().is_empty() { None } else { uuid::Uuid::parse_str(&s).ok() };
+    let result: Option<uuid::Uuid> = if s.trim().is_empty() {
+        None
+    } else {
+        uuid::Uuid::parse_str(&s).ok()
+    };
     assert_eq!(result, Some(id));
 }

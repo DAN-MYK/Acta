@@ -91,7 +91,7 @@ mod tests {
 
     #[test]
     fn edrpou_invalid() {
-        assert!(!is_valid_edrpou("1234567"));   // 7 цифр
+        assert!(!is_valid_edrpou("1234567")); // 7 цифр
         assert!(!is_valid_edrpou("123456789")); // 9 цифр
         assert!(!is_valid_edrpou("1234567a")); // буква
         assert!(!is_valid_edrpou(""));
@@ -105,7 +105,7 @@ mod tests {
 
     #[test]
     fn ipn_invalid() {
-        assert!(!is_valid_ipn("123456789"));   // 9 цифр
+        assert!(!is_valid_ipn("123456789")); // 9 цифр
         assert!(!is_valid_ipn("12345678901")); // 11 цифр
         assert!(!is_valid_ipn("123456789x")); // буква
         assert!(!is_valid_ipn(""));
@@ -120,7 +120,7 @@ mod tests {
 
     #[test]
     fn iban_invalid() {
-        assert!(!is_valid_iban("UA12345"));              // занадто короткий
+        assert!(!is_valid_iban("UA12345")); // занадто короткий
         assert!(!is_valid_iban("DE123456789012345678901234567")); // не UA
         assert!(!is_valid_iban("UA12345678901234567890123456a")); // буква
         assert!(!is_valid_iban("UA123")); // 5 символів

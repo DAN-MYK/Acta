@@ -128,7 +128,11 @@ pub async fn list_filtered(
 ///
 /// Використовує runtime-style query_as щоб уникнути потреби в `cargo sqlx prepare`
 /// при зміні сигнатури (додано company_id).
-pub async fn create(pool: &PgPool, company_id: Uuid, data: &NewCounterparty) -> Result<Counterparty> {
+pub async fn create(
+    pool: &PgPool,
+    company_id: Uuid,
+    data: &NewCounterparty,
+) -> Result<Counterparty> {
     let row = sqlx::query_as::<_, Counterparty>(
         r#"INSERT INTO counterparties (company_id, name, edrpou, ipn, iban, address, phone, email, notes, bas_id)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)

@@ -21,19 +21,19 @@ pub struct PaymentKpi {
 impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Payment {
     fn from_row(row: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
         Ok(Self {
-            id:              row.try_get("id")?,
-            company_id:      row.try_get("company_id")?,
-            date:            row.try_get("date")?,
-            amount:          row.try_get("amount")?,
-            direction:       row.try_get("direction")?,
+            id: row.try_get("id")?,
+            company_id: row.try_get("company_id")?,
+            date: row.try_get("date")?,
+            amount: row.try_get("amount")?,
+            direction: row.try_get("direction")?,
             counterparty_id: row.try_get("counterparty_id")?,
-            bank_name:       row.try_get("bank_name")?,
-            bank_ref:        row.try_get("bank_ref")?,
-            description:     row.try_get("description")?,
-            is_reconciled:   row.try_get("is_reconciled")?,
-            bas_id:          row.try_get("bas_id")?,
-            created_at:      row.try_get("created_at")?,
-            updated_at:      row.try_get("updated_at")?,
+            bank_name: row.try_get("bank_name")?,
+            bank_ref: row.try_get("bank_ref")?,
+            description: row.try_get("description")?,
+            is_reconciled: row.try_get("is_reconciled")?,
+            bas_id: row.try_get("bas_id")?,
+            created_at: row.try_get("created_at")?,
+            updated_at: row.try_get("updated_at")?,
         })
     }
 }
@@ -41,19 +41,19 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Payment {
 impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for PaymentSchedule {
     fn from_row(row: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
         Ok(Self {
-            id:              row.try_get("id")?,
-            company_id:      row.try_get("company_id")?,
-            title:           row.try_get("title")?,
-            amount:          row.try_get("amount")?,
-            direction:       row.try_get("direction")?,
-            scheduled_date:  row.try_get("scheduled_date")?,
-            recurrence:      row.try_get("recurrence")?,
-            recurrence_end:  row.try_get("recurrence_end")?,
+            id: row.try_get("id")?,
+            company_id: row.try_get("company_id")?,
+            title: row.try_get("title")?,
+            amount: row.try_get("amount")?,
+            direction: row.try_get("direction")?,
+            scheduled_date: row.try_get("scheduled_date")?,
+            recurrence: row.try_get("recurrence")?,
+            recurrence_end: row.try_get("recurrence_end")?,
             counterparty_id: row.try_get("counterparty_id")?,
-            notes:           row.try_get("notes")?,
-            is_completed:    row.try_get("is_completed")?,
-            created_at:      row.try_get("created_at")?,
-            updated_at:      row.try_get("updated_at")?,
+            notes: row.try_get("notes")?,
+            is_completed: row.try_get("is_completed")?,
+            created_at: row.try_get("created_at")?,
+            updated_at: row.try_get("updated_at")?,
         })
     }
 }
@@ -65,29 +65,29 @@ pub async fn list(
     direction: Option<PaymentDirection>,
 ) -> Result<Vec<PaymentListRow>> {
     struct Row {
-        id:               Uuid,
-        date:             String,
-        amount:           rust_decimal::Decimal,
-        direction:        PaymentDirection,
-        counterparty_id:  Option<Uuid>,
+        id: Uuid,
+        date: String,
+        amount: rust_decimal::Decimal,
+        direction: PaymentDirection,
+        counterparty_id: Option<Uuid>,
         counterparty_name: Option<String>,
-        bank_name:        Option<String>,
-        description:      Option<String>,
-        is_reconciled:    bool,
+        bank_name: Option<String>,
+        description: Option<String>,
+        is_reconciled: bool,
     }
 
     impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Row {
         fn from_row(r: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
             Ok(Self {
-                id:                r.try_get("id")?,
-                date:              r.try_get("date")?,
-                amount:            r.try_get("amount")?,
-                direction:         r.try_get("direction")?,
-                counterparty_id:   r.try_get("counterparty_id")?,
+                id: r.try_get("id")?,
+                date: r.try_get("date")?,
+                amount: r.try_get("amount")?,
+                direction: r.try_get("direction")?,
+                counterparty_id: r.try_get("counterparty_id")?,
                 counterparty_name: r.try_get("counterparty_name")?,
-                bank_name:         r.try_get("bank_name")?,
-                description:       r.try_get("description")?,
-                is_reconciled:     r.try_get("is_reconciled")?,
+                bank_name: r.try_get("bank_name")?,
+                description: r.try_get("description")?,
+                is_reconciled: r.try_get("is_reconciled")?,
             })
         }
     }
@@ -119,15 +119,15 @@ pub async fn list(
     Ok(rows
         .into_iter()
         .map(|r| PaymentListRow {
-            id:               r.id,
-            date:             r.date,
-            amount:           r.amount,
-            direction:        r.direction,
-            counterparty_id:  r.counterparty_id,
+            id: r.id,
+            date: r.date,
+            amount: r.amount,
+            direction: r.direction,
+            counterparty_id: r.counterparty_id,
             counterparty_name: r.counterparty_name,
-            bank_name:        r.bank_name,
-            description:      r.description,
-            is_reconciled:    r.is_reconciled,
+            bank_name: r.bank_name,
+            description: r.description,
+            is_reconciled: r.is_reconciled,
         })
         .collect())
 }
@@ -304,12 +304,10 @@ pub async fn update(pool: &PgPool, id: Uuid, data: UpdatePayment) -> Result<Opti
 
 /// Позначити платіж як зведений (is_reconciled = true).
 pub async fn mark_reconciled(pool: &PgPool, id: Uuid) -> Result<()> {
-    sqlx::query(
-        "UPDATE payments SET is_reconciled = TRUE, updated_at = NOW() WHERE id = $1",
-    )
-    .bind(id)
-    .execute(pool)
-    .await?;
+    sqlx::query("UPDATE payments SET is_reconciled = TRUE, updated_at = NOW() WHERE id = $1")
+        .bind(id)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
@@ -393,10 +391,7 @@ pub async fn list_upcoming_schedule(
 }
 
 /// Створити запланований платіж.
-pub async fn create_schedule(
-    pool: &PgPool,
-    data: NewPaymentSchedule,
-) -> Result<PaymentSchedule> {
+pub async fn create_schedule(pool: &PgPool, data: NewPaymentSchedule) -> Result<PaymentSchedule> {
     let row = sqlx::query_as::<_, PaymentSchedule>(
         r#"
         INSERT INTO payment_schedule

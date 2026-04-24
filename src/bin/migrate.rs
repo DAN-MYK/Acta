@@ -76,7 +76,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{CliOptions, ParseOutcome, parse_args};
+    use super::{parse_args, CliOptions, ParseOutcome};
 
     fn args(items: &[&str]) -> Vec<String> {
         items.iter().map(|s| s.to_string()).collect()

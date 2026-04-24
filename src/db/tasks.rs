@@ -1,4 +1,3 @@
-
 use anyhow::Result;
 use sqlx::PgPool;
 use uuid::Uuid;

@@ -129,8 +129,7 @@ pub async fn revenue_by_month(
         // i=0 — поточний місяць, i=months-1 — найстаріший
         let target_month = subtract_months(today, i);
         let found = rows.iter().find(|r| {
-            r.month_num as u32 == target_month.month()
-                && r.year_num == target_month.year()
+            r.month_num as u32 == target_month.month() && r.year_num == target_month.year()
         });
         result.push(MonthRevenue {
             month_num: target_month.month(),
@@ -145,10 +144,7 @@ pub async fn revenue_by_month(
 }
 
 /// Розподіл актів за статусами за поточний місяць.
-pub async fn acts_status_distribution(
-    pool: &PgPool,
-    company_id: Uuid,
-) -> Result<Vec<StatusSlice>> {
+pub async fn acts_status_distribution(pool: &PgPool, company_id: Uuid) -> Result<Vec<StatusSlice>> {
     struct Row {
         status: String,
         count: i64,
@@ -243,9 +239,18 @@ pub async fn upcoming_payments(
 
     let month_abbr = |m: i32| -> &'static str {
         match m {
-            1 => "Січ", 2 => "Лют", 3 => "Бер", 4 => "Кві",
-            5 => "Тра", 6 => "Чер", 7 => "Лип", 8 => "Сер",
-            9 => "Вер", 10 => "Жов", 11 => "Лис", 12 => "Гру",
+            1 => "Січ",
+            2 => "Лют",
+            3 => "Бер",
+            4 => "Кві",
+            5 => "Тра",
+            6 => "Чер",
+            7 => "Лип",
+            8 => "Сер",
+            9 => "Вер",
+            10 => "Жов",
+            11 => "Лис",
+            12 => "Гру",
             _ => "???",
         }
     };
@@ -337,12 +342,12 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for InboxRow {
     fn from_row(r: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
         use sqlx::Row as _;
         Ok(Self {
-            doc_id:       r.try_get("doc_id")?,
-            doc_number:   r.try_get("doc_number")?,
+            doc_id: r.try_get("doc_id")?,
+            doc_number: r.try_get("doc_number")?,
             counterparty: r.try_get("counterparty")?,
-            amount:       r.try_get("amount")?,
-            age_days:     r.try_get("age_days")?,
-            kind:         r.try_get("kind")?,
+            amount: r.try_get("amount")?,
+            age_days: r.try_get("age_days")?,
+            kind: r.try_get("kind")?,
             action_label: r.try_get("action_label")?,
         })
     }

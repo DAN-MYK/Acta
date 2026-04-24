@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 use notify_rust::{Notification, Timeout};
 use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
@@ -308,10 +308,22 @@ async fn export_reports_pdf(
     document.push_str("= Звіт Acta\n");
     document.push_str(&format!("Період: {}\n\n", period_label(period)));
     document.push_str("== KPI\n");
-    document.push_str(&format!("Дохід: {}\n", typst_escape(data.metrics.revenue.as_str())));
-    document.push_str(&format!("Витрати: {}\n", typst_escape(data.metrics.expenses.as_str())));
-    document.push_str(&format!("Прибуток: {}\n", typst_escape(data.metrics.profit.as_str())));
-    document.push_str(&format!("Рентабельність: {}\n\n", typst_escape(data.metrics.margin.as_str())));
+    document.push_str(&format!(
+        "Дохід: {}\n",
+        typst_escape(data.metrics.revenue.as_str())
+    ));
+    document.push_str(&format!(
+        "Витрати: {}\n",
+        typst_escape(data.metrics.expenses.as_str())
+    ));
+    document.push_str(&format!(
+        "Прибуток: {}\n",
+        typst_escape(data.metrics.profit.as_str())
+    ));
+    document.push_str(&format!(
+        "Рентабельність: {}\n\n",
+        typst_escape(data.metrics.margin.as_str())
+    ));
     document.push_str("== Структура витрат\n");
     for category in &data.categories {
         document.push_str(&format!(
@@ -364,7 +376,11 @@ pub fn wire_reports_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                 state.period = period;
                 state.drill_category.clear();
             });
-            crate::bootstrap::spawn_refresh_screen(ui_weak.clone(), ctx.clone(), AppScreen::Reports);
+            crate::bootstrap::spawn_refresh_screen(
+                ui_weak.clone(),
+                ctx.clone(),
+                AppScreen::Reports,
+            );
         }
     });
 
@@ -375,7 +391,11 @@ pub fn wire_reports_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
             ctx.update_reports_state(|state| {
                 state.drill_category = category.to_string();
             });
-            crate::bootstrap::spawn_refresh_screen(ui_weak.clone(), ctx.clone(), AppScreen::Reports);
+            crate::bootstrap::spawn_refresh_screen(
+                ui_weak.clone(),
+                ctx.clone(),
+                AppScreen::Reports,
+            );
         }
     });
 
@@ -387,7 +407,11 @@ pub fn wire_reports_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                 let state = ctx.reports_state_snapshot();
                 let period = state.period;
                 let drill = state.drill_category;
-                let drill = if drill.is_empty() { None } else { Some(drill.as_str()) };
+                let drill = if drill.is_empty() {
+                    None
+                } else {
+                    Some(drill.as_str())
+                };
                 match export_reports_csv(ctx.pool(), ctx.company_id(), period, drill).await {
                     Ok(path) => notify_user("CSV-звіт збережено", &path.display().to_string()),
                     Err(error) => {
@@ -407,7 +431,11 @@ pub fn wire_reports_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                 let state = ctx.reports_state_snapshot();
                 let period = state.period;
                 let drill = state.drill_category;
-                let drill = if drill.is_empty() { None } else { Some(drill.as_str()) };
+                let drill = if drill.is_empty() {
+                    None
+                } else {
+                    Some(drill.as_str())
+                };
                 match export_reports_pdf(ctx.pool(), ctx.company_id(), period, drill).await {
                     Ok(path) => notify_user("PDF-звіт збережено", &path.display().to_string()),
                     Err(error) => {
@@ -455,12 +483,28 @@ mod tests {
     #[test]
     fn build_chart_bars_normalizes_against_largest_series_value() {
         let revenue = vec![
-            MonthRevenue { month_num: 1, year: 2026, amount: dec!(100) },
-            MonthRevenue { month_num: 2, year: 2026, amount: dec!(200) },
+            MonthRevenue {
+                month_num: 1,
+                year: 2026,
+                amount: dec!(100),
+            },
+            MonthRevenue {
+                month_num: 2,
+                year: 2026,
+                amount: dec!(200),
+            },
         ];
         let expenses = vec![
-            MonthRevenue { month_num: 1, year: 2026, amount: dec!(50) },
-            MonthRevenue { month_num: 2, year: 2026, amount: dec!(300) },
+            MonthRevenue {
+                month_num: 1,
+                year: 2026,
+                amount: dec!(50),
+            },
+            MonthRevenue {
+                month_num: 2,
+                year: 2026,
+                amount: dec!(300),
+            },
         ];
 
         let bars = build_chart_bars(&revenue, &expenses);
@@ -474,8 +518,16 @@ mod tests {
 
     #[test]
     fn build_chart_bars_returns_zero_heights_when_all_values_are_zero() {
-        let revenue = vec![MonthRevenue { month_num: 1, year: 2026, amount: dec!(0) }];
-        let expenses = vec![MonthRevenue { month_num: 1, year: 2026, amount: dec!(0) }];
+        let revenue = vec![MonthRevenue {
+            month_num: 1,
+            year: 2026,
+            amount: dec!(0),
+        }];
+        let expenses = vec![MonthRevenue {
+            month_num: 1,
+            year: 2026,
+            amount: dec!(0),
+        }];
 
         let bars = build_chart_bars(&revenue, &expenses);
 

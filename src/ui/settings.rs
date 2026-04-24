@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use chrono::Local;
 use notify_rust::{Notification, Timeout};
 use serde::{Deserialize, Serialize};
@@ -216,7 +216,9 @@ async fn last_backup_info() -> (String, String) {
             continue;
         }
 
-        let modified = metadata.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+        let modified = metadata
+            .modified()
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
         let len = metadata.len();
         match &newest {
             Some((current, _, _)) if modified <= *current => {}
@@ -229,7 +231,9 @@ async fn last_backup_info() -> (String, String) {
         let label = modified.format("%d.%m.%Y %H:%M").to_string();
         let file = format!(
             "{} · {:.1} KB",
-            path.file_name().and_then(|name| name.to_str()).unwrap_or_default(),
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or_default(),
             len as f64 / 1024.0
         );
         (label, file)
@@ -389,7 +393,12 @@ pub fn wire_settings_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                 match db::companies::update(ctx.pool(), company_id, &update).await {
                     Ok(Some(company)) => {
                         tracing::info!("settings: company saved");
-                        crate::bootstrap::refresh_screen(ui_weak.clone(), ctx.clone(), AppScreen::Settings).await;
+                        crate::bootstrap::refresh_screen(
+                            ui_weak.clone(),
+                            ctx.clone(),
+                            AppScreen::Settings,
+                        )
+                        .await;
                         notify_user(
                             "Налаштування компанії збережено",
                             &format!("Оновлено профіль '{}'", company.name),
@@ -425,7 +434,12 @@ pub fn wire_settings_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
             tokio::spawn(async move {
                 match write_integration_config(&tag).await {
                     Ok(path) => {
-                        crate::bootstrap::refresh_screen(ui_weak.clone(), ctx.clone(), AppScreen::Settings).await;
+                        crate::bootstrap::refresh_screen(
+                            ui_weak.clone(),
+                            ctx.clone(),
+                            AppScreen::Settings,
+                        )
+                        .await;
                         notify_user(
                             "Інтеграцію налаштовано",
                             &format!("Створено конфіг: {}", path.display()),
@@ -449,7 +463,12 @@ pub fn wire_settings_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
             tokio::spawn(async move {
                 match create_invite_draft().await {
                     Ok(path) => {
-                        crate::bootstrap::refresh_screen(ui_weak.clone(), ctx.clone(), AppScreen::Settings).await;
+                        crate::bootstrap::refresh_screen(
+                            ui_weak.clone(),
+                            ctx.clone(),
+                            AppScreen::Settings,
+                        )
+                        .await;
                         notify_user(
                             "Чернетку запрошення створено",
                             &format!("Відредагуйте файл {}", path.display()),
@@ -473,7 +492,12 @@ pub fn wire_settings_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
             tokio::spawn(async move {
                 match create_backup_snapshot(ctx.company_id()).await {
                     Ok(path) => {
-                        crate::bootstrap::refresh_screen(ui_weak.clone(), ctx.clone(), AppScreen::Settings).await;
+                        crate::bootstrap::refresh_screen(
+                            ui_weak.clone(),
+                            ctx.clone(),
+                            AppScreen::Settings,
+                        )
+                        .await;
                         notify_user(
                             "Резервну копію створено",
                             &format!("Файл збережено: {}", path.display()),

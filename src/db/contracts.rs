@@ -13,19 +13,19 @@ use crate::models::contract::{
 impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Contract {
     fn from_row(row: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
         Ok(Self {
-            id:              row.try_get("id")?,
-            company_id:      row.try_get("company_id")?,
+            id: row.try_get("id")?,
+            company_id: row.try_get("company_id")?,
             counterparty_id: row.try_get("counterparty_id")?,
-            number:          row.try_get("number")?,
-            subject:         row.try_get("subject")?,
-            date:            row.try_get("date")?,
-            expires_at:      row.try_get("expires_at")?,
-            amount:          row.try_get("amount")?,
-            status:          row.try_get("status")?,
-            notes:           row.try_get("notes")?,
-            bas_id:          row.try_get("bas_id")?,
-            created_at:      row.try_get("created_at")?,
-            updated_at:      row.try_get("updated_at")?,
+            number: row.try_get("number")?,
+            subject: row.try_get("subject")?,
+            date: row.try_get("date")?,
+            expires_at: row.try_get("expires_at")?,
+            amount: row.try_get("amount")?,
+            status: row.try_get("status")?,
+            notes: row.try_get("notes")?,
+            bas_id: row.try_get("bas_id")?,
+            created_at: row.try_get("created_at")?,
+            updated_at: row.try_get("updated_at")?,
         })
     }
 }
@@ -33,29 +33,29 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Contract {
 /// Список договорів компанії з назвою контрагента.
 pub async fn list(pool: &PgPool, company_id: Uuid) -> Result<Vec<ContractListRow>> {
     struct Row {
-        id:                Uuid,
-        number:            String,
-        subject:           Option<String>,
-        counterparty_id:   Uuid,
+        id: Uuid,
+        number: String,
+        subject: Option<String>,
+        counterparty_id: Uuid,
         counterparty_name: String,
-        date:              String,
-        expires_at:        Option<String>,
-        amount:            Option<rust_decimal::Decimal>,
-        status:            ContractStatus,
+        date: String,
+        expires_at: Option<String>,
+        amount: Option<rust_decimal::Decimal>,
+        status: ContractStatus,
     }
 
     impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Row {
         fn from_row(r: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
             Ok(Self {
-                id:                r.try_get("id")?,
-                number:            r.try_get("number")?,
-                subject:           r.try_get("subject")?,
-                counterparty_id:   r.try_get("counterparty_id")?,
+                id: r.try_get("id")?,
+                number: r.try_get("number")?,
+                subject: r.try_get("subject")?,
+                counterparty_id: r.try_get("counterparty_id")?,
                 counterparty_name: r.try_get("counterparty_name")?,
-                date:              r.try_get("date")?,
-                expires_at:        r.try_get("expires_at")?,
-                amount:            r.try_get("amount")?,
-                status:            r.try_get("status")?,
+                date: r.try_get("date")?,
+                expires_at: r.try_get("expires_at")?,
+                amount: r.try_get("amount")?,
+                status: r.try_get("status")?,
             })
         }
     }
@@ -85,15 +85,15 @@ pub async fn list(pool: &PgPool, company_id: Uuid) -> Result<Vec<ContractListRow
     Ok(rows
         .into_iter()
         .map(|r| ContractListRow {
-            id:                r.id,
-            number:            r.number,
-            subject:           r.subject,
-            counterparty_id:   r.counterparty_id,
+            id: r.id,
+            number: r.number,
+            subject: r.subject,
+            counterparty_id: r.counterparty_id,
             counterparty_name: r.counterparty_name,
-            date:              r.date,
-            expires_at:        r.expires_at,
-            amount:            r.amount,
-            status:            r.status,
+            date: r.date,
+            expires_at: r.expires_at,
+            amount: r.amount,
+            status: r.status,
         })
         .collect())
 }
@@ -105,29 +105,29 @@ pub async fn list_by_counterparty(
     counterparty_id: Uuid,
 ) -> Result<Vec<ContractListRow>> {
     struct Row {
-        id:                Uuid,
-        number:            String,
-        subject:           Option<String>,
-        counterparty_id:   Uuid,
+        id: Uuid,
+        number: String,
+        subject: Option<String>,
+        counterparty_id: Uuid,
         counterparty_name: String,
-        date:              String,
-        expires_at:        Option<String>,
-        amount:            Option<rust_decimal::Decimal>,
-        status:            ContractStatus,
+        date: String,
+        expires_at: Option<String>,
+        amount: Option<rust_decimal::Decimal>,
+        status: ContractStatus,
     }
 
     impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Row {
         fn from_row(r: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
             Ok(Self {
-                id:                r.try_get("id")?,
-                number:            r.try_get("number")?,
-                subject:           r.try_get("subject")?,
-                counterparty_id:   r.try_get("counterparty_id")?,
+                id: r.try_get("id")?,
+                number: r.try_get("number")?,
+                subject: r.try_get("subject")?,
+                counterparty_id: r.try_get("counterparty_id")?,
                 counterparty_name: r.try_get("counterparty_name")?,
-                date:              r.try_get("date")?,
-                expires_at:        r.try_get("expires_at")?,
-                amount:            r.try_get("amount")?,
-                status:            r.try_get("status")?,
+                date: r.try_get("date")?,
+                expires_at: r.try_get("expires_at")?,
+                amount: r.try_get("amount")?,
+                status: r.try_get("status")?,
             })
         }
     }
@@ -159,15 +159,15 @@ pub async fn list_by_counterparty(
     Ok(rows
         .into_iter()
         .map(|r| ContractListRow {
-            id:                r.id,
-            number:            r.number,
-            subject:           r.subject,
-            counterparty_id:   r.counterparty_id,
+            id: r.id,
+            number: r.number,
+            subject: r.subject,
+            counterparty_id: r.counterparty_id,
             counterparty_name: r.counterparty_name,
-            date:              r.date,
-            expires_at:        r.expires_at,
-            amount:            r.amount,
-            status:            r.status,
+            date: r.date,
+            expires_at: r.expires_at,
+            amount: r.amount,
+            status: r.status,
         })
         .collect())
 }
@@ -179,16 +179,16 @@ pub async fn list_for_select(
     counterparty_id: Uuid,
 ) -> Result<Vec<ContractSelectItem>> {
     struct Row {
-        id:      Uuid,
-        number:  String,
+        id: Uuid,
+        number: String,
         subject: Option<String>,
     }
 
     impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Row {
         fn from_row(r: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
             Ok(Self {
-                id:      r.try_get("id")?,
-                number:  r.try_get("number")?,
+                id: r.try_get("id")?,
+                number: r.try_get("number")?,
                 subject: r.try_get("subject")?,
             })
         }
@@ -212,8 +212,8 @@ pub async fn list_for_select(
     Ok(rows
         .into_iter()
         .map(|r| ContractSelectItem {
-            id:      r.id,
-            number:  r.number,
+            id: r.id,
+            number: r.number,
             subject: r.subject,
         })
         .collect())

@@ -464,7 +464,152 @@ ui.on_doc_open(move |id| {
 });
 ```
 
-## 19. Common gotchas
+## 19. Layout QA rules from dashboard audit
+
+These rules come from real defects found on the dashboard screen. Treat them as
+mandatory checks before calling any Slint UI work done.
+
+### Icon centering
+
+**Mistake:** placing an `Image` directly inside a fixed-size `Rectangle` and
+assuming it will be centered. Slint positions such children at the top-left by
+default unless layout or explicit coordinates are used. This caused toolbar and
+card action icons to visually stick to the top edge.
+
+```slint
+// WRONG: image sits at the container origin
+Rectangle {
+    width: 26px;
+    height: 26px;
+    Image {
+        source: root.icon-plus;
+        width: 12px;
+        height: 12px;
+    }
+}
+
+// CORRECT: center manually in free-positioned containers
+Rectangle {
+    width: 26px;
+    height: 26px;
+    Image {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        source: root.icon-plus;
+        width: 12px;
+        height: 12px;
+        image-fit: contain;
+    }
+}
+```
+
+If the icon is inside `HorizontalLayout` or `VerticalLayout`, use
+`vertical-alignment: center` / `horizontal-alignment: center` where supported.
+If it is inside a plain `Rectangle`, use explicit `x/y` centering.
+
+Shared icon-only controls such as `IconButton` must center their internal image
+inside the component itself. Do not rely on every call site to fix centering.
+
+### Text bounds and overflow
+
+**Mistake:** text in navigation, filters, table cells, or compact cards was
+allowed to grow without a stable width policy. Long Ukrainian labels then stuck
+to the right edge or escaped their visual container.
+
+Rules:
+
+- In a horizontal row, the primary label should usually have
+  `horizontal-stretch: 1` and `overflow: elide`.
+- Trailing counters, badges, amounts, and action buttons should have stable
+  fixed/min widths so they do not get squeezed by labels.
+- For compact sidebar rows, reserve width for the right-side value/counter and
+  right-align it.
+- For table text cells with user or imported data, set `overflow: elide`.
+- Never assume a Ukrainian label will fit because the English/short sample fits.
+
+```slint
+HorizontalLayout {
+    spacing: AppTheme.sp-2;
+
+    Text {
+        text: root.label;
+        horizontal-stretch: 1;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+
+    Text {
+        text: root.count;
+        width: 20px;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+        font-family: AppTheme.font-mono;
+    }
+}
+```
+
+### Fixed columns and table spacing
+
+**Mistake:** adjacent fixed-width columns were placed with `spacing: 0px`, so
+headers like `КРЕДИТ` and `СТАТУС` visually merged or looked clipped.
+
+Rules:
+
+- Numeric columns may be right-aligned, but the next column must have an explicit
+  gap or padding.
+- Header and row layouts must use the same column widths and separator gaps.
+- If adding a spacer between columns, subtract its width from the following fixed
+  column so total table width stays stable.
+- Verify both empty and populated table states.
+
+```slint
+Text {
+    text: data.credit-str;
+    width: 110px;
+    horizontal-alignment: right;
+    vertical-alignment: center;
+}
+
+Rectangle { width: 12px; }
+
+HorizontalLayout {
+    width: 118px;
+    spacing: 6px;
+    // status dot + label
+}
+```
+
+### Centered text inside custom rectangles
+
+**Mistake:** assuming a `Text` child fills its parent `Rectangle`. For custom
+components like avatars or badges, text may not cover the full parent area unless
+dimensions are explicit.
+
+```slint
+Text {
+    x: 0px;
+    y: 0px;
+    width: root.width;
+    height: root.height;
+    text: root.initials;
+    vertical-alignment: center;
+    horizontal-alignment: center;
+}
+```
+
+### Visual audit checklist
+
+Before finishing a UI change, inspect:
+
+1. Icons in plain `Rectangle` containers are centered with layout or explicit
+   `x/y`.
+2. Text in narrow rows has an overflow policy and does not touch the right edge.
+3. Header columns match row columns exactly.
+4. Empty states do not overflow their cards and do not dominate the screen unless
+   intentionally designed as the main state.
+5. `cargo check` passes after Slint edits.
+
+## 20. Common gotchas
 
 | Problem | Fix |
 |---------|-----|
@@ -477,7 +622,12 @@ ui.on_doc_open(move |id| {
 | Window opens blank | Don't use `upgrade_in_event_loop` before `ui.run()` — use `apply_*` directly |
 | Linter "assignment on input property" | Change `in property` → `in-out property` |
 
-## 20. Workflow when adding a new screen
+| Icon sticks to top-left inside `Rectangle` | Center with explicit `x/y` or put the icon inside a layout |
+| Sidebar/nav text touches right edge or escapes | Give the label `horizontal-stretch: 1` + `overflow: elide`; give counters/actions fixed width |
+| Table headers visually merge | Add the same explicit spacer/padding in both header and row layouts |
+| Centered avatar/badge text is off | Give inner `Text` `x/y/width/height` equal to the parent before alignment |
+
+## 21. Workflow when adding a new screen
 
 1. Create `ui/<screen>.slint` — declare data properties using ViewData struct from `types.slint`
 2. Add struct to `types.slint` if needed

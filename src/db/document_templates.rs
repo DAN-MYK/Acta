@@ -2,7 +2,9 @@ use anyhow::Result;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::models::document_template::{DocumentTemplate, NewDocumentTemplate, TemplateListRow, UpdateDocumentTemplate};
+use crate::models::document_template::{
+    DocumentTemplate, NewDocumentTemplate, TemplateListRow, UpdateDocumentTemplate,
+};
 
 /// Всі шаблони компанії.
 pub async fn list(pool: &PgPool, company_id: Uuid) -> Result<Vec<TemplateListRow>> {
@@ -38,7 +40,11 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<DocumentTemplat
 
 /// Створити новий шаблон.
 /// Якщо is_default = true, попередній дефолтний того ж типу скидається.
-pub async fn create(pool: &PgPool, company_id: Uuid, data: NewDocumentTemplate) -> Result<DocumentTemplate> {
+pub async fn create(
+    pool: &PgPool,
+    company_id: Uuid,
+    data: NewDocumentTemplate,
+) -> Result<DocumentTemplate> {
     let mut tx = pool.begin().await?;
 
     if data.is_default {
@@ -78,8 +84,14 @@ pub async fn create(pool: &PgPool, company_id: Uuid, data: NewDocumentTemplate) 
 
 /// Оновити шаблон.
 /// Якщо is_default = true, попередній дефолтний того ж типу скидається.
-pub async fn update(pool: &PgPool, id: Uuid, data: UpdateDocumentTemplate) -> Result<DocumentTemplate> {
-    let existing = get_by_id(pool, id).await?.ok_or_else(|| anyhow::anyhow!("Шаблон не знайдено"))?;
+pub async fn update(
+    pool: &PgPool,
+    id: Uuid,
+    data: UpdateDocumentTemplate,
+) -> Result<DocumentTemplate> {
+    let existing = get_by_id(pool, id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Шаблон не знайдено"))?;
 
     let mut tx = pool.begin().await?;
 
@@ -101,7 +113,10 @@ pub async fn update(pool: &PgPool, id: Uuid, data: UpdateDocumentTemplate) -> Re
 
     let name = data.name.as_ref().unwrap_or(&existing.name);
     let description = data.description.clone().or(existing.description.clone());
-    let template_path = data.template_path.as_ref().unwrap_or(&existing.template_path);
+    let template_path = data
+        .template_path
+        .as_ref()
+        .unwrap_or(&existing.template_path);
     let is_default = data.is_default.unwrap_or(existing.is_default);
 
     let row = sqlx::query_as::<_, DocumentTemplate>(
@@ -139,7 +154,11 @@ pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
 }
 
 /// Дефолтний шаблон для типу ('act' або 'invoice').
-pub async fn get_default(pool: &PgPool, company_id: Uuid, template_type: &str) -> Result<Option<DocumentTemplate>> {
+pub async fn get_default(
+    pool: &PgPool,
+    company_id: Uuid,
+    template_type: &str,
+) -> Result<Option<DocumentTemplate>> {
     let row = sqlx::query_as::<_, DocumentTemplate>(
         r#"
         SELECT id, company_id, name, description, template_type,

@@ -5,11 +5,11 @@ use anyhow::Result;
 use chrono::{Datelike, Duration, Utc};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use sqlx::{PgPool, postgres::PgPoolOptions};
+use sqlx::{postgres::PgPoolOptions, PgPool};
 use uuid::Uuid;
 
 // UUID дефолтної компанії з міграції 012_companies.sql
-const DEFAULT_COMPANY_ID: Uuid = Uuid::from_bytes([0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,1]);
+const DEFAULT_COMPANY_ID: Uuid = Uuid::from_bytes([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
 
 async fn test_pool() -> Result<Option<PgPool>> {
     let url = env::var("TEST_DATABASE_URL")
@@ -34,12 +34,11 @@ fn unique_suffix() -> String {
 }
 
 async fn relation_exists(pool: &PgPool, relation_name: &str) -> Result<bool> {
-    let exists = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS (SELECT 1 FROM pg_class WHERE relname = $1)"
-    )
-    .bind(relation_name)
-    .fetch_one(pool)
-    .await?;
+    let exists =
+        sqlx::query_scalar::<_, bool>("SELECT EXISTS (SELECT 1 FROM pg_class WHERE relname = $1)")
+            .bind(relation_name)
+            .fetch_one(pool)
+            .await?;
 
     Ok(exists)
 }
@@ -451,7 +450,8 @@ async fn acts_status_functions_return_none_for_missing_id() -> Result<()> {
 
     let missing_id = Uuid::new_v4();
 
-    let change_result = db::acts::change_status(&pool, missing_id, models::ActStatus::Issued).await?;
+    let change_result =
+        db::acts::change_status(&pool, missing_id, models::ActStatus::Issued).await?;
     assert!(matches!(change_result, None));
 
     let advance_result = db::acts::advance_status(&pool, missing_id).await?;
@@ -787,8 +787,14 @@ async fn tasks_due_reminders_and_list_open_filter_correctly() -> Result<()> {
         .expect("done task updated");
 
     let open_tasks = db::tasks::list_open(&pool, DEFAULT_COMPANY_ID).await?;
-    let urgent_pos = open_tasks.iter().position(|t| t.id == urgent.id).expect("urgent in open list");
-    let later_pos = open_tasks.iter().position(|t| t.id == later.id).expect("later in open list");
+    let urgent_pos = open_tasks
+        .iter()
+        .position(|t| t.id == urgent.id)
+        .expect("urgent in open list");
+    let later_pos = open_tasks
+        .iter()
+        .position(|t| t.id == later.id)
+        .expect("later in open list");
     assert!(urgent_pos < later_pos);
     assert!(!open_tasks.iter().any(|t| t.id == done.id));
 
@@ -1289,15 +1295,13 @@ async fn invoices_create_update_and_status_flow_in_db() -> Result<()> {
             expected_payment_date: None,
             notes: Some("updated invoice".to_string()),
         },
-        vec![
-            models::NewInvoiceItem {
-                position: 1,
-                description: "Оновлений товар".to_string(),
-                unit: Some("шт".to_string()),
-                quantity: dec!(5.0000),
-                price: dec!(250.00),
-            },
-        ],
+        vec![models::NewInvoiceItem {
+            position: 1,
+            description: "Оновлений товар".to_string(),
+            unit: Some("шт".to_string()),
+            quantity: dec!(5.0000),
+            price: dec!(250.00),
+        }],
     )
     .await?;
 
@@ -1315,7 +1319,8 @@ async fn invoices_create_update_and_status_flow_in_db() -> Result<()> {
         .expect("invoice issued");
     assert_eq!(issued.status, models::InvoiceStatus::Issued);
 
-    let invalid = db::invoices::change_status(&pool, invoice.id, models::InvoiceStatus::Draft).await;
+    let invalid =
+        db::invoices::change_status(&pool, invoice.id, models::InvoiceStatus::Draft).await;
     assert!(invalid.is_err());
 
     let signed = db::invoices::advance_status(&pool, invoice.id)
@@ -1513,7 +1518,8 @@ async fn invoices_change_status_rejects_transition_from_paid() -> Result<()> {
     db::invoices::change_status(&pool, invoice.id, models::InvoiceStatus::Signed).await?;
     db::invoices::change_status(&pool, invoice.id, models::InvoiceStatus::Paid).await?;
 
-    let result = db::invoices::change_status(&pool, invoice.id, models::InvoiceStatus::Issued).await;
+    let result =
+        db::invoices::change_status(&pool, invoice.id, models::InvoiceStatus::Issued).await;
     assert!(result.is_err());
 
     sqlx::query("DELETE FROM invoices WHERE id = $1")
@@ -2053,14 +2059,14 @@ async fn payments_crud_and_direction_filter_in_db() -> Result<()> {
     let income = db::payments::create(
         &pool,
         models::payment::NewPayment {
-            company_id:      DEFAULT_COMPANY_ID,
-            date:            Utc::now().date_naive(),
-            amount:          dec!(1500.00),
-            direction:       models::payment::PaymentDirection::Income,
+            company_id: DEFAULT_COMPANY_ID,
+            date: Utc::now().date_naive(),
+            amount: dec!(1500.00),
+            direction: models::payment::PaymentDirection::Income,
             counterparty_id: None,
-            bank_name:       Some("ПриватБанк".to_string()),
-            bank_ref:        Some(format!("REF-{suffix}")),
-            description:     Some("Тестове надходження".to_string()),
+            bank_name: Some("ПриватБанк".to_string()),
+            bank_ref: Some(format!("REF-{suffix}")),
+            description: Some("Тестове надходження".to_string()),
         },
     )
     .await?;
@@ -2078,14 +2084,14 @@ async fn payments_crud_and_direction_filter_in_db() -> Result<()> {
     let expense = db::payments::create(
         &pool,
         models::payment::NewPayment {
-            company_id:      DEFAULT_COMPANY_ID,
-            date:            Utc::now().date_naive(),
-            amount:          dec!(200.00),
-            direction:       models::payment::PaymentDirection::Expense,
+            company_id: DEFAULT_COMPANY_ID,
+            date: Utc::now().date_naive(),
+            amount: dec!(200.00),
+            direction: models::payment::PaymentDirection::Expense,
             counterparty_id: None,
-            bank_name:       None,
-            bank_ref:        None,
-            description:     Some("Тестова витрата".to_string()),
+            bank_name: None,
+            bank_ref: None,
+            description: Some("Тестова витрата".to_string()),
         },
     )
     .await?;
@@ -2096,16 +2102,22 @@ async fn payments_crud_and_direction_filter_in_db() -> Result<()> {
     assert!(all.iter().any(|p| p.id == expense.id));
 
     // list(Income) не містить витрату
-    let incomes =
-        db::payments::list(&pool, DEFAULT_COMPANY_ID, Some(models::payment::PaymentDirection::Income))
-            .await?;
+    let incomes = db::payments::list(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        Some(models::payment::PaymentDirection::Income),
+    )
+    .await?;
     assert!(incomes.iter().any(|p| p.id == income.id));
     assert!(!incomes.iter().any(|p| p.id == expense.id));
 
     // list(Expense) не містить надходження
-    let expenses =
-        db::payments::list(&pool, DEFAULT_COMPANY_ID, Some(models::payment::PaymentDirection::Expense))
-            .await?;
+    let expenses = db::payments::list(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        Some(models::payment::PaymentDirection::Expense),
+    )
+    .await?;
     assert!(expenses.iter().any(|p| p.id == expense.id));
     assert!(!expenses.iter().any(|p| p.id == income.id));
 
@@ -2114,13 +2126,13 @@ async fn payments_crud_and_direction_filter_in_db() -> Result<()> {
         &pool,
         income.id,
         models::payment::UpdatePayment {
-            date:            Utc::now().date_naive(),
-            amount:          dec!(2000.00),
-            direction:       models::payment::PaymentDirection::Income,
+            date: Utc::now().date_naive(),
+            amount: dec!(2000.00),
+            direction: models::payment::PaymentDirection::Income,
             counterparty_id: None,
-            bank_name:       Some("Monobank".to_string()),
-            bank_ref:        Some(format!("NEW-REF-{suffix}")),
-            description:     Some("Оновлено".to_string()),
+            bank_name: Some("Monobank".to_string()),
+            bank_ref: Some(format!("NEW-REF-{suffix}")),
+            description: Some("Оновлено".to_string()),
         },
     )
     .await?
@@ -2157,15 +2169,15 @@ async fn payments_list_by_counterparty_filters_correctly() -> Result<()> {
         &pool,
         DEFAULT_COMPANY_ID,
         &models::NewCounterparty {
-            name:    format!("ІТ Платіж Контрагент {suffix}"),
-            edrpou:  Some(suffix[..8].to_string()),
-            ipn:     None,
-            iban:    None,
+            name: format!("ІТ Платіж Контрагент {suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
             address: None,
-            phone:   None,
-            email:   None,
-            notes:   None,
-            bas_id:  Some(format!("it-pay-cp-{suffix}")),
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("it-pay-cp-{suffix}")),
         },
     )
     .await?;
@@ -2174,14 +2186,14 @@ async fn payments_list_by_counterparty_filters_correctly() -> Result<()> {
     let with_cp = db::payments::create(
         &pool,
         models::payment::NewPayment {
-            company_id:      DEFAULT_COMPANY_ID,
-            date:            Utc::now().date_naive(),
-            amount:          dec!(500.00),
-            direction:       models::payment::PaymentDirection::Income,
+            company_id: DEFAULT_COMPANY_ID,
+            date: Utc::now().date_naive(),
+            amount: dec!(500.00),
+            direction: models::payment::PaymentDirection::Income,
             counterparty_id: Some(cp.id),
-            bank_name:       None,
-            bank_ref:        None,
-            description:     None,
+            bank_name: None,
+            bank_ref: None,
+            description: None,
         },
     )
     .await?;
@@ -2190,14 +2202,14 @@ async fn payments_list_by_counterparty_filters_correctly() -> Result<()> {
     let without_cp = db::payments::create(
         &pool,
         models::payment::NewPayment {
-            company_id:      DEFAULT_COMPANY_ID,
-            date:            Utc::now().date_naive(),
-            amount:          dec!(300.00),
-            direction:       models::payment::PaymentDirection::Expense,
+            company_id: DEFAULT_COMPANY_ID,
+            date: Utc::now().date_naive(),
+            amount: dec!(300.00),
+            direction: models::payment::PaymentDirection::Expense,
             counterparty_id: None,
-            bank_name:       None,
-            bank_ref:        None,
-            description:     None,
+            bank_name: None,
+            bank_ref: None,
+            description: None,
         },
     )
     .await?;
@@ -2205,7 +2217,13 @@ async fn payments_list_by_counterparty_filters_correctly() -> Result<()> {
     let by_cp = db::payments::list_by_counterparty(&pool, DEFAULT_COMPANY_ID, cp.id).await?;
     assert!(by_cp.iter().any(|p| p.id == with_cp.id));
     assert!(!by_cp.iter().any(|p| p.id == without_cp.id));
-    assert_eq!(by_cp.iter().find(|p| p.id == with_cp.id).map(|p| p.counterparty_id), Some(Some(cp.id)));
+    assert_eq!(
+        by_cp
+            .iter()
+            .find(|p| p.id == with_cp.id)
+            .map(|p| p.counterparty_id),
+        Some(Some(cp.id))
+    );
 
     db::payments::delete(&pool, with_cp.id).await?;
     db::payments::delete(&pool, without_cp.id).await?;
@@ -2232,15 +2250,15 @@ async fn payments_link_act_and_link_invoice_in_db() -> Result<()> {
         &pool,
         DEFAULT_COMPANY_ID,
         &models::NewCounterparty {
-            name:    format!("ІТ Link Контрагент {suffix}"),
-            edrpou:  Some(suffix[..8].to_string()),
-            ipn:     None,
-            iban:    None,
+            name: format!("ІТ Link Контрагент {suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
             address: None,
-            phone:   None,
-            email:   None,
-            notes:   None,
-            bas_id:  Some(format!("it-link-cp-{suffix}")),
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("it-link-cp-{suffix}")),
         },
     )
     .await?;
@@ -2249,21 +2267,21 @@ async fn payments_link_act_and_link_invoice_in_db() -> Result<()> {
         &pool,
         DEFAULT_COMPANY_ID,
         &models::NewAct {
-            number:                format!("IT-LINK-ACT-{suffix}"),
-            counterparty_id:       cp.id,
-            contract_id:           None,
-            category_id:           None,
-            direction:             models::DocumentDirection::Outgoing,
-            date:                  Utc::now().date_naive(),
+            number: format!("IT-LINK-ACT-{suffix}"),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: models::DocumentDirection::Outgoing,
+            date: Utc::now().date_naive(),
             expected_payment_date: None,
-            status:                models::ActStatus::Draft,
-            notes:                 None,
-            bas_id:                None,
+            status: models::ActStatus::Draft,
+            notes: None,
+            bas_id: None,
             items: vec![models::NewActItem {
                 description: "Послуга".to_string(),
-                quantity:    dec!(1.0000),
-                unit:        "шт".to_string(),
-                unit_price:  dec!(3000.00),
+                quantity: dec!(1.0000),
+                unit: "шт".to_string(),
+                unit_price: dec!(3000.00),
             }],
         },
     )
@@ -2273,21 +2291,21 @@ async fn payments_link_act_and_link_invoice_in_db() -> Result<()> {
         &pool,
         DEFAULT_COMPANY_ID,
         &models::NewInvoice {
-            number:                format!("IT-LINK-INV-{suffix}"),
-            counterparty_id:       cp.id,
-            contract_id:           None,
-            category_id:           None,
-            direction:             models::DocumentDirection::Outgoing,
-            date:                  Utc::now().date_naive(),
+            number: format!("IT-LINK-INV-{suffix}"),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: models::DocumentDirection::Outgoing,
+            date: Utc::now().date_naive(),
             expected_payment_date: None,
-            notes:                 None,
-            bas_id:                None,
+            notes: None,
+            bas_id: None,
             items: vec![models::NewInvoiceItem {
-                position:    1,
+                position: 1,
                 description: "Товар".to_string(),
-                unit:        Some("шт".to_string()),
-                quantity:    dec!(2.0000),
-                price:       dec!(1500.00),
+                unit: Some("шт".to_string()),
+                quantity: dec!(2.0000),
+                price: dec!(1500.00),
             }],
         },
     )
@@ -2296,14 +2314,14 @@ async fn payments_link_act_and_link_invoice_in_db() -> Result<()> {
     let payment = db::payments::create(
         &pool,
         models::payment::NewPayment {
-            company_id:      DEFAULT_COMPANY_ID,
-            date:            Utc::now().date_naive(),
-            amount:          dec!(4500.00),
-            direction:       models::payment::PaymentDirection::Income,
+            company_id: DEFAULT_COMPANY_ID,
+            date: Utc::now().date_naive(),
+            amount: dec!(4500.00),
+            direction: models::payment::PaymentDirection::Income,
             counterparty_id: Some(cp.id),
-            bank_name:       None,
-            bank_ref:        None,
-            description:     Some("Повна оплата".to_string()),
+            bank_name: None,
+            bank_ref: None,
+            description: Some("Повна оплата".to_string()),
         },
     )
     .await?;
@@ -2396,15 +2414,15 @@ async fn payments_schedule_create_complete_and_list_upcoming_in_db() -> Result<(
     let schedule = db::payments::create_schedule(
         &pool,
         models::payment::NewPaymentSchedule {
-            company_id:      DEFAULT_COMPANY_ID,
-            title:           format!("Оренда офісу {suffix}"),
-            amount:          Some(dec!(5000.00)),
-            direction:       models::payment::PaymentDirection::Expense,
-            scheduled_date:  future_date,
-            recurrence:      models::payment::ScheduleRecurrence::None,
-            recurrence_end:  None,
+            company_id: DEFAULT_COMPANY_ID,
+            title: format!("Оренда офісу {suffix}"),
+            amount: Some(dec!(5000.00)),
+            direction: models::payment::PaymentDirection::Expense,
+            scheduled_date: future_date,
+            recurrence: models::payment::ScheduleRecurrence::None,
+            recurrence_end: None,
             counterparty_id: None,
-            notes:           Some("integration test schedule".to_string()),
+            notes: Some("integration test schedule".to_string()),
         },
     )
     .await?;
@@ -2424,7 +2442,8 @@ async fn payments_schedule_create_complete_and_list_upcoming_in_db() -> Result<(
     db::payments::complete_schedule(&pool, schedule.id).await?;
 
     // list_upcoming_schedule більше не повертає виконаний запис
-    let upcoming_after = db::payments::list_upcoming_schedule(&pool, DEFAULT_COMPANY_ID, 100).await?;
+    let upcoming_after =
+        db::payments::list_upcoming_schedule(&pool, DEFAULT_COMPANY_ID, 100).await?;
     assert!(
         !upcoming_after.iter().any(|s| s.id == schedule.id),
         "виконаний schedule не має бути в upcoming"
@@ -2452,15 +2471,15 @@ async fn payments_upcoming_schedule_excludes_past_entries() -> Result<()> {
     let past = db::payments::create_schedule(
         &pool,
         models::payment::NewPaymentSchedule {
-            company_id:      DEFAULT_COMPANY_ID,
-            title:           format!("Past schedule {suffix}"),
-            amount:          Some(dec!(500.00)),
-            direction:       models::payment::PaymentDirection::Expense,
-            scheduled_date:  (Utc::now() - Duration::days(1)).date_naive(),
-            recurrence:      models::payment::ScheduleRecurrence::None,
-            recurrence_end:  None,
+            company_id: DEFAULT_COMPANY_ID,
+            title: format!("Past schedule {suffix}"),
+            amount: Some(dec!(500.00)),
+            direction: models::payment::PaymentDirection::Expense,
+            scheduled_date: (Utc::now() - Duration::days(1)).date_naive(),
+            recurrence: models::payment::ScheduleRecurrence::None,
+            recurrence_end: None,
             counterparty_id: None,
-            notes:           Some("past".to_string()),
+            notes: Some("past".to_string()),
         },
     )
     .await?;
@@ -2468,15 +2487,15 @@ async fn payments_upcoming_schedule_excludes_past_entries() -> Result<()> {
     let future = db::payments::create_schedule(
         &pool,
         models::payment::NewPaymentSchedule {
-            company_id:      DEFAULT_COMPANY_ID,
-            title:           format!("Future schedule {suffix}"),
-            amount:          Some(dec!(700.00)),
-            direction:       models::payment::PaymentDirection::Expense,
-            scheduled_date:  (Utc::now() + Duration::days(3)).date_naive(),
-            recurrence:      models::payment::ScheduleRecurrence::None,
-            recurrence_end:  None,
+            company_id: DEFAULT_COMPANY_ID,
+            title: format!("Future schedule {suffix}"),
+            amount: Some(dec!(700.00)),
+            direction: models::payment::PaymentDirection::Expense,
+            scheduled_date: (Utc::now() + Duration::days(3)).date_naive(),
+            recurrence: models::payment::ScheduleRecurrence::None,
+            recurrence_end: None,
             counterparty_id: None,
-            notes:           Some("future".to_string()),
+            notes: Some("future".to_string()),
         },
     )
     .await?;
@@ -2510,15 +2529,15 @@ async fn dashboard_test_setup(pool: &PgPool, suffix: &str) -> Result<(Uuid, Uuid
     let company = db::companies::create(
         pool,
         &models::NewCompany {
-            name:          format!("ІТ Dashboard Компанія {suffix}"),
-            short_name:    None,
-            edrpou:        Some(suffix[..8].to_string()),
-            ipn:           None,
-            iban:          None,
+            name: format!("ІТ Dashboard Компанія {suffix}"),
+            short_name: None,
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
             legal_address: None,
             director_name: None,
-            tax_system:    None,
-            is_vat_payer:  false,
+            tax_system: None,
+            is_vat_payer: false,
         },
     )
     .await?;
@@ -2527,15 +2546,15 @@ async fn dashboard_test_setup(pool: &PgPool, suffix: &str) -> Result<(Uuid, Uuid
         pool,
         company.id,
         &models::NewCounterparty {
-            name:    format!("ІТ Dashboard Контрагент {suffix}"),
-            edrpou:  None,
-            ipn:     None,
-            iban:    None,
+            name: format!("ІТ Dashboard Контрагент {suffix}"),
+            edrpou: None,
+            ipn: None,
+            iban: None,
             address: None,
-            phone:   None,
-            email:   None,
-            notes:   None,
-            bas_id:  None,
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: None,
         },
     )
     .await?;
@@ -2574,21 +2593,21 @@ async fn make_act(
         pool,
         company_id,
         &models::NewAct {
-            number:                format!("IT-DASH-{tag}-{suffix}"),
-            counterparty_id:       cp_id,
-            contract_id:           None,
-            category_id:           None,
-            direction:             models::DocumentDirection::Outgoing,
-            date:                  Utc::now().date_naive(),
+            number: format!("IT-DASH-{tag}-{suffix}"),
+            counterparty_id: cp_id,
+            contract_id: None,
+            category_id: None,
+            direction: models::DocumentDirection::Outgoing,
+            date: Utc::now().date_naive(),
             expected_payment_date,
-            status:                models::ActStatus::Draft,
-            notes:                 None,
-            bas_id:                None,
+            status: models::ActStatus::Draft,
+            notes: None,
+            bas_id: None,
             items: vec![models::NewActItem {
                 description: "Послуга".to_string(),
-                quantity:    dec!(1.0000),
-                unit:        "шт".to_string(),
-                unit_price:  amount,
+                quantity: dec!(1.0000),
+                unit: "шт".to_string(),
+                unit_price: amount,
             }],
         },
     )
@@ -2608,14 +2627,41 @@ async fn dashboard_kpi_summary_aggregates_acts_correctly() -> Result<()> {
     let (company_id, cp_id) = dashboard_test_setup(&pool, &suffix).await?;
 
     // Чернетка — не враховується ні в revenue, ні в unpaid
-    make_act(&pool, company_id, cp_id, &suffix, "DRAFT", dec!(500.00), None).await?;
+    make_act(
+        &pool,
+        company_id,
+        cp_id,
+        &suffix,
+        "DRAFT",
+        dec!(500.00),
+        None,
+    )
+    .await?;
 
     // Виставлений — в unpaid_total
-    let issued_id = make_act(&pool, company_id, cp_id, &suffix, "ISSUED", dec!(2000.00), None).await?;
+    let issued_id = make_act(
+        &pool,
+        company_id,
+        cp_id,
+        &suffix,
+        "ISSUED",
+        dec!(2000.00),
+        None,
+    )
+    .await?;
     db::acts::change_status(&pool, issued_id, models::ActStatus::Issued).await?;
 
     // Оплачений — в revenue_this_month
-    let paid_id = make_act(&pool, company_id, cp_id, &suffix, "PAID", dec!(3000.00), None).await?;
+    let paid_id = make_act(
+        &pool,
+        company_id,
+        cp_id,
+        &suffix,
+        "PAID",
+        dec!(3000.00),
+        None,
+    )
+    .await?;
     db::acts::change_status(&pool, paid_id, models::ActStatus::Issued).await?;
     sqlx::query("UPDATE acts SET status = 'paid' WHERE id = $1")
         .bind(paid_id)
@@ -2624,7 +2670,11 @@ async fn dashboard_kpi_summary_aggregates_acts_correctly() -> Result<()> {
 
     let kpi = db::dashboard::get_kpi_summary(&pool, company_id).await?;
 
-    assert_eq!(kpi.revenue_this_month, dec!(3000.00), "тільки оплачені акти поточного місяця");
+    assert_eq!(
+        kpi.revenue_this_month,
+        dec!(3000.00),
+        "тільки оплачені акти поточного місяця"
+    );
     assert_eq!(kpi.unpaid_total, dec!(2000.00), "виставлені + підписані");
     assert_eq!(kpi.acts_this_month, 3, "всі три акти — поточний місяць");
     assert_eq!(kpi.active_counterparties, 1, "один активний контрагент");
@@ -2645,7 +2695,16 @@ async fn dashboard_revenue_by_month_fills_all_slots() -> Result<()> {
     let (company_id, cp_id) = dashboard_test_setup(&pool, &suffix).await?;
 
     // Оплачений акт у поточному місяці
-    let act_id = make_act(&pool, company_id, cp_id, &suffix, "REV", dec!(7777.00), None).await?;
+    let act_id = make_act(
+        &pool,
+        company_id,
+        cp_id,
+        &suffix,
+        "REV",
+        dec!(7777.00),
+        None,
+    )
+    .await?;
     db::acts::change_status(&pool, act_id, models::ActStatus::Issued).await?;
     sqlx::query("UPDATE acts SET status = 'paid' WHERE id = $1")
         .bind(act_id)
@@ -2657,7 +2716,8 @@ async fn dashboard_revenue_by_month_fills_all_slots() -> Result<()> {
         let result = db::dashboard::revenue_by_month(&pool, company_id, months).await?;
 
         assert_eq!(
-            result.len(), months as usize,
+            result.len(),
+            months as usize,
             "revenue_by_month({months}) має повертати рівно {months} записів"
         );
 
@@ -2667,18 +2727,32 @@ async fn dashboard_revenue_by_month_fills_all_slots() -> Result<()> {
             .iter()
             .find(|m| m.month_num == today.month() && m.year == today.year())
             .expect("поточний місяць має бути в результаті");
-        assert_eq!(current_slot.amount, dec!(7777.00), "оплачений акт у поточному місяці");
+        assert_eq!(
+            current_slot.amount,
+            dec!(7777.00),
+            "оплачений акт у поточному місяці"
+        );
 
         // Решта слотів — нуль (свіжа компанія без інших актів)
-        for slot in result.iter().filter(|m| !(m.month_num == today.month() && m.year == today.year())) {
+        for slot in result
+            .iter()
+            .filter(|m| !(m.month_num == today.month() && m.year == today.year()))
+        {
             assert_eq!(slot.amount, dec!(0), "порожній місяць має суму 0");
         }
 
         // Місяці — в монотонному порядку (всі (year, month) зростають або спадають)
         let pairs: Vec<(i32, u32)> = result.iter().map(|m| (m.year, m.month_num)).collect();
-        let ascending  = pairs.windows(2).all(|w| (w[0].0, w[0].1) <= (w[1].0, w[1].1));
-        let descending = pairs.windows(2).all(|w| (w[0].0, w[0].1) >= (w[1].0, w[1].1));
-        assert!(ascending || descending, "місяці мають бути впорядковані монотонно");
+        let ascending = pairs
+            .windows(2)
+            .all(|w| (w[0].0, w[0].1) <= (w[1].0, w[1].1));
+        let descending = pairs
+            .windows(2)
+            .all(|w| (w[0].0, w[0].1) >= (w[1].0, w[1].1));
+        assert!(
+            ascending || descending,
+            "місяці мають бути впорядковані монотонно"
+        );
     }
 
     dashboard_test_cleanup(&pool, company_id).await?;
@@ -2711,13 +2785,17 @@ async fn dashboard_acts_status_distribution_counts_by_status() -> Result<()> {
     let slices = db::dashboard::acts_status_distribution(&pool, company_id).await?;
 
     let count_for = |status: &str| -> i64 {
-        slices.iter().find(|s| s.status == status).map(|s| s.count).unwrap_or(0)
+        slices
+            .iter()
+            .find(|s| s.status == status)
+            .map(|s| s.count)
+            .unwrap_or(0)
     };
 
-    assert_eq!(count_for("draft"),  1, "одна чернетка");
+    assert_eq!(count_for("draft"), 1, "одна чернетка");
     assert_eq!(count_for("issued"), 2, "два виставлені");
     assert_eq!(count_for("signed"), 1, "один підписаний");
-    assert_eq!(count_for("paid"),   0, "оплачених немає");
+    assert_eq!(count_for("paid"), 0, "оплачених немає");
 
     dashboard_test_cleanup(&pool, company_id).await?;
     Ok(())
@@ -2734,34 +2812,60 @@ async fn dashboard_upcoming_payments_overdue_appears_first() -> Result<()> {
     let suffix = unique_suffix();
     let (company_id, cp_id) = dashboard_test_setup(&pool, &suffix).await?;
 
-    let yesterday  = (Utc::now() - Duration::days(1)).date_naive();
+    let yesterday = (Utc::now() - Duration::days(1)).date_naive();
     let next_month = (Utc::now() + Duration::days(30)).date_naive();
 
     // Прострочений — вчора, статус issued
-    let overdue_id = make_act(&pool, company_id, cp_id, &suffix, "OVD", dec!(1500.00), Some(yesterday)).await?;
+    let overdue_id = make_act(
+        &pool,
+        company_id,
+        cp_id,
+        &suffix,
+        "OVD",
+        dec!(1500.00),
+        Some(yesterday),
+    )
+    .await?;
     db::acts::change_status(&pool, overdue_id, models::ActStatus::Issued).await?;
 
     // Майбутній — +30 днів, статус signed
-    let future_id = make_act(&pool, company_id, cp_id, &suffix, "FUT", dec!(2500.00), Some(next_month)).await?;
+    let future_id = make_act(
+        &pool,
+        company_id,
+        cp_id,
+        &suffix,
+        "FUT",
+        dec!(2500.00),
+        Some(next_month),
+    )
+    .await?;
     db::acts::change_status(&pool, future_id, models::ActStatus::Issued).await?;
     db::acts::advance_status(&pool, future_id).await?;
 
     let upcoming = db::dashboard::upcoming_payments(&pool, company_id, 10).await?;
 
-    assert_eq!(upcoming.len(), 2, "обидва акти з expected_payment_date мають бути в списку");
+    assert_eq!(
+        upcoming.len(),
+        2,
+        "обидва акти з expected_payment_date мають бути в списку"
+    );
 
     // Прострочений йде першим
     assert!(upcoming[0].is_overdue, "перший запис має бути прострочений");
     assert_eq!(upcoming[0].amount, dec!(1500.00));
 
     // Майбутній — другий, не прострочений
-    assert!(!upcoming[1].is_overdue, "другий запис не має бути прострочений");
+    assert!(
+        !upcoming[1].is_overdue,
+        "другий запис не має бути прострочений"
+    );
     assert_eq!(upcoming[1].amount, dec!(2500.00));
 
     // Формат дати: "DD Міс" (наприклад "07 Кві")
     assert!(
         upcoming[0].date_label.len() >= 6 && upcoming[0].date_label.contains(' '),
-        "date_label має формат 'DD Міс': '{}'", upcoming[0].date_label
+        "date_label має формат 'DD Міс': '{}'",
+        upcoming[0].date_label
     );
 
     dashboard_test_cleanup(&pool, company_id).await?;
@@ -2817,14 +2921,32 @@ async fn dashboard_company_isolation_applies_to_kpi_and_revenue() -> Result<()> 
     let (company_a, cp_a) = dashboard_test_setup(&pool, &format!("{suffix}-A")).await?;
     let (company_b, cp_b) = dashboard_test_setup(&pool, &format!("{suffix}-B")).await?;
 
-    let act_a = make_act(&pool, company_a, cp_a, &format!("{suffix}-A"), "ISO-A", dec!(1111.00), None).await?;
+    let act_a = make_act(
+        &pool,
+        company_a,
+        cp_a,
+        &format!("{suffix}-A"),
+        "ISO-A",
+        dec!(1111.00),
+        None,
+    )
+    .await?;
     db::acts::change_status(&pool, act_a, models::ActStatus::Issued).await?;
     sqlx::query("UPDATE acts SET status = 'paid' WHERE id = $1")
         .bind(act_a)
         .execute(&pool)
         .await?;
 
-    let act_b = make_act(&pool, company_b, cp_b, &format!("{suffix}-B"), "ISO-B", dec!(9999.00), None).await?;
+    let act_b = make_act(
+        &pool,
+        company_b,
+        cp_b,
+        &format!("{suffix}-B"),
+        "ISO-B",
+        dec!(9999.00),
+        None,
+    )
+    .await?;
     db::acts::change_status(&pool, act_b, models::ActStatus::Issued).await?;
     sqlx::query("UPDATE acts SET status = 'paid' WHERE id = $1")
         .bind(act_b)
@@ -2838,7 +2960,11 @@ async fn dashboard_company_isolation_applies_to_kpi_and_revenue() -> Result<()> 
 
     let revenue_a = db::dashboard::revenue_by_month(&pool, company_a, 3).await?;
     let total_a: Decimal = revenue_a.iter().map(|row| row.amount).sum();
-    assert_eq!(total_a, dec!(1111.00), "ряд доходу не повинен бачити іншу компанію");
+    assert_eq!(
+        total_a,
+        dec!(1111.00),
+        "ряд доходу не повинен бачити іншу компанію"
+    );
 
     dashboard_test_cleanup(&pool, company_a).await?;
     dashboard_test_cleanup(&pool, company_b).await?;
@@ -2855,16 +2981,52 @@ async fn dashboard_upcoming_payments_includes_only_issued_and_signed() -> Result
     let (company_id, cp_id) = dashboard_test_setup(&pool, &suffix).await?;
     let due_date = (Utc::now() + Duration::days(7)).date_naive();
 
-    let draft_id = make_act(&pool, company_id, cp_id, &suffix, "UP-DRAFT", dec!(100.00), Some(due_date)).await?;
+    let draft_id = make_act(
+        &pool,
+        company_id,
+        cp_id,
+        &suffix,
+        "UP-DRAFT",
+        dec!(100.00),
+        Some(due_date),
+    )
+    .await?;
 
-    let issued_id = make_act(&pool, company_id, cp_id, &suffix, "UP-ISSUED", dec!(200.00), Some(due_date)).await?;
+    let issued_id = make_act(
+        &pool,
+        company_id,
+        cp_id,
+        &suffix,
+        "UP-ISSUED",
+        dec!(200.00),
+        Some(due_date),
+    )
+    .await?;
     db::acts::change_status(&pool, issued_id, models::ActStatus::Issued).await?;
 
-    let signed_id = make_act(&pool, company_id, cp_id, &suffix, "UP-SIGNED", dec!(300.00), Some(due_date)).await?;
+    let signed_id = make_act(
+        &pool,
+        company_id,
+        cp_id,
+        &suffix,
+        "UP-SIGNED",
+        dec!(300.00),
+        Some(due_date),
+    )
+    .await?;
     db::acts::change_status(&pool, signed_id, models::ActStatus::Issued).await?;
     db::acts::advance_status(&pool, signed_id).await?;
 
-    let paid_id = make_act(&pool, company_id, cp_id, &suffix, "UP-PAID", dec!(400.00), Some(due_date)).await?;
+    let paid_id = make_act(
+        &pool,
+        company_id,
+        cp_id,
+        &suffix,
+        "UP-PAID",
+        dec!(400.00),
+        Some(due_date),
+    )
+    .await?;
     db::acts::change_status(&pool, paid_id, models::ActStatus::Issued).await?;
     sqlx::query("UPDATE acts SET status = 'paid' WHERE id = $1")
         .bind(paid_id)
@@ -2874,11 +3036,21 @@ async fn dashboard_upcoming_payments_includes_only_issued_and_signed() -> Result
     let upcoming = db::dashboard::upcoming_payments(&pool, company_id, 10).await?;
     let amounts: Vec<Decimal> = upcoming.iter().map(|row| row.amount).collect();
 
-    assert_eq!(upcoming.len(), 2, "тільки issued і signed мають потрапити в upcoming");
+    assert_eq!(
+        upcoming.len(),
+        2,
+        "тільки issued і signed мають потрапити в upcoming"
+    );
     assert!(amounts.contains(&dec!(200.00)));
     assert!(amounts.contains(&dec!(300.00)));
-    assert!(!amounts.contains(&dec!(100.00)), "draft не має потрапляти в upcoming");
-    assert!(!amounts.contains(&dec!(400.00)), "paid не має потрапляти в upcoming");
+    assert!(
+        !amounts.contains(&dec!(100.00)),
+        "draft не має потрапляти в upcoming"
+    );
+    assert!(
+        !amounts.contains(&dec!(400.00)),
+        "paid не має потрапляти в upcoming"
+    );
 
     // suppress unused warnings for ids that intentionally stay only in DB rows
     let _ = draft_id;
@@ -2900,7 +3072,10 @@ async fn dashboard_empty_company_returns_zeroed_metrics() -> Result<()> {
     assert_eq!(kpi.revenue_this_month, dec!(0));
     assert_eq!(kpi.unpaid_total, dec!(0));
     assert_eq!(kpi.acts_this_month, 0);
-    assert_eq!(kpi.active_counterparties, 1, "setup створює одного активного контрагента");
+    assert_eq!(
+        kpi.active_counterparties, 1,
+        "setup створює одного активного контрагента"
+    );
 
     let revenue = db::dashboard::revenue_by_month(&pool, company_id, 4).await?;
     assert_eq!(revenue.len(), 4);
@@ -2957,11 +3132,11 @@ async fn contracts_crud_in_db() -> Result<()> {
         models::NewContract {
             company_id,
             counterparty_id: cp_id,
-            number:          format!("ДГ-{suffix}"),
-            subject:         Some("Розробка ПЗ".to_string()),
-            date:            Utc::now().date_naive(),
-            expires_at:      Some((Utc::now() + Duration::days(365)).date_naive()),
-            amount:          Some(dec!(50000.00)),
+            number: format!("ДГ-{suffix}"),
+            subject: Some("Розробка ПЗ".to_string()),
+            date: Utc::now().date_naive(),
+            expires_at: Some((Utc::now() + Duration::days(365)).date_naive()),
+            amount: Some(dec!(50000.00)),
         },
     )
     .await?;
@@ -2971,29 +3146,39 @@ async fn contracts_crud_in_db() -> Result<()> {
     assert_eq!(fetched.number, format!("ДГ-{suffix}"));
     assert_eq!(fetched.subject.as_deref(), Some("Розробка ПЗ"));
     assert_eq!(fetched.amount, Some(dec!(50000.00)));
-    assert_eq!(fetched.status, models::ContractStatus::Active, "default status = active");
+    assert_eq!(
+        fetched.status,
+        models::ContractStatus::Active,
+        "default status = active"
+    );
     assert_eq!(fetched.company_id, company_id);
     assert_eq!(fetched.counterparty_id, cp_id);
 
     // list: договір присутній, дата у форматі "ДД.ММ.РРРР"
     let listed = db::contracts::list(&pool, company_id).await?;
-    let row = listed.iter().find(|r| r.id == contract.id).expect("договір у списку");
+    let row = listed
+        .iter()
+        .find(|r| r.id == contract.id)
+        .expect("договір у списку");
     assert_eq!(row.date.len(), 10);
     assert_eq!(row.date.chars().nth(2), Some('.'));
-    assert_eq!(row.counterparty_name, format!("ІТ Dashboard Контрагент {suffix}"));
+    assert_eq!(
+        row.counterparty_name,
+        format!("ІТ Dashboard Контрагент {suffix}")
+    );
 
     // update: змінюємо номер, статус, примітки
     let updated = db::contracts::update(
         &pool,
         contract.id,
         models::UpdateContract {
-            number:     format!("ДГ-UPD-{suffix}"),
-            subject:    Some("Розробка ПЗ (оновлено)".to_string()),
-            date:       contract.date,
+            number: format!("ДГ-UPD-{suffix}"),
+            subject: Some("Розробка ПЗ (оновлено)".to_string()),
+            date: contract.date,
             expires_at: contract.expires_at,
-            amount:     Some(dec!(55000.00)),
-            status:     models::ContractStatus::Expired,
-            notes:      Some("термін закінчився".to_string()),
+            amount: Some(dec!(55000.00)),
+            status: models::ContractStatus::Expired,
+            notes: Some("термін закінчився".to_string()),
         },
     )
     .await?;
@@ -3025,15 +3210,15 @@ async fn contracts_list_by_counterparty_isolates_by_cp() -> Result<()> {
         &pool,
         company_id,
         &models::NewCounterparty {
-            name:    format!("ІТ Contracts CP2 {suffix}"),
-            edrpou:  None,
-            ipn:     None,
-            iban:    None,
+            name: format!("ІТ Contracts CP2 {suffix}"),
+            edrpou: None,
+            ipn: None,
+            iban: None,
             address: None,
-            phone:   None,
-            email:   None,
-            notes:   None,
-            bas_id:  None,
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: None,
         },
     )
     .await?;
@@ -3041,11 +3226,11 @@ async fn contracts_list_by_counterparty_isolates_by_cp() -> Result<()> {
     let new_contract = |cp: Uuid, tag: &str| models::NewContract {
         company_id,
         counterparty_id: cp,
-        number:          format!("ДГ-{tag}-{suffix}"),
-        subject:         None,
-        date:            Utc::now().date_naive(),
-        expires_at:      None,
-        amount:          None,
+        number: format!("ДГ-{tag}-{suffix}"),
+        subject: None,
+        date: Utc::now().date_naive(),
+        expires_at: None,
+        amount: None,
     };
 
     let c1 = db::contracts::create(&pool, new_contract(cp1_id, "A")).await?;
@@ -3084,36 +3269,46 @@ async fn contracts_list_for_select_returns_only_active() -> Result<()> {
     let make = |tag: &str| models::NewContract {
         company_id,
         counterparty_id: cp_id,
-        number:          format!("ДГ-SEL-{tag}-{suffix}"),
-        subject:         None,
-        date:            Utc::now().date_naive(),
-        expires_at:      None,
-        amount:          None,
+        number: format!("ДГ-SEL-{tag}-{suffix}"),
+        subject: None,
+        date: Utc::now().date_naive(),
+        expires_at: None,
+        amount: None,
     };
 
-    let active    = db::contracts::create(&pool, make("ACT")).await?;
+    let active = db::contracts::create(&pool, make("ACT")).await?;
     let to_expire = db::contracts::create(&pool, make("EXP")).await?;
-    let to_term   = db::contracts::create(&pool, make("TRM")).await?;
+    let to_term = db::contracts::create(&pool, make("TRM")).await?;
 
-    db::contracts::update(&pool, to_expire.id, models::UpdateContract {
-        number:     to_expire.number.clone(),
-        subject:    None,
-        date:       to_expire.date,
-        expires_at: None,
-        amount:     None,
-        status:     models::ContractStatus::Expired,
-        notes:      None,
-    }).await?;
+    db::contracts::update(
+        &pool,
+        to_expire.id,
+        models::UpdateContract {
+            number: to_expire.number.clone(),
+            subject: None,
+            date: to_expire.date,
+            expires_at: None,
+            amount: None,
+            status: models::ContractStatus::Expired,
+            notes: None,
+        },
+    )
+    .await?;
 
-    db::contracts::update(&pool, to_term.id, models::UpdateContract {
-        number:     to_term.number.clone(),
-        subject:    None,
-        date:       to_term.date,
-        expires_at: None,
-        amount:     None,
-        status:     models::ContractStatus::Terminated,
-        notes:      None,
-    }).await?;
+    db::contracts::update(
+        &pool,
+        to_term.id,
+        models::UpdateContract {
+            number: to_term.number.clone(),
+            subject: None,
+            date: to_term.date,
+            expires_at: None,
+            amount: None,
+            status: models::ContractStatus::Terminated,
+            notes: None,
+        },
+    )
+    .await?;
 
     let selectable = db::contracts::list_for_select(&pool, company_id, cp_id).await?;
     assert_eq!(selectable.len(), 1);
@@ -3141,15 +3336,15 @@ async fn make_category_company(pool: &PgPool, suffix: &str, tag: &str) -> Result
     let company = db::companies::create(
         pool,
         &models::NewCompany {
-            name:          format!("ІТ Cat{tag} Компанія {suffix}"),
-            short_name:    None,
-            edrpou:        Some(suffix[..8].to_string()),
-            ipn:           None,
-            iban:          None,
+            name: format!("ІТ Cat{tag} Компанія {suffix}"),
+            short_name: None,
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
             legal_address: None,
             director_name: None,
-            tax_system:    None,
-            is_vat_payer:  false,
+            tax_system: None,
+            is_vat_payer: false,
         },
     )
     .await?;
@@ -3168,9 +3363,9 @@ async fn categories_crud_and_archive_in_db() -> Result<()> {
     let cat = db::categories::create(
         &pool,
         models::NewCategory {
-            name:       "Консалтинг".to_string(),
-            kind:       models::CategoryKind::Income,
-            parent_id:  None,
+            name: "Консалтинг".to_string(),
+            kind: models::CategoryKind::Income,
+            parent_id: None,
             company_id,
         },
     )
@@ -3188,7 +3383,10 @@ async fn categories_crud_and_archive_in_db() -> Result<()> {
     let renamed = db::categories::update(
         &pool,
         cat.id,
-        models::UpdateCategory { name: "ІТ Консалтинг".to_string(), parent_id: None },
+        models::UpdateCategory {
+            name: "ІТ Консалтинг".to_string(),
+            parent_id: None,
+        },
     )
     .await?;
     assert_eq!(renamed.name, "ІТ Консалтинг");
@@ -3198,11 +3396,15 @@ async fn categories_crud_and_archive_in_db() -> Result<()> {
 
     // list включає, але is_archived = true
     let after = db::categories::list(&pool, company_id).await?;
-    let row = after.iter().find(|c| c.id == cat.id).expect("архівована категорія у list");
+    let row = after
+        .iter()
+        .find(|c| c.id == cat.id)
+        .expect("архівована категорія у list");
     assert!(row.is_archived);
 
     // list_for_select / list_all_for_select виключають архівовані
-    let sel = db::categories::list_for_select(&pool, company_id, models::CategoryKind::Income).await?;
+    let sel =
+        db::categories::list_for_select(&pool, company_id, models::CategoryKind::Income).await?;
     assert!(!sel.iter().any(|c| c.id == cat.id));
 
     let all_sel = db::categories::list_all_for_select(&pool, company_id).await?;
@@ -3224,8 +3426,10 @@ async fn categories_hierarchy_and_select_depth() -> Result<()> {
     let parent = db::categories::create(
         &pool,
         models::NewCategory {
-            name: "Розробка".to_string(), kind: models::CategoryKind::Income,
-            parent_id: None, company_id,
+            name: "Розробка".to_string(),
+            kind: models::CategoryKind::Income,
+            parent_id: None,
+            company_id,
         },
     )
     .await?;
@@ -3233,8 +3437,10 @@ async fn categories_hierarchy_and_select_depth() -> Result<()> {
     let child = db::categories::create(
         &pool,
         models::NewCategory {
-            name: "Мобільна розробка".to_string(), kind: models::CategoryKind::Income,
-            parent_id: Some(parent.id), company_id,
+            name: "Мобільна розробка".to_string(),
+            kind: models::CategoryKind::Income,
+            parent_id: Some(parent.id),
+            company_id,
         },
     )
     .await?;
@@ -3242,19 +3448,22 @@ async fn categories_hierarchy_and_select_depth() -> Result<()> {
     let expense = db::categories::create(
         &pool,
         models::NewCategory {
-            name: "Оренда".to_string(), kind: models::CategoryKind::Expense,
-            parent_id: None, company_id,
+            name: "Оренда".to_string(),
+            kind: models::CategoryKind::Expense,
+            parent_id: None,
+            company_id,
         },
     )
     .await?;
 
     // list_for_select(Income): тільки income, depth коректний
-    let income = db::categories::list_for_select(&pool, company_id, models::CategoryKind::Income).await?;
+    let income =
+        db::categories::list_for_select(&pool, company_id, models::CategoryKind::Income).await?;
     assert_eq!(income.len(), 2);
 
     let p = income.iter().find(|c| c.id == parent.id).expect("батько");
     let ch = income.iter().find(|c| c.id == child.id).expect("дочірня");
-    assert_eq!(p.depth,  0, "батько depth=0");
+    assert_eq!(p.depth, 0, "батько depth=0");
     assert_eq!(ch.depth, 1, "дочірня depth=1");
 
     // expense не потрапляє в income
@@ -3283,17 +3492,32 @@ async fn categories_seed_defaults_creates_standard_entries() -> Result<()> {
 
     db::categories::seed_defaults(&pool, company_id).await?;
 
-    let income  = db::categories::list_for_select(&pool, company_id, models::CategoryKind::Income).await?;
-    let expense = db::categories::list_for_select(&pool, company_id, models::CategoryKind::Expense).await?;
-    let all     = db::categories::list_all_for_select(&pool, company_id).await?;
+    let income =
+        db::categories::list_for_select(&pool, company_id, models::CategoryKind::Income).await?;
+    let expense =
+        db::categories::list_for_select(&pool, company_id, models::CategoryKind::Expense).await?;
+    let all = db::categories::list_all_for_select(&pool, company_id).await?;
 
-    assert_eq!(income.len(),  4, "4 income: Розробка ПЗ, Консалтинг, Тех. підтримка, Навчання");
-    assert_eq!(expense.len(), 5, "5 expense: Зарплата, Оренда, Маркетинг, Податки, Комунальні");
-    assert_eq!(all.len(),     9);
+    assert_eq!(
+        income.len(),
+        4,
+        "4 income: Розробка ПЗ, Консалтинг, Тех. підтримка, Навчання"
+    );
+    assert_eq!(
+        expense.len(),
+        5,
+        "5 expense: Зарплата, Оренда, Маркетинг, Податки, Комунальні"
+    );
+    assert_eq!(all.len(), 9);
 
     // Ідемпотентність: ON CONFLICT DO NOTHING
     db::categories::seed_defaults(&pool, company_id).await?;
-    assert_eq!(db::categories::list_all_for_select(&pool, company_id).await?.len(), 9);
+    assert_eq!(
+        db::categories::list_all_for_select(&pool, company_id)
+            .await?
+            .len(),
+        9
+    );
 
     // Конкретні назви income
     let names: Vec<&str> = income.iter().map(|c| c.name.as_str()).collect();
@@ -3330,15 +3554,15 @@ async fn acts_generate_next_number_uses_numeric_max() -> Result<()> {
         &pool,
         company_id,
         &models::NewCounterparty {
-            name:    format!("ІТ NextNum Контрагент {suffix}"),
-            edrpou:  Some(suffix[..8].to_string()),
-            ipn:     None,
-            iban:    None,
+            name: format!("ІТ NextNum Контрагент {suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
             address: None,
-            phone:   None,
-            email:   None,
-            notes:   None,
-            bas_id:  Some(format!("it-nn-cp-{suffix}")),
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("it-nn-cp-{suffix}")),
         },
     )
     .await?;
@@ -3350,21 +3574,21 @@ async fn acts_generate_next_number_uses_numeric_max() -> Result<()> {
             &pool,
             company_id,
             &models::NewAct {
-                number:                format!("АКТ-{year}-{num_suffix}"),
-                counterparty_id:       cp.id,
-                contract_id:           None,
-                category_id:           None,
-                direction:             models::DocumentDirection::Outgoing,
-                date:                  Utc::now().date_naive(),
+                number: format!("АКТ-{year}-{num_suffix}"),
+                counterparty_id: cp.id,
+                contract_id: None,
+                category_id: None,
+                direction: models::DocumentDirection::Outgoing,
+                date: Utc::now().date_naive(),
                 expected_payment_date: None,
-                status:                models::ActStatus::Draft,
-                notes:                 None,
-                bas_id:                None,
-                items:                 vec![models::NewActItem {
+                status: models::ActStatus::Draft,
+                notes: None,
+                bas_id: None,
+                items: vec![models::NewActItem {
                     description: "Тест".to_string(),
-                    quantity:    dec!(1.0000),
-                    unit:        "шт".to_string(),
-                    unit_price:  dec!(1.00),
+                    quantity: dec!(1.0000),
+                    unit: "шт".to_string(),
+                    unit_price: dec!(1.00),
                 }],
             },
         )
@@ -3417,24 +3641,24 @@ async fn acts_get_kpi_aggregates_this_month_and_overdue() -> Result<()> {
         &pool,
         company_id,
         &models::NewCounterparty {
-            name:    format!("ІТ KPI Контрагент {suffix}"),
-            edrpou:  Some(suffix[..8].to_string()),
-            ipn:     None,
-            iban:    None,
+            name: format!("ІТ KPI Контрагент {suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
             address: None,
-            phone:   None,
-            email:   None,
-            notes:   None,
-            bas_id:  Some(format!("it-kpi-cp-{suffix}")),
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("it-kpi-cp-{suffix}")),
         },
     )
     .await?;
 
     let make_item = |price: u32| models::NewActItem {
         description: "Послуга".to_string(),
-        quantity:    dec!(1.0000),
-        unit:        "шт".to_string(),
-        unit_price:  rust_decimal::Decimal::from(price),
+        quantity: dec!(1.0000),
+        unit: "шт".to_string(),
+        unit_price: rust_decimal::Decimal::from(price),
     };
 
     // Акт 1: today, статус Draft → acts_this_month += 1
@@ -3442,17 +3666,17 @@ async fn acts_get_kpi_aggregates_this_month_and_overdue() -> Result<()> {
         &pool,
         company_id,
         &models::NewAct {
-            number:                format!("KPI-DRAFT-{suffix}"),
-            counterparty_id:       cp.id,
-            contract_id:           None,
-            category_id:           None,
-            direction:             models::DocumentDirection::Outgoing,
-            date:                  today,
+            number: format!("KPI-DRAFT-{suffix}"),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: models::DocumentDirection::Outgoing,
+            date: today,
             expected_payment_date: None,
-            status:                models::ActStatus::Draft,
-            notes:                 None,
-            bas_id:                None,
-            items:                 vec![make_item(1000)],
+            status: models::ActStatus::Draft,
+            notes: None,
+            bas_id: None,
+            items: vec![make_item(1000)],
         },
     )
     .await?;
@@ -3462,17 +3686,17 @@ async fn acts_get_kpi_aggregates_this_month_and_overdue() -> Result<()> {
         &pool,
         company_id,
         &models::NewAct {
-            number:                format!("KPI-PAID-{suffix}"),
-            counterparty_id:       cp.id,
-            contract_id:           None,
-            category_id:           None,
-            direction:             models::DocumentDirection::Outgoing,
-            date:                  today,
+            number: format!("KPI-PAID-{suffix}"),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: models::DocumentDirection::Outgoing,
+            date: today,
             expected_payment_date: None,
-            status:                models::ActStatus::Draft,
-            notes:                 None,
-            bas_id:                None,
-            items:                 vec![make_item(2000)],
+            status: models::ActStatus::Draft,
+            notes: None,
+            bas_id: None,
+            items: vec![make_item(2000)],
         },
     )
     .await?;
@@ -3485,17 +3709,17 @@ async fn acts_get_kpi_aggregates_this_month_and_overdue() -> Result<()> {
         &pool,
         company_id,
         &models::NewAct {
-            number:                format!("KPI-ISSUED-NEW-{suffix}"),
-            counterparty_id:       cp.id,
-            contract_id:           None,
-            category_id:           None,
-            direction:             models::DocumentDirection::Outgoing,
-            date:                  today,
+            number: format!("KPI-ISSUED-NEW-{suffix}"),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: models::DocumentDirection::Outgoing,
+            date: today,
             expected_payment_date: None,
-            status:                models::ActStatus::Draft,
-            notes:                 None,
-            bas_id:                None,
-            items:                 vec![make_item(3000)],
+            status: models::ActStatus::Draft,
+            notes: None,
+            bas_id: None,
+            items: vec![make_item(3000)],
         },
     )
     .await?;
@@ -3508,17 +3732,17 @@ async fn acts_get_kpi_aggregates_this_month_and_overdue() -> Result<()> {
         &pool,
         company_id,
         &models::NewAct {
-            number:                format!("KPI-OVERDUE-{suffix}"),
-            counterparty_id:       cp.id,
-            contract_id:           None,
-            category_id:           None,
-            direction:             models::DocumentDirection::Outgoing,
-            date:                  overdue_date,
+            number: format!("KPI-OVERDUE-{suffix}"),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: models::DocumentDirection::Outgoing,
+            date: overdue_date,
             expected_payment_date: None,
-            status:                models::ActStatus::Draft,
-            notes:                 None,
-            bas_id:                None,
-            items:                 vec![make_item(4000)],
+            status: models::ActStatus::Draft,
+            notes: None,
+            bas_id: None,
+            items: vec![make_item(4000)],
         },
     )
     .await?;
@@ -3567,15 +3791,15 @@ async fn acts_update_with_items_replaces_positions_and_recalculates_total() -> R
         &pool,
         DEFAULT_COMPANY_ID,
         &models::NewCounterparty {
-            name:    format!("ІТ UpdateItems Контрагент {suffix}"),
-            edrpou:  Some(suffix[..8].to_string()),
-            ipn:     None,
-            iban:    None,
+            name: format!("ІТ UpdateItems Контрагент {suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
             address: None,
-            phone:   None,
-            email:   None,
-            notes:   None,
-            bas_id:  Some(format!("it-uwi-cp-{suffix}")),
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("it-uwi-cp-{suffix}")),
         },
     )
     .await?;
@@ -3585,28 +3809,28 @@ async fn acts_update_with_items_replaces_positions_and_recalculates_total() -> R
         &pool,
         DEFAULT_COMPANY_ID,
         &models::NewAct {
-            number:                format!("UWI-{suffix}"),
-            counterparty_id:       cp.id,
-            contract_id:           None,
-            category_id:           None,
-            direction:             models::DocumentDirection::Outgoing,
-            date:                  Utc::now().date_naive(),
+            number: format!("UWI-{suffix}"),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: models::DocumentDirection::Outgoing,
+            date: Utc::now().date_naive(),
             expected_payment_date: None,
-            status:                models::ActStatus::Draft,
-            notes:                 Some("оригінал".to_string()),
-            bas_id:                None,
-            items:                 vec![
+            status: models::ActStatus::Draft,
+            notes: Some("оригінал".to_string()),
+            bas_id: None,
+            items: vec![
                 models::NewActItem {
                     description: "Стара послуга 1".to_string(),
-                    quantity:    dec!(1.0000),
-                    unit:        "шт".to_string(),
-                    unit_price:  dec!(500.00),
+                    quantity: dec!(1.0000),
+                    unit: "шт".to_string(),
+                    unit_price: dec!(500.00),
                 },
                 models::NewActItem {
                     description: "Стара послуга 2".to_string(),
-                    quantity:    dec!(1.0000),
-                    unit:        "шт".to_string(),
-                    unit_price:  dec!(300.00),
+                    quantity: dec!(1.0000),
+                    unit: "шт".to_string(),
+                    unit_price: dec!(300.00),
                 },
             ],
         },
@@ -3624,19 +3848,19 @@ async fn acts_update_with_items_replaces_positions_and_recalculates_total() -> R
         &pool,
         original.id,
         models::UpdateAct {
-            number:                format!("UWI-UPDATED-{suffix}"),
-            counterparty_id:       cp.id,
-            contract_id:           None,
-            category_id:           None,
-            date:                  Utc::now().date_naive(),
+            number: format!("UWI-UPDATED-{suffix}"),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            date: Utc::now().date_naive(),
             expected_payment_date: None,
-            notes:                 Some("оновлено".to_string()),
+            notes: Some("оновлено".to_string()),
         },
         vec![models::NewActItem {
             description: "Нова послуга".to_string(),
-            quantity:    dec!(3.0000),
-            unit:        "год".to_string(),
-            unit_price:  dec!(400.00),
+            quantity: dec!(3.0000),
+            unit: "год".to_string(),
+            unit_price: dec!(400.00),
         }],
     )
     .await?;
@@ -3659,13 +3883,13 @@ async fn acts_update_with_items_replaces_positions_and_recalculates_total() -> R
         &pool,
         Uuid::new_v4(),
         models::UpdateAct {
-            number:                "MISSING".to_string(),
-            counterparty_id:       cp.id,
-            contract_id:           None,
-            category_id:           None,
-            date:                  Utc::now().date_naive(),
+            number: "MISSING".to_string(),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            date: Utc::now().date_naive(),
             expected_payment_date: None,
-            notes:                 None,
+            notes: None,
         },
         vec![],
     )

@@ -29,19 +29,19 @@ impl MonthRevenue {
     /// Скорочена назва місяця українською (3 літери).
     pub fn month_label(&self) -> &'static str {
         match self.month_num {
-            1  => "Січ",
-            2  => "Лют",
-            3  => "Бер",
-            4  => "Кві",
-            5  => "Тра",
-            6  => "Чер",
-            7  => "Лип",
-            8  => "Сер",
-            9  => "Вер",
+            1 => "Січ",
+            2 => "Лют",
+            3 => "Бер",
+            4 => "Кві",
+            5 => "Тра",
+            6 => "Чер",
+            7 => "Лип",
+            8 => "Сер",
+            9 => "Вер",
             10 => "Жов",
             11 => "Лис",
             12 => "Гру",
-            _  => "???",
+            _ => "???",
         }
     }
 }
@@ -70,21 +70,25 @@ mod tests {
     use super::*;
 
     fn month(n: u32) -> MonthRevenue {
-        MonthRevenue { month_num: n, year: 2026, amount: Decimal::ZERO }
+        MonthRevenue {
+            month_num: n,
+            year: 2026,
+            amount: Decimal::ZERO,
+        }
     }
 
     #[test]
     fn month_label_all_12() {
         let cases = [
-            (1,  "Січ"),
-            (2,  "Лют"),
-            (3,  "Бер"),
-            (4,  "Кві"),
-            (5,  "Тра"),
-            (6,  "Чер"),
-            (7,  "Лип"),
-            (8,  "Сер"),
-            (9,  "Вер"),
+            (1, "Січ"),
+            (2, "Лют"),
+            (3, "Бер"),
+            (4, "Кві"),
+            (5, "Тра"),
+            (6, "Чер"),
+            (7, "Лип"),
+            (8, "Сер"),
+            (9, "Вер"),
             (10, "Жов"),
             (11, "Лис"),
             (12, "Гру"),
@@ -96,7 +100,7 @@ mod tests {
 
     #[test]
     fn month_label_invalid_returns_question_marks() {
-        assert_eq!(month(0).month_label(),  "???");
+        assert_eq!(month(0).month_label(), "???");
         assert_eq!(month(13).month_label(), "???");
     }
 }

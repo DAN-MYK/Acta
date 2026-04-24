@@ -25,7 +25,10 @@ pub mod waybills;
 
 #[cfg(test)]
 mod tests {
-    use super::{acts, categories, companies, contracts, counterparties, dashboard, document_templates, invoices, ilike_pattern, payments, search, tasks, waybills};
+    use super::{
+        acts, categories, companies, contracts, counterparties, dashboard, document_templates,
+        ilike_pattern, invoices, payments, search, tasks, waybills,
+    };
 
     #[test]
     fn db_submodules_are_available() {

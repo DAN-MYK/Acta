@@ -219,6 +219,8 @@ export component IconButton inherits Rectangle {
     border-radius: AppTheme.radius-md;
 
     Image {
+        x: (root.width - self.width) / 2;
+        y: (root.height - self.height) / 2;
         source: root.icon;
         width: 16px;
         height: 16px;
@@ -370,6 +372,10 @@ export component Avatar inherits Rectangle {
     background: bg-color;
 
     Text {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
         text: root.initials;
         color: root.fg-color;
         font-size: max(10px, root.size * 0.36 * 1px);

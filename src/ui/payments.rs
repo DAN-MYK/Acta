@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 use notify_rust::{Notification, Timeout};
 use slint::{ComponentHandle, ModelRc, VecModel};
 use sqlx::PgPool;
@@ -148,7 +148,11 @@ fn parse_bank_rows(path: &Path, csv_text: &str) -> Result<Vec<ParsedBankRow>> {
     Err(last_error.unwrap_or_else(|| anyhow!("Не вдалося розпізнати формат банківського CSV")))
 }
 
-async fn import_bank_rows(pool: &PgPool, company_id: Uuid, rows: Vec<ParsedBankRow>) -> Result<usize> {
+async fn import_bank_rows(
+    pool: &PgPool,
+    company_id: Uuid,
+    rows: Vec<ParsedBankRow>,
+) -> Result<usize> {
     let mut imported = 0usize;
 
     for row in rows {
@@ -251,7 +255,10 @@ pub fn wire_payment_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                         reload_payments(ui_weak, ctx).await;
                         notify_user(
                             "Синхронізація банку завершена",
-                            &format!("Оброблено файл {}. Нових платежів: {imported}", path.display()),
+                            &format!(
+                                "Оброблено файл {}. Нових платежів: {imported}",
+                                path.display()
+                            ),
                         );
                     }
                     Err(error) => {

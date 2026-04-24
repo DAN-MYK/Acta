@@ -15,8 +15,6 @@ pub mod waybill;
 #[allow(unused_imports)]
 pub use act::{Act, ActItem, ActListRow, ActStatus, NewAct, NewActItem, UpdateAct};
 #[allow(unused_imports)]
-pub use shared::DocumentDirection;
-#[allow(unused_imports)]
 pub use category::{Category, CategoryKind, CategorySelectItem, NewCategory, UpdateCategory};
 #[allow(unused_imports)]
 pub use company::{Company, CompanySummary, NewCompany, UpdateCompany};
@@ -24,23 +22,29 @@ pub use company::{Company, CompanySummary, NewCompany, UpdateCompany};
 pub use contract::{
     Contract, ContractListRow, ContractSelectItem, ContractStatus, NewContract, UpdateContract,
 };
+pub use counterparty::{Counterparty, NewCounterparty, UpdateCounterparty};
+#[allow(unused_imports)]
+pub use document_template::{
+    DocumentTemplate, NewDocumentTemplate, TemplateListRow, UpdateDocumentTemplate,
+};
 #[allow(unused_imports)]
 pub use invoice::{
     Invoice, InvoiceItem, InvoiceListRow, InvoiceStatus, NewInvoice, NewInvoiceItem, UpdateInvoice,
 };
 #[allow(unused_imports)]
-pub use waybill::{
-    Waybill, WaybillItem, WaybillListRow, WaybillStatus, NewWaybill, NewWaybillItem, UpdateWaybill,
-};
-pub use counterparty::{Counterparty, NewCounterparty, UpdateCounterparty};
+pub use shared::DocumentDirection;
 #[allow(unused_imports)]
 pub use task::{NewTask, Task, TaskPriority, TaskStatus};
 #[allow(unused_imports)]
-pub use document_template::{DocumentTemplate, NewDocumentTemplate, TemplateListRow, UpdateDocumentTemplate};
+pub use waybill::{
+    NewWaybill, NewWaybillItem, UpdateWaybill, Waybill, WaybillItem, WaybillListRow, WaybillStatus,
+};
 
 #[cfg(test)]
 mod tests {
-    use super::{ActStatus, CategoryKind, DocumentDirection, NewCounterparty, TaskPriority, TaskStatus};
+    use super::{
+        ActStatus, CategoryKind, DocumentDirection, NewCounterparty, TaskPriority, TaskStatus,
+    };
 
     #[test]
     fn reexports_are_available_for_consumers() {

@@ -4,12 +4,12 @@ use slint::{ComponentHandle, ModelRc, VecModel};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use acta::app_ctx::{AppCtx, AppScreen};
-use acta::db;
 use crate::ui::helpers::{
     act_row_to_document_item, counterparty_to_details, counterparty_to_item,
     invoice_row_to_document_item, payment_row_to_item,
 };
+use acta::app_ctx::{AppCtx, AppScreen};
+use acta::db;
 
 pub struct CounterpartiesData {
     pub items: Vec<crate::CounterpartyItem>,
@@ -127,7 +127,11 @@ pub fn wire_counterparty_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
             ctx.update_counterparty_state(|state| {
                 state.query = q;
             });
-            crate::bootstrap::spawn_refresh_screen(ui_weak.clone(), ctx.clone(), AppScreen::Counterparties);
+            crate::bootstrap::spawn_refresh_screen(
+                ui_weak.clone(),
+                ctx.clone(),
+                AppScreen::Counterparties,
+            );
         }
     });
 
@@ -136,10 +140,15 @@ pub fn wire_counterparty_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
         tracing::warn!("TODO: створення контрагента — форма планується у наступному спринті");
     });
     ui.on_cp_create_doc(|id| {
-        tracing::warn!("TODO: створення документу для контрагента {} — форма планується у наступному спринті", id);
+        tracing::warn!(
+            "TODO: створення документу для контрагента {} — форма планується у наступному спринті",
+            id
+        );
     });
     ui.on_cp_tab_changed(|_t| {
-        tracing::debug!("cp_tab_changed — вибір вкладки зберігається у локальному стані Slint-компоненту");
+        tracing::debug!(
+            "cp_tab_changed — вибір вкладки зберігається у локальному стані Slint-компоненту"
+        );
     });
 }
 

@@ -35,6 +35,7 @@ component KpiMetric inherits VerticalLayout {
             font-family: AppTheme.font-sans;
             font-weight: 600;
             letter-spacing: 1.4px;
+            overflow: elide;
         }
 
     HorizontalLayout {
@@ -163,10 +164,12 @@ component JournalTableRow inherits Rectangle {
             width: 110px;
         }
 
+        Rectangle { width: 12px; }
+
         // Status
         HorizontalLayout {
             spacing: 6px;
-            width: 130px;
+            width: 118px;
             padding-left: 12px;
 
             StatusDot {
@@ -980,6 +983,7 @@ export component Dashboard inherits Rectangle {
                                         horizontal-alignment: right;
                                         width: 110px;
                                     }
+                                    Rectangle { width: 12px; }
                                     th-status := Text {
                                         text: "СТАТУС";
                                         color: AppTheme.text-faint;
@@ -988,7 +992,7 @@ export component Dashboard inherits Rectangle {
                                         font-weight: 600;
                                         letter-spacing: 1.2px;
                                         vertical-alignment: center;
-                                        width: 130px;
+                                        width: 118px;
                                     }
                                 }
                             }
@@ -1047,6 +1051,8 @@ export component Dashboard inherits Rectangle {
                                 background: plus-hover.has-hover ? AppTheme.bg-hover : transparent;
 
                                 Image {
+                                    x: (parent.width - self.width) / 2;
+                                    y: (parent.height - self.height) / 2;
                                     source: root.icon-plus;
                                     width: 12px;
                                     height: 12px;
@@ -1138,6 +1144,8 @@ export component Dashboard inherits Rectangle {
                                 background: add-hover.has-hover ? AppTheme.bg-hover : transparent;
 
                                 Image {
+                                    x: (parent.width - self.width) / 2;
+                                    y: (parent.height - self.height) / 2;
                                     source: root.icon-plus;
                                     width: 12px;
                                     height: 12px;

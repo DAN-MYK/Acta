@@ -54,40 +54,40 @@ impl TryFrom<String> for CategoryKind {
 /// Запис категорії з БД.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct Category {
-    pub id:          Uuid,
-    pub name:        String,
+    pub id: Uuid,
+    pub name: String,
     /// Тип: дохід або видаток.
-    pub kind:        CategoryKind,
-    pub parent_id:   Option<Uuid>,
-    pub company_id:  Uuid,
+    pub kind: CategoryKind,
+    pub parent_id: Option<Uuid>,
+    pub company_id: Uuid,
     pub is_archived: bool,
-    pub created_at:  DateTime<Utc>,
-    pub updated_at:  DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 /// Дані для створення нової категорії.
 #[derive(Debug, Clone)]
 pub struct NewCategory {
-    pub name:       String,
-    pub kind:       CategoryKind,
-    pub parent_id:  Option<Uuid>,
+    pub name: String,
+    pub kind: CategoryKind,
+    pub parent_id: Option<Uuid>,
     pub company_id: Uuid,
 }
 
 /// Дані для оновлення категорії.
 #[derive(Debug, Clone)]
 pub struct UpdateCategory {
-    pub name:      String,
+    pub name: String,
     pub parent_id: Option<Uuid>,
 }
 
 /// Спрощений запис для ComboBox у формах.
 #[derive(Debug, Clone)]
 pub struct CategorySelectItem {
-    pub id:       Uuid,
-    pub name:     String,
-    pub kind:     CategoryKind,
-    pub depth:    u8,    // 0 — верхній рівень, 1 — підкатегорія
+    pub id: Uuid,
+    pub name: String,
+    pub kind: CategoryKind,
+    pub depth: u8, // 0 — верхній рівень, 1 — підкатегорія
 }
 
 #[cfg(test)]
