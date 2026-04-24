@@ -410,85 +410,28 @@ export component Settings inherits Rectangle {
                                 spacing: 10px;
                                 alignment: start;
 
-                                // Light theme card
-                                Rectangle {
-                                    width: 150px;
-                                    height: 108px;
-                                    border-radius: AppTheme.radius-md;
-                                    border-width: !root.dark-mode ? 2px : 1px;
-                                    border-color: !root.dark-mode ? AppTheme.accent : AppTheme.border;
-                                    background: AppTheme.bg-elevated;
-
-                                    VerticalLayout {
-                                        padding: 10px;
-                                        spacing: 8px;
-
-                                        // Mini preview
-                                        Rectangle {
-                                            height: 60px;
-                                            border-radius: 4px;
-                                            background: #F6F5F1;
-                                            border-width: 1px;
-                                            border-color: #E5E2D8;
-                                            clip: true;
-
-                                            Rectangle { x: 0; y: 0; width: 32px; height: 60px; background: #F0EEE8; border-width: 1px; border-color: #E5E2D8; }
-                                            Rectangle { x: 36px; y: 6px; width: 80px; height: 8px; border-radius: 2px; background: #FFFFFF; border-width: 1px; border-color: #E5E2D8; }
-                                            Rectangle { x: 36px; y: 20px; width: 50px; height: 5px; border-radius: 2px; background: #D6D2C3; }
-                                            Rectangle { x: 36px; y: 30px; width: 70px; height: 5px; border-radius: 2px; background: #E5E2D8; }
-                                        }
-
-                                        HorizontalLayout {
-                                            alignment: stretch;
-                                            Text { text: "Світла"; color: AppTheme.text; font-size: 12.5px; font-family: AppTheme.font-sans; font-weight: 500; vertical-alignment: center; }
-                                            if !root.dark-mode : Image { source: root.icon-check; width: 13px; height: 13px; colorize: AppTheme.accent; image-fit: contain; }
-                                        }
-                                    }
-
-                                    TouchArea {
-                                        mouse-cursor: pointer;
-                                        clicked => { root.dark-mode = false; root.dark-mode-toggled(false); }
-                                    }
+                                // Light theme
+                                ThemePreviewCard {
+                                    label: "Світла";
+                                    active: !root.dark-mode;
+                                    preview-bg: #F6F5F1;
+                                    preview-sidebar: #F0EEE8;
+                                    preview-surface: #FFFFFF;
+                                    preview-line-a: #D6D2C3;
+                                    preview-line-b: #E5E2D8;
+                                    clicked => { root.dark-mode = false; root.dark-mode-toggled(false); }
                                 }
 
-                                // Dark theme card
-                                Rectangle {
-                                    width: 150px;
-                                    height: 108px;
-                                    border-radius: AppTheme.radius-md;
-                                    border-width: root.dark-mode ? 2px : 1px;
-                                    border-color: root.dark-mode ? AppTheme.accent : AppTheme.border;
-                                    background: AppTheme.bg-elevated;
-
-                                    VerticalLayout {
-                                        padding: 10px;
-                                        spacing: 8px;
-
-                                        Rectangle {
-                                            height: 60px;
-                                            border-radius: 4px;
-                                            background: #262931;
-                                            border-width: 1px;
-                                            border-color: #31353E;
-                                            clip: true;
-
-                                            Rectangle { x: 0; y: 0; width: 32px; height: 60px; background: #2D3039; border-width: 1px; border-color: #31353E; }
-                                            Rectangle { x: 36px; y: 6px; width: 80px; height: 8px; border-radius: 2px; background: #31353E; border-width: 1px; border-color: #3A3F49; }
-                                            Rectangle { x: 36px; y: 20px; width: 50px; height: 5px; border-radius: 2px; background: #464C58; }
-                                            Rectangle { x: 36px; y: 30px; width: 70px; height: 5px; border-radius: 2px; background: #3A3F49; }
-                                        }
-
-                                        HorizontalLayout {
-                                            alignment: stretch;
-                                            Text { text: "Темна"; color: AppTheme.text; font-size: 12.5px; font-family: AppTheme.font-sans; font-weight: 500; vertical-alignment: center; }
-                                            if root.dark-mode : Image { source: root.icon-check; width: 13px; height: 13px; colorize: AppTheme.accent; image-fit: contain; }
-                                        }
-                                    }
-
-                                    TouchArea {
-                                        mouse-cursor: pointer;
-                                        clicked => { root.dark-mode = true; root.dark-mode-toggled(true); }
-                                    }
+                                // Dark theme
+                                ThemePreviewCard {
+                                    label: "Темна";
+                                    active: root.dark-mode;
+                                    preview-bg: #262931;
+                                    preview-sidebar: #2D3039;
+                                    preview-surface: #31353E;
+                                    preview-line-a: #464C58;
+                                    preview-line-b: #3A3F49;
+                                    clicked => { root.dark-mode = true; root.dark-mode-toggled(true); }
                                 }
                             }
                         }

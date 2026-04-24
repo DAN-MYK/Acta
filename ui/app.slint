@@ -55,8 +55,14 @@ export component AppWindow inherits Window {
     callback doc-search-changed(string);
     callback doc-tab-changed(string);
     callback doc-toggled(string, bool);
+    callback doc-selection-cleared;
     callback doc-open(string);
+    callback doc-edit(string);
     callback doc-send(string);
+    callback doc-more-actions(string);
+    callback doc-bulk-send;
+    callback doc-bulk-archive;
+    callback doc-bulk-delete;
     callback doc-delete(string);
     callback doc-new;
     callback doc-page-changed(int);
@@ -162,12 +168,22 @@ export component AppWindow inherits Window {
             chart-bars: root.dashboard.chart-bars;
             journal: root.dashboard.journal;
             accounts: root.dashboard.accounts;
+            accounts-total: root.dashboard.accounts-total;
             tasks: root.dashboard.tasks;
+            open-task-count: root.dashboard.tasks.length;
             revenue-str: root.dashboard.revenue-str;
             expenses-str: root.dashboard.expenses-str;
             net-str: root.dashboard.net-str;
             outstanding-str: root.dashboard.outstanding-str;
             overdue-str: root.dashboard.overdue-str;
+            delta-revenue-str: root.dashboard.delta-revenue-str;
+            delta-expenses-str: root.dashboard.delta-expenses-str;
+            delta-net-str: root.dashboard.delta-net-str;
+            ytd-total-str: root.dashboard.ytd-total-str;
+            ytd-revenue-str: root.dashboard.ytd-revenue-str;
+            ytd-expenses-str: root.dashboard.ytd-expenses-str;
+            spark-revenue: root.dashboard.spark-revenue;
+            spark-expenses: root.dashboard.spark-expenses;
 
             icon-check: Icons.check;
             icon-plus: Icons.plus;
@@ -185,6 +201,9 @@ export component AppWindow inherits Window {
             height: 100%;
 
             all-docs: root.documents.items;
+            invoice-docs: root.documents.invoice-items;
+            act-docs: root.documents.act-items;
+            waybill-docs: root.documents.waybill-items;
             search-query: root.docs-search-state;
             selected-ids: root.documents.selected-ids;
             total-count: root.documents.total-count;
@@ -208,9 +227,14 @@ export component AppWindow inherits Window {
             search-changed(q) => { root.docs-search-state = q; root.doc-search-changed(q); }
             tab-changed(t) => { root.docs-tab-state = t; root.doc-tab-changed(t); }
             row-selected(id, sel) => { root.doc-toggled(id, sel); }
+            selection-cleared => { root.doc-selection-cleared(); }
             open-document(id) => { root.doc-open(id); }
             pdf-export(id) => { root.doc-send(id); }
-            edit-document(id) => { root.doc-open(id); }
+            edit-document(id) => { root.doc-edit(id); }
+            more-actions(id) => { root.doc-more-actions(id); }
+            bulk-send => { root.doc-bulk-send(); }
+            bulk-archive => { root.doc-bulk-archive(); }
+            bulk-delete => { root.doc-bulk-delete(); }
             create-document => { root.doc-new(); }
             page-changed(p) => { root.docs-page = p; root.doc-page-changed(p); }
             chain-load(id) => { root.doc-chain-load(id); }

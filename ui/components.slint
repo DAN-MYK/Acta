@@ -764,3 +764,53 @@ export component DocChain inherits HorizontalLayout {
         }
     }
 }
+
+// ── Theme preview card for settings ─────────────────────────────────────────
+export component ThemePreviewCard inherits Rectangle {
+    in property <string> label;
+    in property <bool> active: false;
+    in property <color> preview-bg;
+    in property <color> preview-sidebar;
+    in property <color> preview-surface;
+    in property <color> preview-line-a;
+    in property <color> preview-line-b;
+    callback clicked;
+
+    width: 150px;
+    height: 108px;
+    border-radius: AppTheme.radius-md;
+    border-width: active ? 2px : 1px;
+    border-color: active ? AppTheme.accent : AppTheme.border;
+    background: AppTheme.bg-elevated;
+
+    VerticalLayout {
+        padding: 10px;
+        spacing: 8px;
+
+        // Mini preview
+        Rectangle {
+            height: 60px;
+            border-radius: 4px;
+            background: root.preview-bg;
+            border-width: 1px;
+            border-color: root.preview-line-b;
+            clip: true;
+
+            Rectangle { x: 0; y: 0; width: 32px; height: 60px; background: root.preview-sidebar; border-width: 1px; border-color: root.preview-line-b; }
+            Rectangle { x: 36px; y: 6px; width: 80px; height: 8px; border-radius: 2px; background: root.preview-surface; border-width: 1px; border-color: root.preview-line-b; }
+            Rectangle { x: 36px; y: 20px; width: 50px; height: 5px; border-radius: 2px; background: root.preview-line-a; }
+            Rectangle { x: 36px; y: 30px; width: 70px; height: 5px; border-radius: 2px; background: root.preview-line-b; }
+        }
+
+        HorizontalLayout {
+            alignment: stretch;
+            Text { text: root.label; color: AppTheme.text; font-size: 12.5px; font-family: AppTheme.font-sans; font-weight: 500; vertical-alignment: center; }
+            if root.active : Image { source: Icons.check; width: 13px; height: 13px; colorize: AppTheme.accent; image-fit: contain; }
+        }
+    }
+
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}

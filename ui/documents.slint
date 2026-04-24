@@ -409,7 +409,15 @@ export component Documents inherits Rectangle {
 
     // Internal tab state
     property <string> active-tab: "all";
-    property <[DocumentItem]> visible-rows: all-docs;
+    property <[DocumentItem]> visible-rows:
+        active-tab == "invoice" ? invoice-docs :
+        active-tab == "act"     ? act-docs     :
+        active-tab == "waybill" ? waybill-docs :
+        all-docs;
+
+    // Pagination guards
+    property <bool> can-prev-page: root.page > 1;
+    property <bool> can-next-page: root.page < root.total-pages;
 
     background: AppTheme.bg;
 
@@ -603,7 +611,7 @@ export component Documents inherits Rectangle {
                     for doc[i] in visible-rows : DocRow {
                         doc: doc;
                         index: i;
-                        selected: root.selected-ids.length > 0; // simplified — Rust manages selection
+                        selected: doc.selected;
                         icon-invoice: root.icon-invoice;
                         icon-act: root.icon-act;
                         icon-waybill: root.icon-waybill;
@@ -660,11 +668,16 @@ export component Documents inherits Rectangle {
                                 width: 28px;
                                 height: 28px;
                                 border-radius: AppTheme.radius-md;
-                                background: prev-hover.has-hover ? AppTheme.bg-hover : transparent;
+                                opacity: root.can-prev-page ? 1.0 : 0.5;
+                                background: (root.can-prev-page && prev-hover.has-hover) ? AppTheme.bg-hover : transparent;
                                 Image { source: root.icon-chevron-left; width: 15px; height: 15px; colorize: AppTheme.text-muted; image-fit: contain; }
                                 prev-hover := TouchArea {
-                                    mouse-cursor: pointer;
-                                    clicked => { root.page-changed(root.page - 1); }
+                                    mouse-cursor: root.can-prev-page ? pointer : default;
+                                    clicked => {
+                                        if (root.can-prev-page) {
+                                            root.page-changed(root.page - 1);
+                                        }
+                                    }
                                 }
                             }
 
@@ -682,11 +695,16 @@ export component Documents inherits Rectangle {
                                 width: 28px;
                                 height: 28px;
                                 border-radius: AppTheme.radius-md;
-                                background: next-hover.has-hover ? AppTheme.bg-hover : transparent;
+                                opacity: root.can-next-page ? 1.0 : 0.5;
+                                background: (root.can-next-page && next-hover.has-hover) ? AppTheme.bg-hover : transparent;
                                 Image { source: root.icon-chevron-right; width: 15px; height: 15px; colorize: AppTheme.text-muted; image-fit: contain; }
                                 next-hover := TouchArea {
-                                    mouse-cursor: pointer;
-                                    clicked => { root.page-changed(root.page + 1); }
+                                    mouse-cursor: root.can-next-page ? pointer : default;
+                                    clicked => {
+                                        if (root.can-next-page) {
+                                            root.page-changed(root.page + 1);
+                                        }
+                                    }
                                 }
                             }
                         }

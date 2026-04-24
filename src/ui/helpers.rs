@@ -149,6 +149,7 @@ pub fn act_row_to_document_item(r: &ActListRow) -> crate::DocumentItem {
         amount_str: format_money_ua(r.total_amount).into(),
         status: act_status_to_slint(&r.status),
         linked_id: SharedString::default(),
+        selected: false,
     }
 }
 
@@ -162,6 +163,7 @@ pub fn invoice_row_to_document_item(r: &InvoiceListRow) -> crate::DocumentItem {
         amount_str: format_money_ua(r.total_amount).into(),
         status: invoice_status_to_slint(&r.status),
         linked_id: SharedString::default(),
+        selected: false,
     }
 }
 
@@ -175,6 +177,7 @@ pub fn waybill_row_to_document_item(r: &WaybillListRow) -> crate::DocumentItem {
         amount_str: format_money_ua(r.total_amount).into(),
         status: waybill_status_to_slint(&r.status),
         linked_id: SharedString::default(),
+        selected: false,
     }
 }
 
