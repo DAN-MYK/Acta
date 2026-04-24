@@ -2,16 +2,17 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use chrono::{Duration, Utc};
-use slint::{ComponentHandle, ModelRc, VecModel};
+use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use sqlx::PgPool;
 use tokio::runtime::Runtime;
 use uuid::Uuid;
 
 use acta::app_ctx::{AppCtx, AppScreen};
+use acta::models::company::Company;
 use acta::models::{NewTask, TaskPriority, TaskStatus};
 
 use crate::ui;
-use crate::{AppWindow, ChainStep, NavScreen, PaletteItemData};
+use crate::{AppWindow, ChainStep, CompanySwitcherItem, NavScreen, PaletteItemData, ShellChrome};
 
 struct InitialUiData {
     dashboard: ui::dashboard::DashboardData,
@@ -21,6 +22,11 @@ struct InitialUiData {
     tasks: ui::tasks::TasksData,
     reports: ui::reports::ReportsData,
     settings: ui::settings::SettingsData,
+}
+
+struct ShellState {
+    chrome: ShellChrome,
+    company_items: Vec<CompanySwitcherItem>,
 }
 
 /// Повертає першу компанію або nil UUID, якщо компаній ще немає.
@@ -133,22 +139,143 @@ async fn load_initial_ui_data(ctx: &AppCtx) -> InitialUiData {
     }
 }
 
+fn company_display_name(company: &Company) -> SharedString {
+    company
+        .short_name
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| company.name.clone())
+        .into()
+}
+
+fn company_switcher_initials(company: &Company) -> SharedString {
+    let display_name = company_display_name(company).to_string();
+    let mut initials = display_name
+        .split(|ch: char| ch.is_whitespace() || ch == '«' || ch == '»' || ch == '"' || ch == '\'')
+        .filter(|part| !part.is_empty())
+        .filter_map(|part| part.chars().next())
+        .take(2)
+        .collect::<String>()
+        .to_uppercase();
+
+    if initials.is_empty() {
+        initials = "A".to_string();
+    }
+
+    initials.into()
+}
+
+fn company_switcher_subtitle(company: &Company) -> SharedString {
+    let mut parts = Vec::new();
+    if let Some(edrpou) = company
+        .edrpou
+        .as_ref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        parts.push(format!("ЄДРПОУ {edrpou}"));
+    }
+    if company.is_vat_payer {
+        parts.push("ПДВ".to_string());
+    }
+
+    if parts.is_empty() {
+        "Без додаткових реквізитів".into()
+    } else {
+        parts.join(" · ").into()
+    }
+}
+
+async fn load_shell_state(pool: &PgPool, active_company_id: Uuid) -> Result<ShellState> {
+    let companies = acta::db::companies::list(pool).await?;
+    let company_items = companies
+        .iter()
+        .map(|company| CompanySwitcherItem {
+            id: company.id.to_string().into(),
+            name: company_display_name(company),
+            subtitle: company_switcher_subtitle(company),
+            initials: company_switcher_initials(company),
+            badge: if company.id == active_company_id {
+                "Активна".into()
+            } else {
+                SharedString::default()
+            },
+            active: company.id == active_company_id,
+        })
+        .collect::<Vec<_>>();
+
+    let company_name = companies
+        .iter()
+        .find(|company| company.id == active_company_id)
+        .map(company_display_name)
+        .or_else(|| companies.first().map(company_display_name))
+        .unwrap_or_else(|| "Acta".into());
+
+    Ok(ShellState {
+        chrome: ShellChrome {
+            company_name,
+            user_name: "Адміністратор".into(),
+            user_initials: "АД".into(),
+            user_role: "Адміністратор".into(),
+            documents_badge: 0,
+            tasks_badge: 0,
+        },
+        company_items,
+    })
+}
+
 fn apply_initial_ui_data(ui: &AppWindow, data: InitialUiData) {
     ui::dashboard::apply_dashboard_to_ui(ui, data.dashboard);
     ui::documents::apply_documents_to_ui(ui, data.documents);
     ui::counterparties::apply_counterparties_to_ui(ui, data.counterparties);
+    ui::counterparties::apply_counterparty_detail_to_ui(
+        ui,
+        ui::counterparties::empty_counterparty_detail(),
+    );
+    ui.set_cp_selected_id("".into());
     ui::payments::apply_payments_to_ui(ui, data.payments);
     ui::tasks::apply_tasks_to_ui(ui, data.tasks);
     ui::reports::apply_reports_to_ui(ui, data.reports);
     ui::settings::apply_settings_to_ui(ui, data.settings);
 }
 
+fn apply_shell_state(ui: &AppWindow, shell_state: ShellState) {
+    ui.set_shell(shell_state.chrome);
+    ui.set_shell_company_items(ModelRc::new(VecModel::from(shell_state.company_items)));
+}
+
+pub async fn refresh_all_ui(ui_weak: slint::Weak<AppWindow>, ctx: Arc<AppCtx>) -> Result<()> {
+    let company_id = ctx.company_id();
+    let refresh_epoch = ctx.refresh_epoch();
+    let data = load_initial_ui_data(&ctx).await;
+    let shell_state = load_shell_state(ctx.pool(), company_id).await?;
+
+    if is_refresh_stale(&ctx, company_id, refresh_epoch) {
+        tracing::debug!("refresh_all_ui: пропускаємо застарілий refresh після switch компанії");
+        return Ok(());
+    }
+
+    let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+        apply_initial_ui_data(&ui, data);
+        apply_shell_state(&ui, shell_state);
+    });
+
+    Ok(())
+}
+
+fn is_refresh_stale(ctx: &AppCtx, company_id: Uuid, refresh_epoch: u64) -> bool {
+    ctx.company_id() != company_id || ctx.refresh_epoch() != refresh_epoch
+}
+
 pub async fn refresh_screen(ui_weak: slint::Weak<AppWindow>, ctx: Arc<AppCtx>, screen: AppScreen) {
     let company_id = ctx.company_id();
+    let refresh_epoch = ctx.refresh_epoch();
 
     match screen {
         AppScreen::Dashboard => {
             let data = ui::dashboard::prepare_dashboard_data(ctx.pool(), company_id).await;
+            if is_refresh_stale(&ctx, company_id, refresh_epoch) {
+                return;
+            }
             let _ = ui_weak.upgrade_in_event_loop(move |ui| {
                 ui::dashboard::apply_dashboard_to_ui(&ui, data);
             });
@@ -170,6 +297,9 @@ pub async fn refresh_screen(ui_weak: slint::Weak<AppWindow>, ctx: Arc<AppCtx>, s
                 },
             )
             .await;
+            if is_refresh_stale(&ctx, company_id, refresh_epoch) {
+                return;
+            }
             let _ = ui_weak.upgrade_in_event_loop(move |ui| {
                 ui::documents::apply_documents_to_ui(&ui, data);
             });
@@ -186,12 +316,18 @@ pub async fn refresh_screen(ui_weak: slint::Weak<AppWindow>, ctx: Arc<AppCtx>, s
                 },
             )
             .await;
+            if is_refresh_stale(&ctx, company_id, refresh_epoch) {
+                return;
+            }
             let _ = ui_weak.upgrade_in_event_loop(move |ui| {
                 ui::counterparties::apply_counterparties_to_ui(&ui, data);
             });
         }
         AppScreen::Payments => {
             let data = ui::payments::prepare_payments_data(ctx.pool(), company_id).await;
+            if is_refresh_stale(&ctx, company_id, refresh_epoch) {
+                return;
+            }
             let _ = ui_weak.upgrade_in_event_loop(move |ui| {
                 ui::payments::apply_payments_to_ui(&ui, data);
             });
@@ -209,18 +345,27 @@ pub async fn refresh_screen(ui_weak: slint::Weak<AppWindow>, ctx: Arc<AppCtx>, s
                 },
             )
             .await;
+            if is_refresh_stale(&ctx, company_id, refresh_epoch) {
+                return;
+            }
             let _ = ui_weak.upgrade_in_event_loop(move |ui| {
                 ui::reports::apply_reports_to_ui(&ui, data);
             });
         }
         AppScreen::Tasks => {
             let data = ui::tasks::prepare_tasks_data(ctx.pool(), company_id).await;
+            if is_refresh_stale(&ctx, company_id, refresh_epoch) {
+                return;
+            }
             let _ = ui_weak.upgrade_in_event_loop(move |ui| {
                 ui::tasks::apply_tasks_to_ui(&ui, data);
             });
         }
         AppScreen::Settings => {
             let data = ui::settings::prepare_settings_data(ctx.pool(), company_id).await;
+            if is_refresh_stale(&ctx, company_id, refresh_epoch) {
+                return;
+            }
             let _ = ui_weak.upgrade_in_event_loop(move |ui| {
                 ui::settings::apply_settings_to_ui(&ui, data);
             });
@@ -242,11 +387,12 @@ pub fn spawn_refresh_screen(ui_weak: slint::Weak<AppWindow>, ctx: Arc<AppCtx>, s
 /// Створює вікно та наповнює його стартовими даними.
 pub fn build_ui(rt: &Runtime, ctx: &Arc<AppCtx>) -> Result<AppWindow> {
     let ui = AppWindow::new()?;
-    let data = rt.block_on(load_initial_ui_data(ctx));
-    let company_name = {
-        let name = data.settings.company_info.short_name.clone();
-        if name.is_empty() { "Acta".into() } else { name }
-    };
+    let (data, shell_state) = rt.block_on(async {
+        let data = load_initial_ui_data(ctx).await;
+        let shell_state = load_shell_state(ctx.pool(), ctx.company_id()).await?;
+        Ok::<_, anyhow::Error>((data, shell_state))
+    })?;
+    let company_name = shell_state.chrome.company_name.clone();
     // apply_documents_to_ui всередині ініціалізує chain_steps/cp_doc_chains порожніми VecModel-ами.
     apply_initial_ui_data(&ui, data);
 
@@ -259,12 +405,14 @@ pub fn build_ui(rt: &Runtime, ctx: &Arc<AppCtx>) -> Result<AppWindow> {
         tasks_badge: 0,
     });
 
+    apply_shell_state(&ui, shell_state);
     Ok(ui)
 }
 
 /// Підписує callback-и root shell та feature screens.
 pub fn wire_app(ui: &AppWindow, ctx: &Arc<AppCtx>) {
     wire_navigation(ui, ctx);
+    wire_company_switcher(ui, ctx);
     ui::documents::wire_document_callbacks(ui, ctx);
     ui::counterparties::wire_counterparty_callbacks(ui, ctx);
     ui::payments::wire_payment_callbacks(ui, ctx);
@@ -274,6 +422,35 @@ pub fn wire_app(ui: &AppWindow, ctx: &Arc<AppCtx>) {
     wire_inbox_callbacks(ui, ctx);
     wire_palette_callbacks(ui, ctx);
     wire_stub_callbacks(ui);
+}
+
+fn wire_company_switcher(ui: &AppWindow, ctx: &Arc<AppCtx>) {
+    ui.on_company_selected({
+        let ctx = ctx.clone();
+        let ui_weak = ui.as_weak();
+        move |company_id| {
+            let ctx = ctx.clone();
+            let ui_weak = ui_weak.clone();
+            let company_id = company_id.to_string();
+
+            tokio::spawn(async move {
+                let Ok(company_id) = Uuid::parse_str(&company_id) else {
+                    tracing::warn!("company_switcher: некоректний UUID компанії: {company_id}");
+                    return;
+                };
+
+                if ctx.company_id() == company_id {
+                    return;
+                }
+
+                ctx.set_company_id(company_id);
+
+                if let Err(error) = refresh_all_ui(ui_weak, ctx).await {
+                    tracing::error!("company_switcher: не вдалося оновити UI: {error}");
+                }
+            });
+        }
+    });
 }
 
 fn wire_navigation(ui: &AppWindow, ctx: &Arc<AppCtx>) {
@@ -465,13 +642,18 @@ fn wire_palette_callbacks(ui: &AppWindow, ctx: &Arc<AppCtx>) {
                     }
                     "open_cp" => {
                         if let Ok(cp_id) = Uuid::parse_str(id) {
+                            let company_id = ctx.company_id();
+                            let refresh_epoch = ctx.refresh_epoch();
                             ctx.set_active_screen(AppScreen::Counterparties);
                             let data = ui::counterparties::prepare_counterparty_detail(
                                 ctx.pool(),
-                                ctx.company_id(),
+                                company_id,
                                 cp_id,
                             )
                             .await;
+                            if is_refresh_stale(&ctx, company_id, refresh_epoch) {
+                                return;
+                            }
                             let id = id.to_string();
                             let _ = ui_weak.upgrade_in_event_loop(move |ui| {
                                 ui.set_current_screen(NavScreen::Counterparties);

@@ -54,6 +54,7 @@ pub enum AppScreen {
 pub struct AppCtx {
     pub pool: PgPool,
     active_company_id: Arc<Mutex<uuid::Uuid>>,
+    refresh_epoch: Arc<Mutex<u64>>,
     active_screen: Arc<Mutex<AppScreen>>,
     documents_state: Arc<Mutex<DocumentListState>>,
     counterparty_state: Arc<Mutex<CounterpartyListState>>,
@@ -67,6 +68,7 @@ impl AppCtx {
         Self {
             pool,
             active_company_id: Arc::new(Mutex::new(initial_company_id)),
+            refresh_epoch: Arc::new(Mutex::new(0)),
             active_screen: Arc::new(Mutex::new(AppScreen::Dashboard)),
             documents_state: Arc::new(Mutex::new(DocumentListState {
                 query: String::new(),
@@ -117,6 +119,19 @@ impl AppCtx {
             .active_company_id
             .lock()
             .unwrap_or_else(|e| e.into_inner()) = id;
+        self.bump_refresh_epoch();
+    }
+
+    /// Повертає поточну версію UI-контексту компанії для захисту від застарілих async refresh.
+    pub fn refresh_epoch(&self) -> u64 {
+        *self.refresh_epoch.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Інкрементує версію UI-контексту та повертає нове значення.
+    pub fn bump_refresh_epoch(&self) -> u64 {
+        let mut guard = self.refresh_epoch.lock().unwrap_or_else(|e| e.into_inner());
+        *guard += 1;
+        *guard
     }
 
     pub fn active_screen(&self) -> AppScreen {
@@ -243,6 +258,7 @@ mod tests {
         let new_id = Uuid::new_v4();
         ctx.set_company_id(new_id);
         assert_eq!(ctx.company_id(), new_id);
+        assert_eq!(ctx.refresh_epoch(), 1);
     }
 
     #[test]
@@ -259,6 +275,22 @@ mod tests {
         let id = Uuid::new_v4();
         ctx.set_company_id(id);
         assert_eq!(ctx.company_id_opt(), Some(id));
+    }
+
+    #[test]
+    fn refresh_epoch_starts_at_zero() {
+        let pool = make_ctx_pool();
+        let ctx = AppCtx::new(pool, Uuid::nil());
+        assert_eq!(ctx.refresh_epoch(), 0);
+    }
+
+    #[test]
+    fn bump_refresh_epoch_increments_monotonically() {
+        let pool = make_ctx_pool();
+        let ctx = AppCtx::new(pool, Uuid::nil());
+        assert_eq!(ctx.bump_refresh_epoch(), 1);
+        assert_eq!(ctx.bump_refresh_epoch(), 2);
+        assert_eq!(ctx.refresh_epoch(), 2);
     }
 
     #[test]

@@ -88,6 +88,26 @@ export component StatusDot inherits Rectangle {
     background: dot-color;
 }
 
+// Явно центрує SVG у рядкових layout-контейнерах.
+export component InlineIcon inherits Rectangle {
+    in property <image> icon;
+    in property <length> icon-size: 14px;
+    in property <color> tint: AppTheme.text-muted;
+
+    width: icon-size;
+    height: 100%;
+
+    Image {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        source: root.icon;
+        width: root.icon-size;
+        height: root.icon-size;
+        colorize: root.tint;
+        image-fit: contain;
+    }
+}
+
 // ── PrimaryButton ─────────────────────────────────────────────────────────────
 export component PrimaryButton inherits Rectangle {
     in property <string> text;
@@ -258,13 +278,10 @@ export component SearchInput inherits Rectangle {
         padding-right: 10px;
         spacing: 7px;
 
-        Image {
-            source: root.search-icon;
-            width: 14px;
-            height: 14px;
-            colorize: AppTheme.text-faint;
-            image-fit: contain;
-            vertical-alignment: center;
+        InlineIcon {
+            icon: root.search-icon;
+            icon-size: 14px;
+            tint: AppTheme.text-faint;
         }
 
         field := TextInput {
@@ -429,6 +446,8 @@ export component FilterPill inherits Rectangle {
             border-radius: 3px;
 
             Image {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
                 source: root.close-icon;
                 width: 11px;
                 height: 11px;
@@ -459,6 +478,8 @@ export component Checkbox inherits Rectangle {
     background: (checked || indeterminate) ? AppTheme.accent : transparent;
 
     if checked : Image {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
         source: root.check-icon;
         width: 10px;
         height: 10px;
@@ -548,6 +569,8 @@ export component BulkBar inherits Rectangle {
             background: clear-h.has-hover ? AppTheme.accent : transparent;
 
             Image {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
                 source: root.icon-close;
                 width: 13px;
                 height: 13px;
@@ -812,7 +835,7 @@ export component ThemePreviewCard inherits Rectangle {
         HorizontalLayout {
             alignment: stretch;
             Text { text: root.label; color: AppTheme.text; font-size: 12.5px; font-family: AppTheme.font-sans; font-weight: 500; vertical-alignment: center; }
-            if root.active : Image { source: root.icon-check; width: 13px; height: 13px; colorize: AppTheme.accent; image-fit: contain; }
+            if root.active : InlineIcon { icon: root.icon-check; icon-size: 13px; tint: AppTheme.accent; }
         }
     }
 

@@ -15,17 +15,18 @@ pub async fn list(pool: &PgPool, company_id: Uuid) -> Result<Vec<Counterparty>> 
     list_filtered(pool, company_id, None, false).await
 }
 
-/// Отримати одного контрагента за UUID.
-/// Повертає `None` якщо не знайдено.
-pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<Counterparty>> {
+/// Отримати одного контрагента за UUID у межах конкретної компанії.
+/// Повертає `None` якщо не знайдено або запис належить іншій компанії.
+pub async fn get_by_id(pool: &PgPool, company_id: Uuid, id: Uuid) -> Result<Option<Counterparty>> {
     let row = sqlx::query_as::<_, Counterparty>(
         r#"
         SELECT id, name, edrpou, ipn, iban, address, phone, email, notes,
                is_archived, bas_id, created_at, updated_at
         FROM counterparties
-        WHERE id = $1
+        WHERE company_id = $1 AND id = $2
         "#,
     )
+    .bind(company_id)
     .bind(id)
     .fetch_optional(pool)
     .await?;

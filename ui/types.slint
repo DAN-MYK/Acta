@@ -52,6 +52,15 @@ export struct PaletteItemData {
     payload: string,
 }
 
+export struct CompanySwitcherItem {
+    id: string,
+    name: string,
+    subtitle: string,
+    initials: string,
+    badge: string,
+    active: bool,
+}
+
 export enum DocumentDirection {
     outgoing,
     incoming,

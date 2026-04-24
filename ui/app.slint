@@ -21,7 +21,7 @@ import {
     NavScreen,
     ShellChrome, DashboardViewData, DocumentsViewData, CounterpartiesViewData,
     CounterpartyDetailViewData, PaymentsViewData, ReportsViewData, TasksViewData, SettingsViewData,
-    CompanyInfo, PaletteItemData,
+    CompanyInfo, CompanySwitcherItem, PaletteItemData,
 } from "types.slint";
 
 // ── AppWindow ─────────────────────────────────────────────────────────────────
@@ -39,6 +39,7 @@ export component AppWindow inherits Window {
 
     // ── Shell info ───────────────────────────────────────────────────────
     in property <ShellChrome> shell;
+    in property <[CompanySwitcherItem]> shell-company-items;
 
     // ── Screen contracts ────────────────────────────────────────────────
     in property <DashboardViewData> dashboard;
@@ -99,6 +100,7 @@ export component AppWindow inherits Window {
     in property <[PaletteItemData]> palette-items;
     callback palette-query-changed(string);
     callback palette-item-activated(string);
+    callback company-selected(string);
 
     // ── Tasks form ───────────────────────────────────────────────────────
     callback task-save(string, string, string, string);
@@ -130,6 +132,7 @@ export component AppWindow inherits Window {
         is-dark: AppTheme.is-dark;
         cmd-palette-open: root.palette-open;
         cmd-palette-items: root.palette-items;
+        company-items: root.shell-company-items;
 
         // Icons from Icons global
         icon-home:           Icons.home;
@@ -143,17 +146,26 @@ export component AppWindow inherits Window {
         icon-close:          Icons.close;
         icon-plus:           Icons.plus;
         icon-more:           Icons.more;
-        icon-bell:           Icons.search;      // TODO: додати Bell.svg
-        icon-sun:            Icons.uah;          // TODO: додати Sun.svg
-        icon-moon:           Icons.uah;          // TODO: додати Moon.svg
-        icon-chevron-down:   Icons.sort;         // TODO: додати ChevronDown.svg
-        icon-star:           Icons.uah;          // TODO: додати Star.svg
+        icon-bell:           Icons.bell;
+        icon-sun:            Icons.sun;
+        icon-moon:           Icons.moon;
+        icon-chevron-down:   Icons.chevron-down;
+        icon-star:           Icons.star;
         icon-enter:          Icons.arrow-right;
         logo:                Icons.home;
 
         navigate(screen) => {
             root.current-screen = screen;
             root.nav-changed(screen);
+        }
+        company-selected(id) => {
+            root.company-selected(id);
+        }
+        company-manage-requested => {
+            root.current-screen = NavScreen.Settings;
+            root.settings-section-state = "company";
+            root.nav-changed(NavScreen.Settings);
+            root.settings-section-changed("company");
         }
         toggle-theme => {
             AppTheme.is-dark = !AppTheme.is-dark;
@@ -196,7 +208,7 @@ export component AppWindow inherits Window {
             icon-check: Icons.check;
             icon-plus: Icons.plus;
             icon-arrow-right: Icons.arrow-right;
-            icon-chevron-down: Icons.sort;
+            icon-chevron-down: Icons.chevron-down;
 
             inbox: root.dashboard.inbox;
             inbox-action(id, kind) => { root.inbox-action(id, kind); }
@@ -222,9 +234,9 @@ export component AppWindow inherits Window {
             icon-more: Icons.more;
             icon-plus: Icons.plus;
             icon-pdf: Icons.pdf;
-            icon-invoice: Icons.documents;
-            icon-act: Icons.documents;
-            icon-waybill: Icons.documents;
+            icon-invoice: Icons.invoice;
+            icon-act: Icons.act;
+            icon-waybill: Icons.waybill;
             icon-edit: Icons.edit;
             icon-check: Icons.check;
             icon-chevron-left: Icons.arrow-left;

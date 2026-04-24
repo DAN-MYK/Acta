@@ -12,6 +12,8 @@ mod shell_test_components {
 
         export component TestShellHost inherits Window {
             callback navigate-id(string);
+            callback company-selected-id(string);
+            callback company-manage-requested;
             callback toggle-theme;
             callback open-cmd-palette;
             callback close-cmd-palette;
@@ -29,6 +31,8 @@ mod shell_test_components {
                     else if (screen == ShellScreen.Tasks) { root.navigate-id("tasks"); }
                     else if (screen == ShellScreen.Settings) { root.navigate-id("settings"); }
                 }
+                company-selected(id) => { root.company-selected-id(id); }
+                company-manage-requested => { root.company-manage-requested(); }
                 toggle-theme => { root.toggle-theme(); }
                 open-cmd-palette => { root.open-cmd-palette(); }
                 close-cmd-palette => { root.close-cmd-palette(); }
@@ -627,6 +631,23 @@ mod app_window_contract {
         assert_eq!(section.borrow().as_str(), "appearance");
 
         let fired = capture_bool();
+        let company_id = capture_string();
+        {
+            let fired = fired.clone();
+            let company_id_capture = company_id.clone();
+            ui.on_company_selected(move |value| {
+                fired.set(true);
+                *company_id_capture.borrow_mut() = value;
+            });
+        }
+        ui.invoke_company_selected("00000000-0000-0000-0000-000000000001".into());
+        assert!(fired.get(), "company-switcher: selected");
+        assert_eq!(
+            company_id.borrow().as_str(),
+            "00000000-0000-0000-0000-000000000001"
+        );
+
+        let fired = capture_bool();
         let dark = capture_bool();
         {
             let fired = fired.clone();
@@ -792,6 +813,28 @@ mod shell_contract {
         }
         shell.invoke_close_cmd_palette();
         assert!(close_fired.get(), "shell: close-cmd-palette");
+
+        let company_fired = capture_bool();
+        let company_id = capture_string();
+        {
+            let company_fired = company_fired.clone();
+            let company_id_capture = company_id.clone();
+            shell.on_company_selected_id(move |id| {
+                company_fired.set(true);
+                *company_id_capture.borrow_mut() = id;
+            });
+        }
+        shell.invoke_company_selected_id("company-uuid-001".into());
+        assert!(company_fired.get(), "shell: company-selected");
+        assert_eq!(company_id.borrow().as_str(), "company-uuid-001");
+
+        let manage_fired = capture_bool();
+        {
+            let manage_fired = manage_fired.clone();
+            shell.on_company_manage_requested(move || manage_fired.set(true));
+        }
+        shell.invoke_company_manage_requested();
+        assert!(manage_fired.get(), "shell: company-manage-requested");
     }
 }
 

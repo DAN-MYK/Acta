@@ -2,8 +2,8 @@
 // Aesthetic: hairline border between sidebar and main, flat avatar, no gradients.
 
 import { AppTheme } from "design-tokens.slint";
-import { NavScreen, PaletteItemData } from "types.slint";
-import { Card, VDivider, HDivider, IconButton, KbdHint, SearchInput, Avatar, GhostButton, SecondaryButton } from "components.slint";
+import { NavScreen, PaletteItemData, CompanySwitcherItem } from "types.slint";
+import { Card, VDivider, HDivider, IconButton, KbdHint, SearchInput, Avatar, GhostButton, SecondaryButton, InlineIcon } from "components.slint";
 
 // ── Skip Navigation ───────────────────────────────────────────────────────────
 component SkipNav inherits Rectangle {
@@ -78,13 +78,10 @@ component NavItem inherits Rectangle {
         spacing: 10px;
         alignment: stretch;
 
-        Image {
-            source: root.icon;
-            width: 15px;
-            height: 15px;
-            colorize: active ? AppTheme.text : AppTheme.text-faint;
-            image-fit: contain;
-            vertical-alignment: center;
+        InlineIcon {
+            icon: root.icon;
+            icon-size: 15px;
+            tint: active ? AppTheme.text : AppTheme.text-faint;
         }
 
         Text {
@@ -146,13 +143,10 @@ component SavedViewItem inherits Rectangle {
         spacing: 8px;
         alignment: stretch;
 
-        Image {
-            source: root.star-icon;
-            width: 11px;
-            height: 11px;
-            colorize: AppTheme.text-faint;
-            image-fit: contain;
-            vertical-alignment: center;
+        InlineIcon {
+            icon: root.star-icon;
+            icon-size: 11px;
+            tint: AppTheme.text-faint;
         }
 
         Text {
@@ -187,6 +181,97 @@ component SavedViewItem inherits Rectangle {
     }
 }
 
+component CompanySwitcherRow inherits Rectangle {
+    in property <CompanySwitcherItem> company;
+    callback selected(string);
+
+    accessible-role: button;
+    accessible-label: root.company.name;
+
+    property <bool> hovered: false;
+
+    height: 46px;
+    border-radius: AppTheme.radius-lg;
+    background:
+        root.company.active ? AppTheme.accent-soft :
+        (hovered ? AppTheme.bg-hover : transparent);
+    border-width: root.company.active ? 1px : 0px;
+    border-color: root.company.active ? AppTheme.accent.with-alpha(0.35) : transparent;
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 10px;
+        alignment: stretch;
+
+        Rectangle {
+            width: 30px;
+            height: 30px;
+            border-radius: 8px;
+            background: root.company.active ? AppTheme.accent : AppTheme.bg-subtle;
+
+            Text {
+                text: root.company.initials;
+                color: root.company.active ? #ffffff : AppTheme.text;
+                font-size: 11px;
+                font-family: AppTheme.font-sans;
+                font-weight: 700;
+                vertical-alignment: center;
+                horizontal-alignment: center;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+
+            Text {
+                text: root.company.name;
+                color: AppTheme.text;
+                font-size: 12.5px;
+                font-family: AppTheme.font-sans;
+                font-weight: root.company.active ? 600 : 500;
+                overflow: elide;
+            }
+
+            Text {
+                text: root.company.subtitle;
+                color: AppTheme.text-faint;
+                font-size: 10.5px;
+                font-family: AppTheme.font-sans;
+                overflow: elide;
+            }
+        }
+
+        if root.company.badge != "" : Rectangle {
+            height: 18px;
+            border-radius: 9px;
+            background: root.company.active ? AppTheme.accent : AppTheme.bg-subtle;
+            min-width: badge-label.preferred-width + 14px;
+
+            badge-label := Text {
+                text: root.company.badge;
+                color: root.company.active ? #ffffff : AppTheme.text-muted;
+                font-size: 10px;
+                font-family: AppTheme.font-sans;
+                font-weight: 600;
+                vertical-alignment: center;
+                horizontal-alignment: center;
+            }
+        }
+    }
+
+    TouchArea {
+        mouse-cursor: pointer;
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.move) {
+                root.hovered = self.has-hover;
+            }
+        }
+        clicked => { root.selected(root.company.id); }
+    }
+}
+
 // ── Palette item ──────────────────────────────────────────────────────────────
 component PaletteItem inherits Rectangle {
     in property <image> icon;
@@ -206,13 +291,10 @@ component PaletteItem inherits Rectangle {
         spacing: 10px;
         alignment: stretch;
 
-        Image {
-            source: root.icon;
-            width: 14px;
-            height: 14px;
-            colorize: hovered ? AppTheme.text : AppTheme.text-muted;
-            image-fit: contain;
-            vertical-alignment: center;
+        InlineIcon {
+            icon: root.icon;
+            icon-size: 14px;
+            tint: hovered ? AppTheme.text : AppTheme.text-muted;
         }
 
         Text {
@@ -313,13 +395,10 @@ export component CommandPalette inherits Rectangle {
                 spacing: 10px;
                 height: 52px;
 
-                Image {
-                    source: root.search-icon;
-                    width: 16px;
-                    height: 16px;
-                    colorize: AppTheme.text-faint;
-                    image-fit: contain;
-                    vertical-alignment: center;
+                InlineIcon {
+                    icon: root.search-icon;
+                    icon-size: 16px;
+                    tint: AppTheme.text-faint;
                 }
 
                 search-field := TextInput {
@@ -391,13 +470,10 @@ export component CommandPalette inherits Rectangle {
                         padding-right: 16px;
                         spacing: 10px;
 
-                        Image {
-                            source: root.enter-icon;
-                            width: 15px;
-                            height: 15px;
-                            colorize: AppTheme.text-faint;
-                            image-fit: contain;
-                            vertical-alignment: center;
+                        InlineIcon {
+                            icon: root.enter-icon;
+                            icon-size: 15px;
+                            tint: AppTheme.text-faint;
                         }
 
                         VerticalLayout {
@@ -753,6 +829,7 @@ export component Shell inherits Rectangle {
 
     // Company info
     in property <string> company-name: "ТОВ «Альфа-Бізнес»";
+    in property <[CompanySwitcherItem]> company-items;
     in property <string> user-name: "Михайло Дан";
     in property <string> user-role: "Адміністратор";
     in property <string> user-initials: "МД";
@@ -768,6 +845,7 @@ export component Shell inherits Rectangle {
 
     // Keyboard shortcuts help overlay
     private property <bool> shortcuts-open: false;
+    private property <bool> company-switcher-open: false;
     changed shortcuts-open => {
         if !root.shortcuts-open { nav-scope.focus(); }
     }
@@ -797,6 +875,8 @@ export component Shell inherits Rectangle {
 
     // Callbacks to Rust
     callback navigate(NavScreen);
+    callback company-selected(string);
+    callback company-manage-requested;
     callback toggle-theme;
     callback open-cmd-palette;
     callback close-cmd-palette;
@@ -888,13 +968,10 @@ export component Shell inherits Rectangle {
                             }
                         }
 
-                        Image {
-                            source: root.icon-chevron-down;
-                            width: 13px;
-                            height: 13px;
-                            colorize: AppTheme.text-faint;
-                            image-fit: contain;
-                            vertical-alignment: center;
+                        InlineIcon {
+                            icon: root.icon-chevron-down;
+                            icon-size: 13px;
+                            tint: AppTheme.text-faint;
                         }
                     }
 
@@ -902,6 +979,7 @@ export component Shell inherits Rectangle {
                         mouse-cursor: pointer;
                         accessible-role: button;
                         accessible-label: "Компанія: \{root.company-name}";
+                        clicked => { root.company-switcher-open = !root.company-switcher-open; }
                     }
                 }
 
@@ -921,13 +999,10 @@ export component Shell inherits Rectangle {
                         spacing: 10px;
                         alignment: stretch;
 
-                        Image {
-                            source: root.icon-search;
-                            width: 14px;
-                            height: 14px;
-                            colorize: AppTheme.text-faint;
-                            image-fit: contain;
-                            vertical-alignment: center;
+                        InlineIcon {
+                            icon: root.icon-search;
+                            icon-size: 14px;
+                            tint: AppTheme.text-faint;
                         }
 
                         Text {
@@ -1008,6 +1083,10 @@ export component Shell inherits Rectangle {
                 nav-scope := FocusScope {
                     init => { self.focus(); }
                     key-pressed(e) => {
+                        if (e.text == Key.Escape && root.company-switcher-open) {
+                            root.company-switcher-open = false;
+                            return accept;
+                        }
                         if (e.text == "1" && e.modifiers.control) {
                             root.navigate(NavScreen.Dashboard);
                             return accept;
@@ -1185,6 +1264,71 @@ export component Shell inherits Rectangle {
                         more-hover := TouchArea { mouse-cursor: pointer; }
                     }
                 }
+                }
+            }
+
+            if root.company-switcher-open : Rectangle {
+                x: 14px;
+                y: 84px;
+                width: parent.width - 28px;
+                background: AppTheme.bg-elevated;
+                border-width: 1px;
+                border-color: AppTheme.border;
+                border-radius: AppTheme.radius-xl;
+                drop-shadow-blur: 18px;
+                drop-shadow-color: #1e1e1e.with-alpha(0.08);
+                z: 200;
+                height: company-switcher-popup-content.preferred-height + 20px;
+
+                VerticalLayout {
+                    padding: 10px;
+                    spacing: 10px;
+
+                    company-switcher-popup-content := VerticalLayout {
+                        spacing: 6px;
+
+                        Text {
+                            text: "Активна компанія";
+                            color: AppTheme.text-faint;
+                            font-size: 10px;
+                            font-family: AppTheme.font-sans;
+                            font-weight: 600;
+                            letter-spacing: 1.2px;
+                        }
+
+                        if root.company-items.length == 0 : Rectangle {
+                            height: 42px;
+                            border-radius: AppTheme.radius-lg;
+                            background: AppTheme.bg-subtle;
+
+                            Text {
+                                text: "Ще немає компаній для вибору";
+                                color: AppTheme.text-muted;
+                                font-size: 12px;
+                                font-family: AppTheme.font-sans;
+                                vertical-alignment: center;
+                                horizontal-alignment: center;
+                            }
+                        }
+
+                        for company in root.company-items : CompanySwitcherRow {
+                            company: company;
+                            selected(id) => {
+                                root.company-switcher-open = false;
+                                root.company-selected(id);
+                            }
+                        }
+
+                        HDivider { }
+
+                        SecondaryButton {
+                            text: "Налаштувати компанію";
+                            clicked => {
+                                root.company-switcher-open = false;
+                                root.company-manage-requested();
+                            }
+                        }
+                    }
                 }
             }
         }

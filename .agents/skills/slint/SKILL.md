@@ -471,7 +471,7 @@ mandatory checks before calling any Slint UI work done.
 
 ### Icon centering
 
-**Mistake:** placing an `Image` directly inside a fixed-size `Rectangle` and
+**Mistake 1:** placing an `Image` directly inside a fixed-size `Rectangle` and
 assuming it will be centered. Slint positions such children at the top-left by
 default unless layout or explicit coordinates are used. This caused toolbar and
 card action icons to visually stick to the top edge.
@@ -503,9 +503,70 @@ Rectangle {
 }
 ```
 
-If the icon is inside `HorizontalLayout` or `VerticalLayout`, use
-`vertical-alignment: center` / `horizontal-alignment: center` where supported.
-If it is inside a plain `Rectangle`, use explicit `x/y` centering.
+**Mistake 2:** placing an `Image` directly inside `HorizontalLayout` /
+`VerticalLayout` and assuming `vertical-alignment: center` on the `Image`
+will visually center the icon in the row. In Acta this repeatedly produced
+icons that sat too high in sidebar items, search rows, and palette rows.
+
+```slint
+// WRONG: icon gets its own layout slot but still looks optically top-biased
+HorizontalLayout {
+    spacing: 8px;
+
+    Image {
+        source: root.icon-search;
+        width: 14px;
+        height: 14px;
+        vertical-alignment: center;
+        image-fit: contain;
+    }
+
+    Text {
+        text: "Пошук";
+        vertical-alignment: center;
+    }
+}
+
+// CORRECT: wrap the icon in a full-height box and center explicitly
+component InlineIcon inherits Rectangle {
+    in property <image> icon;
+    in property <length> icon-size: 14px;
+    in property <color> tint: AppTheme.text-muted;
+
+    width: icon-size;
+    height: 100%;
+
+    Image {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        source: root.icon;
+        width: root.icon-size;
+        height: root.icon-size;
+        colorize: root.tint;
+        image-fit: contain;
+    }
+}
+
+HorizontalLayout {
+    spacing: 8px;
+
+    InlineIcon {
+        icon: root.icon-search;
+        icon-size: 14px;
+        tint: AppTheme.text-faint;
+    }
+
+    Text {
+        text: "Пошук";
+        vertical-alignment: center;
+    }
+}
+```
+
+If the icon is inside a plain `Rectangle`, use explicit `x/y` centering.
+If the icon is inside a layout row/column, prefer a dedicated wrapper such as
+`InlineIcon` whose height tracks the full row and centers the inner `Image`.
+Do not rely on `vertical-alignment` on the `Image` itself as the primary fix.
 
 Shared icon-only controls such as `IconButton` must center their internal image
 inside the component itself. Do not rely on every call site to fix centering.
@@ -601,13 +662,14 @@ Text {
 
 Before finishing a UI change, inspect:
 
-1. Icons in plain `Rectangle` containers are centered with layout or explicit
-   `x/y`.
-2. Text in narrow rows has an overflow policy and does not touch the right edge.
-3. Header columns match row columns exactly.
-4. Empty states do not overflow their cards and do not dominate the screen unless
+1. Icons in plain `Rectangle` containers are centered with explicit `x/y`.
+2. Icons inside `HorizontalLayout` / `VerticalLayout` use `InlineIcon` or an
+   equivalent full-height wrapper instead of bare `Image`.
+3. Text in narrow rows has an overflow policy and does not touch the right edge.
+4. Header columns match row columns exactly.
+5. Empty states do not overflow their cards and do not dominate the screen unless
    intentionally designed as the main state.
-5. `cargo check` passes after Slint edits.
+6. `cargo check` passes after Slint edits.
 
 ## 20. Common gotchas
 
@@ -622,7 +684,8 @@ Before finishing a UI change, inspect:
 | Window opens blank | Don't use `upgrade_in_event_loop` before `ui.run()` — use `apply_*` directly |
 | Linter "assignment on input property" | Change `in property` → `in-out property` |
 
-| Icon sticks to top-left inside `Rectangle` | Center with explicit `x/y` or put the icon inside a layout |
+| Icon sticks to top-left inside `Rectangle` | Center with explicit `x/y` |
+| Icon in a row still looks too high | Replace bare `Image` with `InlineIcon` or a full-height wrapper that centers via `x/y` |
 | Sidebar/nav text touches right edge or escapes | Give the label `horizontal-stretch: 1` + `overflow: elide`; give counters/actions fixed width |
 | Table headers visually merge | Add the same explicit spacer/padding in both header and row layouts |
 | Centered avatar/badge text is off | Give inner `Text` `x/y/width/height` equal to the parent before alignment |

@@ -21,6 +21,35 @@ pub struct CounterpartyDetailData {
     pub payments: Vec<crate::PaymentItem>,
 }
 
+pub fn empty_counterparty_detail() -> CounterpartyDetailData {
+    CounterpartyDetailData {
+        detail: crate::CounterpartyDetails {
+            id: "".into(),
+            name: "".into(),
+            kind: "".into(),
+            edrpou: "".into(),
+            ipn: "".into(),
+            vat: "".into(),
+            iban: "".into(),
+            bank: "".into(),
+            address: "".into(),
+            director: "".into(),
+            phone: "".into(),
+            email: "".into(),
+            client_since: "".into(),
+            balance_str: "".into(),
+            balance_is_negative: false,
+            doc_count: 0,
+            overdue_count: 0,
+            overdue_amount_str: "".into(),
+            last_contact_days: 0,
+            last_contact_date: "".into(),
+        },
+        documents: Vec::new(),
+        payments: Vec::new(),
+    }
+}
+
 pub async fn prepare_counterparties_data(
     pool: &PgPool,
     company_id: Uuid,
@@ -39,7 +68,9 @@ pub async fn prepare_counterparty_detail(
     company_id: Uuid,
     cp_id: Uuid,
 ) -> Option<CounterpartyDetailData> {
-    let cp = db::counterparties::get_by_id(pool, cp_id).await.ok()??;
+    let cp = db::counterparties::get_by_id(pool, company_id, cp_id)
+        .await
+        .ok()??;
 
     let (acts, invoices, payments) = tokio::join!(
         db::acts::list_filtered(pool, company_id, None, None, None, Some(cp_id), None, None),
@@ -99,8 +130,15 @@ pub fn wire_counterparty_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
             let id_str = id.to_string();
             tokio::spawn(async move {
                 let cid = ctx.company_id();
+                let refresh_epoch = ctx.refresh_epoch();
                 if let Ok(cp_id) = Uuid::parse_str(&id_str) {
                     if let Some(data) = prepare_counterparty_detail(ctx.pool(), cid, cp_id).await {
+                        if ctx.company_id() != cid || ctx.refresh_epoch() != refresh_epoch {
+                            tracing::debug!(
+                                "counterparties: пропускаємо detail контрагента після switch компанії"
+                            );
+                            return;
+                        }
                         let _ = ui_weak.upgrade_in_event_loop(move |ui| {
                             apply_counterparty_detail_to_ui(&ui, data);
                             ui.set_cp_selected_id(id_str.into());
@@ -184,5 +222,16 @@ mod tests {
         let details = crate::ui::helpers::counterparty_to_details(&cp);
         assert_eq!(details.id.as_str(), Uuid::nil().to_string());
         assert_eq!(details.edrpou.as_str(), "12345678");
+    }
+
+    #[test]
+    fn empty_counterparty_detail_resets_all_fields() {
+        let details = super::empty_counterparty_detail();
+        assert_eq!(details.detail.id.as_str(), "");
+        assert_eq!(details.detail.name.as_str(), "");
+        assert!(details.documents.is_empty());
+        assert!(details.payments.is_empty());
+        assert_eq!(details.detail.doc_count, 0);
+        assert_eq!(details.detail.overdue_count, 0);
     }
 }

@@ -7,7 +7,7 @@ import { DocumentItem, DocumentKind, DocumentStatus, ChainStep } from "types.sli
 import {
     Card, HDivider, VDivider, Badge, StatusDot,
     GhostButton, SecondaryButton, PrimaryButton, IconButton,
-    SearchInput, HeadingSm, BulkBar, Checkbox, DocChain
+    SearchInput, HeadingSm, BulkBar, Checkbox, DocChain, InlineIcon
 } from "components.slint";
 
 // ── Tab item ──────────────────────────────────────────────────────────────────
@@ -85,16 +85,13 @@ component KindCell inherits HorizontalLayout {
     spacing: 6px;
     alignment: start;
 
-    Image {
-        source:
+    InlineIcon {
+        icon:
             kind == DocumentKind.Invoice ? root.icon-invoice :
             kind == DocumentKind.Act     ? root.icon-act     :
             root.icon-waybill;
-        width: 14px;
-        height: 14px;
-        colorize: AppTheme.text-muted;
-        image-fit: contain;
-        vertical-alignment: center;
+        icon-size: 14px;
+        tint: AppTheme.text-muted;
     }
 
     Text {
@@ -274,6 +271,8 @@ component DocRow inherits Rectangle {
                 border-radius: AppTheme.radius-md;
                 background: pdf-hover.has-hover ? AppTheme.bg-subtle : transparent;
                 Image {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
                     source: root.icon-pdf;
                     width: 15px;
                     height: 15px;
@@ -292,6 +291,8 @@ component DocRow inherits Rectangle {
                 border-radius: AppTheme.radius-md;
                 background: edit-hover.has-hover ? AppTheme.bg-subtle : transparent;
                 Image {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
                     source: root.icon-edit;
                     width: 15px;
                     height: 15px;
@@ -310,6 +311,8 @@ component DocRow inherits Rectangle {
                 border-radius: AppTheme.radius-md;
                 background: more-hover.has-hover ? AppTheme.bg-subtle : transparent;
                 Image {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
                     source: root.icon-more;
                     width: 15px;
                     height: 15px;
@@ -450,6 +453,8 @@ export component Documents inherits Rectangle {
                                 background: clear-hover.has-hover ? AppTheme.accent : transparent;
 
                                 Image {
+                                    x: (parent.width - self.width) / 2;
+                                    y: (parent.height - self.height) / 2;
                                     source: root.icon-close;
                                     width: 13px;
                                     height: 13px;
@@ -670,7 +675,7 @@ export component Documents inherits Rectangle {
                                 border-radius: AppTheme.radius-md;
                                 opacity: root.can-prev-page ? 1.0 : 0.5;
                                 background: (root.can-prev-page && prev-hover.has-hover) ? AppTheme.bg-hover : transparent;
-                                Image { source: root.icon-chevron-left; width: 15px; height: 15px; colorize: AppTheme.text-muted; image-fit: contain; }
+                                Image { x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; source: root.icon-chevron-left; width: 15px; height: 15px; colorize: AppTheme.text-muted; image-fit: contain; }
                                 prev-hover := TouchArea {
                                     mouse-cursor: root.can-prev-page ? pointer : default;
                                     clicked => {
@@ -697,7 +702,7 @@ export component Documents inherits Rectangle {
                                 border-radius: AppTheme.radius-md;
                                 opacity: root.can-next-page ? 1.0 : 0.5;
                                 background: (root.can-next-page && next-hover.has-hover) ? AppTheme.bg-hover : transparent;
-                                Image { source: root.icon-chevron-right; width: 15px; height: 15px; colorize: AppTheme.text-muted; image-fit: contain; }
+                                Image { x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; source: root.icon-chevron-right; width: 15px; height: 15px; colorize: AppTheme.text-muted; image-fit: contain; }
                                 next-hover := TouchArea {
                                     mouse-cursor: root.can-next-page ? pointer : default;
                                     clicked => {

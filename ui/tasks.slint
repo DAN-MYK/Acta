@@ -8,7 +8,7 @@ import { TaskItem, Priority, DayEvent } from "types.slint";
 import {
     Card, HDivider, VDivider, Badge,
     GhostButton, SecondaryButton, PrimaryButton,
-    HeadingSm, SectionLabel
+    HeadingSm, SectionLabel, InlineIcon
 } from "components.slint";
 import { LineEdit } from "std-widgets.slint";
 
@@ -399,6 +399,8 @@ component TaskListItem inherits Rectangle {
             background: task.done ? AppTheme.success : transparent;
 
             if task.done : Image {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
                 source: root.check-icon;
                 width: 10px;
                 height: 10px;
@@ -449,7 +451,7 @@ component TaskListItem inherits Rectangle {
                 if task.due-date != "" : HorizontalLayout {
                     spacing: 5px;
 
-                    Image { source: root.icon-calendar; width: 11px; height: 11px; colorize: AppTheme.text-faint; image-fit: contain; vertical-alignment: center; }
+                    InlineIcon { icon: root.icon-calendar; icon-size: 11px; tint: AppTheme.text-faint; }
                     Text {
                         text: task.due-date;
                         color: AppTheme.text-faint;
@@ -488,7 +490,7 @@ component TaskListItem inherits Rectangle {
             border-radius: AppTheme.radius-md;
             background: more-h.has-hover ? AppTheme.bg-subtle : transparent;
 
-            Image { source: root.icon-more; width: 14px; height: 14px; colorize: AppTheme.text-muted; image-fit: contain; }
+            Image { x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; source: root.icon-more; width: 14px; height: 14px; colorize: AppTheme.text-muted; image-fit: contain; }
             more-h := TouchArea {
                 mouse-cursor: pointer;
                 clicked => { root.more(root.task.id); }

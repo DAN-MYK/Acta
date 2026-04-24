@@ -299,7 +299,7 @@ component TeamMemberRow inherits Rectangle {
             border-radius: AppTheme.radius-md;
             background: more-h.has-hover ? AppTheme.bg-hover : transparent;
 
-            Image { source: root.icon-more; width: 14px; height: 14px; colorize: AppTheme.text-muted; image-fit: contain; }
+            Image { x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; source: root.icon-more; width: 14px; height: 14px; colorize: AppTheme.text-muted; image-fit: contain; }
             more-h := TouchArea { mouse-cursor: pointer; }
         }
     }

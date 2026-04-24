@@ -7,7 +7,7 @@ import { PaymentItem, Direction } from "types.slint";
 import {
     Card, HDivider, VDivider, Badge, StatusDot,
     GhostButton, SecondaryButton, PrimaryButton,
-    HeadingSm
+    HeadingSm, InlineIcon
 } from "components.slint";
 
 // ── KPI Metric ────────────────────────────────────────────────────────────────
@@ -129,14 +129,7 @@ component PaymentRow inherits Rectangle {
             if payment.matched-doc != "" : HorizontalLayout {
                 spacing: 6px;
 
-                Image {
-                    source: root.icon-link;
-                    width: 11px;
-                    height: 11px;
-                    colorize: AppTheme.success;
-                    image-fit: contain;
-                    vertical-alignment: center;
-                }
+                InlineIcon { icon: root.icon-link; icon-size: 11px; tint: AppTheme.success; }
                 Text {
                     text: payment.matched-doc;
                     color: AppTheme.accent-text;
@@ -159,14 +152,7 @@ component PaymentRow inherits Rectangle {
                     padding-right: 8px;
                     spacing: 4px;
 
-                    Image {
-                        source: root.icon-link;
-                        width: 11px;
-                        height: 11px;
-                        colorize: AppTheme.text-muted;
-                        image-fit: contain;
-                        vertical-alignment: center;
-                    }
+                    InlineIcon { icon: root.icon-link; icon-size: 11px; tint: AppTheme.text-muted; }
 
                     link-label := Text {
                         text: "Прив'язати";

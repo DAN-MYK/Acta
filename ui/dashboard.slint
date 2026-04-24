@@ -293,6 +293,8 @@ component DashboardTaskItem inherits Rectangle {
             background: task.done ? AppTheme.success : transparent;
 
             if task.done : Image {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
                 source: root.check-icon;
                 width: 9px;
                 height: 9px;
@@ -566,13 +568,15 @@ export component Dashboard inherits Rectangle {
 
     // Main scroll area
     Flickable {
+        width: 100%;
+        height: 100%;
         viewport-height: content-col.preferred-height + 56px;
 
         HorizontalLayout {
             padding: 28px;
             padding-right: 28px;
             spacing: 24px;
-            alignment: stretch;
+            alignment: start;
 
             // ── Left column (metrics + chart + journal) ────────────────────
             content-col := VerticalLayout {

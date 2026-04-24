@@ -267,7 +267,7 @@ export component Counterparties inherits Rectangle {
                         border-width: add-hover.has-hover ? 1px : 0px;
                         border-color: AppTheme.border;
 
-                        Image { source: root.icon-plus; width: 15px; height: 15px; colorize: AppTheme.text-muted; image-fit: contain; }
+                        Image { x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; source: root.icon-plus; width: 15px; height: 15px; colorize: AppTheme.text-muted; image-fit: contain; }
                         add-hover := TouchArea { mouse-cursor: pointer; }
                     }
                 }
@@ -347,7 +347,7 @@ export component Counterparties inherits Rectangle {
                                         height: 28px;
                                         border-radius: AppTheme.radius-md;
                                         background: more-h.has-hover ? AppTheme.bg-hover : transparent;
-                                        Image { source: root.icon-more; width: 15px; height: 15px; colorize: AppTheme.text-muted; image-fit: contain; }
+                                        Image { x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; source: root.icon-more; width: 15px; height: 15px; colorize: AppTheme.text-muted; image-fit: contain; }
                                         more-h := TouchArea { mouse-cursor: pointer; }
                                     }
 

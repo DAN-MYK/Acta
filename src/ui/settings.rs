@@ -410,6 +410,11 @@ pub fn wire_settings_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                             AppScreen::Settings,
                         )
                         .await;
+                        if let Err(error) =
+                            crate::bootstrap::refresh_all_ui(ui_weak.clone(), ctx.clone()).await
+                        {
+                            tracing::error!("settings: refresh_all_ui failed: {error}");
+                        }
                         notify_user(
                             "Налаштування компанії збережено",
                             &format!("Оновлено профіль '{}'", company.name),

@@ -4,11 +4,11 @@ use slint::{ComponentHandle, ModelRc, VecModel};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use acta::app_ctx::{AppCtx, AppScreen};
-use acta::db;
 use crate::ui::helpers::{
     act_row_to_document_item, invoice_row_to_document_item, waybill_row_to_document_item,
 };
+use acta::app_ctx::{AppCtx, AppScreen};
+use acta::db;
 
 pub struct DocumentsData {
     pub items: Vec<crate::DocumentItem>,
@@ -98,7 +98,11 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
             ctx.update_documents_state(|state| {
                 state.query = q;
             });
-            crate::bootstrap::spawn_refresh_screen(ui_weak.clone(), ctx.clone(), AppScreen::Documents);
+            crate::bootstrap::spawn_refresh_screen(
+                ui_weak.clone(),
+                ctx.clone(),
+                AppScreen::Documents,
+            );
         }
     });
 
@@ -112,7 +116,11 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
             ctx.update_documents_state(|state| {
                 state.tab = t;
             });
-            crate::bootstrap::spawn_refresh_screen(ui_weak.clone(), ctx.clone(), AppScreen::Documents);
+            crate::bootstrap::spawn_refresh_screen(
+                ui_weak.clone(),
+                ctx.clone(),
+                AppScreen::Documents,
+            );
         }
     });
 
@@ -173,31 +181,46 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
         tracing::warn!("TODO: створення нового документа — форма планується у наступному спринті");
     });
     ui.on_doc_open(|id| {
-        tracing::warn!("TODO: відкриття документа {} — детальний вигляд планується у наступному спринті", id);
+        tracing::warn!(
+            "TODO: відкриття документа {} — детальний вигляд планується у наступному спринті",
+            id
+        );
     });
     ui.on_doc_edit(|id| {
-        tracing::warn!("TODO: редагування документа {} — форма редагування планується у наступному спринті", id);
+        tracing::warn!(
+            "TODO: редагування документа {} — форма редагування планується у наступному спринті",
+            id
+        );
     });
     ui.on_doc_toggled(|_id, _sel| {
-        tracing::debug!("doc_toggled — вибір рядку зберігається у локальному стані Slint-компоненту");
+        tracing::debug!(
+            "doc_toggled — вибір рядку зберігається у локальному стані Slint-компоненту"
+        );
     });
     ui.on_doc_selection_cleared(|| {
         tracing::debug!("doc_selection_cleared — очищення вибору в UI");
     });
     ui.on_doc_more_actions(|id| {
-        tracing::warn!("TODO: doc_more_actions({}) — контекстне меню планується у наступному спринті", id);
+        tracing::warn!(
+            "TODO: doc_more_actions({}) — контекстне меню планується у наступному спринті",
+            id
+        );
     });
     ui.on_doc_bulk_send(|| {
         tracing::warn!("TODO: doc_bulk_send — масове надсилання планується у наступному спринті");
     });
     ui.on_doc_bulk_archive(|| {
-        tracing::warn!("TODO: doc_bulk_archive — масове архівування планується у наступному спринті");
+        tracing::warn!(
+            "TODO: doc_bulk_archive — масове архівування планується у наступному спринті"
+        );
     });
     ui.on_doc_bulk_delete(|| {
         tracing::warn!("TODO: doc_bulk_delete — масове видалення планується у наступному спринті");
     });
     ui.on_doc_page_changed(|_p| {
-        tracing::debug!("doc_page_changed — пагінація зберігається у локальному стані Slint-компоненту");
+        tracing::debug!(
+            "doc_page_changed — пагінація зберігається у локальному стані Slint-компоненту"
+        );
     });
 }
 
@@ -208,9 +231,18 @@ mod tests {
     #[test]
     fn sort_combined_documents_by_date_descending() {
         let pairs = vec![
-            (NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(), "A".to_string()),
-            (NaiveDate::from_ymd_opt(2026, 4, 21).unwrap(), "B".to_string()),
-            (NaiveDate::from_ymd_opt(2025, 12, 31).unwrap(), "C".to_string()),
+            (
+                NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
+                "A".to_string(),
+            ),
+            (
+                NaiveDate::from_ymd_opt(2026, 4, 21).unwrap(),
+                "B".to_string(),
+            ),
+            (
+                NaiveDate::from_ymd_opt(2025, 12, 31).unwrap(),
+                "C".to_string(),
+            ),
         ];
         let mut sorted = pairs;
         sorted.sort_by(|a, b| b.0.cmp(&a.0));
@@ -222,7 +254,10 @@ mod tests {
 
     #[test]
     fn empty_documents_data_has_zero_total() {
-        let data = super::DocumentsData { items: vec![], total: 0 };
+        let data = super::DocumentsData {
+            items: vec![],
+            total: 0,
+        };
         assert!(data.items.is_empty());
         assert_eq!(data.total, 0);
     }

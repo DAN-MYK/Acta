@@ -588,7 +588,7 @@ INSERT INTO tasks (company_id, title, description, status, priority,
         'in_progress', 'high',
         '2026-04-30 17:00:00+03',
         '2026-04-28 09:00:00+03',
-        'dd000001-0000-0000-0000-000000000001',
+        NULL,
         'dd000004-0000-0000-0000-000000000001'
     ),
     (
@@ -598,7 +598,7 @@ INSERT INTO tasks (company_id, title, description, status, priority,
         'open', 'high',
         '2026-05-05 17:00:00+03',
         '2026-04-25 10:00:00+03',
-        'dd000001-0000-0000-0000-000000000003',
+        NULL,
         'dd000004-0000-0000-0000-000000000003'
     ),
     (
@@ -618,7 +618,7 @@ INSERT INTO tasks (company_id, title, description, status, priority,
         'open', 'normal',
         '2026-04-15 17:00:00+03',
         NULL,
-        'dd000001-0000-0000-0000-000000000005',
+        NULL,
         'dd000004-0000-0000-0000-000000000004'
     ),
     (
@@ -648,7 +648,7 @@ INSERT INTO tasks (company_id, title, description, status, priority,
         'open', 'normal',
         '2026-04-10 17:00:00+03',
         '2026-04-08 09:00:00+03',
-        'dd000001-0000-0000-0000-000000000001',
+        NULL,
         'dd000004-0000-0000-0000-000000000007'
     ),
     (

@@ -1,4 +1,6 @@
 /target
+/target_codex_run/
+/target_codex_test/
 .env
 .claude/
 .claude/worktrees/

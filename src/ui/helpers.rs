@@ -559,10 +559,22 @@ mod tests {
             updated_at: Utc::now(),
         };
 
-        assert_eq!(task_to_item(&make_task(TaskPriority::High)).priority, crate::Priority::High);
-        assert_eq!(task_to_item(&make_task(TaskPriority::Critical)).priority, crate::Priority::High);
-        assert_eq!(task_to_item(&make_task(TaskPriority::Normal)).priority, crate::Priority::Medium);
-        assert_eq!(task_to_item(&make_task(TaskPriority::Low)).priority, crate::Priority::Low);
+        assert_eq!(
+            task_to_item(&make_task(TaskPriority::High)).priority,
+            crate::Priority::High
+        );
+        assert_eq!(
+            task_to_item(&make_task(TaskPriority::Critical)).priority,
+            crate::Priority::High
+        );
+        assert_eq!(
+            task_to_item(&make_task(TaskPriority::Normal)).priority,
+            crate::Priority::Medium
+        );
+        assert_eq!(
+            task_to_item(&make_task(TaskPriority::Low)).priority,
+            crate::Priority::Low
+        );
     }
 
     #[test]
