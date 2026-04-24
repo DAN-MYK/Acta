@@ -75,19 +75,13 @@ pub async fn prepare_counterparty_detail(
 }
 
 pub fn apply_counterparties_to_ui(ui: &crate::AppWindow, data: CounterpartiesData) {
-    let previous = ui.get_counterparties_screen();
     ui.set_counterparties_screen(crate::CounterpartiesViewData {
         items: ModelRc::new(VecModel::from(data.items)),
-        detail: previous.detail,
-        documents: previous.documents,
-        payments: previous.payments,
     });
 }
 
 pub fn apply_counterparty_detail_to_ui(ui: &crate::AppWindow, data: CounterpartyDetailData) {
-    let previous = ui.get_counterparties_screen();
-    ui.set_counterparties_screen(crate::CounterpartiesViewData {
-        items: previous.items,
+    ui.set_counterparty_detail(crate::CounterpartyDetailViewData {
         detail: data.detail,
         documents: ModelRc::new(VecModel::from(data.documents)),
         payments: ModelRc::new(VecModel::from(data.payments)),

@@ -20,7 +20,7 @@ import { Settings } from "settings.slint";
 import {
     NavScreen,
     ShellChrome, DashboardViewData, DocumentsViewData, CounterpartiesViewData,
-    PaymentsViewData, ReportsViewData, TasksViewData, SettingsViewData,
+    CounterpartyDetailViewData, PaymentsViewData, ReportsViewData, TasksViewData, SettingsViewData,
     CompanyInfo, PaletteItemData,
 } from "types.slint";
 
@@ -44,6 +44,7 @@ export component AppWindow inherits Window {
     in property <DashboardViewData> dashboard;
     in property <DocumentsViewData> documents;
     in property <CounterpartiesViewData> counterparties-screen;
+    in property <CounterpartyDetailViewData> counterparty-detail;
     in property <PaymentsViewData> payments-screen;
     in property <ReportsViewData> reports-screen;
     in property <TasksViewData> tasks-screen;
@@ -253,9 +254,9 @@ export component AppWindow inherits Window {
             height: 100%;
 
             list: root.counterparties-screen.items;
-            detail: root.counterparties-screen.detail;
-            detail-docs: root.counterparties-screen.documents;
-            detail-payments: root.counterparties-screen.payments;
+            detail: root.counterparty-detail.detail;
+            detail-docs: root.counterparty-detail.documents;
+            detail-payments: root.counterparty-detail.payments;
             selected-id: root.cp-selected-id;
             search-query: root.cp-search;
             active-tab: root.cp-detail-tab-state;

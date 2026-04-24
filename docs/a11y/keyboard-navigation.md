@@ -1,8 +1,8 @@
 # Accessibility / Keyboard Navigation — Acta
 
 > Перевірено: 2026-04-22
-> Оновлено: 2026-04-22
-> Статус: P1 + P2 повністю виконано в `ui/`
+> Оновлено: 2026-04-24
+> Статус: P1 + P2 + залишкові TODO повністю виконано в `ui/`
 >
 > **Важливо:** Компільований UI — `ui/` (build.rs). Усі accessibility зміни застосовано там.
 
@@ -22,8 +22,8 @@
 
 | Сценарій | Статус | Примітка |
 |----------|--------|----------|
-| Перший фокус при завантаженні | ❌ TODO | Sidebar → перший nav item має отримати focus |
-| Фокус після modal close | ❌ TODO | Повертати фокус на trigger елемент |
+| Перший фокус при завантаженні | ✅ | `nav-scope` FocusScope отримує `init => { self.focus(); }` |
+| Фокус після modal close | ✅ | `changed cmd-palette-open` повертає фокус на `nav-scope` |
 | Фокус після screen switch | ✅ | Sidebar залишається accessible |
 | Focus ring visible | ✅ | `AppTheme.focus-ring` використовується |
 | Keyboard trap | ✅ | Немає відомих traps |

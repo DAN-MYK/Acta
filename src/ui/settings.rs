@@ -393,6 +393,17 @@ pub fn wire_settings_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                 match db::companies::update(ctx.pool(), company_id, &update).await {
                     Ok(Some(company)) => {
                         tracing::info!("settings: company saved");
+                        let display_name: slint::SharedString = company
+                            .short_name
+                            .clone()
+                            .filter(|s| !s.is_empty())
+                            .unwrap_or_else(|| company.name.clone())
+                            .into();
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            let mut shell = ui.get_shell();
+                            shell.company_name = display_name;
+                            ui.set_shell(shell);
+                        });
                         crate::bootstrap::refresh_screen(
                             ui_weak.clone(),
                             ctx.clone(),

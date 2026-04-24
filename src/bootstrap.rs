@@ -243,11 +243,15 @@ pub fn spawn_refresh_screen(ui_weak: slint::Weak<AppWindow>, ctx: Arc<AppCtx>, s
 pub fn build_ui(rt: &Runtime, ctx: &Arc<AppCtx>) -> Result<AppWindow> {
     let ui = AppWindow::new()?;
     let data = rt.block_on(load_initial_ui_data(ctx));
+    let company_name = {
+        let name = data.settings.company_info.short_name.clone();
+        if name.is_empty() { "Acta".into() } else { name }
+    };
     // apply_documents_to_ui всередині ініціалізує chain_steps/cp_doc_chains порожніми VecModel-ами.
     apply_initial_ui_data(&ui, data);
 
     ui.set_shell(crate::ShellChrome {
-        company_name: "Acta".into(),
+        company_name,
         user_name: "Адміністратор".into(),
         user_initials: "АД".into(),
         user_role: "Адміністратор".into(),

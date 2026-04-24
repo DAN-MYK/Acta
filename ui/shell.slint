@@ -771,6 +771,9 @@ export component Shell inherits Rectangle {
     changed shortcuts-open => {
         if !root.shortcuts-open { nav-scope.focus(); }
     }
+    changed cmd-palette-open => {
+        if !root.cmd-palette-open { nav-scope.focus(); }
+    }
 
     // Icon assets — loaded from project/ui/assets/icons/
     in property <image> icon-home;
@@ -1003,6 +1006,7 @@ export component Shell inherits Rectangle {
 
                 // Epic 10: Keyboard navigation hotkeys
                 nav-scope := FocusScope {
+                    init => { self.focus(); }
                     key-pressed(e) => {
                         if (e.text == "1" && e.modifiers.control) {
                             root.navigate(NavScreen.Dashboard);

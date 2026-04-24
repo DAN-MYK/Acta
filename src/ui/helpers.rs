@@ -424,4 +424,194 @@ mod tests {
             crate::DocumentStatus::Paid
         );
     }
+
+    #[test]
+    fn format_money_negative() {
+        assert_eq!(format_money(dec!(-1234.56)), "-1 234,56");
+    }
+
+    #[test]
+    fn invoice_status_to_slint_all_variants() {
+        assert_eq!(
+            invoice_status_to_slint(&InvoiceStatus::Draft),
+            crate::DocumentStatus::Draft
+        );
+        assert_eq!(
+            invoice_status_to_slint(&InvoiceStatus::Issued),
+            crate::DocumentStatus::Issued
+        );
+        assert_eq!(
+            invoice_status_to_slint(&InvoiceStatus::Signed),
+            crate::DocumentStatus::Signed
+        );
+        assert_eq!(
+            invoice_status_to_slint(&InvoiceStatus::Paid),
+            crate::DocumentStatus::Paid
+        );
+    }
+
+    #[test]
+    fn waybill_status_issued_and_signed_map_correctly() {
+        use acta::models::waybill::WaybillStatus;
+        assert_eq!(
+            waybill_status_to_slint(&WaybillStatus::Issued),
+            crate::DocumentStatus::Issued
+        );
+        assert_eq!(
+            waybill_status_to_slint(&WaybillStatus::Signed),
+            crate::DocumentStatus::Signed
+        );
+    }
+
+    #[test]
+    fn waybill_row_converts_with_wbl_prefix() {
+        use acta::models::waybill::{WaybillListRow, WaybillStatus};
+        let row = WaybillListRow {
+            id: Uuid::nil(),
+            number: "НАК-001".to_string(),
+            direction: DocumentDirection::Outgoing,
+            date: NaiveDate::from_ymd_opt(2026, 3, 10).unwrap(),
+            counterparty_name: "ТОВ Склад".to_string(),
+            total_amount: dec!(750.00),
+            status: WaybillStatus::Signed,
+        };
+        let item = waybill_row_to_document_item(&row);
+        assert!(item.id.as_str().starts_with("wbl:"));
+        assert_eq!(item.kind, crate::DocumentKind::Waybill);
+        assert_eq!(item.status, crate::DocumentStatus::Signed);
+        assert_eq!(item.amount_str.as_str(), "750 ₴");
+    }
+
+    #[test]
+    fn counterparty_to_item_maps_name_and_edrpou() {
+        use acta::models::counterparty::Counterparty;
+        use chrono::Utc;
+        let cp = Counterparty {
+            id: Uuid::nil(),
+            name: "ФОП Петренко".to_string(),
+            edrpou: Some("12345678".to_string()),
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            is_archived: false,
+            bas_id: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        let item = counterparty_to_item(&cp);
+        assert_eq!(item.name.as_str(), "ФОП Петренко");
+        assert_eq!(item.edrpou.as_str(), "12345678");
+    }
+
+    #[test]
+    fn payment_row_expense_direction_maps_to_out() {
+        let row = PaymentListRow {
+            id: Uuid::nil(),
+            date: "10.03.2026".to_string(),
+            amount: dec!(200.00),
+            direction: PaymentDirection::Expense,
+            counterparty_id: None,
+            counterparty_name: None,
+            bank_name: None,
+            description: None,
+            is_reconciled: false,
+        };
+        let item = payment_row_to_item(&row);
+        assert_eq!(item.direction, crate::Direction::Out);
+    }
+
+    #[test]
+    fn payment_row_reconciled_shows_label() {
+        let row = PaymentListRow {
+            id: Uuid::nil(),
+            date: "10.03.2026".to_string(),
+            amount: dec!(50.00),
+            direction: PaymentDirection::Income,
+            counterparty_id: None,
+            counterparty_name: None,
+            bank_name: None,
+            description: None,
+            is_reconciled: true,
+        };
+        let item = payment_row_to_item(&row);
+        assert_eq!(item.matched_doc.as_str(), "Звірено");
+    }
+
+    #[test]
+    fn task_to_item_priority_mapping() {
+        use acta::models::task::{Task, TaskPriority, TaskStatus};
+        use chrono::Utc;
+
+        let make_task = |priority: TaskPriority| Task {
+            id: Uuid::nil(),
+            title: "Test".to_string(),
+            description: None,
+            status: TaskStatus::Open,
+            priority,
+            due_date: None,
+            reminder_at: None,
+            counterparty_id: None,
+            act_id: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        assert_eq!(task_to_item(&make_task(TaskPriority::High)).priority, crate::Priority::High);
+        assert_eq!(task_to_item(&make_task(TaskPriority::Critical)).priority, crate::Priority::High);
+        assert_eq!(task_to_item(&make_task(TaskPriority::Normal)).priority, crate::Priority::Medium);
+        assert_eq!(task_to_item(&make_task(TaskPriority::Low)).priority, crate::Priority::Low);
+    }
+
+    #[test]
+    fn task_to_item_done_and_cancelled_set_done_flag() {
+        use acta::models::task::{Task, TaskPriority, TaskStatus};
+        use chrono::Utc;
+
+        let make_task = |status: TaskStatus| Task {
+            id: Uuid::nil(),
+            title: "Test".to_string(),
+            description: None,
+            status,
+            priority: TaskPriority::Normal,
+            due_date: None,
+            reminder_at: None,
+            counterparty_id: None,
+            act_id: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        assert!(task_to_item(&make_task(TaskStatus::Done)).done);
+        assert!(task_to_item(&make_task(TaskStatus::Cancelled)).done);
+        assert!(!task_to_item(&make_task(TaskStatus::Open)).done);
+    }
+
+    #[test]
+    fn task_to_item_due_date_formats_correctly() {
+        use acta::models::task::{Task, TaskPriority, TaskStatus};
+        use chrono::{TimeZone, Utc};
+
+        let task = Task {
+            id: Uuid::nil(),
+            title: "Test".to_string(),
+            description: None,
+            status: TaskStatus::Open,
+            priority: TaskPriority::Normal,
+            due_date: Some(Utc.with_ymd_and_hms(2026, 4, 21, 12, 0, 0).unwrap()),
+            reminder_at: None,
+            counterparty_id: None,
+            act_id: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        let item = task_to_item(&task);
+        assert!(
+            item.due_date.as_str().contains("2026"),
+            "due_date має містити рік: {}",
+            item.due_date
+        );
+    }
 }

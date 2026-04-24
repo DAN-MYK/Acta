@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use slint::{ComponentHandle, Model, ModelRc, VecModel};
+use slint::{ComponentHandle, ModelRc, VecModel};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -55,25 +55,12 @@ pub async fn prepare_documents_data(
 }
 
 pub fn apply_documents_to_ui(ui: &crate::AppWindow, data: DocumentsData) {
-    let previous = ui.get_documents();
-    let selected_ids = previous.selected_ids.clone();
-
-    // Обчислюємо selected статус для кожного документа
-    let items_with_selection: Vec<crate::DocumentItem> = data
-        .items
-        .into_iter()
-        .map(|mut item| {
-            item.selected = selected_ids.iter().any(|id| id == item.id);
-            item
-        })
-        .collect();
-
     // Розділяємо документи за типами для tab-specific списків
     let mut invoice_items = vec![];
     let mut act_items = vec![];
     let mut waybill_items = vec![];
 
-    for item in items_with_selection.iter() {
+    for item in data.items.iter() {
         if item.id.starts_with("inv:") {
             invoice_items.push(item.clone());
         } else if item.id.starts_with("act:") {
@@ -84,16 +71,15 @@ pub fn apply_documents_to_ui(ui: &crate::AppWindow, data: DocumentsData) {
     }
 
     // chain_steps і cp_doc_chains завжди перестворюються порожніми: on_doc_chain_load
-    // сам створює новий VecModel при завантаженні ланцюга. Це прибирає потребу у
-    // подвійному set_documents у bootstrap::build_ui для ініціалізації цих полів.
+    // сам створює новий VecModel при завантаженні ланцюга.
     ui.set_documents(crate::DocumentsViewData {
-        items: ModelRc::new(VecModel::from(items_with_selection)),
+        items: ModelRc::new(VecModel::from(data.items)),
         invoice_items: ModelRc::new(VecModel::from(invoice_items)),
         act_items: ModelRc::new(VecModel::from(act_items)),
         waybill_items: ModelRc::new(VecModel::from(waybill_items)),
-        selected_ids,
+        selected_ids: ModelRc::new(VecModel::<slint::SharedString>::default()),
         total_count: data.total,
-        page_count: if previous.page_count > 0 { previous.page_count } else { 1 },
+        page_count: 1,
         chain_steps: ModelRc::new(VecModel::<crate::ChainStep>::default()),
         cp_doc_chains: ModelRc::new(VecModel::<crate::DocChainGroup>::default()),
     });
