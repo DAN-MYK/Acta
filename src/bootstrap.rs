@@ -97,7 +97,6 @@ async fn load_initial_ui_data(ctx: &AppCtx) -> InitialUiData {
             } else {
                 Some(documents_state.tab.as_str())
             },
-            &documents_state.selected_ids,
         ),
         ui::counterparties::prepare_counterparties_data(
             ctx.pool(),
@@ -169,7 +168,6 @@ pub async fn refresh_screen(ui_weak: slint::Weak<AppWindow>, ctx: Arc<AppCtx>, s
                 } else {
                     Some(state.tab.as_str())
                 },
-                &state.selected_ids,
             )
             .await;
             let _ = ui_weak.upgrade_in_event_loop(move |ui| {

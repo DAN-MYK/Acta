@@ -170,11 +170,8 @@ pub fn wire_task_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
     });
 
     ui.on_task_new({
-        let ui_weak = ui.as_weak();
         move || {
-            let _ = ui_weak.upgrade_in_event_loop(|ui| {
-                ui.set_task_form_open(true);
-            });
+            // show-task-form is managed internally by the Tasks Slint component
         }
     });
 
