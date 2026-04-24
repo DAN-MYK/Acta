@@ -3,7 +3,7 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use notify_rust::{Notification, Timeout};
 use sqlx::PgPool;
-use tokio::time::{Duration, interval};
+use tokio::time::{interval, Duration};
 
 use crate::db::tasks;
 
@@ -108,7 +108,10 @@ mod tests {
         let handle = tokio::spawn(reminder_loop(Arc::new(fake_pool())));
         handle.abort();
         let err = handle.await.unwrap_err();
-        assert!(err.is_cancelled(), "abort повинен скасувати, а не панікувати");
+        assert!(
+            err.is_cancelled(),
+            "abort повинен скасувати, а не панікувати"
+        );
     }
 
     #[tokio::test]
@@ -119,7 +122,10 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(150)).await;
         handle.abort();
         let err = handle.await.unwrap_err();
-        assert!(err.is_cancelled(), "abort між тіками повинен скасувати задачу");
+        assert!(
+            err.is_cancelled(),
+            "abort між тіками повинен скасувати задачу"
+        );
     }
 
     // ── run_loop: стійкість до помилок БД ────────────────────────────────────
@@ -147,23 +153,28 @@ mod tests {
 
     #[tokio::test(start_paused = true)]
     async fn run_loop_does_not_self_terminate_between_ticks() {
-        let handle =
-            tokio::spawn(run_loop(Arc::new(fake_pool()), Duration::from_secs(60)));
+        let handle = tokio::spawn(run_loop(Arc::new(fake_pool()), Duration::from_secs(60)));
 
         // Перший тік: interval завжди спрацьовує одразу при першому poll().
         // Просуваємо 1ms щоб дати задачі час виконати тік і помилковий DB-запит.
         tokio::time::advance(Duration::from_millis(1)).await;
-        for _ in 0..100 { tokio::task::yield_now().await; }
+        for _ in 0..100 {
+            tokio::task::yield_now().await;
+        }
         assert!(!handle.is_finished(), "alive після тіку 1");
 
         // Другий тік: через 60s. Між тіками loop заблокований на ticker.tick().await.
         tokio::time::advance(Duration::from_secs(60)).await;
-        for _ in 0..100 { tokio::task::yield_now().await; }
+        for _ in 0..100 {
+            tokio::task::yield_now().await;
+        }
         assert!(!handle.is_finished(), "alive після тіку 2");
 
         // Третій тік: через ще 60s.
         tokio::time::advance(Duration::from_secs(60)).await;
-        for _ in 0..100 { tokio::task::yield_now().await; }
+        for _ in 0..100 {
+            tokio::task::yield_now().await;
+        }
         assert!(!handle.is_finished(), "alive після тіку 3");
 
         handle.abort();
@@ -175,17 +186,20 @@ mod tests {
         // Перевіряємо що між тіками цикл заблокований, а не «крутиться» активно.
         // Якщо б цикл не чекав інтервал, він би продовжував робити DB-виклики
         // і міг би завершитись або панікувати — а він не повинен.
-        let handle =
-            tokio::spawn(run_loop(Arc::new(fake_pool()), Duration::from_secs(3600)));
+        let handle = tokio::spawn(run_loop(Arc::new(fake_pool()), Duration::from_secs(3600)));
 
         // Перший тік (одразу)
         tokio::time::advance(Duration::from_millis(1)).await;
-        for _ in 0..100 { tokio::task::yield_now().await; }
+        for _ in 0..100 {
+            tokio::task::yield_now().await;
+        }
 
         // Просуваємо лише половину інтервалу (1800s < 3600s) —
         // другий тік ще не повинен настати.
         tokio::time::advance(Duration::from_secs(1800)).await;
-        for _ in 0..100 { tokio::task::yield_now().await; }
+        for _ in 0..100 {
+            tokio::task::yield_now().await;
+        }
 
         assert!(
             !handle.is_finished(),
@@ -198,23 +212,31 @@ mod tests {
     async fn run_loop_fires_tick_exactly_at_interval_boundary() {
         // Перевіряємо що тік ТАКИ спрацьовує коли інтервал минув.
         // До межі — живий та чекає; після повного advance — живий (не завершився).
-        let handle =
-            tokio::spawn(run_loop(Arc::new(fake_pool()), Duration::from_secs(60)));
+        let handle = tokio::spawn(run_loop(Arc::new(fake_pool()), Duration::from_secs(60)));
 
         // Перший тік
         tokio::time::advance(Duration::from_millis(1)).await;
-        for _ in 0..100 { tokio::task::yield_now().await; }
+        for _ in 0..100 {
+            tokio::task::yield_now().await;
+        }
 
         // Рівно інтервал — другий тік повинен спрацювати
         tokio::time::advance(Duration::from_secs(60)).await;
-        for _ in 0..100 { tokio::task::yield_now().await; }
+        for _ in 0..100 {
+            tokio::task::yield_now().await;
+        }
 
         // Ще раз — третій тік
         tokio::time::advance(Duration::from_secs(60)).await;
-        for _ in 0..100 { tokio::task::yield_now().await; }
+        for _ in 0..100 {
+            tokio::task::yield_now().await;
+        }
 
         // Після трьох тіків з помилками БД loop все ще живий
-        assert!(!handle.is_finished(), "loop живий після 3 тіків з помилками БД");
+        assert!(
+            !handle.is_finished(),
+            "loop живий після 3 тіків з помилками БД"
+        );
         handle.abort();
     }
 }

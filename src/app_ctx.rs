@@ -20,6 +20,7 @@ pub struct CounterpartyListState {
 pub struct DocumentListState {
     pub query: String,
     pub tab: String, // "all" | "act" | "invoice" | "waybill"
+    pub selected_ids: Vec<String>,
 }
 
 #[derive(Clone, Default)]
@@ -70,6 +71,7 @@ impl AppCtx {
             documents_state: Arc::new(Mutex::new(DocumentListState {
                 query: String::new(),
                 tab: "all".to_string(),
+                selected_ids: Vec::new(),
             })),
             counterparty_state: Arc::new(Mutex::new(CounterpartyListState::default())),
             reports_state: Arc::new(Mutex::new(ReportsState {
@@ -93,18 +95,28 @@ impl AppCtx {
 
     /// Повертає поточний UUID. Nil = компанія не обрана.
     pub fn company_id(&self) -> uuid::Uuid {
-        *self.active_company_id.lock().unwrap_or_else(|e| e.into_inner())
+        *self
+            .active_company_id
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
     }
 
     /// Повертає `Some(id)` якщо компанія обрана (не nil), `None` інакше.
     pub fn company_id_opt(&self) -> Option<uuid::Uuid> {
         let id = self.company_id();
-        if id.is_nil() { None } else { Some(id) }
+        if id.is_nil() {
+            None
+        } else {
+            Some(id)
+        }
     }
 
     /// Встановлює активну компанію.
     pub fn set_company_id(&self, id: uuid::Uuid) {
-        *self.active_company_id.lock().unwrap_or_else(|e| e.into_inner()) = id;
+        *self
+            .active_company_id
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = id;
     }
 
     pub fn active_screen(&self) -> AppScreen {
@@ -123,7 +135,10 @@ impl AppCtx {
     }
 
     pub fn set_documents_state(&self, state: DocumentListState) {
-        *self.documents_state.lock().unwrap_or_else(|e| e.into_inner()) = state;
+        *self
+            .documents_state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = state;
     }
 
     pub fn update_documents_state(
@@ -146,7 +161,10 @@ impl AppCtx {
     }
 
     pub fn set_counterparty_state(&self, state: CounterpartyListState) {
-        *self.counterparty_state.lock().unwrap_or_else(|e| e.into_inner()) = state;
+        *self
+            .counterparty_state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = state;
     }
 
     pub fn update_counterparty_state(
@@ -202,7 +220,9 @@ mod tests {
     use uuid::Uuid;
 
     fn make_ctx_pool() -> PgPool {
-        let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
         rt.block_on(async {
             sqlx::PgPool::connect_lazy("postgres://test:test@localhost/test").unwrap()
         })
@@ -264,6 +284,7 @@ mod tests {
         ctx.set_documents_state(DocumentListState {
             query: "акт".to_string(),
             tab: "act".to_string(),
+            selected_ids: Vec::new(),
         });
 
         let state = ctx.documents_state_snapshot();

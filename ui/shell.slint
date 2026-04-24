@@ -2,7 +2,7 @@
 // Aesthetic: hairline border between sidebar and main, flat avatar, no gradients.
 
 import { AppTheme } from "design-tokens.slint";
-import { NavScreen } from "types.slint";
+import { NavScreen, PaletteItemData } from "types.slint";
 import { Card, VDivider, HDivider, IconButton, KbdHint, SearchInput, Avatar, GhostButton, SecondaryButton } from "components.slint";
 
 // ── Skip Navigation ───────────────────────────────────────────────────────────
@@ -95,6 +95,7 @@ component NavItem inherits Rectangle {
             font-weight: active ? 500 : 400;
             vertical-alignment: center;
             horizontal-stretch: 1;
+            overflow: elide;
         }
 
         if badge-count > 0 : Rectangle {
@@ -170,6 +171,8 @@ component SavedViewItem inherits Rectangle {
             font-size: 10.5px;
             font-family: AppTheme.font-mono;
             vertical-alignment: center;
+            horizontal-alignment: right;
+            width: 20px;
         }
     }
 
@@ -262,13 +265,15 @@ component PaletteItem inherits Rectangle {
 // ── Command Palette ────────────────────────────────────────────────────────────
 export component CommandPalette inherits Rectangle {
     in-out property <bool> open: false;
-    in property <string> query: "";
+    in-out property <string> query: "";
+    in property <[PaletteItemData]> items;
     in property <image> search-icon;
     in property <image> close-icon;
     in property <image> enter-icon;
     callback closed;
     callback navigated(NavScreen);
     callback query-changed(string);
+    callback item-activated(string);
 
     visible: open;
     x: 0;
@@ -326,7 +331,7 @@ export component CommandPalette inherits Rectangle {
                     vertical-alignment: center;
                     horizontal-stretch: 1;
                     accessible-label: "Пошук команд";
-                    edited => { root.query-changed(self.text); }
+                    edited => { root.query = self.text; root.query-changed(self.text); }
                 }
 
                 // Placeholder overlay shown when field is empty
@@ -360,8 +365,80 @@ export component CommandPalette inherits Rectangle {
 
             HDivider { }
 
+            if root.items.length > 0 : VerticalLayout {
+                padding-top: 6px;
+                padding-bottom: 6px;
+
+                for item in root.items : Rectangle {
+                    height: item.kind == "header" ? 28px : 46px;
+                    background: row-touch.has-hover && item.kind != "header" ? AppTheme.bg-hover : transparent;
+
+                    if item.kind == "header" : Text {
+                        text: item.title;
+                        x: 16px;
+                        width: parent.width - 32px;
+                        height: parent.height;
+                        color: AppTheme.text-faint;
+                        font-size: 10px;
+                        font-family: AppTheme.font-sans;
+                        font-weight: 600;
+                        letter-spacing: 1.2px;
+                        vertical-alignment: center;
+                    }
+
+                    if item.kind != "header" : HorizontalLayout {
+                        padding-left: 16px;
+                        padding-right: 16px;
+                        spacing: 10px;
+
+                        Image {
+                            source: root.enter-icon;
+                            width: 15px;
+                            height: 15px;
+                            colorize: AppTheme.text-faint;
+                            image-fit: contain;
+                            vertical-alignment: center;
+                        }
+
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            alignment: center;
+                            spacing: 2px;
+
+                            Text {
+                                text: item.title;
+                                color: AppTheme.text;
+                                font-size: 13px;
+                                font-family: AppTheme.font-sans;
+                                overflow: elide;
+                            }
+
+                            if item.subtitle != "" : Text {
+                                text: item.subtitle;
+                                color: AppTheme.text-faint;
+                                font-size: 11px;
+                                font-family: AppTheme.font-sans;
+                                overflow: elide;
+                            }
+                        }
+
+                        if item.shortcut != "" : KbdHint { key: item.shortcut; }
+                    }
+
+                    row-touch := TouchArea {
+                        mouse-cursor: item.kind == "header" ? default : pointer;
+                        clicked => {
+                            if item.kind != "header" {
+                                root.item-activated(item.payload);
+                                root.closed();
+                            }
+                        }
+                    }
+                }
+            }
+
             // Navigation shortcuts section
-            VerticalLayout {
+            if root.items.length == 0 : VerticalLayout {
                 padding-top: 6px;
                 padding-bottom: 6px;
 
@@ -686,6 +763,8 @@ export component Shell inherits Rectangle {
 
     // Command palette
     in-out property <bool> cmd-palette-open: false;
+    in-out property <string> cmd-palette-query: "";
+    in property <[PaletteItemData]> cmd-palette-items;
 
     // Keyboard shortcuts help overlay
     private property <bool> shortcuts-open: false;
@@ -718,6 +797,8 @@ export component Shell inherits Rectangle {
     callback toggle-theme;
     callback open-cmd-palette;
     callback close-cmd-palette;
+    callback cmd-palette-query-changed(string);
+    callback cmd-palette-item-activated(string);
 
     background: AppTheme.bg;
 
@@ -1213,11 +1294,15 @@ export component Shell inherits Rectangle {
     // ── Command Palette overlay ────────────────────────────────────────────
     if cmd-palette-open : CommandPalette {
         open: root.cmd-palette-open;
+        query: root.cmd-palette-query;
+        items: root.cmd-palette-items;
         search-icon: root.icon-search;
         close-icon: root.icon-close;
         enter-icon: root.icon-enter;
         closed => { root.close-cmd-palette(); }
         navigated(screen) => { root.navigate(screen); }
+        query-changed(value) => { root.cmd-palette-query = value; root.cmd-palette-query-changed(value); }
+        item-activated(payload) => { root.cmd-palette-item-activated(payload); }
     }
 
     // ── Keyboard Help overlay ──────────────────────────────────────────────

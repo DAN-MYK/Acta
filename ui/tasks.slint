@@ -10,6 +10,7 @@ import {
     GhostButton, SecondaryButton, PrimaryButton,
     HeadingSm, SectionLabel
 } from "components.slint";
+import { LineEdit } from "std-widgets.slint";
 
 // ── Task KPI metric ───────────────────────────────────────────────────────────
 component TaskMetric inherits VerticalLayout {
@@ -63,6 +64,303 @@ component FilterBtn inherits Rectangle {
     }
 
     TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
+component FormField inherits Rectangle {
+    in property <string> label;
+    in property <string> placeholder;
+    in-out property <string> value;
+
+    height: 58px;
+
+    VerticalLayout {
+        spacing: 6px;
+
+        Text {
+            text: root.label;
+            color: AppTheme.text-muted;
+            font-size: 11px;
+            font-family: AppTheme.font-sans;
+            font-weight: 600;
+        }
+
+        Rectangle {
+            height: 32px;
+            background: AppTheme.bg;
+            border-width: 1px;
+            border-color: AppTheme.border;
+            border-radius: AppTheme.radius-md;
+
+            HorizontalLayout {
+                padding-left: 10px;
+                padding-right: 10px;
+
+                input := LineEdit {
+                    text <=> root.value;
+                    font-size: 12.5px;
+                    font-family: AppTheme.font-sans;
+                    accessible-label: root.label;
+                }
+
+                if root.value == "" : Text {
+                    text: root.placeholder;
+                    color: AppTheme.text-faint;
+                    font-size: 12.5px;
+                    font-family: AppTheme.font-sans;
+                    vertical-alignment: center;
+                    accessible-role: none;
+                }
+            }
+        }
+    }
+
+}
+
+component PriorityChoice inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <string> selected;
+    callback picked(string);
+
+    height: 28px;
+    min-width: txt.preferred-width + 18px;
+    background: root.selected == root.value ? AppTheme.accent-soft : AppTheme.bg;
+    border-width: 1px;
+    border-color: root.selected == root.value ? AppTheme.accent : AppTheme.border;
+    border-radius: AppTheme.radius-md;
+
+    txt := Text {
+        text: root.label;
+        color: root.selected == root.value ? AppTheme.accent-text : AppTheme.text-muted;
+        font-size: 12px;
+        font-family: AppTheme.font-sans;
+        font-weight: root.selected == root.value ? 600 : 400;
+        vertical-alignment: center;
+        horizontal-alignment: center;
+    }
+
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.picked(root.value); }
+    }
+}
+
+component DetailLine inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> value;
+
+    height: 26px;
+    spacing: 12px;
+
+    Text {
+        text: root.label;
+        color: AppTheme.text-faint;
+        font-size: 11.5px;
+        font-family: AppTheme.font-sans;
+        width: 130px;
+        vertical-alignment: center;
+    }
+
+    Text {
+        text: root.value == "" ? "-" : root.value;
+        color: AppTheme.text;
+        font-size: 12.5px;
+        font-family: AppTheme.font-sans;
+        horizontal-stretch: 1;
+        overflow: elide;
+        vertical-alignment: center;
+    }
+}
+
+export component TaskFormOverlay {
+    in-out property <bool> open;
+    callback save(string, string, string, string);
+
+    private property <string> title-value: "";
+    private property <string> priority-value: "normal";
+    private property <string> due-value: "";
+    private property <string> reminder-value: "";
+
+    x: 0px;
+    y: 0px;
+    width: 100%;
+    height: 100%;
+
+    Rectangle { background: #0a0b0d.with-alpha(0.32); }
+    TouchArea { clicked => { root.open = false; } }
+
+    FocusScope {
+        width: parent.width;
+        height: parent.height;
+        init => { self.focus(); }
+        key-pressed(e) => {
+            if e.text == Key.Escape {
+                root.open = false;
+                accept
+            } else {
+                reject
+            }
+        }
+    }
+
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: 460px;
+        height: 358px;
+        background: AppTheme.bg-elevated;
+        border-width: 1px;
+        border-color: AppTheme.border;
+        border-radius: AppTheme.radius-xl;
+        drop-shadow-blur: 24px;
+        drop-shadow-color: #1e1e1e.with-alpha(0.08);
+
+        TouchArea { }
+
+        VerticalLayout {
+            padding: 20px;
+            spacing: 14px;
+
+            HorizontalLayout {
+                height: 24px;
+                HeadingSm { text: "Нова задача"; horizontal-stretch: 1; }
+                GhostButton { text: "Закрити"; small: true; clicked => { root.open = false; } }
+            }
+
+            FormField {
+                label: "Назва";
+                placeholder: "Наприклад, нагадати про оплату";
+                value: root.title-value;
+            }
+
+            VerticalLayout {
+                spacing: 6px;
+                Text {
+                    text: "Пріоритет";
+                    color: AppTheme.text-muted;
+                    font-size: 11px;
+                    font-family: AppTheme.font-sans;
+                    font-weight: 600;
+                }
+                HorizontalLayout {
+                    spacing: 8px;
+                    PriorityChoice { label: "Низький"; value: "low"; selected: root.priority-value; picked(v) => { root.priority-value = v; } }
+                    PriorityChoice { label: "Звичайний"; value: "normal"; selected: root.priority-value; picked(v) => { root.priority-value = v; } }
+                    PriorityChoice { label: "Високий"; value: "high"; selected: root.priority-value; picked(v) => { root.priority-value = v; } }
+                    PriorityChoice { label: "Критичний"; value: "critical"; selected: root.priority-value; picked(v) => { root.priority-value = v; } }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 12px;
+                FormField { label: "Дата"; placeholder: "дд.мм.рррр"; value: root.due-value; horizontal-stretch: 1; }
+                FormField { label: "Нагадування"; placeholder: "дд.мм.рррр"; value: root.reminder-value; horizontal-stretch: 1; }
+            }
+
+            Rectangle { vertical-stretch: 1; }
+
+            HorizontalLayout {
+                alignment: end;
+                spacing: 8px;
+                SecondaryButton { text: "Скасувати"; clicked => { root.open = false; } }
+                PrimaryButton {
+                    text: "Зберегти";
+                    enabled: root.title-value != "";
+                    clicked => {
+                        root.save(root.title-value, root.priority-value, root.due-value, root.reminder-value);
+                        root.title-value = "";
+                        root.priority-value = "normal";
+                        root.due-value = "";
+                        root.reminder-value = "";
+                        root.open = false;
+                    }
+                }
+            }
+        }
+    }
+
+}
+
+export component TaskDetailsOverlay {
+    in-out property <bool> open;
+    in property <TaskItem> task;
+
+    x: 0px;
+    y: 0px;
+    width: 100%;
+    height: 100%;
+
+    Rectangle { background: #0a0b0d.with-alpha(0.26); }
+    TouchArea { clicked => { root.open = false; } }
+
+    FocusScope {
+        width: parent.width;
+        height: parent.height;
+        init => { self.focus(); }
+        key-pressed(e) => {
+            if e.text == Key.Escape {
+                root.open = false;
+                accept
+            } else {
+                reject
+            }
+        }
+    }
+
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: 420px;
+        height: 270px;
+        background: AppTheme.bg-elevated;
+        border-width: 1px;
+        border-color: AppTheme.border;
+        border-radius: AppTheme.radius-xl;
+        drop-shadow-blur: 24px;
+        drop-shadow-color: #1e1e1e.with-alpha(0.08);
+
+        TouchArea { }
+
+        VerticalLayout {
+            padding: 20px;
+            spacing: 12px;
+
+            HorizontalLayout {
+                height: 26px;
+                Text {
+                    text: root.task.title;
+                    color: AppTheme.text;
+                    font-size: 15px;
+                    font-family: AppTheme.font-sans;
+                    font-weight: 600;
+                    horizontal-stretch: 1;
+                    overflow: elide;
+                    vertical-alignment: center;
+                }
+                GhostButton { text: "Закрити"; small: true; clicked => { root.open = false; } }
+            }
+
+            HDivider { }
+
+            DetailLine { label: "Deadline"; value: root.task.due-date; }
+            DetailLine { label: "Статус"; value: root.task.done ? "Виконано" : "Відкрита"; }
+            DetailLine {
+                label: "Пріоритет";
+                value:
+                    root.task.priority == Priority.High ? "Високий" :
+                    root.task.priority == Priority.Medium ? "Звичайний" :
+                    "Низький";
+            }
+            DetailLine { label: "Пов'язаний документ"; value: root.task.linked-doc; }
+
+            Rectangle { vertical-stretch: 1; }
+
+            HorizontalLayout {
+                alignment: end;
+                SecondaryButton { text: "Готово"; clicked => { root.open = false; } }
+            }
+        }
+    }
 }
 
 // ── Task list item ────────────────────────────────────────────────────────────
@@ -284,6 +582,7 @@ export component Tasks inherits Rectangle {
 
     // State
     in-out property <string> filter: "open";  // "open" | "done" | "all"
+    in-out property <bool> show-task-form: false;
 
     // Icons
     in property <image> icon-check;
@@ -296,6 +595,10 @@ export component Tasks inherits Rectangle {
     callback task-toggled(string, bool);
     callback task-more(string);
     callback new-task;
+    callback task-save(string, string, string, string);
+
+    private property <bool> show-task-detail: false;
+    private property <string> detail-task-id: "";
 
     background: AppTheme.bg;
 
@@ -384,7 +687,7 @@ export component Tasks inherits Rectangle {
 
                             PrimaryButton {
                                 text: "Нова задача";
-                                clicked => { root.new-task(); }
+                                clicked => { root.show-task-form = true; root.new-task(); }
                             }
                         }
 
@@ -397,7 +700,11 @@ export component Tasks inherits Rectangle {
                             icon-calendar: root.icon-calendar;
                             icon-more: root.icon-more;
                             toggled(id, done) => { root.task-toggled(id, done); }
-                            more(id) => { root.task-more(id); }
+                            more(id) => {
+                                root.detail-task-id = id;
+                                root.show-task-detail = true;
+                                root.task-more(id);
+                            }
                         }
 
                         if visible-tasks.length == 0 : Rectangle {
@@ -454,5 +761,18 @@ export component Tasks inherits Rectangle {
                 }
             }
         }
+    }
+
+    if root.show-task-form : TaskFormOverlay {
+        open <=> root.show-task-form;
+        save(title, priority, due, reminder) => {
+            root.task-save(title, priority, due, reminder);
+        }
+    }
+
+    for task in all-tasks : TaskDetailsOverlay {
+        visible: root.show-task-detail && task.id == root.detail-task-id;
+        open <=> root.show-task-detail;
+        task: task;
     }
 }

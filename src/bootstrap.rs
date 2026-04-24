@@ -11,7 +11,7 @@ use acta::app_ctx::{AppCtx, AppScreen};
 use acta::models::{NewTask, TaskPriority, TaskStatus};
 
 use crate::ui;
-use crate::{AppWindow, ChainStep, NavScreen};
+use crate::{AppWindow, ChainStep, NavScreen, PaletteItemData};
 
 struct InitialUiData {
     dashboard: ui::dashboard::DashboardData,
@@ -82,15 +82,7 @@ async fn load_initial_ui_data(ctx: &AppCtx) -> InitialUiData {
     let counterparty_state = ctx.counterparty_state_snapshot();
     let reports_state = ctx.reports_state_snapshot();
 
-    let (
-        dashboard,
-        documents,
-        counterparties,
-        payments,
-        tasks,
-        reports,
-        settings,
-    ) = tokio::join!(
+    let (dashboard, documents, counterparties, payments, tasks, reports, settings) = tokio::join!(
         ui::dashboard::prepare_dashboard_data(ctx.pool(), company_id),
         ui::documents::prepare_documents_data(
             ctx.pool(),
@@ -105,6 +97,7 @@ async fn load_initial_ui_data(ctx: &AppCtx) -> InitialUiData {
             } else {
                 Some(documents_state.tab.as_str())
             },
+            &documents_state.selected_ids,
         ),
         ui::counterparties::prepare_counterparties_data(
             ctx.pool(),
@@ -176,6 +169,7 @@ pub async fn refresh_screen(ui_weak: slint::Weak<AppWindow>, ctx: Arc<AppCtx>, s
                 } else {
                     Some(state.tab.as_str())
                 },
+                &state.selected_ids,
             )
             .await;
             let _ = ui_weak.upgrade_in_event_loop(move |ui| {
@@ -276,6 +270,7 @@ pub fn wire_app(ui: &AppWindow, ctx: &Arc<AppCtx>) {
     ui::reports::wire_reports_callbacks(ui, ctx);
     ui::settings::wire_settings_callbacks(ui, ctx);
     wire_inbox_callbacks(ui, ctx);
+    wire_palette_callbacks(ui, ctx);
     wire_stub_callbacks(ui);
 }
 
@@ -297,7 +292,37 @@ fn wire_navigation(ui: &AppWindow, ctx: &Arc<AppCtx>) {
 
 /// Явні TODO-маркери для ще не реалізованих сценаріїв.
 fn prefixed_uuid(id: &str, prefix: &str) -> Option<Uuid> {
-    id.strip_prefix(prefix).and_then(|value| Uuid::parse_str(value).ok())
+    id.strip_prefix(prefix)
+        .and_then(|value| Uuid::parse_str(value).ok())
+}
+
+fn nav_screen_from_search_id(id: &str) -> Option<NavScreen> {
+    match id {
+        "dashboard" => Some(NavScreen::Dashboard),
+        "documents" | "acts" | "invoices" | "waybills" => Some(NavScreen::Documents),
+        "counterparties" => Some(NavScreen::Counterparties),
+        "payments" => Some(NavScreen::Payments),
+        "reports" => Some(NavScreen::Reports),
+        "tasks" => Some(NavScreen::Tasks),
+        "settings" => Some(NavScreen::Settings),
+        _ => None,
+    }
+}
+
+fn palette_item_from_search(item: acta::db::search::SearchResultItem) -> PaletteItemData {
+    let payload = if item.action.is_empty() {
+        String::new()
+    } else {
+        format!("{}:{}", item.action, item.id)
+    };
+
+    PaletteItemData {
+        kind: item.kind.into(),
+        title: item.title.into(),
+        subtitle: item.subtitle.into(),
+        shortcut: item.shortcut.into(),
+        payload: payload.into(),
+    }
 }
 
 async fn create_overdue_act_reminder(ctx: &AppCtx, act_id: Uuid) -> Result<()> {
@@ -311,8 +336,7 @@ async fn create_overdue_act_reminder(ctx: &AppCtx, act_id: Uuid) -> Result<()> {
         .await?
         .into_iter()
         .any(|task| {
-            matches!(task.status, TaskStatus::Open | TaskStatus::InProgress)
-                && task.title == title
+            matches!(task.status, TaskStatus::Open | TaskStatus::InProgress) && task.title == title
         });
 
     if already_open {
@@ -350,9 +374,12 @@ fn wire_inbox_callbacks(ui: &AppWindow, ctx: &Arc<AppCtx>) {
                     "overdue" => {
                         if let Some(act_id) = prefixed_uuid(&id, "act:") {
                             if let Err(err) = create_overdue_act_reminder(&ctx, act_id).await {
-                                tracing::error!("inbox_action: не вдалося створити нагадування: {err}");
+                                tracing::error!(
+                                    "inbox_action: не вдалося створити нагадування: {err}"
+                                );
                             }
-                            refresh_screen(ui_weak.clone(), ctx.clone(), AppScreen::Dashboard).await;
+                            refresh_screen(ui_weak.clone(), ctx.clone(), AppScreen::Dashboard)
+                                .await;
                             refresh_screen(ui_weak, ctx, AppScreen::Tasks).await;
                         } else {
                             tracing::warn!("inbox_action: некоректний id простроченого акту: {id}");
@@ -368,6 +395,121 @@ fn wire_inbox_callbacks(ui: &AppWindow, ctx: &Arc<AppCtx>) {
                     other => {
                         tracing::info!("inbox_action: дія '{other}' для {id} ще не підтримується");
                     }
+                }
+            });
+        }
+    });
+}
+
+fn wire_palette_callbacks(ui: &AppWindow, ctx: &Arc<AppCtx>) {
+    ui.on_palette_query_changed({
+        let ctx = ctx.clone();
+        let ui_weak = ui.as_weak();
+        move |query| {
+            let ctx = ctx.clone();
+            let ui_weak = ui_weak.clone();
+            let query = query.to_string();
+
+            tokio::spawn(async move {
+                match acta::db::search::search(ctx.pool(), ctx.company_id(), &query).await {
+                    Ok(items) => {
+                        let items = items
+                            .into_iter()
+                            .map(palette_item_from_search)
+                            .collect::<Vec<_>>();
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            let model: ModelRc<PaletteItemData> =
+                                ModelRc::new(VecModel::from(items));
+                            ui.set_palette_items(model);
+                        });
+                    }
+                    Err(error) => {
+                        tracing::error!("palette: search failed: {error}");
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            ui.set_palette_items(ModelRc::new(
+                                VecModel::<PaletteItemData>::default(),
+                            ));
+                        });
+                    }
+                }
+            });
+        }
+    });
+
+    ui.on_palette_item_activated({
+        let ctx = ctx.clone();
+        let ui_weak = ui.as_weak();
+        move |payload| {
+            let ctx = ctx.clone();
+            let ui_weak = ui_weak.clone();
+            let payload = payload.to_string();
+
+            tokio::spawn(async move {
+                let Some((action, id)) = payload.split_once(':') else {
+                    tracing::warn!("palette: некоректний payload '{payload}'");
+                    return;
+                };
+
+                match action {
+                    "navigate" => {
+                        if let Some(screen) = nav_screen_from_search_id(id) {
+                            let app_screen = map_nav_screen(screen);
+                            ctx.set_active_screen(app_screen);
+                            let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                                ui.set_current_screen(screen);
+                            });
+                            refresh_screen(ui_weak, ctx, app_screen).await;
+                        }
+                    }
+                    "open_cp" => {
+                        if let Ok(cp_id) = Uuid::parse_str(id) {
+                            ctx.set_active_screen(AppScreen::Counterparties);
+                            let data = ui::counterparties::prepare_counterparty_detail(
+                                ctx.pool(),
+                                ctx.company_id(),
+                                cp_id,
+                            )
+                            .await;
+                            let id = id.to_string();
+                            let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                                ui.set_current_screen(NavScreen::Counterparties);
+                                ui.set_cp_selected_id(id.into());
+                                if let Some(data) = data {
+                                    ui::counterparties::apply_counterparty_detail_to_ui(&ui, data);
+                                }
+                            });
+                        }
+                    }
+                    "open_doc" => {
+                        ctx.set_active_screen(AppScreen::Documents);
+                        let id = id.to_string();
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            ui.set_current_screen(NavScreen::Documents);
+                            ui.invoke_doc_open(id.into());
+                        });
+                        refresh_screen(ui_weak, ctx, AppScreen::Documents).await;
+                    }
+                    "create" => {
+                        let screen = if id == "counterparty" {
+                            NavScreen::Counterparties
+                        } else {
+                            NavScreen::Documents
+                        };
+                        let app_screen = map_nav_screen(screen);
+                        ctx.set_active_screen(app_screen);
+                        let create_kind = id.to_string();
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            ui.set_current_screen(screen);
+                            if create_kind == "counterparty" {
+                                ui.invoke_cp_new();
+                            } else {
+                                ui.invoke_doc_new();
+                            }
+                        });
+                        refresh_screen(ui_weak, ctx, app_screen).await;
+                        tracing::info!("palette: create('{id}') очікує повного create-flow");
+                    }
+                    other => tracing::warn!("palette: невідома дія '{other}'"),
                 }
             });
         }
@@ -398,6 +540,4 @@ fn wire_stub_callbacks(ui: &AppWindow) {
     ui.on_doc_chain_create(|doc_type, source_id| {
         tracing::info!("TODO: doc_chain_create(type={doc_type}, source={source_id})");
     });
-    ui.on_palette_query_changed(|query| tracing::info!("TODO: palette_query_changed({query})"));
-    ui.on_palette_item_activated(|item| tracing::info!("TODO: palette_item_activated({item})"));
 }

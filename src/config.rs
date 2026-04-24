@@ -80,7 +80,9 @@ mod tests {
     #[test]
     fn save_and_load_roundtrip() {
         let id = Uuid::new_v4();
-        let cfg = AppConfig { last_company_id: Some(id) };
+        let cfg = AppConfig {
+            last_company_id: Some(id),
+        };
 
         let path = std::env::temp_dir().join(format!("acta_config_test_{}.toml", id));
         cfg.save_to(&path);
@@ -128,7 +130,9 @@ mod tests {
     #[test]
     fn save_to_creates_missing_parent_directories() {
         let id = Uuid::new_v4();
-        let cfg = AppConfig { last_company_id: Some(id) };
+        let cfg = AppConfig {
+            last_company_id: Some(id),
+        };
         let base = std::env::temp_dir().join(format!("acta_config_nested_{id}"));
         let path = base.join("nested").join("config.toml");
 
@@ -143,7 +147,9 @@ mod tests {
 
     #[test]
     fn save_and_load_roundtrip_with_none_company_id() {
-        let cfg = AppConfig { last_company_id: None };
+        let cfg = AppConfig {
+            last_company_id: None,
+        };
 
         let path = std::env::temp_dir().join("acta_config_none_roundtrip.toml");
         cfg.save_to(&path);

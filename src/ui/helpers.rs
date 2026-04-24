@@ -101,11 +101,7 @@ pub fn max_chart_value<'a, I>(values: I) -> Decimal
 where
     I: IntoIterator<Item = &'a Decimal>,
 {
-    values
-        .into_iter()
-        .copied()
-        .max()
-        .unwrap_or(Decimal::ZERO)
+    values.into_iter().copied().max().unwrap_or(Decimal::ZERO)
 }
 
 pub fn date_to_str(d: NaiveDate) -> SharedString {
@@ -181,7 +177,9 @@ pub fn waybill_row_to_document_item(r: &WaybillListRow) -> crate::DocumentItem {
     }
 }
 
-pub fn counterparty_to_item(c: &acta::models::counterparty::Counterparty) -> crate::CounterpartyItem {
+pub fn counterparty_to_item(
+    c: &acta::models::counterparty::Counterparty,
+) -> crate::CounterpartyItem {
     crate::CounterpartyItem {
         id: c.id.to_string().into(),
         name: c.name.clone().into(),
@@ -193,7 +191,9 @@ pub fn counterparty_to_item(c: &acta::models::counterparty::Counterparty) -> cra
     }
 }
 
-pub fn counterparty_to_details(c: &acta::models::counterparty::Counterparty) -> crate::CounterpartyDetails {
+pub fn counterparty_to_details(
+    c: &acta::models::counterparty::Counterparty,
+) -> crate::CounterpartyDetails {
     crate::CounterpartyDetails {
         id: c.id.to_string().into(),
         name: c.name.clone().into(),
@@ -243,7 +243,12 @@ pub fn task_to_item(t: &Task) -> crate::TaskItem {
         title: t.title.clone().into(),
         due_date: t
             .due_date
-            .map(|d| d.with_timezone(&chrono::Local).date_naive().format("%d.%m.%Y").to_string())
+            .map(|d| {
+                d.with_timezone(&chrono::Local)
+                    .date_naive()
+                    .format("%d.%m.%Y")
+                    .to_string()
+            })
             .unwrap_or_default()
             .into(),
         done: t.status == TaskStatus::Done || t.status == TaskStatus::Cancelled,
@@ -259,12 +264,12 @@ pub fn task_to_item(t: &Task) -> crate::TaskItem {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::NaiveDate;
-    use rust_decimal_macros::dec;
     use acta::models::act::{ActListRow, ActStatus};
     use acta::models::invoice::{InvoiceListRow, InvoiceStatus};
-    use acta::models::payment::{PaymentListRow, PaymentDirection};
+    use acta::models::payment::{PaymentDirection, PaymentListRow};
     use acta::models::shared::DocumentDirection;
+    use chrono::NaiveDate;
+    use rust_decimal_macros::dec;
     use uuid::Uuid;
 
     fn sample_act_row() -> ActListRow {
@@ -342,10 +347,22 @@ mod tests {
 
     #[test]
     fn act_status_to_slint_all_variants() {
-        assert_eq!(act_status_to_slint(&ActStatus::Draft), crate::DocumentStatus::Draft);
-        assert_eq!(act_status_to_slint(&ActStatus::Issued), crate::DocumentStatus::Issued);
-        assert_eq!(act_status_to_slint(&ActStatus::Signed), crate::DocumentStatus::Signed);
-        assert_eq!(act_status_to_slint(&ActStatus::Paid), crate::DocumentStatus::Paid);
+        assert_eq!(
+            act_status_to_slint(&ActStatus::Draft),
+            crate::DocumentStatus::Draft
+        );
+        assert_eq!(
+            act_status_to_slint(&ActStatus::Issued),
+            crate::DocumentStatus::Issued
+        );
+        assert_eq!(
+            act_status_to_slint(&ActStatus::Signed),
+            crate::DocumentStatus::Signed
+        );
+        assert_eq!(
+            act_status_to_slint(&ActStatus::Paid),
+            crate::DocumentStatus::Paid
+        );
     }
 
     #[test]
@@ -398,7 +415,13 @@ mod tests {
     #[test]
     fn waybill_status_delivered_maps_to_paid() {
         use acta::models::waybill::WaybillStatus;
-        assert_eq!(waybill_status_to_slint(&WaybillStatus::Draft), crate::DocumentStatus::Draft);
-        assert_eq!(waybill_status_to_slint(&WaybillStatus::Delivered), crate::DocumentStatus::Paid);
+        assert_eq!(
+            waybill_status_to_slint(&WaybillStatus::Draft),
+            crate::DocumentStatus::Draft
+        );
+        assert_eq!(
+            waybill_status_to_slint(&WaybillStatus::Delivered),
+            crate::DocumentStatus::Paid
+        );
     }
 }
