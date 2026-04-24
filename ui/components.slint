@@ -769,6 +769,7 @@ export component DocChain inherits HorizontalLayout {
 export component ThemePreviewCard inherits Rectangle {
     in property <string> label;
     in property <bool> active: false;
+    in property <image> icon-check;
     in property <color> preview-bg;
     in property <color> preview-sidebar;
     in property <color> preview-surface;
@@ -805,7 +806,7 @@ export component ThemePreviewCard inherits Rectangle {
         HorizontalLayout {
             alignment: stretch;
             Text { text: root.label; color: AppTheme.text; font-size: 12.5px; font-family: AppTheme.font-sans; font-weight: 500; vertical-alignment: center; }
-            if root.active : Image { source: Icons.check; width: 13px; height: 13px; colorize: AppTheme.accent; image-fit: contain; }
+            if root.active : Image { source: root.icon-check; width: 13px; height: 13px; colorize: AppTheme.accent; image-fit: contain; }
         }
     }
 

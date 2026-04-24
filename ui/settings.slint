@@ -7,7 +7,7 @@ import { CompanyInfo, IntegrationItem, TeamMember, NumberingRow } from "types.sl
 import {
     Card, HDivider, VDivider, Badge, StatusDot,
     GhostButton, SecondaryButton, PrimaryButton,
-    HeadingSm, SectionLabel
+    HeadingSm, SectionLabel, ThemePreviewCard
 } from "components.slint";
 
 // ── Settings nav item ─────────────────────────────────────────────────────────
@@ -414,6 +414,7 @@ export component Settings inherits Rectangle {
                                 ThemePreviewCard {
                                     label: "Світла";
                                     active: !root.dark-mode;
+                                    icon-check: root.icon-check;
                                     preview-bg: #F6F5F1;
                                     preview-sidebar: #F0EEE8;
                                     preview-surface: #FFFFFF;
@@ -426,6 +427,7 @@ export component Settings inherits Rectangle {
                                 ThemePreviewCard {
                                     label: "Темна";
                                     active: root.dark-mode;
+                                    icon-check: root.icon-check;
                                     preview-bg: #262931;
                                     preview-sidebar: #2D3039;
                                     preview-surface: #31353E;
