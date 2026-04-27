@@ -127,6 +127,7 @@ component DocRow inherits Rectangle {
     callback pdf-clicked(string);
     callback edit-clicked(string);
     callback more-clicked(string);
+    callback chain-create(string, string);
 
     property <bool> hovered: false;
     property <string> status-tone:
@@ -353,7 +354,7 @@ component DocRow inherits Rectangle {
             x: 18px; y: 10px;
             width: root.width - 36px;
             steps: root.chain-steps;
-            create-next(_t) => { }
+            create-next(t) => { root.chain-create(t, root.doc.id); }
         }
     }
 }

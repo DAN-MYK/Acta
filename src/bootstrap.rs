@@ -738,7 +738,102 @@ fn wire_stub_callbacks(ui: &AppWindow, ctx: &Arc<AppCtx>) {
             });
         }
     });
-    ui.on_doc_chain_create(|doc_type, source_id| {
-        tracing::info!("TODO: doc_chain_create(type={doc_type}, source={source_id})");
+    ui.on_doc_chain_create({
+        let ctx = ctx.clone();
+        let ui_weak = ui.as_weak();
+        move |doc_type, source_id| {
+            let ctx = ctx.clone();
+            let ui_weak = ui_weak.clone();
+            let source_id_str = source_id.to_string();
+            let doc_type_str = doc_type.to_string();
+
+            tokio::spawn(async move {
+                match crate::ui::documents::create_chain_draft_from_source(
+                    ctx.pool(),
+                    ctx.company_id(),
+                    &doc_type_str,
+                    &source_id_str,
+                )
+                .await
+                {
+                    Ok((form, items)) => {
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            crate::ui::documents::set_document_state(&ui, form, items, false, true);
+                        });
+                        tracing::info!(
+                            "chain_create: opened draft for {} from {}",
+                            doc_type_str,
+                            source_id_str
+                        );
+                    }
+                    Err(error) => {
+                        tracing::error!(
+                            "chain_create failed for type={} source={}: {}",
+                            doc_type_str,
+                            source_id_str,
+                            error
+                        );
+                    }
+                }
+                return;
+
+                // Parse source ID: "act:UUID" -> ("act", UUID)
+                let Some(colon_idx) = source_id_str.find(':') else {
+                    tracing::error!("invalid source_id: {}", source_id_str);
+                    return;
+                };
+                let (kind, uuid_str) = source_id_str.split_at(colon_idx);
+                let uuid_str = &uuid_str[1..];
+
+                let Ok(uuid) = Uuid::parse_str(uuid_str) else {
+                    tracing::error!("invalid uuid in source_id: {}", uuid_str);
+                    return;
+                };
+
+                let kind = kind.to_string();
+                let source_doc_ref = (kind, uuid);
+
+                // Load counterparty name
+                let cp_name = match crate::ui::documents::load_counterparty_name(ctx.pool(), ctx.company_id(), uuid).await {
+                    Ok(name) => name,
+                    Err(e) => {
+                        tracing::error!("chain_create: couldn't load counterparty: {}", e);
+                        return;
+                    }
+                };
+
+                // Load items (non-critical, continue if this fails)
+                let items = match crate::ui::documents::prefill_items_from_source(ctx.pool(), source_doc_ref.clone()).await {
+                    Ok(items) => items,
+                    Err(e) => {
+                        tracing::warn!("chain_create: couldn't prefill items: {}", e);
+                        Vec::new()
+                    }
+                };
+
+                // Open form with prefilled data
+                let log_msg = format!("chain_create: opened form for {} from {}", doc_type_str, source_id_str);
+                let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                    crate::ui::documents::set_document_state(
+                        &ui,
+                        crate::DocumentDraftForm {
+                            id: "".into(),
+                            kind: doc_type_str.clone().into(),
+                            counterparty_id: uuid.to_string().into(),
+                            counterparty_name: cp_name.clone().into(),
+                            title: "".into(),
+                            number: "".into(),
+                            date: "".into(),
+                            notes: format!("Ланцюг від: {}", source_id_str).into(),
+                        },
+                        items.clone(),
+                        true,  // is_draft
+                        false, // is_view_only
+                    );
+                });
+
+                tracing::info!("{}", log_msg);
+            });
+        }
     });
 }

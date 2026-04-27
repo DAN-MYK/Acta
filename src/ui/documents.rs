@@ -9,8 +9,8 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::ui::helpers::{
-    act_row_to_document_item, date_to_str, invoice_row_to_document_item, waybill_row_to_document_item,
-    OperationResult,
+    act_row_to_document_item, date_to_str, format_money_ua, invoice_row_to_document_item,
+    waybill_row_to_document_item, OperationResult,
 };
 use acta::app_ctx::{AppCtx, AppScreen};
 use acta::db;
@@ -30,6 +30,24 @@ enum DocumentRef {
     Invoice(Uuid),
     Waybill(Uuid),
 }
+
+#[derive(Clone)]
+struct DocumentSnapshot {
+    ref_id: String,
+    kind: String,
+    id: Uuid,
+    number: String,
+    counterparty_id: Uuid,
+    counterparty_name: String,
+    date: NaiveDate,
+    total_amount: Decimal,
+    status: String,
+    notes: Option<String>,
+    items: Vec<crate::DocumentDraftItem>,
+}
+
+const CHAIN_PARENT_PREFIX: &str = "[chain-parent:";
+const CHAIN_PARENT_SUFFIX: &str = "]";
 
 pub async fn prepare_documents_data(
     pool: &PgPool,
@@ -127,6 +145,79 @@ fn parse_document_ref(id: &str) -> Option<DocumentRef> {
         .map(DocumentRef::Waybill)
 }
 
+fn document_ref_string(kind: &str, id: Uuid) -> String {
+    match kind {
+        "act" => format!("act:{id}"),
+        "invoice" => format!("inv:{id}"),
+        "waybill" => format!("wbl:{id}"),
+        _ => id.to_string(),
+    }
+}
+
+fn normalize_chain_kind(kind: &str) -> Option<&'static str> {
+    match kind {
+        "act" => Some("act"),
+        "invoice" | "inv" => Some("invoice"),
+        "waybill" | "wbl" => Some("waybill"),
+        _ => None,
+    }
+}
+
+fn chain_kind_rank(kind: &str) -> Option<u8> {
+    match normalize_chain_kind(kind) {
+        Some("invoice") => Some(0),
+        Some("act") => Some(1),
+        Some("waybill") => Some(2),
+        _ => None,
+    }
+}
+
+fn can_create_chain_target(source_kind: &str, target_kind: &str) -> bool {
+    match (chain_kind_rank(source_kind), chain_kind_rank(target_kind)) {
+        (Some(source_rank), Some(target_rank)) => target_rank > source_rank,
+        _ => false,
+    }
+}
+
+fn split_visible_notes_and_chain_parent(notes: Option<&str>) -> (String, Option<String>) {
+    let mut visible_lines = Vec::new();
+    let mut parent_ref = None;
+
+    for line in notes.unwrap_or_default().lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with(CHAIN_PARENT_PREFIX) && trimmed.ends_with(CHAIN_PARENT_SUFFIX) {
+            let parent = trimmed
+                .trim_start_matches(CHAIN_PARENT_PREFIX)
+                .trim_end_matches(CHAIN_PARENT_SUFFIX)
+                .trim();
+            if !parent.is_empty() {
+                parent_ref = Some(parent.to_string());
+            }
+            continue;
+        }
+
+        visible_lines.push(line);
+    }
+
+    let visible = visible_lines.join("\n").trim().to_string();
+    (visible, parent_ref)
+}
+
+fn compose_notes_with_chain_parent(visible_notes: &str, parent_ref: Option<&str>) -> Option<String> {
+    let visible = visible_notes.trim();
+    let parent_line = parent_ref
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| format!("{CHAIN_PARENT_PREFIX}{value}{CHAIN_PARENT_SUFFIX}"));
+
+    match (visible.is_empty(), parent_line) {
+        (true, None) => None,
+        (false, None) => Some(visible.to_string()),
+        (true, Some(parent)) => Some(parent),
+        (false, Some(parent)) => Some(format!("{visible}\n\n{parent}")),
+    }
+}
+
 fn kind_title(kind: &str, is_new: bool) -> &'static str {
     match (kind, is_new) {
         ("act", true) => "Новий акт",
@@ -144,7 +235,7 @@ fn parse_ui_date(value: &str) -> Result<NaiveDate> {
         .with_context(|| format!("Некоректна дата: {value}. Очікується формат дд.мм.рррр"))
 }
 
-fn set_document_state(
+pub fn set_document_state(
     ui: &crate::AppWindow,
     form: crate::DocumentDraftForm,
     items: Vec<crate::DocumentDraftItem>,
@@ -245,7 +336,163 @@ fn draft_items_to_new_waybill(items: Vec<crate::DocumentDraftItem>) -> Result<Ve
         .collect()
 }
 
-async fn load_counterparty_name(pool: &PgPool, company_id: Uuid, counterparty_id: Uuid) -> Result<String> {
+async fn load_document_snapshot(
+    pool: &PgPool,
+    company_id: Uuid,
+    doc_ref: DocumentRef,
+) -> Result<DocumentSnapshot> {
+    match doc_ref {
+        DocumentRef::Act(id) => {
+            let (act, items) = db::acts::get_by_id(pool, id)
+                .await?
+                .ok_or_else(|| anyhow!("Акт не знайдено"))?;
+            Ok(DocumentSnapshot {
+                ref_id: document_ref_string("act", id),
+                kind: "act".to_string(),
+                id,
+                number: act.number.clone(),
+                counterparty_id: act.counterparty_id,
+                counterparty_name: load_counterparty_name(pool, company_id, act.counterparty_id).await?,
+                date: act.date,
+                total_amount: act.total_amount,
+                status: act.status.as_str().to_string(),
+                notes: act.notes.clone(),
+                items: act_items_to_draft(items),
+            })
+        }
+        DocumentRef::Invoice(id) => {
+            let (invoice, items) = db::invoices::get_by_id(pool, id)
+                .await?
+                .ok_or_else(|| anyhow!("Рахунок не знайдено"))?;
+            Ok(DocumentSnapshot {
+                ref_id: document_ref_string("invoice", id),
+                kind: "invoice".to_string(),
+                id,
+                number: invoice.number.clone(),
+                counterparty_id: invoice.counterparty_id,
+                counterparty_name: load_counterparty_name(pool, company_id, invoice.counterparty_id).await?,
+                date: invoice.date,
+                total_amount: invoice.total_amount,
+                status: invoice.status.as_str().to_string(),
+                notes: invoice.notes.clone(),
+                items: invoice_items_to_draft(items),
+            })
+        }
+        DocumentRef::Waybill(id) => {
+            let (waybill, items) = db::waybills::get_by_id(pool, id)
+                .await?
+                .ok_or_else(|| anyhow!("Накладну не знайдено"))?;
+            Ok(DocumentSnapshot {
+                ref_id: document_ref_string("waybill", id),
+                kind: "waybill".to_string(),
+                id,
+                number: waybill.number.clone(),
+                counterparty_id: waybill.counterparty_id,
+                counterparty_name: load_counterparty_name(pool, company_id, waybill.counterparty_id).await?,
+                date: waybill.date,
+                total_amount: waybill.total_amount,
+                status: waybill.status.as_str().to_string(),
+                notes: waybill.notes.clone(),
+                items: waybill_items_to_draft(items),
+            })
+        }
+    }
+}
+
+async fn find_document_by_parent_ref(
+    pool: &PgPool,
+    company_id: Uuid,
+    parent_ref: &str,
+    target_kind: &str,
+) -> Result<Option<DocumentSnapshot>> {
+    match normalize_chain_kind(target_kind) {
+        Some("act") => {
+            for row in db::acts::list(pool, company_id, None).await.unwrap_or_default() {
+                if let Some((act, items)) = db::acts::get_by_id(pool, row.id).await? {
+                    if split_visible_notes_and_chain_parent(act.notes.as_deref()).1.as_deref() == Some(parent_ref)
+                    {
+                        return Ok(Some(DocumentSnapshot {
+                            ref_id: document_ref_string("act", act.id),
+                            kind: "act".to_string(),
+                            id: act.id,
+                            number: act.number,
+                            counterparty_id: act.counterparty_id,
+                            counterparty_name: load_counterparty_name(pool, company_id, act.counterparty_id)
+                                .await?,
+                            date: act.date,
+                            total_amount: act.total_amount,
+                            status: act.status.as_str().to_string(),
+                            notes: act.notes,
+                            items: act_items_to_draft(items),
+                        }));
+                    }
+                }
+            }
+            Ok(None)
+        }
+        Some("invoice") => {
+            for row in db::invoices::list(pool, company_id, None).await.unwrap_or_default() {
+                if let Some((invoice, items)) = db::invoices::get_by_id(pool, row.id).await? {
+                    if split_visible_notes_and_chain_parent(invoice.notes.as_deref()).1.as_deref()
+                        == Some(parent_ref)
+                    {
+                        return Ok(Some(DocumentSnapshot {
+                            ref_id: document_ref_string("invoice", invoice.id),
+                            kind: "invoice".to_string(),
+                            id: invoice.id,
+                            number: invoice.number,
+                            counterparty_id: invoice.counterparty_id,
+                            counterparty_name: load_counterparty_name(
+                                pool,
+                                company_id,
+                                invoice.counterparty_id,
+                            )
+                            .await?,
+                            date: invoice.date,
+                            total_amount: invoice.total_amount,
+                            status: invoice.status.as_str().to_string(),
+                            notes: invoice.notes,
+                            items: invoice_items_to_draft(items),
+                        }));
+                    }
+                }
+            }
+            Ok(None)
+        }
+        Some("waybill") => {
+            for row in db::waybills::list(pool, company_id, None).await.unwrap_or_default() {
+                if let Some((waybill, items)) = db::waybills::get_by_id(pool, row.id).await? {
+                    if split_visible_notes_and_chain_parent(waybill.notes.as_deref()).1.as_deref()
+                        == Some(parent_ref)
+                    {
+                        return Ok(Some(DocumentSnapshot {
+                            ref_id: document_ref_string("waybill", waybill.id),
+                            kind: "waybill".to_string(),
+                            id: waybill.id,
+                            number: waybill.number,
+                            counterparty_id: waybill.counterparty_id,
+                            counterparty_name: load_counterparty_name(
+                                pool,
+                                company_id,
+                                waybill.counterparty_id,
+                            )
+                            .await?,
+                            date: waybill.date,
+                            total_amount: waybill.total_amount,
+                            status: waybill.status.as_str().to_string(),
+                            notes: waybill.notes,
+                            items: waybill_items_to_draft(items),
+                        }));
+                    }
+                }
+            }
+            Ok(None)
+        }
+        _ => Err(anyhow!("Невідомий тип документа для ланцюжка: {target_kind}")),
+    }
+}
+
+pub async fn load_counterparty_name(pool: &PgPool, company_id: Uuid, counterparty_id: Uuid) -> Result<String> {
     let counterparty = db::counterparties::get_by_id(pool, company_id, counterparty_id)
         .await?
         .ok_or_else(|| anyhow!("Контрагента не знайдено"))?;
@@ -272,7 +519,7 @@ async fn build_existing_document_form(
                     title: kind_title("act", false).into(),
                     number: act.number.into(),
                     date: date_to_str(act.date),
-                    notes: act.notes.unwrap_or_default().into(),
+                    notes: split_visible_notes_and_chain_parent(act.notes.as_deref()).0.into(),
                 },
                 act_items_to_draft(items),
             ))
@@ -292,7 +539,7 @@ async fn build_existing_document_form(
                     title: kind_title("invoice", false).into(),
                     number: invoice.number.into(),
                     date: date_to_str(invoice.date),
-                    notes: invoice.notes.unwrap_or_default().into(),
+                    notes: split_visible_notes_and_chain_parent(invoice.notes.as_deref()).0.into(),
                 },
                 invoice_items_to_draft(items),
             ))
@@ -312,7 +559,7 @@ async fn build_existing_document_form(
                     title: kind_title("waybill", false).into(),
                     number: waybill.number.into(),
                     date: date_to_str(waybill.date),
-                    notes: waybill.notes.unwrap_or_default().into(),
+                    notes: split_visible_notes_and_chain_parent(waybill.notes.as_deref()).0.into(),
                 },
                 waybill_items_to_draft(items),
             ))
@@ -435,8 +682,6 @@ async fn save_document_form(
     let doc_ref = parse_document_ref(form.id.as_str())
         .ok_or_else(|| anyhow!("Некоректний ідентифікатор документа"))?;
     let date = parse_ui_date(form.date.as_str())?;
-    let notes = optional_string(form.notes.as_str());
-
     if items.is_empty() {
         return Err(anyhow!("Документ має містити хоча б одну позицію"));
     }
@@ -446,6 +691,7 @@ async fn save_document_form(
             let (act, _) = db::acts::get_by_id(pool, id)
                 .await?
                 .ok_or_else(|| anyhow!("Акт не знайдено"))?;
+            let parent_ref = split_visible_notes_and_chain_parent(act.notes.as_deref()).1;
             db::acts::update_with_items(
                 pool,
                 id,
@@ -456,7 +702,7 @@ async fn save_document_form(
                     category_id: act.category_id,
                     date,
                     expected_payment_date: act.expected_payment_date,
-                    notes,
+                    notes: compose_notes_with_chain_parent(form.notes.as_str(), parent_ref.as_deref()),
                 },
                 draft_items_to_new_act(items)?,
             )
@@ -466,6 +712,7 @@ async fn save_document_form(
             let (invoice, _) = db::invoices::get_by_id(pool, id)
                 .await?
                 .ok_or_else(|| anyhow!("Рахунок не знайдено"))?;
+            let parent_ref = split_visible_notes_and_chain_parent(invoice.notes.as_deref()).1;
             db::invoices::update_with_items(
                 pool,
                 id,
@@ -476,7 +723,7 @@ async fn save_document_form(
                     category_id: invoice.category_id,
                     date,
                     expected_payment_date: invoice.expected_payment_date,
-                    notes,
+                    notes: compose_notes_with_chain_parent(form.notes.as_str(), parent_ref.as_deref()),
                 },
                 draft_items_to_new_invoice(items)?,
             )
@@ -486,6 +733,7 @@ async fn save_document_form(
             let (waybill, _) = db::waybills::get_by_id(pool, id)
                 .await?
                 .ok_or_else(|| anyhow!("Накладну не знайдено"))?;
+            let parent_ref = split_visible_notes_and_chain_parent(waybill.notes.as_deref()).1;
             db::waybills::update_with_items(
                 pool,
                 id,
@@ -495,7 +743,7 @@ async fn save_document_form(
                     contract_id: waybill.contract_id,
                     category_id: waybill.category_id,
                     date,
-                    notes,
+                    notes: compose_notes_with_chain_parent(form.notes.as_str(), parent_ref.as_deref()),
                 },
                 draft_items_to_new_waybill(items)?,
             )
@@ -513,23 +761,14 @@ pub async fn load_chain_from_id(
     company_id: Uuid,
     id: &str,
 ) -> anyhow::Result<Vec<crate::ChainStep>> {
-    // Parse the id string to (kind, uuid) tuple
-    let (kind, uuid) = if let Some(uuid_str) = id.strip_prefix("act:") {
-        ("act".to_string(), Uuid::parse_str(uuid_str)?)
-    } else if let Some(uuid_str) = id.strip_prefix("inv:") {
-        ("inv".to_string(), Uuid::parse_str(uuid_str)?)
-    } else if let Some(uuid_str) = id.strip_prefix("wbl:") {
-        ("wbl".to_string(), Uuid::parse_str(uuid_str)?)
-    } else {
-        return Err(anyhow!("Невідомий формат ID документа: {}", id));
-    };
-
-    load_document_chain(pool, company_id, (kind, uuid)).await
+    let doc_ref = parse_document_ref(id)
+        .ok_or_else(|| anyhow!("Некоректний ідентифікатор документа для ланцюжка: {id}"))?;
+    load_document_chain(pool, company_id, doc_ref).await
 }
 
 /// Завантажує ланцюг пов'язаних документів для зазначеного документа.
 /// Повертає список ChainStep з інформацією про кожен документ у ланцюгу.
-pub async fn load_document_chain(
+pub async fn load_document_chain_legacy(
     pool: &PgPool,
     company_id: Uuid,
     doc_ref: (String, Uuid),
@@ -623,6 +862,263 @@ pub async fn load_document_chain(
     });
 
     Ok(steps)
+}
+
+pub async fn load_document_chain(
+    pool: &PgPool,
+    company_id: Uuid,
+    doc_ref: DocumentRef,
+) -> anyhow::Result<Vec<crate::ChainStep>> {
+    let source = load_document_snapshot(pool, company_id, doc_ref).await?;
+    let mut invoice = (source.kind == "invoice").then(|| source.clone());
+    let mut act = (source.kind == "act").then(|| source.clone());
+    let mut waybill = (source.kind == "waybill").then(|| source.clone());
+
+    let mut current = source.clone();
+    while let Some(parent_ref) = split_visible_notes_and_chain_parent(current.notes.as_deref()).1 {
+        let parent_doc_ref = parse_document_ref(&parent_ref)
+            .ok_or_else(|| anyhow!("Некоректний parent link у документі {}", current.number))?;
+        let parent = load_document_snapshot(pool, company_id, parent_doc_ref).await?;
+        match parent.kind.as_str() {
+            "invoice" if invoice.is_none() => invoice = Some(parent.clone()),
+            "act" if act.is_none() => act = Some(parent.clone()),
+            "waybill" if waybill.is_none() => waybill = Some(parent.clone()),
+            _ => {}
+        }
+        current = parent;
+    }
+
+    if act.is_none() {
+        if let Some(invoice_doc) = invoice.as_ref() {
+            act = find_document_by_parent_ref(pool, company_id, &invoice_doc.ref_id, "act").await?;
+        }
+    }
+
+    if waybill.is_none() {
+        if let Some(act_doc) = act.as_ref() {
+            waybill = find_document_by_parent_ref(pool, company_id, &act_doc.ref_id, "waybill").await?;
+        } else if let Some(invoice_doc) = invoice.as_ref() {
+            waybill =
+                find_document_by_parent_ref(pool, company_id, &invoice_doc.ref_id, "waybill").await?;
+        }
+    }
+
+    Ok([
+        ("invoice", invoice),
+        ("act", act),
+        ("waybill", waybill),
+    ]
+    .into_iter()
+    .map(|(kind, document)| crate::ChainStep {
+        doc_type: kind.into(),
+        doc_number: document
+            .as_ref()
+            .map(|doc| doc.number.clone())
+            .unwrap_or_default()
+            .into(),
+        amount_str: document
+            .as_ref()
+            .map(|doc| format_money_ua(doc.total_amount))
+            .unwrap_or_default()
+            .into(),
+        status: document
+            .as_ref()
+            .map(|doc| doc.status.clone())
+            .unwrap_or_default()
+            .into(),
+        exists: document.is_some(),
+    })
+    .collect())
+}
+
+/// Prefills items for new document based on source document.
+pub async fn prefill_items_from_source(
+    pool: &PgPool,
+    source_doc_ref: (String, Uuid),
+) -> anyhow::Result<Vec<crate::DocumentDraftItem>> {
+    let (kind, uuid) = source_doc_ref;
+
+    match kind.as_str() {
+        "act" => {
+            let (_, items) = db::acts::get_by_id(pool, uuid)
+                .await?
+                .ok_or_else(|| anyhow!("Акт не знайдено"))?;
+            Ok(items
+                .into_iter()
+                .map(|item| crate::DocumentDraftItem {
+                    description: item.description.into(),
+                    quantity: item.quantity.to_string().into(),
+                    unit: item.unit.into(),
+                    price: item.unit_price.to_string().into(),
+                })
+                .collect())
+        }
+        "inv" => {
+            let (_, items) = db::invoices::get_by_id(pool, uuid)
+                .await?
+                .ok_or_else(|| anyhow!("Рахунок не знайдено"))?;
+            Ok(items
+                .into_iter()
+                .map(|item| crate::DocumentDraftItem {
+                    description: item.description.into(),
+                    quantity: item.quantity.to_string().into(),
+                    unit: item.unit.unwrap_or_default().into(),
+                    price: item.price.to_string().into(),
+                })
+                .collect())
+        }
+        "wbl" => {
+            let (_, items) = db::waybills::get_by_id(pool, uuid)
+                .await?
+                .ok_or_else(|| anyhow!("Накладна не знайдена"))?;
+            Ok(items
+                .into_iter()
+                .map(|item| crate::DocumentDraftItem {
+                    description: item.description.into(),
+                    quantity: item.quantity.to_string().into(),
+                    unit: item.unit.unwrap_or_default().into(),
+                    price: item.price.to_string().into(),
+                })
+                .collect())
+        }
+        _ => Err(anyhow!("Невідомий тип документа: {}", kind)),
+    }
+}
+
+pub async fn create_chain_draft_from_source(
+    pool: &PgPool,
+    company_id: Uuid,
+    target_kind: &str,
+    source_id: &str,
+) -> Result<(crate::DocumentDraftForm, Vec<crate::DocumentDraftItem>)> {
+    let source_ref = parse_document_ref(source_id)
+        .ok_or_else(|| anyhow!("Некоректний ідентифікатор джерельного документа"))?;
+    let source = load_document_snapshot(pool, company_id, source_ref).await?;
+    let target_kind = normalize_chain_kind(target_kind)
+        .ok_or_else(|| anyhow!("Невідомий тип документа для ланцюжка: {target_kind}"))?;
+
+    if !can_create_chain_target(source.kind.as_str(), target_kind) {
+        return Err(anyhow!(
+            "Для документа типу {} не можна створити похідний документ типу {}",
+            source.kind,
+            target_kind
+        ));
+    }
+
+    let chain_steps = load_chain_from_id(pool, company_id, source_id).await?;
+    if chain_steps.iter().any(|step| step.doc_type == target_kind && step.exists) {
+        return Err(anyhow!("Документ цього типу в ланцюжку вже існує"));
+    }
+
+    let draft_items = source.items.clone();
+    let visible_notes = format!("Створено з {}", source.number);
+    let stored_notes = compose_notes_with_chain_parent(&visible_notes, Some(&source.ref_id));
+
+    match target_kind {
+        "act" => {
+            let number = db::acts::generate_next_number(pool, company_id).await?;
+            let act = db::acts::create(
+                pool,
+                company_id,
+                &NewAct {
+                    number: number.clone(),
+                    counterparty_id: source.counterparty_id,
+                    contract_id: None,
+                    category_id: None,
+                    direction: DocumentDirection::Outgoing,
+                    date: source.date,
+                    expected_payment_date: None,
+                    status: ActStatus::Draft,
+                    notes: stored_notes,
+                    bas_id: None,
+                    items: draft_items_to_new_act(draft_items.clone())?,
+                },
+            )
+            .await?;
+
+            Ok((
+                crate::DocumentDraftForm {
+                    id: format!("act:{}", act.id).into(),
+                    kind: "act".into(),
+                    counterparty_id: source.counterparty_id.to_string().into(),
+                    counterparty_name: source.counterparty_name.into(),
+                    title: kind_title("act", true).into(),
+                    number: number.into(),
+                    date: date_to_str(source.date),
+                    notes: visible_notes.into(),
+                },
+                draft_items,
+            ))
+        }
+        "invoice" => {
+            let number = db::invoices::generate_next_number(pool, company_id).await?;
+            let invoice = db::invoices::create(
+                pool,
+                company_id,
+                &NewInvoice {
+                    number: number.clone(),
+                    counterparty_id: source.counterparty_id,
+                    contract_id: None,
+                    category_id: None,
+                    direction: DocumentDirection::Outgoing,
+                    date: source.date,
+                    expected_payment_date: None,
+                    notes: stored_notes,
+                    bas_id: None,
+                    items: draft_items_to_new_invoice(draft_items.clone())?,
+                },
+            )
+            .await?;
+
+            Ok((
+                crate::DocumentDraftForm {
+                    id: format!("inv:{}", invoice.id).into(),
+                    kind: "invoice".into(),
+                    counterparty_id: source.counterparty_id.to_string().into(),
+                    counterparty_name: source.counterparty_name.into(),
+                    title: kind_title("invoice", true).into(),
+                    number: number.into(),
+                    date: date_to_str(source.date),
+                    notes: visible_notes.into(),
+                },
+                draft_items,
+            ))
+        }
+        "waybill" => {
+            let number = db::waybills::generate_next_number(pool, company_id).await?;
+            let waybill = db::waybills::create(
+                pool,
+                company_id,
+                &NewWaybill {
+                    number: number.clone(),
+                    counterparty_id: source.counterparty_id,
+                    contract_id: None,
+                    category_id: None,
+                    direction: DocumentDirection::Outgoing,
+                    date: source.date,
+                    notes: stored_notes,
+                    bas_id: None,
+                    items: draft_items_to_new_waybill(draft_items.clone())?,
+                },
+            )
+            .await?;
+
+            Ok((
+                crate::DocumentDraftForm {
+                    id: format!("wbl:{}", waybill.id).into(),
+                    kind: "waybill".into(),
+                    counterparty_id: source.counterparty_id.to_string().into(),
+                    counterparty_name: source.counterparty_name.into(),
+                    title: kind_title("waybill", true).into(),
+                    number: number.into(),
+                    date: date_to_str(source.date),
+                    notes: visible_notes.into(),
+                },
+                draft_items,
+            ))
+        }
+        _ => Err(anyhow!("Невідомий тип документа для створення: {target_kind}")),
+    }
 }
 
 pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
