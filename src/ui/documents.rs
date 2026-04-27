@@ -728,6 +728,7 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                 .map(|ui| {
                     ui.get_documents().selected_ids
                         .iter()
+                        .map(|s| s.to_string())
                         .collect::<Vec<String>>()
                 })
                 .unwrap_or_default();
@@ -754,7 +755,7 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                     }
                 }
                 crate::bootstrap::refresh_screen(ui_weak, ctx, AppScreen::Documents).await;
-                notify_user("Операція завершена", "Документи оновлено.");
+                notify_user("Операція завершена", "Документи надіслано.");
             });
         }
     });
@@ -769,6 +770,7 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                 .map(|ui| {
                     ui.get_documents().selected_ids
                         .iter()
+                        .map(|s| s.to_string())
                         .collect::<Vec<String>>()
                 })
                 .unwrap_or_default();
@@ -810,6 +812,7 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                 .map(|ui| {
                     ui.get_documents().selected_ids
                         .iter()
+                        .map(|s| s.to_string())
                         .collect::<Vec<String>>()
                 })
                 .unwrap_or_default();

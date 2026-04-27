@@ -1,65 +1,67 @@
 # Next Sprint Checklist
 
-Оновлено: `2026-04-24`
-Статус: `closed` — commit ea422fe
+Оновлено: `2026-04-27`
+Статус: `historical execution checklist`
+
+> Це execution checklist для плану від `2026-04-24`.
+> Галочки тут відображають планову чергу робіт, а не підтверджений факт виконання.
+> Для фактичного статусу див. [sprint-report-2026-04-24.md](/C:/Users/MykhailoDan/apps/Acta/docs/planning/sprint-report-2026-04-24.md).
 
 ## Sprint Goal
 
-- [x] Закрити головні user-facing stub flow
-- [x] Довести BAS import до реального MVP
-- [x] Довести payments import/reconcile до цілісного flow
+- [ ] Закрити головні user-facing stub flow
+- [ ] Довести BAS import до реального MVP
+- [ ] Довести payments import/reconcile до цілісного flow
 
 ## Workstream 1. BAS Import MVP
 
-- [x] Уточнити supported input format для BAS export (XML + Excel)
-- [x] Реалізувати file discovery у `src/bin/migrate.rs` / `src/import/`
-- [x] Реалізувати orchestration імпорту (`MigrationRunner`)
-- [x] Реалізувати `--dry-run`
-- [x] Додати зрозумілі помилки для unsupported/invalid input
-- [x] Додати тести на happy path (14 unit tests in `src/import/bas.rs`)
-- [x] Додати тести на failure path
+- [ ] Уточнити supported input format для BAS export
+- [ ] Реалізувати file discovery у `src/bin/migrate.rs` / `src/import/`
+- [ ] Реалізувати orchestration імпорту
+- [ ] Реалізувати `--dry-run`
+- [ ] Додати зрозумілі помилки для unsupported/invalid input
+- [ ] Додати тести на happy path
+- [ ] Додати тести на failure path
 
 ## Workstream 2. Documents Screen
 
-- [x] Реалізувати `doc_new` — `DocCreateOverlay` з вибором типу, номером, датою, контрагентом
-- [x] Реалізувати `doc_open` — `DocDetailOverlay` (read-only перегляд)
-- [x] Реалізувати `doc_edit` — `DocDetailOverlay` з кнопкою "Змінити статус"
-- [x] Прийняти рішення по `doc_more_actions` — залишається warn (edge case, post-sprint)
-- [x] Прийняти рішення по `doc_bulk_send` — кнопка disabled, post-sprint
-- [x] Прийняти рішення по `doc_bulk_archive` — кнопка disabled, post-sprint
-- [x] Прийняти рішення по `doc_bulk_delete` — кнопка disabled, post-sprint
-- [x] Прийняти рішення по `doc_chain_load` — defer post-sprint (зберігається stub у bootstrap.rs)
-- [x] Прийняти рішення по `doc_chain_create` — defer post-sprint
-- [x] Прибрати misleading UI — bulk action buttons disabled (enabled: false)
+- [ ] Реалізувати `doc_new`
+- [ ] Реалізувати `doc_open`
+- [ ] Реалізувати `doc_edit`
+- [ ] Прийняти рішення по `doc_more_actions`
+- [ ] Прийняти рішення по `doc_bulk_send`
+- [ ] Прийняти рішення по `doc_bulk_archive`
+- [ ] Прийняти рішення по `doc_bulk_delete`
+- [ ] Прийняти рішення по `doc_chain_load`
+- [ ] Прийняти рішення по `doc_chain_create`
+- [ ] Прибрати misleading UI для ще неготових дій
 
 ## Workstream 3. Tasks
 
-- [x] Реалізувати `new-task` flow (TaskFormOverlay вже був, тепер wired через task_save)
-- [x] Реалізувати `task-more` як details/edit flow (TaskDetailsOverlay)
-- [x] Наповнити `day-events` (list_due_today → DayEvent mapping)
-- [x] Увімкнути пошук/фільтрацію через `TaskListState.query`
-- [x] Оновити або додати `ui_events` coverage для tasks
+- [ ] Реалізувати `new-task` flow
+- [ ] Реалізувати `task-more` як details/edit flow
+- [ ] Наповнити `day-events`
+- [ ] Увімкнути пошук/фільтрацію через `TaskListState.query`
+- [ ] Оновити або додати `ui_events` coverage для tasks
 
 ## Workstream 4. Payments
 
-- [ ] Підключити користувацький flow імпорту CSV — потребує окремого sprint item
-- [ ] Додати callback wiring для import flow — відкладено
-- [x] Реалізувати `unreconcile-payment` — `mark_unreconciled` в db/payments.rs + UI кнопка ×
-- [x] Реалізувати reconcile UI flow — `pay-link` вже існував, `pay-unlink` додано
-- [ ] Перевірити duplicate handling через `bank_ref` — в existing import flow
-- [x] Додати тести на reconcile/unreconcile — ui_events test для pay_unlink
+- [ ] Підключити користувацький flow імпорту CSV
+- [ ] Додати callback wiring для import flow
+- [ ] Реалізувати `unreconcile-payment`
+- [ ] Реалізувати reconcile UI flow
+- [ ] Перевірити duplicate handling через `bank_ref`
+- [ ] Додати тести на reconcile/unreconcile
 
 ## Verification
 
-- [x] Прогнати релевантні unit-тести — `cargo build --tests` Finished (0 warnings крім одного unused import прибраний)
-- [x] Прогнати `tests/ui_events.rs` — покритий: doc_created, pay_unlink, task_save
+- [ ] Прогнати релевантні unit-тести
+- [ ] Прогнати `tests/ui_events.rs`
 - [ ] Прогнати інтеграційні тести для змінених db-flow — потребує живої БД
-- [x] Перевірити, що нові callback-и не лишилися в no-op стані — doc_created, task_save, pay_unlink всі wired
+- [ ] Перевірити, що нові callback-и не лишилися в no-op стані
 
 ## Sprint Exit Criteria
 
-- [x] Усі P1 workstream-и або завершені, або свідомо перенесені з documented reason
-  - WS4 CSV import defer: потребує окремого sprint item (user-facing file picker)
-  - WS4 bank_ref duplicate check: в existing import, не регресія цього спринту
-- [x] У репозиторії немає нових критичних user-facing `TODO`
-- [x] Документація оновлена відповідно до фактичного результату
+- [ ] Усі P1 workstream-и або завершені, або свідомо перенесені з documented reason
+- [ ] У репозиторії немає нових критичних user-facing `TODO`
+- [ ] Документація оновлена відповідно до фактичного результату

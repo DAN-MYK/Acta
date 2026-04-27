@@ -342,8 +342,9 @@ export component TaskDetailsOverlay {
 
             HDivider { }
 
-            DetailLine { label: "Deadline"; value: root.task.due-date; }
-            DetailLine { label: "Статус"; value: root.task.done ? "Виконано" : "Відкрита"; }
+            DetailLine { label: "Дедлайн"; value: root.task.due-date; }
+            DetailLine { label: "Нагадування"; value: root.task.reminder-at; }
+            DetailLine { label: "Статус"; value: root.task.status-label; }
             DetailLine {
                 label: "Пріоритет";
                 value:
@@ -352,6 +353,26 @@ export component TaskDetailsOverlay {
                     "Низький";
             }
             DetailLine { label: "Пов'язаний документ"; value: root.task.linked-doc; }
+
+            if root.task.description != "" : VerticalLayout {
+                spacing: 6px;
+
+                Text {
+                    text: "Опис";
+                    color: AppTheme.text-faint;
+                    font-size: 11.5px;
+                    font-family: AppTheme.font-sans;
+                    font-weight: 600;
+                }
+
+                Text {
+                    text: root.task.description;
+                    color: AppTheme.text;
+                    font-size: 12.5px;
+                    font-family: AppTheme.font-sans;
+                    wrap: word-wrap;
+                }
+            }
 
             Rectangle { vertical-stretch: 1; }
 

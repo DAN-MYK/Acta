@@ -20,8 +20,9 @@ import { Settings } from "settings.slint";
 import {
     NavScreen,
     ShellChrome, DashboardViewData, DocumentsViewData, CounterpartiesViewData,
-    CounterpartyDetailViewData, PaymentsViewData, ReportsViewData, TasksViewData, SettingsViewData,
-    CompanyInfo, CompanySwitcherItem, PaletteItemData,
+    CounterpartyDetailViewData,
+    PaymentsViewData, ReportsViewData, TasksViewData, SettingsViewData,
+    CompanyInfo, CompanySwitcherItem, PaletteItemData, DocumentDraftForm, DocumentDraftItem,
 } from "types.slint";
 
 // ── AppWindow ─────────────────────────────────────────────────────────────────
@@ -31,7 +32,7 @@ export component AppWindow inherits Window {
     preferred-height: 900px;
     min-width: 1440px;
     min-height: 900px;
-    background: AppTheme.bg;
+    background: AppTheme.accent-soft;
 
     // ── Navigation ───────────────────────────────────────────────────────
     in-out property <NavScreen> current-screen: NavScreen.Dashboard;
@@ -40,6 +41,7 @@ export component AppWindow inherits Window {
     // ── Shell info ───────────────────────────────────────────────────────
     in property <ShellChrome> shell;
     in property <[CompanySwitcherItem]> shell-company-items;
+    in property <[PaletteItemData]> palette-items;
 
     // ── Screen contracts ────────────────────────────────────────────────
     in property <DashboardViewData> dashboard;
@@ -57,19 +59,26 @@ export component AppWindow inherits Window {
     callback doc-search-changed(string);
     callback doc-tab-changed(string);
     callback doc-toggled(string, bool);
-    callback doc-selection-cleared;
     callback doc-open(string);
     callback doc-edit(string);
     callback doc-send(string);
+    callback doc-delete(string);
+    callback doc-new;
+    callback doc-selection-cleared;
     callback doc-more-actions(string);
     callback doc-bulk-send;
     callback doc-bulk-archive;
     callback doc-bulk-delete;
-    callback doc-delete(string);
-    callback doc-new;
     callback doc-page-changed(int);
     callback doc-chain-load(string);
     callback doc-chain-create(string, string);
+    callback doc-create-kind-selected(string);
+    callback doc-draft-saved(DocumentDraftForm);
+    callback doc-draft-item-upserted(int, DocumentDraftItem);
+    callback doc-draft-item-removed(int);
+    callback context-send(string);
+    callback context-archive(string);
+    callback context-delete(string);
     callback cp-selected(string);
     callback cp-search-changed(string);
     callback cp-new;
@@ -86,7 +95,9 @@ export component AppWindow inherits Window {
     callback task-toggled(string, bool);
     callback task-more(string);
     callback task-new;
+    callback task-save(string, string, string, string);
     callback task-filter-changed(string);
+    callback company-selected(string);
     callback settings-section-changed(string);
     callback settings-dark-mode-toggled(bool);
     callback settings-density-changed(int);
@@ -97,13 +108,8 @@ export component AppWindow inherits Window {
     callback settings-backup-download;
 
     // ── Command palette ──────────────────────────────────────────────────
-    in property <[PaletteItemData]> palette-items;
     callback palette-query-changed(string);
     callback palette-item-activated(string);
-    callback company-selected(string);
-
-    // ── Tasks form ───────────────────────────────────────────────────────
-    callback task-save(string, string, string, string);
 
     // ── Internal state (UI-only, not exposed to Rust) ────────────────────
     private property <string> docs-tab-state: "all";
@@ -113,7 +119,20 @@ export component AppWindow inherits Window {
     private property <int> rep-period-state: 1;
     in-out property <string> cp-selected-id: "";
     in-out property <string> cp-search: "";
-    private property <string> cp-info-tab-state: "docs";
+    in-out property <DocumentDraftForm> doc-draft-form: {
+        id: "",
+        kind: "",
+        counterparty-id: "",
+        counterparty-name: "",
+        title: "",
+        number: "",
+        date: "",
+        notes: "",
+    };
+    in-out property <[DocumentDraftItem]> doc-draft-items: [];
+    in-out property <bool> show-doc-type-picker: false;
+    in-out property <bool> show-doc-editor: false;
+    private property <string> cp-detail-tab-state: "docs";
     private property <string> settings-section-state: "appearance";
     private property <bool> palette-open: false;
 
@@ -129,10 +148,10 @@ export component AppWindow inherits Window {
         user-role: root.shell.user-role;
         documents-badge: root.shell.documents-badge;
         tasks-badge: root.shell.tasks-badge;
+        company-items: root.shell-company-items;
         is-dark: AppTheme.is-dark;
         cmd-palette-open: root.palette-open;
         cmd-palette-items: root.palette-items;
-        company-items: root.shell-company-items;
 
         // Icons from Icons global
         icon-home:           Icons.home;
@@ -146,11 +165,11 @@ export component AppWindow inherits Window {
         icon-close:          Icons.close;
         icon-plus:           Icons.plus;
         icon-more:           Icons.more;
-        icon-bell:           Icons.bell;
-        icon-sun:            Icons.sun;
-        icon-moon:           Icons.moon;
-        icon-chevron-down:   Icons.chevron-down;
-        icon-star:           Icons.star;
+        icon-bell:           Icons.search;      // TODO: додати Bell.svg
+        icon-sun:            Icons.uah;          // TODO: додати Sun.svg
+        icon-moon:           Icons.uah;          // TODO: додати Moon.svg
+        icon-chevron-down:   Icons.sort;         // TODO: додати ChevronDown.svg
+        icon-star:           Icons.uah;          // TODO: додати Star.svg
         icon-enter:          Icons.arrow-right;
         logo:                Icons.home;
 
@@ -158,23 +177,15 @@ export component AppWindow inherits Window {
             root.current-screen = screen;
             root.nav-changed(screen);
         }
-        company-selected(id) => {
-            root.company-selected(id);
-        }
-        company-manage-requested => {
-            root.current-screen = NavScreen.Settings;
-            root.settings-section-state = "company";
-            root.nav-changed(NavScreen.Settings);
-            root.settings-section-changed("company");
-        }
         toggle-theme => {
             AppTheme.is-dark = !AppTheme.is-dark;
             root.settings-dark-mode-toggled(AppTheme.is-dark);
         }
         open-cmd-palette => { root.palette-open = true; }
         close-cmd-palette => { root.palette-open = false; }
+        company-selected(id) => { root.company-selected(id); }
         cmd-palette-query-changed(q) => { root.palette-query-changed(q); }
-        cmd-palette-item-activated(p) => { root.palette-item-activated(p); }
+        cmd-palette-item-activated(payload) => { root.palette-item-activated(payload); }
 
         // ═══════════════════════════════════════════════════════════════
         // Screen routing — кожен екран отримує свої дані та callbacks
@@ -188,27 +199,17 @@ export component AppWindow inherits Window {
             chart-bars: root.dashboard.chart-bars;
             journal: root.dashboard.journal;
             accounts: root.dashboard.accounts;
-            accounts-total: root.dashboard.accounts-total;
             tasks: root.dashboard.tasks;
-            open-task-count: root.dashboard.tasks.length;
             revenue-str: root.dashboard.revenue-str;
             expenses-str: root.dashboard.expenses-str;
             net-str: root.dashboard.net-str;
             outstanding-str: root.dashboard.outstanding-str;
             overdue-str: root.dashboard.overdue-str;
-            delta-revenue-str: root.dashboard.delta-revenue-str;
-            delta-expenses-str: root.dashboard.delta-expenses-str;
-            delta-net-str: root.dashboard.delta-net-str;
-            ytd-total-str: root.dashboard.ytd-total-str;
-            ytd-revenue-str: root.dashboard.ytd-revenue-str;
-            ytd-expenses-str: root.dashboard.ytd-expenses-str;
-            spark-revenue: root.dashboard.spark-revenue;
-            spark-expenses: root.dashboard.spark-expenses;
 
             icon-check: Icons.check;
             icon-plus: Icons.plus;
             icon-arrow-right: Icons.arrow-right;
-            icon-chevron-down: Icons.chevron-down;
+            icon-chevron-down: Icons.sort;
 
             inbox: root.dashboard.inbox;
             inbox-action(id, kind) => { root.inbox-action(id, kind); }
@@ -221,9 +222,6 @@ export component AppWindow inherits Window {
             height: 100%;
 
             all-docs: root.documents.items;
-            invoice-docs: root.documents.invoice-items;
-            act-docs: root.documents.act-items;
-            waybill-docs: root.documents.waybill-items;
             search-query: root.docs-search-state;
             selected-ids: root.documents.selected-ids;
             total-count: root.documents.total-count;
@@ -234,15 +232,19 @@ export component AppWindow inherits Window {
             icon-more: Icons.more;
             icon-plus: Icons.plus;
             icon-pdf: Icons.pdf;
-            icon-invoice: Icons.invoice;
-            icon-act: Icons.act;
-            icon-waybill: Icons.waybill;
+            icon-invoice: Icons.documents;
+            icon-act: Icons.documents;
+            icon-waybill: Icons.documents;
             icon-edit: Icons.edit;
             icon-check: Icons.check;
             icon-chevron-left: Icons.arrow-left;
             icon-chevron-right: Icons.arrow-right;
             icon-close: Icons.close;
             chain-steps: root.documents.chain-steps;
+            show-type-picker: root.show-doc-type-picker;
+            show-editor: root.show-doc-editor;
+            draft-form: root.doc-draft-form;
+            draft-items: root.doc-draft-items;
 
             search-changed(q) => { root.docs-search-state = q; root.doc-search-changed(q); }
             tab-changed(t) => { root.docs-tab-state = t; root.doc-tab-changed(t); }
@@ -259,6 +261,13 @@ export component AppWindow inherits Window {
             page-changed(p) => { root.docs-page = p; root.doc-page-changed(p); }
             chain-load(id) => { root.doc-chain-load(id); }
             chain-create(t, id) => { root.doc-chain-create(t, id); }
+            create-kind-selected(kind) => { root.doc-create-kind-selected(kind); }
+            draft-saved(form) => { root.doc-draft-saved(form); }
+            draft-item-upserted(index, item) => { root.doc-draft-item-upserted(index, item); }
+            draft-item-removed(index) => { root.doc-draft-item-removed(index); }
+            context-send(id) => { root.context-send(id); }
+            context-archive(id) => { root.context-archive(id); }
+            context-delete(id) => { root.context-delete(id); }
         }
 
         if root.current-screen == NavScreen.Counterparties : Counterparties {
@@ -271,10 +280,10 @@ export component AppWindow inherits Window {
             info-payments: root.counterparty-detail.payments;
             selected-id: root.cp-selected-id;
             search-query: root.cp-search;
-            active-tab: root.cp-info-tab-state;
-            info-balance-str: self.info.balance-str;
-            info-balance-is-negative: self.info.balance-is-negative;
-            info-overdue-str: self.info.overdue-amount-str;
+            active-tab: root.cp-detail-tab-state;
+            info-balance-str: root.counterparty-detail.info.balance-str;
+            info-balance-is-negative: root.counterparty-detail.info.balance-is-negative;
+            info-overdue-str: root.counterparty-detail.info.overdue-amount-str;
 
             icon-search: Icons.search;
             icon-plus: Icons.plus;
@@ -285,7 +294,7 @@ export component AppWindow inherits Window {
 
             select(id) => { root.cp-selected-id = id; root.cp-selected(id); }
             search-changed(q) => { root.cp-search = q; root.cp-search-changed(q); }
-            tab-changed(t) => { root.cp-info-tab-state = t; root.cp-tab-changed(t); }
+            tab-changed(t) => { root.cp-detail-tab-state = t; root.cp-tab-changed(t); }
             edit-cp(id) => { root.cp-selected(id); }
             create-doc(id) => { root.cp-create-doc(id); }
             chain-create(t, id) => { root.doc-chain-create(t, id); }
@@ -314,7 +323,8 @@ export component AppWindow inherits Window {
         }
 
         if root.current-screen == NavScreen.Reports : Reports {
-            width: 100%;
+            width: 1004px;
+            x: 437px;
             height: 100%;
 
             metrics: root.reports-screen.metrics;
@@ -357,7 +367,9 @@ export component AppWindow inherits Window {
             task-toggled(id, done) => { root.task-toggled(id, done); }
             task-more(id) => { root.task-more(id); }
             new-task => { root.task-new(); }
-            task-save(t, p, d, r) => { root.task-save(t, p, d, r); }
+            task-save(title, priority, due-date, reminder-at) => {
+                root.task-save(title, priority, due-date, reminder-at);
+            }
         }
 
         if root.current-screen == NavScreen.Settings : Settings {

@@ -85,6 +85,24 @@ export struct DocumentItem {
     selected: bool,        // true if document is currently selected
 }
 
+export struct DocumentDraftForm {
+    id: string,
+    kind: string,              // "invoice" | "act" | "waybill"
+    counterparty-id: string,
+    counterparty-name: string,
+    title: string,
+    number: string,
+    date: string,              // "dd.mm.yyyy"
+    notes: string,
+}
+
+export struct DocumentDraftItem {
+    description: string,
+    unit: string,
+    quantity: string,
+    price: string,
+}
+
 export struct CounterpartyItem {
     id: string,
     name: string,
@@ -148,8 +166,11 @@ export struct InvoiceListRow {
 export struct TaskItem {
     id: string,
     title: string,
+    description: string,
     due-date: string,      // "dd.mm.yyyy" or ""
+    reminder-at: string,   // "dd.mm.yyyy" or ""
     done: bool,
+    status-label: string,
     priority: Priority,
     linked-doc: string,    // document id or ""
 }

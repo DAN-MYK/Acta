@@ -241,6 +241,7 @@ pub fn task_to_item(t: &Task) -> crate::TaskItem {
     crate::TaskItem {
         id: t.id.to_string().into(),
         title: t.title.clone().into(),
+        description: t.description.clone().unwrap_or_default().into(),
         due_date: t
             .due_date
             .map(|d| {
@@ -251,7 +252,18 @@ pub fn task_to_item(t: &Task) -> crate::TaskItem {
             })
             .unwrap_or_default()
             .into(),
+        reminder_at: t
+            .reminder_at
+            .map(|d| {
+                d.with_timezone(&chrono::Local)
+                    .date_naive()
+                    .format("%d.%m.%Y")
+                    .to_string()
+            })
+            .unwrap_or_default()
+            .into(),
         done: t.status == TaskStatus::Done || t.status == TaskStatus::Cancelled,
+        status_label: t.status.label().into(),
         priority: match t.priority {
             TaskPriority::High | TaskPriority::Critical => crate::Priority::High,
             TaskPriority::Normal => crate::Priority::Medium,
@@ -599,6 +611,35 @@ mod tests {
         assert!(task_to_item(&make_task(TaskStatus::Done)).done);
         assert!(task_to_item(&make_task(TaskStatus::Cancelled)).done);
         assert!(!task_to_item(&make_task(TaskStatus::Open)).done);
+    }
+
+    #[test]
+    fn task_to_item_exposes_description_reminder_and_status() {
+        use acta::models::task::{Task, TaskPriority, TaskStatus};
+        use chrono::{TimeZone, Utc};
+
+        let task = Task {
+            id: Uuid::nil(),
+            title: "Test".to_string(),
+            description: Some("Перевірити оплату".to_string()),
+            status: TaskStatus::InProgress,
+            priority: TaskPriority::Normal,
+            due_date: None,
+            reminder_at: Some(Utc.with_ymd_and_hms(2026, 4, 27, 9, 0, 0).unwrap()),
+            counterparty_id: None,
+            act_id: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        let item = task_to_item(&task);
+        assert_eq!(item.description.as_str(), "Перевірити оплату");
+        assert_eq!(item.status_label.as_str(), "В роботі");
+        assert!(
+            item.reminder_at.as_str().contains("2026"),
+            "reminder_at має містити рік: {}",
+            item.reminder_at
+        );
     }
 
     #[test]

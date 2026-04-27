@@ -3,12 +3,13 @@
 // Features: tab filter, search, bulk select bar, status badges, PDF/Edit/More actions.
 
 import { AppTheme } from "design-tokens.slint";
-import { DocumentItem, DocumentKind, DocumentStatus, ChainStep } from "types.slint";
+import { DocumentItem, DocumentKind, DocumentStatus, ChainStep, DocumentDraftForm, DocumentDraftItem } from "types.slint";
 import {
     Card, HDivider, VDivider, Badge, StatusDot,
     GhostButton, SecondaryButton, PrimaryButton, IconButton,
     SearchInput, HeadingSm, BulkBar, Checkbox, DocChain, InlineIcon
 } from "components.slint";
+import { LineEdit } from "std-widgets.slint";
 
 // ── Tab item ──────────────────────────────────────────────────────────────────
 component DocTab inherits Rectangle {
@@ -357,6 +358,562 @@ component DocRow inherits Rectangle {
     }
 }
 
+component DraftField inherits Rectangle {
+    in property <string> label;
+    in property <string> placeholder;
+    in-out property <string> value;
+
+    height: 58px;
+
+    VerticalLayout {
+        spacing: 6px;
+
+        Text {
+            text: root.label;
+            color: AppTheme.text-muted;
+            font-size: 11px;
+            font-family: AppTheme.font-sans;
+            font-weight: 600;
+        }
+
+        Rectangle {
+            height: 32px;
+            background: AppTheme.bg;
+            border-width: 1px;
+            border-color: AppTheme.border;
+            border-radius: AppTheme.radius-md;
+
+            HorizontalLayout {
+                padding-left: 10px;
+                padding-right: 10px;
+
+                input := LineEdit {
+                    text <=> root.value;
+                    font-size: 12.5px;
+                    font-family: AppTheme.font-sans;
+                    accessible-label: root.label;
+                }
+
+                if root.value == "" : Text {
+                    text: root.placeholder;
+                    color: AppTheme.text-faint;
+                    font-size: 12.5px;
+                    font-family: AppTheme.font-sans;
+                    vertical-alignment: center;
+                    accessible-role: none;
+                }
+            }
+        }
+    }
+}
+
+component DocumentTypeTile inherits Rectangle {
+    in property <string> title;
+    in property <string> subtitle;
+    in property <string> kind;
+    callback picked(string);
+
+    height: 110px;
+    width: 132px;
+    border-radius: AppTheme.radius-xl;
+    border-width: 1px;
+    border-color: tile-touch.has-hover ? AppTheme.accent : AppTheme.border;
+    background: tile-touch.has-hover ? AppTheme.accent-soft : AppTheme.bg;
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 6px;
+        alignment: center;
+
+        Text {
+            text: root.title;
+            color: AppTheme.text;
+            font-size: 14px;
+            font-family: AppTheme.font-sans;
+            font-weight: 600;
+            horizontal-alignment: center;
+        }
+
+        Text {
+            text: root.subtitle;
+            color: AppTheme.text-muted;
+            font-size: 11.5px;
+            font-family: AppTheme.font-sans;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+    }
+
+    tile-touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.picked(root.kind); }
+    }
+}
+
+component DocumentTypePickerOverlay {
+    in-out property <bool> open;
+    in property <string> counterparty-name;
+    callback picked(string);
+
+    x: 0px;
+    y: 0px;
+    width: 100%;
+    height: 100%;
+
+    Rectangle { background: #0a0b0d.with-alpha(0.32); }
+    TouchArea { clicked => { root.open = false; } }
+
+    FocusScope {
+        width: parent.width;
+        height: parent.height;
+        init => { self.focus(); }
+        key-pressed(e) => {
+            if e.text == Key.Escape {
+                root.open = false;
+                accept
+            } else {
+                reject
+            }
+        }
+    }
+
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: 500px;
+        height: 280px;
+        background: AppTheme.bg-elevated;
+        border-width: 1px;
+        border-color: AppTheme.border;
+        border-radius: AppTheme.radius-xl;
+        drop-shadow-blur: 24px;
+        drop-shadow-color: #1e1e1e.with-alpha(0.08);
+
+        TouchArea { }
+
+        VerticalLayout {
+            padding: 20px;
+            spacing: 16px;
+
+            HorizontalLayout {
+                height: 24px;
+                HeadingSm { text: "Новий документ"; horizontal-stretch: 1; }
+                GhostButton { text: "Закрити"; small: true; clicked => { root.open = false; } }
+            }
+
+            Text {
+                text: root.counterparty-name == "" ?
+                    "Оберіть тип документа." :
+                    "Контрагент: " + root.counterparty-name;
+                color: AppTheme.text-muted;
+                font-size: 12px;
+                font-family: AppTheme.font-sans;
+            }
+
+            HorizontalLayout {
+                alignment: center;
+                spacing: 12px;
+
+                DocumentTypeTile {
+                    title: "Рахунок";
+                    subtitle: "Чернетка для виставлення оплати";
+                    kind: "invoice";
+                    picked(kind) => { root.picked(kind); root.open = false; }
+                }
+                DocumentTypeTile {
+                    title: "Акт";
+                    subtitle: "Чернетка акта виконаних робіт";
+                    kind: "act";
+                    picked(kind) => { root.picked(kind); root.open = false; }
+                }
+                DocumentTypeTile {
+                    title: "Накладна";
+                    subtitle: "Чернетка видаткової накладної";
+                    kind: "waybill";
+                    picked(kind) => { root.picked(kind); root.open = false; }
+                }
+            }
+        }
+    }
+}
+
+// ── Document context menu ─────────────────────────────────────────────────────
+component DocContextMenu inherits Rectangle {
+    in-out property <bool> open;
+    in property <string> doc-id;
+    in property <string> doc-status;
+    callback send;
+    callback archive;
+    callback delete;
+    callback close;
+
+    x: 0px;
+    y: 0px;
+    width: 100%;
+    height: 100%;
+
+    Rectangle { background: transparent; }
+    TouchArea { clicked => { root.close(); } }
+
+    FocusScope {
+        width: parent.width;
+        height: parent.height;
+        init => { self.focus(); }
+        key-pressed(e) => {
+            if e.text == Key.Escape {
+                root.close();
+                accept
+            } else {
+                reject
+            }
+        }
+    }
+
+    Rectangle {
+        x: 150px;
+        y: 100px;
+        width: 200px;
+        height: 140px;
+        background: AppTheme.bg-elevated;
+        border-width: 1px;
+        border-color: AppTheme.border;
+        border-radius: AppTheme.radius-lg;
+        drop-shadow-blur: 12px;
+        drop-shadow-color: #1e1e1e.with-alpha(0.12);
+
+        VerticalLayout {
+            padding: 4px;
+            spacing: 2px;
+
+            GhostButton {
+                text: "Редагувати";
+                small: true;
+                clicked => { root.close(); }
+            }
+
+            Rectangle {
+                height: 26px;
+                opacity: root.doc-status == "Paid" || root.doc-status == "Issued" ? 0.5 : 1.0;
+
+                GhostButton {
+                    text: "Надіслати";
+                    small: true;
+                    clicked => { root.send(); root.close(); }
+                }
+            }
+
+            GhostButton {
+                text: "Архівувати";
+                small: true;
+                clicked => { root.archive(); root.close(); }
+            }
+
+            Rectangle { height: 1px; background: AppTheme.border; }
+
+            GhostButton {
+                text: "Видалити";
+                small: true;
+                clicked => { root.delete(); root.close(); }
+            }
+        }
+    }
+}
+
+component DocumentDraftOverlay {
+    in-out property <bool> open;
+    in-out property <DocumentDraftForm> form;
+    in property <[DocumentDraftItem]> items;
+    callback saved(DocumentDraftForm);
+    callback item-upserted(int, DocumentDraftItem);
+    callback item-removed(int);
+
+    private property <string> line-description: "";
+    private property <string> line-unit: "";
+    private property <string> line-quantity: "";
+    private property <string> line-price: "";
+    private property <int> edit-index: -1;
+
+    x: 0px;
+    y: 0px;
+    width: 100%;
+    height: 100%;
+
+    Rectangle { background: #0a0b0d.with-alpha(0.32); }
+    TouchArea { clicked => { root.open = false; } }
+
+    FocusScope {
+        width: parent.width;
+        height: parent.height;
+        init => { self.focus(); }
+        key-pressed(e) => {
+            if e.text == Key.Escape {
+                root.open = false;
+                accept
+            } else {
+                reject
+            }
+        }
+    }
+
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: 760px;
+        height: 640px;
+        background: AppTheme.bg-elevated;
+        border-width: 1px;
+        border-color: AppTheme.border;
+        border-radius: AppTheme.radius-xl;
+        drop-shadow-blur: 24px;
+        drop-shadow-color: #1e1e1e.with-alpha(0.08);
+
+        TouchArea { }
+
+        VerticalLayout {
+            padding: 20px;
+            spacing: 14px;
+
+            HorizontalLayout {
+                height: 24px;
+                HeadingSm { text: root.form.title; horizontal-stretch: 1; }
+                GhostButton { text: "Закрити"; small: true; clicked => { root.open = false; } }
+            }
+
+            Text {
+                text:
+                    root.form.kind == "invoice" ? "Тип: рахунок" :
+                    root.form.kind == "act" ? "Тип: акт" :
+                    "Тип: накладна";
+                color: AppTheme.text-faint;
+                font-size: 11px;
+                font-family: AppTheme.font-sans;
+                font-weight: 600;
+            }
+
+            DraftField {
+                label: "Контрагент";
+                placeholder: "";
+                value: root.form.counterparty-name;
+            }
+
+            HorizontalLayout {
+                spacing: 12px;
+                DraftField {
+                    label: "Номер";
+                    placeholder: "АКТ-2026-001";
+                    value: root.form.number;
+                    horizontal-stretch: 1;
+                }
+                DraftField {
+                    label: "Дата";
+                    placeholder: "дд.мм.рррр";
+                    value: root.form.date;
+                    horizontal-stretch: 1;
+                }
+            }
+
+            DraftField {
+                label: "Примітки";
+                placeholder: "Короткий коментар або внутрішня нотатка";
+                value: root.form.notes;
+            }
+
+            Text {
+                text: "Позиції документа";
+                color: AppTheme.text;
+                font-size: 12.5px;
+                font-family: AppTheme.font-sans;
+                font-weight: 600;
+            }
+
+            Rectangle {
+                border-width: 1px;
+                border-color: AppTheme.border;
+                border-radius: AppTheme.radius-lg;
+                background: AppTheme.bg;
+                min-height: 150px;
+
+                VerticalLayout {
+                    padding: 12px;
+                    spacing: 8px;
+
+                    if root.items.length == 0 : Text {
+                        text: "Ще немає позицій. Додайте хоча б один рядок.";
+                        color: AppTheme.text-faint;
+                        font-size: 12px;
+                        font-family: AppTheme.font-sans;
+                    }
+
+                    for item[i] in root.items : Rectangle {
+                        border-width: 1px;
+                        border-color: AppTheme.border;
+                        border-radius: AppTheme.radius-md;
+                        background: AppTheme.bg-elevated;
+                        height: 56px;
+
+                        HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 12px;
+                            spacing: 10px;
+                            alignment: stretch;
+
+                            Text {
+                                text: item.description;
+                                color: AppTheme.text;
+                                font-size: 12.5px;
+                                font-family: AppTheme.font-sans;
+                                horizontal-stretch: 1;
+                                vertical-alignment: center;
+                                overflow: elide;
+                            }
+
+                            Text {
+                                text: item.quantity + " " + item.unit;
+                                color: AppTheme.text-muted;
+                                font-size: 11.5px;
+                                font-family: AppTheme.font-mono;
+                                width: 120px;
+                                vertical-alignment: center;
+                            }
+
+                            Text {
+                                text: item.price;
+                                color: AppTheme.text;
+                                font-size: 11.5px;
+                                font-family: AppTheme.font-mono;
+                                width: 110px;
+                                horizontal-alignment: right;
+                                vertical-alignment: center;
+                            }
+
+                            GhostButton {
+                                text: "Редагувати";
+                                small: true;
+                                clicked => {
+                                    root.edit-index = i;
+                                    root.line-description = item.description;
+                                    root.line-unit = item.unit;
+                                    root.line-quantity = item.quantity;
+                                    root.line-price = item.price;
+                                }
+                            }
+
+                            GhostButton {
+                                text: "Видалити";
+                                small: true;
+                                clicked => { root.item-removed(i); }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                border-width: 1px;
+                border-color: AppTheme.border;
+                border-radius: AppTheme.radius-lg;
+                background: AppTheme.bg-subtle;
+
+                VerticalLayout {
+                    padding: 12px;
+                    spacing: 10px;
+
+                    Text {
+                        text: root.edit-index >= 0 ? "Редагування позиції" : "Нова позиція";
+                        color: AppTheme.text;
+                        font-size: 12.5px;
+                        font-family: AppTheme.font-sans;
+                        font-weight: 600;
+                    }
+
+                    DraftField {
+                        label: "Опис";
+                        placeholder: "Наприклад, послуги за квітень";
+                        value: root.line-description;
+                    }
+
+                    HorizontalLayout {
+                        spacing: 10px;
+
+                        DraftField {
+                            label: "Од.";
+                            placeholder: "шт / год / посл.";
+                            value: root.line-unit;
+                            width: 120px;
+                        }
+
+                        DraftField {
+                            label: "Кількість";
+                            placeholder: "1";
+                            value: root.line-quantity;
+                            horizontal-stretch: 1;
+                        }
+
+                        DraftField {
+                            label: "Ціна";
+                            placeholder: "1000.00";
+                            value: root.line-price;
+                            horizontal-stretch: 1;
+                        }
+                    }
+
+                    HorizontalLayout {
+                        alignment: end;
+                        spacing: 8px;
+
+                        GhostButton {
+                            text: "Очистити";
+                            small: true;
+                            clicked => {
+                                root.edit-index = -1;
+                                root.line-description = "";
+                                root.line-unit = "";
+                                root.line-quantity = "";
+                                root.line-price = "";
+                            }
+                        }
+
+                        PrimaryButton {
+                            text: root.edit-index >= 0 ? "Оновити позицію" : "Додати позицію";
+                            enabled: root.line-description != "" && root.line-quantity != "" && root.line-price != "";
+                            clicked => {
+                                root.item-upserted(root.edit-index, {
+                                    description: root.line-description,
+                                    unit: root.line-unit,
+                                    quantity: root.line-quantity,
+                                    price: root.line-price,
+                                });
+                                root.edit-index = -1;
+                                root.line-description = "";
+                                root.line-unit = "";
+                                root.line-quantity = "";
+                                root.line-price = "";
+                            }
+                        }
+                    }
+                }
+            }
+
+            Rectangle { vertical-stretch: 1; }
+
+            HorizontalLayout {
+                alignment: end;
+                spacing: 8px;
+
+                SecondaryButton { text: "Скасувати"; clicked => { root.open = false; } }
+                PrimaryButton {
+                    text: "Зберегти";
+                    enabled: root.form.number != "" && root.form.date != "" && root.items.length > 0;
+                    clicked => {
+                        root.saved(root.form);
+                        root.open = false;
+                    }
+                }
+            }
+        }
+    }
+}
+
 // ── Documents screen ──────────────────────────────────────────────────────────
 export component Documents inherits Rectangle {
     // Data from Rust
@@ -409,6 +966,31 @@ export component Documents inherits Rectangle {
     property <string> expanded-doc-id: "";
     callback chain-load(string);
     callback chain-create(string, string);
+    in-out property <bool> show-type-picker: false;
+    in-out property <bool> show-editor: false;
+    in-out property <DocumentDraftForm> draft-form: {
+        id: "",
+        kind: "",
+        counterparty-id: "",
+        counterparty-name: "",
+        title: "",
+        number: "",
+        date: "",
+        notes: "",
+    };
+    in property <[DocumentDraftItem]> draft-items;
+    callback create-kind-selected(string);
+    callback draft-saved(DocumentDraftForm);
+    callback draft-item-upserted(int, DocumentDraftItem);
+    callback draft-item-removed(int);
+
+    // Context menu state
+    in-out property <bool> show-context-menu: false;
+    in-out property <string> context-menu-doc-id: "";
+    in-out property <string> context-menu-doc-status: "";
+    callback context-send(string);
+    callback context-archive(string);
+    callback context-delete(string);
 
     // Internal tab state
     property <string> active-tab: "all";
@@ -628,7 +1210,17 @@ export component Documents inherits Rectangle {
                         row-clicked(id) => { root.open-document(id); }
                         pdf-clicked(id) => { root.pdf-export(id); }
                         edit-clicked(id) => { root.edit-document(id); }
-                        more-clicked(id) => { root.more-actions(id); }
+                        more-clicked(id) => {
+                            root.context-menu-doc-id = id;
+                            root.context-menu-doc-status =
+                                doc.status == DocumentStatus.Draft ? "Draft" :
+                                doc.status == DocumentStatus.Issued ? "Issued" :
+                                doc.status == DocumentStatus.Signed ? "Signed" :
+                                doc.status == DocumentStatus.Paid ? "Paid" :
+                                doc.status == DocumentStatus.Overdue ? "Overdue" :
+                                "Partial";
+                            root.show-context-menu = true;
+                        }
                         chain-expanded: doc.id == root.expanded-doc-id;
                         chain-steps: root.chain-steps;
                         chain-toggle(id) => {
@@ -717,5 +1309,30 @@ export component Documents inherits Rectangle {
                 }
             }
         }
+    }
+
+    if root.show-type-picker : DocumentTypePickerOverlay {
+        open <=> root.show-type-picker;
+        counterparty-name: root.draft-form.counterparty-name;
+        picked(kind) => { root.create-kind-selected(kind); }
+    }
+
+    if root.show-editor : DocumentDraftOverlay {
+        open <=> root.show-editor;
+        form <=> root.draft-form;
+        items: root.draft-items;
+        saved(form) => { root.draft-saved(form); }
+        item-upserted(index, item) => { root.draft-item-upserted(index, item); }
+        item-removed(index) => { root.draft-item-removed(index); }
+    }
+
+    if root.show-context-menu : DocContextMenu {
+        open <=> root.show-context-menu;
+        doc-id: root.context-menu-doc-id;
+        doc-status: root.context-menu-doc-status;
+        send => { root.context-send(root.context-menu-doc-id); }
+        archive => { root.context-archive(root.context-menu-doc-id); }
+        delete => { root.context-delete(root.context-menu-doc-id); }
+        close => { root.show-context-menu = false; }
     }
 }

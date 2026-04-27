@@ -1,4 +1,4 @@
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, Local, NaiveDate, Timelike, Utc};
 use slint::{ComponentHandle, ModelRc, VecModel};
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::ui::helpers::task_to_item;
 use acta::app_ctx::{AppCtx, AppScreen};
 use acta::db;
-use acta::models::task::{NewTask, TaskPriority, TaskStatus};
+use acta::models::task::{NewTask, Task, TaskPriority, TaskStatus};
 
 #[cfg(test)]
 #[derive(Debug, PartialEq)]
@@ -30,6 +30,7 @@ pub struct TasksData {
     pub open: Vec<crate::TaskItem>,
     pub done: Vec<crate::TaskItem>,
     pub all: Vec<crate::TaskItem>,
+    pub day_events: Vec<crate::DayEvent>,
 }
 
 pub async fn prepare_tasks_data(pool: &PgPool, company_id: Uuid) -> TasksData {
@@ -57,6 +58,7 @@ pub async fn prepare_tasks_data(pool: &PgPool, company_id: Uuid) -> TasksData {
         open: open_items,
         done: done_items,
         all: all_items,
+        day_events: build_day_events(&all_tasks),
     }
 }
 
@@ -73,7 +75,7 @@ pub fn apply_tasks_to_ui(ui: &crate::AppWindow, data: TasksData) {
         open: ModelRc::new(VecModel::from(data.open)),
         done: ModelRc::new(VecModel::from(data.done)),
         all: ModelRc::new(VecModel::from(data.all)),
-        day_events: ModelRc::new(VecModel::<crate::DayEvent>::default()),
+        day_events: ModelRc::new(VecModel::from(data.day_events)),
         open_count,
         high_count,
         done_count,
@@ -133,6 +135,80 @@ fn today_label() -> slint::SharedString {
         chrono::Weekday::Sun => "Неділя",
     };
     format!("{weekday}, {day} {month}").into()
+}
+
+fn priority_label(priority: &TaskPriority) -> &'static str {
+    match priority {
+        TaskPriority::Critical => "Критичний пріоритет",
+        TaskPriority::High => "Високий пріоритет",
+        TaskPriority::Normal => "Звичайний пріоритет",
+        TaskPriority::Low => "Низький пріоритет",
+    }
+}
+
+fn build_day_events(tasks: &[Task]) -> Vec<crate::DayEvent> {
+    let today = Local::now().date_naive();
+    let mut timed_events: Vec<(i32, crate::DayEvent)> = Vec::new();
+
+    for task in tasks {
+        let reminder_local = task.reminder_at.map(|date| date.with_timezone(&Local));
+        if let Some(reminder) = reminder_local {
+            if reminder.date_naive() == today {
+                timed_events.push((
+                    reminder.hour() as i32,
+                    crate::DayEvent {
+                        hour: reminder.hour() as i32,
+                        title: task.title.clone().into(),
+                        subtitle: format!("Нагадування • {}", priority_label(&task.priority)).into(),
+                        is_primary: matches!(task.priority, TaskPriority::High | TaskPriority::Critical),
+                    },
+                ));
+            }
+        }
+
+        let due_local = task.due_date.map(|date| date.with_timezone(&Local));
+        if let Some(due) = due_local {
+            if due.date_naive() == today {
+                let reminder_same_hour = reminder_local
+                    .map(|reminder| reminder.date_naive() == today && reminder.hour() == due.hour())
+                    .unwrap_or(false);
+
+                if !reminder_same_hour {
+                    timed_events.push((
+                        due.hour() as i32,
+                        crate::DayEvent {
+                            hour: due.hour() as i32,
+                            title: task.title.clone().into(),
+                            subtitle: "Дедлайн на сьогодні".into(),
+                            is_primary: matches!(task.priority, TaskPriority::High | TaskPriority::Critical),
+                        },
+                    ));
+                }
+            }
+        }
+    }
+
+    timed_events.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.title.as_str().cmp(b.1.title.as_str())));
+
+    let mut events = Vec::new();
+    for hour in 8..=18 {
+        let mut has_entries = false;
+        for (_, event) in timed_events.iter().filter(|(event_hour, _)| *event_hour == hour) {
+            has_entries = true;
+            events.push(event.clone());
+        }
+
+        if !has_entries {
+            events.push(crate::DayEvent {
+                hour,
+                title: "".into(),
+                subtitle: "".into(),
+                is_primary: false,
+            });
+        }
+    }
+
+    events
 }
 
 /// Підписує всі task callbacks — виконує завдання (збереження, видалення, і т.д.).
@@ -215,13 +291,14 @@ pub fn wire_task_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
     });
 
     ui.on_task_more(|id| {
-        tracing::debug!("task_more: відкрито деталі задачі {id}");
+        tracing::info!("task_more: відкрито деталі задачі {id}");
     });
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Datelike;
 
     #[test]
     fn filter_selects_correct_task_list() {
@@ -250,5 +327,43 @@ mod tests {
         assert_eq!(iso.date_naive(), expected);
         assert!(parse_optional_task_date("").is_none());
         assert!(parse_optional_task_date("не дата").is_none());
+    }
+    #[test]
+    fn build_day_events_includes_today_slots_and_task_entries() {
+        use acta::models::task::{Task, TaskPriority, TaskStatus};
+        use chrono::{Duration, TimeZone};
+
+        let now = Local::now();
+        let today = now.date_naive();
+        let due = Local
+            .with_ymd_and_hms(today.year(), today.month(), today.day(), 11, 0, 0)
+            .unwrap()
+            .with_timezone(&Utc);
+
+        let task = Task {
+            id: Uuid::nil(),
+            title: "Подзвонити клієнту".to_string(),
+            description: None,
+            status: TaskStatus::Open,
+            priority: TaskPriority::High,
+            due_date: Some(due),
+            reminder_at: None,
+            counterparty_id: None,
+            act_id: None,
+            created_at: Utc::now() - Duration::hours(1),
+            updated_at: Utc::now(),
+        };
+
+        let events = build_day_events(&[task]);
+        assert!(
+            events
+                .iter()
+                .any(|event| event.hour == 11 && event.title.as_str() == "Подзвонити клієнту")
+        );
+        assert!(
+            events
+                .iter()
+                .any(|event| event.hour == 8 && event.title.as_str().is_empty())
+        );
     }
 }

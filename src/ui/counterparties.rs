@@ -80,19 +80,19 @@ pub async fn prepare_counterparty_detail(
 
     let mut docs: Vec<(chrono::NaiveDate, crate::DocumentItem)> = vec![];
     if let Ok(rows) = acts {
-        for r in &rows {
-            docs.push((r.date, act_row_to_document_item(r)));
+        for row in &rows {
+            docs.push((row.date, act_row_to_document_item(row)));
         }
     }
     if let Ok(rows) = invoices {
-        for r in &rows {
-            docs.push((r.date, invoice_row_to_document_item(r)));
+        for row in &rows {
+            docs.push((row.date, invoice_row_to_document_item(row)));
         }
     }
     docs.sort_by(|a, b| b.0.cmp(&a.0));
-    let documents: Vec<crate::DocumentItem> = docs.into_iter().map(|(_, d)| d).collect();
+    let documents: Vec<crate::DocumentItem> = docs.into_iter().map(|(_, doc)| doc).collect();
 
-    let pay_items: Vec<crate::PaymentItem> = payments
+    let payments: Vec<crate::PaymentItem> = payments
         .unwrap_or_default()
         .iter()
         .map(payment_row_to_item)
@@ -101,7 +101,7 @@ pub async fn prepare_counterparty_detail(
     Some(CounterpartyDetailData {
         detail: counterparty_to_details(&cp),
         documents,
-        payments: pay_items,
+        payments,
     })
 }
 
@@ -119,7 +119,6 @@ pub fn apply_counterparty_detail_to_ui(ui: &crate::AppWindow, data: Counterparty
     });
 }
 
-/// Підписує всі counterparty callbacks на UI компонент.
 pub fn wire_counterparty_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
     ui.on_cp_selected({
         let ctx = ctx.clone();
@@ -129,11 +128,11 @@ pub fn wire_counterparty_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
             let ui_weak = ui_weak.clone();
             let id_str = id.to_string();
             tokio::spawn(async move {
-                let cid = ctx.company_id();
+                let company_id = ctx.company_id();
                 let refresh_epoch = ctx.refresh_epoch();
                 if let Ok(cp_id) = Uuid::parse_str(&id_str) {
-                    if let Some(data) = prepare_counterparty_detail(ctx.pool(), cid, cp_id).await {
-                        if ctx.company_id() != cid || ctx.refresh_epoch() != refresh_epoch {
+                    if let Some(data) = prepare_counterparty_detail(ctx.pool(), company_id, cp_id).await {
+                        if ctx.company_id() != company_id || ctx.refresh_epoch() != refresh_epoch {
                             tracing::debug!(
                                 "counterparties: пропускаємо detail контрагента після switch компанії"
                             );
@@ -153,8 +152,6 @@ pub fn wire_counterparty_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
         let ctx = ctx.clone();
         let ui_weak = ui.as_weak();
         move |query| {
-            let ctx = ctx.clone();
-            let ui_weak = ui_weak.clone();
             let q = query.to_string();
             ctx.update_counterparty_state(|state| {
                 state.query = q;
@@ -167,19 +164,57 @@ pub fn wire_counterparty_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
         }
     });
 
-    // Epic 7: Реалізація базових no-op callbacks
     ui.on_cp_new(|| {
-        tracing::warn!("TODO: створення контрагента — форма планується у наступному спринті");
+        tracing::warn!("TODO: створення контрагента ще не реалізоване");
     });
-    ui.on_cp_create_doc(|id| {
-        tracing::warn!(
-            "TODO: створення документу для контрагента {} — форма планується у наступному спринті",
-            id
-        );
+
+    ui.on_cp_create_doc({
+        let ctx = ctx.clone();
+        let ui_weak = ui.as_weak();
+        move |id| {
+            let ctx = ctx.clone();
+            let ui_weak = ui_weak.clone();
+            let id_str = id.to_string();
+            tokio::spawn(async move {
+                let Ok(counterparty_id) = Uuid::parse_str(&id_str) else {
+                    tracing::warn!("cp_create_doc: некоректний id контрагента: {id_str}");
+                    return;
+                };
+
+                match db::counterparties::get_by_id(ctx.pool(), ctx.company_id(), counterparty_id).await {
+                    Ok(Some(counterparty)) => {
+                        ctx.set_active_screen(AppScreen::Documents);
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            ui.set_current_screen(crate::NavScreen::Documents);
+                            ui.set_cp_selected_id(counterparty_id.to_string().into());
+                            ui.set_doc_draft_form(crate::DocumentDraftForm {
+                                id: "".into(),
+                                kind: "".into(),
+                                counterparty_id: counterparty_id.to_string().into(),
+                                counterparty_name: counterparty.name.into(),
+                                title: "".into(),
+                                number: "".into(),
+                                date: "".into(),
+                                notes: "".into(),
+                            });
+                            ui.set_show_doc_type_picker(true);
+                            ui.set_show_doc_editor(false);
+                        });
+                    }
+                    Ok(None) => {
+                        tracing::warn!("cp_create_doc: контрагента не знайдено: {counterparty_id}");
+                    }
+                    Err(error) => {
+                        tracing::error!("cp_create_doc: не вдалося завантажити контрагента: {error}");
+                    }
+                }
+            });
+        }
     });
-    ui.on_cp_tab_changed(|_t| {
+
+    ui.on_cp_tab_changed(|_tab| {
         tracing::debug!(
-            "cp_tab_changed — вибір вкладки зберігається у локальному стані Slint-компоненту"
+            "cp_tab_changed: вибір вкладки зберігається у локальному стані Slint-компоненту"
         );
     });
 }
