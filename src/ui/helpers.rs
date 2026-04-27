@@ -86,6 +86,72 @@ pub fn format_money_ua(d: Decimal) -> String {
     format!("{} ₴", format_money(d))
 }
 
+/// Результат операції над групою документів.
+/// Трекує успішні операції, помилки, та генерує юзер-friendly повідомлення.
+pub struct OperationResult {
+    pub total: usize,
+    pub succeeded: usize,
+    pub failed: usize,
+    pub errors: Vec<String>,
+}
+
+impl OperationResult {
+    pub fn new(total: usize) -> Self {
+        Self {
+            total,
+            succeeded: 0,
+            failed: 0,
+            errors: Vec::new(),
+        }
+    }
+
+    pub fn add_success(&mut self) {
+        self.succeeded += 1;
+    }
+
+    pub fn add_error(&mut self, error: String) {
+        self.failed += 1;
+        if self.errors.len() < 3 {
+            // Показуємо максимум 3 помилки користувачу
+            self.errors.push(error);
+        }
+    }
+
+    /// Формує повідомлення для користувача
+    pub fn user_message(&self) -> String {
+        if self.succeeded == self.total {
+            format!("Успішно оброблено {} документів.", self.total)
+        } else if self.succeeded == 0 {
+            format!("Помилка: не вдалось обробити жодного документа з {}.", self.total)
+        } else {
+            format!(
+                "Обробленого {}/{} документів ({} помилок).",
+                self.succeeded, self.total, self.failed
+            )
+        }
+    }
+
+    /// Форматує помилки для логування
+    #[allow(dead_code)]
+    pub fn error_log(&self) -> String {
+        if self.errors.is_empty() {
+            String::new()
+        } else {
+            format!("Помилки: {}", self.errors.join("; "))
+        }
+    }
+
+    /// Чи всі операції були успішними
+    pub fn all_succeeded(&self) -> bool {
+        self.failed == 0 && self.succeeded > 0
+    }
+
+    /// Чи були якісь успіхи
+    pub fn has_successes(&self) -> bool {
+        self.succeeded > 0
+    }
+}
+
 /// Нормалізує значення для chart/render use cases у діапазон 0.0..1.0.
 /// Money-facing display ніколи не має проходити через цей helper.
 pub fn normalize_chart_value(value: Decimal, max_value: Decimal) -> f32 {
@@ -666,5 +732,38 @@ mod tests {
             "due_date має містити рік: {}",
             item.due_date
         );
+    }
+
+    #[test]
+    fn operation_result_tracks_counts() {
+        let mut result = OperationResult::new(10);
+        result.add_success();
+        result.add_success();
+        result.add_error("Error 1".to_string());
+
+        assert_eq!(result.succeeded, 2);
+        assert_eq!(result.failed, 1);
+        assert_eq!(result.total, 10);
+        assert!(!result.all_succeeded());
+        assert!(result.has_successes());
+    }
+
+    #[test]
+    fn operation_result_user_message_partial_success() {
+        let mut result = OperationResult::new(10);
+        result.add_success();
+        result.add_success();
+        result.add_error("Error 1".to_string());
+
+        let msg = result.user_message();
+        assert!(msg.contains("2"), "message should contain success count: {}", msg);
+        assert!(msg.contains("10"), "message should contain total: {}", msg);
+    }
+
+    #[test]
+    fn operation_result_all_failed_message() {
+        let result = OperationResult::new(10);
+        let msg = result.user_message();
+        assert!(msg.contains("не вдалось"), "message should indicate failure: {}", msg);
     }
 }
