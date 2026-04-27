@@ -12,7 +12,6 @@ use acta::models::company::Company;
 use acta::models::{NewTask, TaskPriority, TaskStatus};
 
 use crate::ui;
-use crate::ui::documents::load_document_chain;
 use crate::{AppWindow, CompanySwitcherItem, NavScreen, PaletteItemData, ShellChrome};
 
 struct InitialUiData {
@@ -710,12 +709,7 @@ fn wire_stub_callbacks(ui: &AppWindow, ctx: &Arc<AppCtx>) {
             let ui_weak = ui_weak.clone();
             let id = id.to_string();
             tokio::spawn(async move {
-                let Some(doc_ref) = crate::ui::documents::parse_document_ref(&id) else {
-                    tracing::error!("documents: invalid document ref for chain_load: {id}");
-                    return;
-                };
-
-                match load_document_chain(ctx.pool(), ctx.company_id(), doc_ref).await {
+                match crate::ui::documents::load_chain_from_id(ctx.pool(), ctx.company_id(), &id).await {
                     Ok(steps) => {
                         let step_count = steps.len();
                         let _ = ui_weak.upgrade_in_event_loop(move |ui| {
