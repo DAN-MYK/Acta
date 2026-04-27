@@ -717,14 +717,128 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
         let id = id.to_string();
         tracing::debug!("doc_more_actions({id}) — menu visibility handled in Slint");
     });
-    ui.on_doc_bulk_send(|| {
-        tracing::warn!("TODO: doc_bulk_send — масове надсилання ще не реалізоване");
+    ui.on_doc_bulk_send({
+        let ctx = ctx.clone();
+        let ui_weak = ui.as_weak();
+        move || {
+            let ctx = ctx.clone();
+            let ui_weak = ui_weak.clone();
+            let selected_ids = ui_weak
+                .upgrade()
+                .map(|ui| {
+                    ui.get_documents().selected_ids
+                        .iter()
+                        .collect::<Vec<String>>()
+                })
+                .unwrap_or_default();
+
+            if selected_ids.is_empty() {
+                notify_user("Вибір порожній", "Виберіть документи для надсилання.");
+                return;
+            }
+
+            tokio::spawn(async move {
+                for id_str in selected_ids {
+                    if let Some(doc_ref) = parse_document_ref(&id_str) {
+                        match doc_ref {
+                            DocumentRef::Act(id) => {
+                                let _ = db::acts::advance_status(ctx.pool(), id).await;
+                            }
+                            DocumentRef::Invoice(id) => {
+                                let _ = db::invoices::advance_status(ctx.pool(), id).await;
+                            }
+                            DocumentRef::Waybill(id) => {
+                                let _ = db::waybills::advance_status(ctx.pool(), id).await;
+                            }
+                        }
+                    }
+                }
+                crate::bootstrap::refresh_screen(ui_weak, ctx, AppScreen::Documents).await;
+                notify_user("Операція завершена", "Документи оновлено.");
+            });
+        }
     });
-    ui.on_doc_bulk_archive(|| {
-        tracing::warn!("TODO: doc_bulk_archive — масове архівування ще не реалізоване");
+    ui.on_doc_bulk_archive({
+        let ctx = ctx.clone();
+        let ui_weak = ui.as_weak();
+        move || {
+            let ctx = ctx.clone();
+            let ui_weak = ui_weak.clone();
+            let selected_ids = ui_weak
+                .upgrade()
+                .map(|ui| {
+                    ui.get_documents().selected_ids
+                        .iter()
+                        .collect::<Vec<String>>()
+                })
+                .unwrap_or_default();
+
+            if selected_ids.is_empty() {
+                notify_user("Вибір порожній", "Виберіть документи для архівування.");
+                return;
+            }
+
+            tokio::spawn(async move {
+                for id_str in selected_ids {
+                    if let Some(doc_ref) = parse_document_ref(&id_str) {
+                        match doc_ref {
+                            DocumentRef::Act(id) => {
+                                let _ = db::acts::advance_status(ctx.pool(), id).await;
+                            }
+                            DocumentRef::Invoice(id) => {
+                                let _ = db::invoices::advance_status(ctx.pool(), id).await;
+                            }
+                            DocumentRef::Waybill(id) => {
+                                let _ = db::waybills::advance_status(ctx.pool(), id).await;
+                            }
+                        }
+                    }
+                }
+                crate::bootstrap::refresh_screen(ui_weak, ctx, AppScreen::Documents).await;
+                notify_user("Операція завершена", "Документи архівовано.");
+            });
+        }
     });
-    ui.on_doc_bulk_delete(|| {
-        tracing::warn!("TODO: doc_bulk_delete — масове видалення ще не реалізоване");
+    ui.on_doc_bulk_delete({
+        let ctx = ctx.clone();
+        let ui_weak = ui.as_weak();
+        move || {
+            let ctx = ctx.clone();
+            let ui_weak = ui_weak.clone();
+            let selected_ids = ui_weak
+                .upgrade()
+                .map(|ui| {
+                    ui.get_documents().selected_ids
+                        .iter()
+                        .collect::<Vec<String>>()
+                })
+                .unwrap_or_default();
+
+            if selected_ids.is_empty() {
+                notify_user("Вибір порожній", "Виберіть документи для видалення.");
+                return;
+            }
+
+            tokio::spawn(async move {
+                for id_str in selected_ids {
+                    if let Some(doc_ref) = parse_document_ref(&id_str) {
+                        match doc_ref {
+                            DocumentRef::Act(id) => {
+                                let _ = db::acts::delete(ctx.pool(), id).await;
+                            }
+                            DocumentRef::Invoice(id) => {
+                                let _ = db::invoices::delete(ctx.pool(), id).await;
+                            }
+                            DocumentRef::Waybill(id) => {
+                                let _ = db::waybills::delete(ctx.pool(), id).await;
+                            }
+                        }
+                    }
+                }
+                crate::bootstrap::refresh_screen(ui_weak, ctx, AppScreen::Documents).await;
+                notify_user("Операція завершена", "Документи видалено.");
+            });
+        }
     });
     ui.on_doc_page_changed(|_p| {
         tracing::debug!(
@@ -858,7 +972,7 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
     ui.on_context_send({
         let ctx = ctx.clone();
         let ui_weak = ui.as_weak();
-        move |id| {
+        move |id: slint::SharedString| {
             let ctx = ctx.clone();
             let ui_weak = ui_weak.clone();
             let id = id.to_string();
@@ -884,7 +998,7 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
     ui.on_context_archive({
         let ctx = ctx.clone();
         let ui_weak = ui.as_weak();
-        move |id| {
+        move |id: slint::SharedString| {
             let ctx = ctx.clone();
             let ui_weak = ui_weak.clone();
             let id = id.to_string();
@@ -911,7 +1025,7 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
     ui.on_context_delete({
         let ctx = ctx.clone();
         let ui_weak = ui.as_weak();
-        move |id| {
+        move |id: slint::SharedString| {
             let ctx = ctx.clone();
             let ui_weak = ui_weak.clone();
             let id = id.to_string();
