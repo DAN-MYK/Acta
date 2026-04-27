@@ -36,7 +36,6 @@ enum DocumentRef {
 struct DocumentSnapshot {
     ref_id: String,
     kind: String,
-    id: Uuid,
     number: String,
     counterparty_id: Uuid,
     counterparty_name: String,
@@ -350,7 +349,6 @@ async fn load_document_snapshot(
             Ok(DocumentSnapshot {
                 ref_id: document_ref_string("act", id),
                 kind: "act".to_string(),
-                id,
                 number: act.number.clone(),
                 counterparty_id: act.counterparty_id,
                 counterparty_name: load_counterparty_name(pool, company_id, act.counterparty_id).await?,
@@ -368,7 +366,6 @@ async fn load_document_snapshot(
             Ok(DocumentSnapshot {
                 ref_id: document_ref_string("invoice", id),
                 kind: "invoice".to_string(),
-                id,
                 number: invoice.number.clone(),
                 counterparty_id: invoice.counterparty_id,
                 counterparty_name: load_counterparty_name(pool, company_id, invoice.counterparty_id).await?,
@@ -386,7 +383,6 @@ async fn load_document_snapshot(
             Ok(DocumentSnapshot {
                 ref_id: document_ref_string("waybill", id),
                 kind: "waybill".to_string(),
-                id,
                 number: waybill.number.clone(),
                 counterparty_id: waybill.counterparty_id,
                 counterparty_name: load_counterparty_name(pool, company_id, waybill.counterparty_id).await?,
@@ -415,7 +411,6 @@ async fn find_document_by_parent_ref(
                         return Ok(Some(DocumentSnapshot {
                             ref_id: document_ref_string("act", act.id),
                             kind: "act".to_string(),
-                            id: act.id,
                             number: act.number,
                             counterparty_id: act.counterparty_id,
                             counterparty_name: load_counterparty_name(pool, company_id, act.counterparty_id)
@@ -440,7 +435,6 @@ async fn find_document_by_parent_ref(
                         return Ok(Some(DocumentSnapshot {
                             ref_id: document_ref_string("invoice", invoice.id),
                             kind: "invoice".to_string(),
-                            id: invoice.id,
                             number: invoice.number,
                             counterparty_id: invoice.counterparty_id,
                             counterparty_name: load_counterparty_name(
@@ -469,7 +463,6 @@ async fn find_document_by_parent_ref(
                         return Ok(Some(DocumentSnapshot {
                             ref_id: document_ref_string("waybill", waybill.id),
                             kind: "waybill".to_string(),
-                            id: waybill.id,
                             number: waybill.number,
                             counterparty_id: waybill.counterparty_id,
                             counterparty_name: load_counterparty_name(
@@ -767,7 +760,7 @@ pub async fn load_chain_from_id(
     load_document_chain(pool, company_id, doc_ref).await
 }
 
-pub async fn load_document_chain(
+async fn load_document_chain(
     pool: &PgPool,
     company_id: Uuid,
     doc_ref: DocumentRef,
