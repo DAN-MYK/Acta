@@ -586,20 +586,34 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
             let ui_weak = ui_weak.clone();
             let id = id.to_string();
             tokio::spawn(async move {
-                if let Some(uuid_str) = id.strip_prefix("act:") {
-                    if let Ok(uuid) = Uuid::parse_str(uuid_str) {
-                        let _ = db::acts::delete(ctx.pool(), uuid).await;
+                let Some(doc_ref) = parse_document_ref(&id) else {
+                    notify_user("Помилка видалення", "Некоректний ідентифікатор документа.");
+                    return;
+                };
+
+                let result = match doc_ref {
+                    DocumentRef::Act(uuid) => {
+                        db::acts::delete(ctx.pool(), uuid).await
                     }
-                } else if let Some(uuid_str) = id.strip_prefix("inv:") {
-                    if let Ok(uuid) = Uuid::parse_str(uuid_str) {
-                        let _ = db::invoices::delete(ctx.pool(), uuid).await;
+                    DocumentRef::Invoice(uuid) => {
+                        db::invoices::delete(ctx.pool(), uuid).await
                     }
-                } else if let Some(uuid_str) = id.strip_prefix("wbl:") {
-                    if let Ok(uuid) = Uuid::parse_str(uuid_str) {
-                        let _ = db::waybills::delete(ctx.pool(), uuid).await;
+                    DocumentRef::Waybill(uuid) => {
+                        db::waybills::delete(ctx.pool(), uuid).await
+                    }
+                };
+
+                match result {
+                    Ok(_) => {
+                        tracing::info!("documents: deleted successfully: {id}");
+                        notify_user("Успішно", "Документ видалено.");
+                        crate::bootstrap::refresh_screen(ui_weak, ctx, AppScreen::Documents).await;
+                    }
+                    Err(error) => {
+                        tracing::error!("documents: delete failed for {id}: {error}");
+                        notify_user("Помилка видалення", &error.to_string());
                     }
                 }
-                crate::bootstrap::refresh_screen(ui_weak, ctx, AppScreen::Documents).await;
             });
         }
     });
