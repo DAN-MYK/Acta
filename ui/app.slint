@@ -113,7 +113,7 @@ export component AppWindow inherits Window {
     private property <int> rep-period-state: 1;
     in-out property <string> cp-selected-id: "";
     in-out property <string> cp-search: "";
-    private property <string> cp-detail-tab-state: "docs";
+    private property <string> cp-info-tab-state: "docs";
     private property <string> settings-section-state: "appearance";
     private property <bool> palette-open: false;
 
@@ -267,14 +267,14 @@ export component AppWindow inherits Window {
 
             list: root.counterparties-screen.items;
             info: root.counterparty-detail.info;
-            detail-docs: root.counterparty-detail.documents;
-            detail-payments: root.counterparty-detail.payments;
+            info-docs: root.counterparty-detail.documents;
+            info-payments: root.counterparty-detail.payments;
             selected-id: root.cp-selected-id;
             search-query: root.cp-search;
-            active-tab: root.cp-detail-tab-state;
-            detail-balance-str: self.info.balance-str;
-            detail-balance-is-negative: self.info.balance-is-negative;
-            detail-overdue-str: self.info.overdue-amount-str;
+            active-tab: root.cp-info-tab-state;
+            info-balance-str: self.info.balance-str;
+            info-balance-is-negative: self.info.balance-is-negative;
+            info-overdue-str: self.info.overdue-amount-str;
 
             icon-search: Icons.search;
             icon-plus: Icons.plus;
@@ -285,7 +285,7 @@ export component AppWindow inherits Window {
 
             select(id) => { root.cp-selected-id = id; root.cp-selected(id); }
             search-changed(q) => { root.cp-search = q; root.cp-search-changed(q); }
-            tab-changed(t) => { root.cp-detail-tab-state = t; root.cp-tab-changed(t); }
+            tab-changed(t) => { root.cp-info-tab-state = t; root.cp-tab-changed(t); }
             edit-cp(id) => { root.cp-selected(id); }
             create-doc(id) => { root.cp-create-doc(id); }
             chain-create(t, id) => { root.doc-chain-create(t, id); }

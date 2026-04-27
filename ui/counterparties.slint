@@ -204,13 +204,13 @@ export component Counterparties inherits Rectangle {
     // Data
     in property <[CounterpartyItem]> list;
     in property <CounterpartyDetails> info;
-    in property <[DocumentItem]> detail-docs;
-    in property <[PaymentItem]> detail-payments;
+    in property <[DocumentItem]> info-docs;
+    in property <[PaymentItem]> info-payments;
 
     // Pre-formatted detail values
-    in property <string> detail-balance-str;
-    in property <bool> detail-balance-is-negative: false;
-    in property <string> detail-overdue-str;
+    in property <string> info-balance-str;
+    in property <bool> info-balance-is-negative: false;
+    in property <string> info-overdue-str;
 
     // Icons
     in property <image> icon-search;
@@ -287,9 +287,9 @@ export component Counterparties inherits Rectangle {
             padded: false;
 
             Flickable {
-                viewport-height: detail-content.preferred-height + 20px;
+                viewport-height: info-content.preferred-height + 20px;
 
-                detail-content := VerticalLayout {
+                info-content := VerticalLayout {
 
                     // ── Detail header ──────────────────────────────────────
                     Rectangle {
@@ -364,8 +364,8 @@ export component Counterparties inherits Rectangle {
 
                                 CpMetric {
                                     label: "Баланс";
-                                    value: root.detail-balance-str;
-                                    danger: root.detail-balance-is-negative;
+                                    value: root.info-balance-str;
+                                    danger: root.info-balance-is-negative;
                                 }
                                 VDivider { }
                                 CpMetric {
@@ -400,13 +400,13 @@ export component Counterparties inherits Rectangle {
 
                         DetailTab {
                             label: "Документи";
-                            count: root.detail-docs.length;
+                            count: root.info-docs.length;
                             active: root.active-tab == "docs";
                             clicked => { root.active-tab = "docs"; root.tab-changed("docs"); }
                         }
                         DetailTab {
                             label: "Платежі";
-                            count: root.detail-payments.length;
+                            count: root.info-payments.length;
                             active: root.active-tab == "payments";
                             clicked => { root.active-tab = "payments"; root.tab-changed("payments"); }
                         }
@@ -450,7 +450,7 @@ export component Counterparties inherits Rectangle {
                             }
                         }
 
-                        for doc in detail-docs : Rectangle {
+                        for doc in info-docs : Rectangle {
                             height: 44px;
 
                             Rectangle { y: root.height - 1px; width: root.width; height: 1px; background: AppTheme.border; }
@@ -507,7 +507,7 @@ export component Counterparties inherits Rectangle {
                             }
                         }
 
-                        if detail-docs.length == 0 : Rectangle {
+                        if info-docs.length == 0 : Rectangle {
                             height: 80px;
                             Text {
                                 text: "Немає документів";

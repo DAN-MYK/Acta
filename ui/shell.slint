@@ -188,13 +188,11 @@ component CompanySwitcherRow inherits Rectangle {
     accessible-role: button;
     accessible-label: root.company.name;
 
-    property <bool> hovered: false;
-
     height: 46px;
     border-radius: AppTheme.radius-lg;
     background:
         root.company.active ? AppTheme.accent-soft :
-        (hovered ? AppTheme.bg-hover : transparent);
+        (company-row-hover.has-hover ? AppTheme.bg-hover : transparent);
     border-width: root.company.active ? 1px : 0px;
     border-color: root.company.active ? AppTheme.accent.with-alpha(0.35) : transparent;
 
@@ -261,13 +259,8 @@ component CompanySwitcherRow inherits Rectangle {
         }
     }
 
-    TouchArea {
+    company-row-hover := TouchArea {
         mouse-cursor: pointer;
-        pointer-event(e) => {
-            if (e.kind == PointerEventKind.move) {
-                root.hovered = self.has-hover;
-            }
-        }
         clicked => { root.selected(root.company.id); }
     }
 }
