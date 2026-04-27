@@ -546,20 +546,34 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
             let ui_weak = ui_weak.clone();
             let id = id.to_string();
             tokio::spawn(async move {
-                if let Some(uuid_str) = id.strip_prefix("act:") {
-                    if let Ok(uuid) = Uuid::parse_str(uuid_str) {
-                        let _ = db::acts::advance_status(ctx.pool(), uuid).await;
+                let Some(doc_ref) = parse_document_ref(&id) else {
+                    notify_user("Помилка надсилання", "Некоректний ідентифікатор документа.");
+                    return;
+                };
+
+                let result = match doc_ref {
+                    DocumentRef::Act(uuid) => {
+                        db::acts::advance_status(ctx.pool(), uuid).await.map(|_| ())
                     }
-                } else if let Some(uuid_str) = id.strip_prefix("inv:") {
-                    if let Ok(uuid) = Uuid::parse_str(uuid_str) {
-                        let _ = db::invoices::advance_status(ctx.pool(), uuid).await;
+                    DocumentRef::Invoice(uuid) => {
+                        db::invoices::advance_status(ctx.pool(), uuid).await.map(|_| ())
                     }
-                } else if let Some(uuid_str) = id.strip_prefix("wbl:") {
-                    if let Ok(uuid) = Uuid::parse_str(uuid_str) {
-                        let _ = db::waybills::advance_status(ctx.pool(), uuid).await;
+                    DocumentRef::Waybill(uuid) => {
+                        db::waybills::advance_status(ctx.pool(), uuid).await.map(|_| ())
+                    }
+                };
+
+                match result {
+                    Ok(_) => {
+                        tracing::info!("documents: sent successfully: {id}");
+                        notify_user("Успішно", "Документ надіслано.");
+                        crate::bootstrap::refresh_screen(ui_weak, ctx, AppScreen::Documents).await;
+                    }
+                    Err(error) => {
+                        tracing::error!("documents: send failed for {id}: {error}");
+                        notify_user("Помилка надсилання", &format!("{}", error));
                     }
                 }
-                crate::bootstrap::refresh_screen(ui_weak, ctx, AppScreen::Documents).await;
             });
         }
     });
