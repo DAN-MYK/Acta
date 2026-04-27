@@ -115,7 +115,7 @@ fn optional_string(value: &str) -> Option<String> {
     }
 }
 
-fn parse_document_ref(id: &str) -> Option<DocumentRef> {
+fn parse_document_ref_internal(id: &str) -> Option<DocumentRef> {
     if let Some(uuid) = id.strip_prefix("act:").and_then(|v| Uuid::parse_str(v).ok()) {
         return Some(DocumentRef::Act(uuid));
     }
@@ -125,6 +125,33 @@ fn parse_document_ref(id: &str) -> Option<DocumentRef> {
     id.strip_prefix("wbl:")
         .and_then(|v| Uuid::parse_str(v).ok())
         .map(DocumentRef::Waybill)
+}
+
+/// Публічна функція для розбору посилання на документ у форматі "kind:uuid".
+/// Повертає (kind, uuid) кортеж.
+pub fn parse_document_ref(id: &str) -> Option<(String, Uuid)> {
+    parse_document_ref_internal(id).and_then(|doc_ref| {
+        match doc_ref {
+            DocumentRef::Act(uuid) => Some(("act".to_string(), uuid)),
+            DocumentRef::Invoice(uuid) => Some(("inv".to_string(), uuid)),
+            DocumentRef::Waybill(uuid) => Some(("wbl".to_string(), uuid)),
+        }
+    })
+}
+
+/// Повертає старої внутрішнього DocumentRef за public (kind, uuid) кортежем.
+fn internal_doc_ref_from_public(kind: &str, uuid: Uuid) -> Option<DocumentRef> {
+    match kind {
+        "act" => Some(DocumentRef::Act(uuid)),
+        "inv" => Some(DocumentRef::Invoice(uuid)),
+        "wbl" => Some(DocumentRef::Waybill(uuid)),
+        _ => None,
+    }
+}
+
+/// Конвертує public (kind, uuid) кортеж у внутрішній DocumentRef.
+fn convert_public_to_internal_ref(doc_ref: (String, Uuid)) -> Option<DocumentRef> {
+    internal_doc_ref_from_public(&doc_ref.0, doc_ref.1)
 }
 
 fn kind_title(kind: &str, is_new: bool) -> &'static str {
@@ -432,7 +459,7 @@ async fn save_document_form(
     form: crate::DocumentDraftForm,
     items: Vec<crate::DocumentDraftItem>,
 ) -> Result<()> {
-    let doc_ref = parse_document_ref(form.id.as_str())
+    let doc_ref = parse_document_ref_internal(form.id.as_str())
         .ok_or_else(|| anyhow!("Некоректний ідентифікатор документа"))?;
     let date = parse_ui_date(form.date.as_str())?;
     let notes = optional_string(form.notes.as_str());
@@ -506,6 +533,104 @@ async fn save_document_form(
     Ok(())
 }
 
+/// Завантажує ланцюг пов'язаних документів для зазначеного документа.
+/// Повертає список ChainStep з інформацією про кожен документ у ланцюгу.
+pub async fn load_document_chain(
+    pool: &PgPool,
+    company_id: Uuid,
+    doc_ref: (String, Uuid),
+) -> anyhow::Result<Vec<crate::ChainStep>> {
+    let (kind, uuid) = doc_ref;
+
+    // Отримуємо основний документ та його контрагента
+    let source_counterparty_name = match kind.as_str() {
+        "act" => {
+            let (act, _) = db::acts::get_by_id(pool, uuid)
+                .await?
+                .ok_or_else(|| anyhow!("Акт не знайдено"))?;
+            Ok::<String, anyhow::Error>(
+                load_counterparty_name(pool, company_id, act.counterparty_id).await?,
+            )
+        }
+        "inv" => {
+            let (invoice, _) = db::invoices::get_by_id(pool, uuid)
+                .await?
+                .ok_or_else(|| anyhow!("Рахунок не знайдено"))?;
+            Ok(load_counterparty_name(pool, company_id, invoice.counterparty_id).await?)
+        }
+        "wbl" => {
+            let (waybill, _) = db::waybills::get_by_id(pool, uuid)
+                .await?
+                .ok_or_else(|| anyhow!("Накладна не знайдена"))?;
+            Ok(load_counterparty_name(pool, company_id, waybill.counterparty_id).await?)
+        }
+        _ => return Err(anyhow!("Невідомий тип документа: {}", kind)),
+    }?;
+
+    // Завантажуємо пов'язані документи
+    let acts = db::acts::list(pool, company_id, None)
+        .await
+        .unwrap_or_default();
+    let invoices = db::invoices::list(pool, company_id, None)
+        .await
+        .unwrap_or_default();
+    let waybills = db::waybills::list(pool, company_id, None)
+        .await
+        .unwrap_or_default();
+
+    let mut steps = Vec::new();
+
+    // Invoice
+    let inv_doc = invoices
+        .iter()
+        .find(|i| i.counterparty_name == source_counterparty_name);
+    let inv_exists = invoices.iter().any(|i| i.id == uuid && kind == "inv");
+    steps.push(crate::ChainStep {
+        doc_type: "Invoice".into(),
+        doc_number: inv_doc.map(|i| i.number.clone()).unwrap_or_default().into(),
+        amount_str: inv_doc
+            .map(|i| format!("₴ {}", i.total_amount))
+            .unwrap_or_default()
+            .into(),
+        status: inv_doc.map(|i| i.status.to_string()).unwrap_or_default().into(),
+        exists: inv_exists,
+    });
+
+    // Act
+    let act_doc = acts
+        .iter()
+        .find(|a| a.counterparty_name == source_counterparty_name);
+    let act_exists = acts.iter().any(|a| a.id == uuid && kind == "act");
+    steps.push(crate::ChainStep {
+        doc_type: "Act".into(),
+        doc_number: act_doc.map(|a| a.number.clone()).unwrap_or_default().into(),
+        amount_str: act_doc
+            .map(|a| format!("₴ {}", a.total_amount))
+            .unwrap_or_default()
+            .into(),
+        status: act_doc.map(|a| a.status.to_string()).unwrap_or_default().into(),
+        exists: act_exists,
+    });
+
+    // Waybill
+    let wbl_doc = waybills
+        .iter()
+        .find(|w| w.counterparty_name == source_counterparty_name);
+    let wbl_exists = waybills.iter().any(|w| w.id == uuid && kind == "wbl");
+    steps.push(crate::ChainStep {
+        doc_type: "Waybill".into(),
+        doc_number: wbl_doc.map(|w| w.number.clone()).unwrap_or_default().into(),
+        amount_str: wbl_doc
+            .map(|w| format!("₴ {}", w.total_amount))
+            .unwrap_or_default()
+            .into(),
+        status: wbl_doc.map(|w| w.status.to_string()).unwrap_or_default().into(),
+        exists: wbl_exists,
+    });
+
+    Ok(steps)
+}
+
 pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
     ui.on_doc_search_changed({
         let ctx = ctx.clone();
@@ -547,7 +672,7 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
             let ui_weak = ui_weak.clone();
             let id = id.to_string();
             tokio::spawn(async move {
-                let Some(doc_ref) = parse_document_ref(&id) else {
+                let Some(doc_ref) = parse_document_ref_internal(&id) else {
                     notify_user("Помилка надсилання", "Некоректний ідентифікатор документа.");
                     return;
                 };
@@ -587,7 +712,7 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
             let ui_weak = ui_weak.clone();
             let id = id.to_string();
             tokio::spawn(async move {
-                let Some(doc_ref) = parse_document_ref(&id) else {
+                let Some(doc_ref) = parse_document_ref_internal(&id) else {
                     notify_user("Помилка видалення", "Некоректний ідентифікатор документа.");
                     return;
                 };
@@ -686,8 +811,13 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
             let ui_weak = ui_weak.clone();
             let id = id.to_string();
             tokio::spawn(async move {
-                let Some(doc_ref) = parse_document_ref(&id) else {
+                let Some(public_ref) = parse_document_ref(&id) else {
                     notify_user("Помилка відкриття", "Некоректний ідентифікатор документа.");
+                    return;
+                };
+
+                let Some(doc_ref) = convert_public_to_internal_ref(public_ref) else {
+                    notify_user("Помилка відкриття", "Некоректний тип документа.");
                     return;
                 };
 
@@ -714,8 +844,13 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
             let ui_weak = ui_weak.clone();
             let id = id.to_string();
             tokio::spawn(async move {
-                let Some(doc_ref) = parse_document_ref(&id) else {
+                let Some(public_ref) = parse_document_ref(&id) else {
                     notify_user("Помилка редагування", "Некоректний ідентифікатор документа.");
+                    return;
+                };
+
+                let Some(doc_ref) = convert_public_to_internal_ref(public_ref) else {
+                    notify_user("Помилка редагування", "Некоректний тип документа.");
                     return;
                 };
 
@@ -768,8 +903,13 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                 let mut result = OperationResult::new(total);
 
                 for id in selected_ids {
-                    let Some(doc_ref) = parse_document_ref(&id) else {
+                    let Some(public_ref) = parse_document_ref(&id) else {
                         result.add_error(format!("Некоректний ID: {}", id));
+                        continue;
+                    };
+
+                    let Some(doc_ref) = convert_public_to_internal_ref(public_ref) else {
+                        result.add_error(format!("Невідомий тип документа: {}", id));
                         continue;
                     };
 
@@ -846,8 +986,13 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                 let mut result = OperationResult::new(total);
 
                 for id in selected_ids {
-                    let Some(doc_ref) = parse_document_ref(&id) else {
+                    let Some(public_ref) = parse_document_ref(&id) else {
                         result.add_error(format!("Некоректний ID: {}", id));
+                        continue;
+                    };
+
+                    let Some(doc_ref) = convert_public_to_internal_ref(public_ref) else {
+                        result.add_error(format!("Невідомий тип документа: {}", id));
                         continue;
                     };
 
@@ -925,8 +1070,13 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                 let mut result = OperationResult::new(total);
 
                 for id in selected_ids {
-                    let Some(doc_ref) = parse_document_ref(&id) else {
+                    let Some(public_ref) = parse_document_ref(&id) else {
                         result.add_error(format!("Некоректний ID: {}", id));
+                        continue;
+                    };
+
+                    let Some(doc_ref) = convert_public_to_internal_ref(public_ref) else {
+                        result.add_error(format!("Невідомий тип документа: {}", id));
                         continue;
                     };
 

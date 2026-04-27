@@ -12,7 +12,8 @@ use acta::models::company::Company;
 use acta::models::{NewTask, TaskPriority, TaskStatus};
 
 use crate::ui;
-use crate::{AppWindow, ChainStep, CompanySwitcherItem, NavScreen, PaletteItemData, ShellChrome};
+use crate::ui::documents::load_document_chain;
+use crate::{AppWindow, CompanySwitcherItem, NavScreen, PaletteItemData, ShellChrome};
 
 struct InitialUiData {
     dashboard: ui::dashboard::DashboardData,
@@ -421,7 +422,7 @@ pub fn wire_app(ui: &AppWindow, ctx: &Arc<AppCtx>) {
     ui::settings::wire_settings_callbacks(ui, ctx);
     wire_inbox_callbacks(ui, ctx);
     wire_palette_callbacks(ui, ctx);
-    wire_stub_callbacks(ui);
+    wire_stub_callbacks(ui, ctx);
 }
 
 fn wire_company_switcher(ui: &AppWindow, ctx: &Arc<AppCtx>) {
@@ -700,24 +701,46 @@ fn wire_palette_callbacks(ui: &AppWindow, ctx: &Arc<AppCtx>) {
     });
 }
 
-fn wire_stub_callbacks(ui: &AppWindow) {
+fn wire_stub_callbacks(ui: &AppWindow, ctx: &Arc<AppCtx>) {
     ui.on_doc_chain_load({
+        let ctx = ctx.clone();
         let ui_weak = ui.as_weak();
         move |id| {
-            tracing::info!("TODO: doc_chain_load({id})");
-            let _ = ui_weak.upgrade_in_event_loop(|ui| {
-                let documents = ui.get_documents();
-                ui.set_documents(crate::DocumentsViewData {
-                    items: documents.items,
-                    invoice_items: documents.invoice_items,
-                    act_items: documents.act_items,
-                    waybill_items: documents.waybill_items,
-                    selected_ids: documents.selected_ids,
-                    total_count: documents.total_count,
-                    page_count: documents.page_count,
-                    chain_steps: ModelRc::new(VecModel::<ChainStep>::default()),
-                    cp_doc_chains: documents.cp_doc_chains,
-                });
+            let ctx = ctx.clone();
+            let ui_weak = ui_weak.clone();
+            let id = id.to_string();
+            tokio::spawn(async move {
+                let Some(doc_ref) = crate::ui::documents::parse_document_ref(&id) else {
+                    tracing::error!("documents: invalid document ref for chain_load: {id}");
+                    return;
+                };
+
+                match load_document_chain(ctx.pool(), ctx.company_id(), doc_ref).await {
+                    Ok(steps) => {
+                        let step_count = steps.len();
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            let chain_steps_model =
+                                slint::ModelRc::new(slint::VecModel::from(steps));
+                            let documents = ui.get_documents();
+                            ui.set_documents(crate::DocumentsViewData {
+                                items: documents.items,
+                                invoice_items: documents.invoice_items,
+                                act_items: documents.act_items,
+                                waybill_items: documents.waybill_items,
+                                selected_ids: documents.selected_ids,
+                                total_count: documents.total_count,
+                                page_count: documents.page_count,
+                                chain_steps: chain_steps_model,
+                                cp_doc_chains: documents.cp_doc_chains,
+                            });
+                        });
+
+                        tracing::info!("documents: loaded chain for {id} with {step_count} steps");
+                    }
+                    Err(error) => {
+                        tracing::error!("documents: chain_load failed for {id}: {error}");
+                    }
+                }
             });
         }
     });
