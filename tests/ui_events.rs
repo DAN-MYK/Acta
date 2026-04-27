@@ -364,6 +364,48 @@ mod app_window_contract {
         assert!(fired.get(), "doc: chain-create");
         assert_eq!(doc_type.borrow().as_str(), "act");
         assert_eq!(doc_id.borrow().as_str(), "inv:uuid-src");
+
+        let fired = capture_bool();
+        let doc_id = capture_string();
+        {
+            let fired = fired.clone();
+            let doc_id_capture = doc_id.clone();
+            ui.on_context_send(move |id| {
+                fired.set(true);
+                *doc_id_capture.borrow_mut() = id;
+            });
+        }
+        ui.invoke_context_send("act:uuid-context-send".into());
+        assert!(fired.get(), "doc: context-send");
+        assert_eq!(doc_id.borrow().as_str(), "act:uuid-context-send");
+
+        let fired = capture_bool();
+        let doc_id = capture_string();
+        {
+            let fired = fired.clone();
+            let doc_id_capture = doc_id.clone();
+            ui.on_context_archive(move |id| {
+                fired.set(true);
+                *doc_id_capture.borrow_mut() = id;
+            });
+        }
+        ui.invoke_context_archive("inv:uuid-context-archive".into());
+        assert!(fired.get(), "doc: context-archive");
+        assert_eq!(doc_id.borrow().as_str(), "inv:uuid-context-archive");
+
+        let fired = capture_bool();
+        let doc_id = capture_string();
+        {
+            let fired = fired.clone();
+            let doc_id_capture = doc_id.clone();
+            ui.on_context_delete(move |id| {
+                fired.set(true);
+                *doc_id_capture.borrow_mut() = id;
+            });
+        }
+        ui.invoke_context_delete("wbl:uuid-context-delete".into());
+        assert!(fired.get(), "doc: context-delete");
+        assert_eq!(doc_id.borrow().as_str(), "wbl:uuid-context-delete");
     }
 
     fn counterparties() {
