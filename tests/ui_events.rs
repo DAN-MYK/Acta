@@ -242,14 +242,28 @@ mod app_window_contract {
         {
             let fired = fired.clone();
             let doc_id_capture = doc_id.clone();
+            ui.on_doc_edit(move |id| {
+                fired.set(true);
+                *doc_id_capture.borrow_mut() = id;
+            });
+        }
+        ui.invoke_doc_edit("act:uuid-789".into());
+        assert!(fired.get(), "doc: edit");
+        assert_eq!(doc_id.borrow().as_str(), "act:uuid-789");
+
+        let fired = capture_bool();
+        let doc_id = capture_string();
+        {
+            let fired = fired.clone();
+            let doc_id_capture = doc_id.clone();
             ui.on_doc_send(move |id| {
                 fired.set(true);
                 *doc_id_capture.borrow_mut() = id;
             });
         }
-        ui.invoke_doc_send("inv:uuid-789".into());
+        ui.invoke_doc_send("inv:uuid-790".into());
         assert!(fired.get(), "doc: send");
-        assert_eq!(doc_id.borrow().as_str(), "inv:uuid-789");
+        assert_eq!(doc_id.borrow().as_str(), "inv:uuid-790");
 
         let fired = capture_bool();
         let doc_id = capture_string();
