@@ -827,39 +827,75 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
         move || {
             let ctx = ctx.clone();
             let ui_weak = ui_weak.clone();
-            let selected_ids = ui_weak
-                .upgrade()
-                .map(|ui| {
-                    ui.get_documents().selected_ids
-                        .iter()
+            let selected_ids: Vec<String> = {
+                if let Some(ui) = ui_weak.upgrade() {
+                    use slint::Model;
+                    let documents = ui.get_documents();
+                    let model = documents.selected_ids;
+                    (0..model.row_count())
+                        .filter_map(|i| model.row_data(i))
                         .map(|s| s.to_string())
-                        .collect::<Vec<String>>()
-                })
-                .unwrap_or_default();
-
-            if selected_ids.is_empty() {
-                notify_user("Вибір порожній", "Виберіть документи для архівування.");
-                return;
-            }
+                        .collect()
+                } else {
+                    return;
+                }
+            };
 
             tokio::spawn(async move {
-                for id_str in selected_ids {
-                    if let Some(doc_ref) = parse_document_ref(&id_str) {
-                        match doc_ref {
-                            DocumentRef::Act(id) => {
-                                let _ = db::acts::advance_status(ctx.pool(), id).await;
-                            }
-                            DocumentRef::Invoice(id) => {
-                                let _ = db::invoices::advance_status(ctx.pool(), id).await;
-                            }
-                            DocumentRef::Waybill(id) => {
-                                let _ = db::waybills::advance_status(ctx.pool(), id).await;
-                            }
+                let total = selected_ids.len();
+                let mut result = OperationResult::new(total);
+
+                for id in selected_ids {
+                    let Some(doc_ref) = parse_document_ref(&id) else {
+                        result.add_error(format!("Некоректний ID: {}", id));
+                        continue;
+                    };
+
+                    let op_result = match doc_ref {
+                        DocumentRef::Act(uuid) => {
+                            db::acts::advance_status(ctx.pool(), uuid).await.map(|_| ())
+                        }
+                        DocumentRef::Invoice(uuid) => {
+                            db::invoices::advance_status(ctx.pool(), uuid).await.map(|_| ())
+                        }
+                        DocumentRef::Waybill(uuid) => {
+                            db::waybills::advance_status(ctx.pool(), uuid).await.map(|_| ())
+                        }
+                    };
+
+                    match op_result {
+                        Ok(_) => {
+                            result.add_success();
+                        }
+                        Err(error) => {
+                            result.add_error(format!("{}: {}", id, error));
                         }
                     }
                 }
-                crate::bootstrap::refresh_screen(ui_weak, ctx, AppScreen::Documents).await;
-                notify_user("Операція завершена", "Документи архівовано.");
+
+                tracing::info!(
+                    "documents: bulk archive completed: {}/{} succeeded{}",
+                    result.succeeded,
+                    result.total,
+                    if !result.errors.is_empty() {
+                        format!(" — {}", result.error_log())
+                    } else {
+                        String::new()
+                    }
+                );
+
+                notify_user(
+                    if result.all_succeeded() {
+                        "Успішно"
+                    } else {
+                        "Частково"
+                    },
+                    &result.user_message(),
+                );
+
+                if result.has_successes() {
+                    let _ = crate::bootstrap::refresh_screen(ui_weak, ctx, AppScreen::Documents).await;
+                }
             });
         }
     });
