@@ -1251,6 +1251,8 @@ export component Shell inherits Rectangle {
 
             if root.company-switcher-open : Rectangle {
                 x: 14px;
+                // 84 = sidebar padding-top(24) + company-btn height(56) + gap(4)
+                // Оновити якщо змінюється padding-top VerticalLayout або company-btn height
                 y: 84px;
                 width: parent.width - 28px;
                 background: AppTheme.bg-elevated;
