@@ -383,7 +383,16 @@ export component CommandPalette inherits Rectangle {
                     vertical-alignment: center;
                     horizontal-stretch: 1;
                     accessible-label: "Пошук команд";
+                    init => { self.focus(); }
                     edited => { root.query = self.text; root.query-changed(self.text); }
+                    key-pressed(e) => {
+                        if e.text == Key.Escape {
+                            root.closed();
+                            accept
+                        } else {
+                            reject
+                        }
+                    }
                 }
 
                 // Placeholder overlay shown when field is empty
