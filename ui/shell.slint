@@ -2,7 +2,7 @@
 // Aesthetic: hairline border between sidebar and main, flat avatar, no gradients.
 
 import { AppTheme } from "design-tokens.slint";
-import { NavScreen, PaletteItemData, CompanySwitcherItem } from "types.slint";
+import { NavScreen, PaletteItemData, CompanySwitcherItem, SavedFilterItem } from "types.slint";
 import { Card, VDivider, HDivider, IconButton, KbdHint, SearchInput, Avatar, GhostButton, SecondaryButton, InlineIcon } from "components.slint";
 
 // ── Skip Navigation ───────────────────────────────────────────────────────────
@@ -823,6 +823,10 @@ export component Shell inherits Rectangle {
     in property <int> documents-badge: 0;
     in property <int> tasks-badge: 0;
 
+    // Saved filters sidebar section
+    in property <[SavedFilterItem]> saved-filters;
+    callback saved-filter-clicked(int);
+
     // Command palette
     in-out property <bool> cmd-palette-open: false;
     in-out property <string> cmd-palette-query: "";
@@ -1155,25 +1159,24 @@ export component Shell inherits Rectangle {
 
                 Rectangle { height: 6px; }
 
-                SavedViewItem {
-                    label: "Прострочені рахунки";
-                    count: 1;
-                    star-icon: root.icon-star;
+                if root.saved-filters.length == 0 : HorizontalLayout {
+                    height: 28px;
+                    padding-left: 10px;
+
+                    Text {
+                        text: "Немає збережених фільтрів";
+                        color: AppTheme.text-faint;
+                        font-size: 11px;
+                        font-family: AppTheme.font-sans;
+                        vertical-alignment: center;
+                    }
                 }
-                SavedViewItem {
-                    label: "Акти без підпису";
-                    count: 2;
+
+                for filter[i] in root.saved-filters : SavedViewItem {
+                    label: filter.label;
+                    count: filter.count;
                     star-icon: root.icon-star;
-                }
-                SavedViewItem {
-                    label: "Неприв'язані платежі";
-                    count: 2;
-                    star-icon: root.icon-star;
-                }
-                SavedViewItem {
-                    label: "Цей тиждень";
-                    count: 7;
-                    star-icon: root.icon-star;
+                    clicked => { root.saved-filter-clicked(i); }
                 }
 
                 // ── Spacer ─────────────────────────────────────────────────

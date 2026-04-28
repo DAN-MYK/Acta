@@ -166,6 +166,8 @@ export component AppWindow inherits Window {
         user-role: root.shell.user-role;
         documents-badge: root.shell.documents-badge;
         tasks-badge: root.shell.tasks-badge;
+        saved-filters: [];
+        saved-filter-clicked(i) => { }
         company-items: root.shell-company-items;
         is-dark: AppTheme.is-dark;
         cmd-palette-open: root.palette-open;
