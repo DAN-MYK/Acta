@@ -599,6 +599,8 @@ export component CommandPalette inherits Rectangle {
 
 // ── Keyboard Help Overlay ─────────────────────────────────────────────────────
 // Shows keyboard shortcuts cheatsheet. Triggered by Ctrl+/.
+// SYNC: Список скорочень тут і реальна логіка в nav-scope FocusScope (~рядок 1076)
+// мусять залишатись синхронізованими при зміні будь-якого скорочення.
 component KeyboardHelp {
     callback closed;
 
@@ -1061,7 +1063,8 @@ export component Shell inherits Rectangle {
                     }
                 }
 
-                // Epic 10: Keyboard navigation hotkeys
+                // Keyboard navigation hotkeys — при зміні скорочень тут
+                // оновлювати також KeyboardHelp (~рядок 611).
                 nav-scope := FocusScope {
                     init => { self.focus(); }
                     key-pressed(e) => {
