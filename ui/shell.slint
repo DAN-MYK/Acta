@@ -811,6 +811,7 @@ export component Shell inherits Rectangle {
 
     // Company info
     in property <string> company-name: "";
+    in property <string> app-subtitle: "Acta · упр. облік";
     in property <[CompanySwitcherItem]> company-items;
     in property <string> user-name: "";
     in property <string> user-role: "";
@@ -942,7 +943,7 @@ export component Shell inherits Rectangle {
                             }
 
                             Text {
-                                text: "Acta · упр. облік";
+                                text: root.app-subtitle;
                                 color: AppTheme.text-faint;
                                 font-size: 10.5px;
                                 font-family: AppTheme.font-sans;
