@@ -10,6 +10,7 @@ component SkipNav inherits Rectangle {
     callback activated;
 
     height: scope.has-focus ? 36px : 1px;
+    width: scope.has-focus ? 260px : 1px;
     clip: true;
     z: 200;
     background: transparent;
@@ -858,7 +859,6 @@ export component Shell inherits Rectangle {
     background: AppTheme.bg;
 
     skip-nav := SkipNav {
-        width: 1px;
         x: 0;
         y: 12px;
         activated => { content-area.focus(); }
