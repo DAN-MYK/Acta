@@ -284,6 +284,7 @@ export component TaskFormOverlay {
 export component TaskDetailsOverlay {
     in-out property <bool> open;
     in property <TaskItem> task;
+    callback status-changed(string, string);
 
     x: 0px;
     y: 0px;
@@ -378,6 +379,31 @@ export component TaskDetailsOverlay {
 
             HorizontalLayout {
                 alignment: end;
+                spacing: 8px;
+                if root.task.status-code == "open" : GhostButton {
+                    text: "В роботу";
+                    small: true;
+                    clicked => {
+                        root.status-changed(root.task.id, "in_progress");
+                        root.open = false;
+                    }
+                }
+                if root.task.status-code != "done" && root.task.status-code != "cancelled" : SecondaryButton {
+                    text: "Завершити";
+                    small: true;
+                    clicked => {
+                        root.status-changed(root.task.id, "done");
+                        root.open = false;
+                    }
+                }
+                if root.task.status-code != "cancelled" && root.task.status-code != "done" : GhostButton {
+                    text: "Скасувати";
+                    small: true;
+                    clicked => {
+                        root.status-changed(root.task.id, "cancelled");
+                        root.open = false;
+                    }
+                }
                 SecondaryButton { text: "Готово"; clicked => { root.open = false; } }
             }
         }
@@ -617,6 +643,7 @@ export component Tasks inherits Rectangle {
     callback filter-changed(string);
     callback task-toggled(string, bool);
     callback task-more(string);
+    callback task-status-set(string, string);
     callback new-task;
     callback task-save(string, string, string, string);
 
@@ -797,5 +824,6 @@ export component Tasks inherits Rectangle {
         visible: root.show-task-detail && task.id == root.detail-task-id;
         open <=> root.show-task-detail;
         task: task;
+        status-changed(id, status) => { root.task-status-set(id, status); }
     }
 }

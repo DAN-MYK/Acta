@@ -12,7 +12,7 @@ use crate::ui::helpers::{
 use acta::app_ctx::{AppCtx, AppScreen};
 use acta::db;
 use acta::models::counterparty::{is_valid_edrpou, is_valid_iban, is_valid_ipn};
-use acta::models::NewCounterparty;
+use acta::models::{NewCounterparty, UpdateCounterparty};
 
 pub struct CounterpartiesData {
     pub items: Vec<crate::CounterpartyItem>,
@@ -146,6 +146,23 @@ fn new_counterparty_form() -> crate::CounterpartyDraftForm {
     }
 }
 
+fn edit_counterparty_form(
+    counterparty: &acta::models::counterparty::Counterparty,
+) -> crate::CounterpartyDraftForm {
+    crate::CounterpartyDraftForm {
+        id: counterparty.id.to_string().into(),
+        title: "Редагування контрагента".into(),
+        name: counterparty.name.clone().into(),
+        edrpou: counterparty.edrpou.clone().unwrap_or_default().into(),
+        ipn: counterparty.ipn.clone().unwrap_or_default().into(),
+        iban: counterparty.iban.clone().unwrap_or_default().into(),
+        address: counterparty.address.clone().unwrap_or_default().into(),
+        phone: counterparty.phone.clone().unwrap_or_default().into(),
+        email: counterparty.email.clone().unwrap_or_default().into(),
+        notes: counterparty.notes.clone().unwrap_or_default().into(),
+    }
+}
+
 fn set_counterparty_form_state(
     ui: &crate::AppWindow,
     form: crate::CounterpartyDraftForm,
@@ -192,6 +209,20 @@ fn validate_counterparty_form(form: &crate::CounterpartyDraftForm) -> Result<New
         email: optional_string(form.email.as_str()),
         notes: optional_string(form.notes.as_str()),
         bas_id: None,
+    })
+}
+
+fn update_payload_from_form(form: &crate::CounterpartyDraftForm) -> Result<UpdateCounterparty> {
+    let create_payload = validate_counterparty_form(form)?;
+    Ok(UpdateCounterparty {
+        name: create_payload.name,
+        edrpou: create_payload.edrpou,
+        ipn: create_payload.ipn,
+        iban: create_payload.iban,
+        address: create_payload.address,
+        phone: create_payload.phone,
+        email: create_payload.email,
+        notes: create_payload.notes,
     })
 }
 
@@ -249,6 +280,39 @@ pub fn wire_counterparty_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
         }
     });
 
+    ui.on_cp_edit({
+        let ctx = ctx.clone();
+        let ui_weak = ui.as_weak();
+        move |id| {
+            let ctx = ctx.clone();
+            let ui_weak = ui_weak.clone();
+            let id_str = id.to_string();
+            tokio::spawn(async move {
+                let Ok(counterparty_id) = Uuid::parse_str(&id_str) else {
+                    tracing::warn!("cp_edit: некоректний id контрагента: {id_str}");
+                    return;
+                };
+
+                match db::counterparties::get_by_id(ctx.pool(), ctx.company_id(), counterparty_id)
+                    .await
+                {
+                    Ok(Some(counterparty)) => {
+                        let form = edit_counterparty_form(&counterparty);
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            set_counterparty_form_state(&ui, form, true);
+                        });
+                    }
+                    Ok(None) => {
+                        tracing::warn!("cp_edit: контрагента не знайдено: {counterparty_id}");
+                    }
+                    Err(error) => {
+                        tracing::error!("cp_edit: не вдалося завантажити контрагента: {error}");
+                    }
+                }
+            });
+        }
+    });
+
     ui.on_cp_draft_saved({
         let ctx = ctx.clone();
         let ui_weak = ui.as_weak();
@@ -256,8 +320,38 @@ pub fn wire_counterparty_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
             let ctx = ctx.clone();
             let ui_weak = ui_weak.clone();
             tokio::spawn(async move {
-                let payload = match validate_counterparty_form(&form) {
-                    Ok(payload) => payload,
+                let maybe_id = optional_string(form.id.as_str())
+                    .and_then(|value| Uuid::parse_str(&value).ok());
+
+                let save_result = if let Some(counterparty_id) = maybe_id {
+                    match update_payload_from_form(&form) {
+                        Ok(payload) => {
+                            db::counterparties::update(ctx.pool(), counterparty_id, &payload)
+                                .await
+                                .map(|row| row.map(|counterparty| counterparty.id))
+                        }
+                        Err(error) => Err(error),
+                    }
+                } else {
+                    match validate_counterparty_form(&form) {
+                        Ok(payload) => {
+                            db::counterparties::create(ctx.pool(), ctx.company_id(), &payload)
+                                .await
+                                .map(|counterparty| Some(counterparty.id))
+                        }
+                        Err(error) => Err(error),
+                    }
+                };
+
+                let counterparty_id = match save_result {
+                    Ok(Some(counterparty_id)) => counterparty_id,
+                    Ok(None) => {
+                        tracing::warn!("cp_draft_saved: контрагента для оновлення не знайдено");
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            ui.set_show_cp_editor(true);
+                        });
+                        return;
+                    }
                     Err(error) => {
                         tracing::warn!("cp_draft_saved: {error}");
                         let _ = ui_weak.upgrade_in_event_loop(move |ui| {
@@ -267,31 +361,23 @@ pub fn wire_counterparty_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                     }
                 };
 
-                match db::counterparties::create(ctx.pool(), ctx.company_id(), &payload).await {
-                    Ok(counterparty) => {
-                        let list_data = prepare_counterparties_data(ctx.pool(), ctx.company_id(), None).await;
-                        let detail_data =
-                            prepare_counterparty_detail(ctx.pool(), ctx.company_id(), counterparty.id).await;
-                        let selected_id = counterparty.id.to_string();
+                let list_data =
+                    prepare_counterparties_data(ctx.pool(), ctx.company_id(), None).await;
+                let detail_data =
+                    prepare_counterparty_detail(ctx.pool(), ctx.company_id(), counterparty_id)
+                        .await;
+                let selected_id = counterparty_id.to_string();
 
-                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
-                            apply_counterparties_to_ui(&ui, list_data);
-                            if let Some(detail) = detail_data {
-                                apply_counterparty_detail_to_ui(&ui, detail);
-                            }
-                            ui.set_cp_selected_id(selected_id.into());
-                            ui.set_show_cp_editor(false);
-                        });
+                let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                    apply_counterparties_to_ui(&ui, list_data);
+                    if let Some(detail) = detail_data {
+                        apply_counterparty_detail_to_ui(&ui, detail);
+                    }
+                    ui.set_cp_selected_id(selected_id.into());
+                    ui.set_show_cp_editor(false);
+                });
 
-                        tracing::info!("counterparties: created counterparty {}", counterparty.id);
-                    }
-                    Err(error) => {
-                        tracing::error!("cp_draft_saved: create failed: {error}");
-                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
-                            ui.set_show_cp_editor(true);
-                        });
-                    }
-                }
+                tracing::info!("counterparties: saved counterparty {}", counterparty_id);
             });
         }
     });
@@ -309,7 +395,9 @@ pub fn wire_counterparty_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                     return;
                 };
 
-                match db::counterparties::get_by_id(ctx.pool(), ctx.company_id(), counterparty_id).await {
+                match db::counterparties::get_by_id(ctx.pool(), ctx.company_id(), counterparty_id)
+                    .await
+                {
                     Ok(Some(counterparty)) => {
                         ctx.set_active_screen(AppScreen::Documents);
                         let _ = ui_weak.upgrade_in_event_loop(move |ui| {
@@ -333,7 +421,9 @@ pub fn wire_counterparty_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                         tracing::warn!("cp_create_doc: контрагента не знайдено: {counterparty_id}");
                     }
                     Err(error) => {
-                        tracing::error!("cp_create_doc: не вдалося завантажити контрагента: {error}");
+                        tracing::error!(
+                            "cp_create_doc: не вдалося завантажити контрагента: {error}"
+                        );
                     }
                 }
             });

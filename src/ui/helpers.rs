@@ -122,7 +122,10 @@ impl OperationResult {
         if self.succeeded == self.total {
             format!("Успішно оброблено {} документів.", self.total)
         } else if self.succeeded == 0 {
-            format!("Помилка: не вдалось обробити жодного документа з {}.", self.total)
+            format!(
+                "Помилка: не вдалось обробити жодного документа з {}.",
+                self.total
+            )
         } else {
             format!(
                 "Обробленого {}/{} документів ({} помилок).",
@@ -330,6 +333,7 @@ pub fn task_to_item(t: &Task) -> crate::TaskItem {
             .into(),
         done: t.status == TaskStatus::Done || t.status == TaskStatus::Cancelled,
         status_label: t.status.label().into(),
+        status_code: t.status.as_str().into(),
         priority: match t.priority {
             TaskPriority::High | TaskPriority::Critical => crate::Priority::High,
             TaskPriority::Normal => crate::Priority::Medium,
@@ -756,7 +760,11 @@ mod tests {
         result.add_error("Error 1".to_string());
 
         let msg = result.user_message();
-        assert!(msg.contains("2"), "message should contain success count: {}", msg);
+        assert!(
+            msg.contains("2"),
+            "message should contain success count: {}",
+            msg
+        );
         assert!(msg.contains("10"), "message should contain total: {}", msg);
     }
 
@@ -764,6 +772,10 @@ mod tests {
     fn operation_result_all_failed_message() {
         let result = OperationResult::new(10);
         let msg = result.user_message();
-        assert!(msg.contains("не вдалось"), "message should indicate failure: {}", msg);
+        assert!(
+            msg.contains("не вдалось"),
+            "message should indicate failure: {}",
+            msg
+        );
     }
 }

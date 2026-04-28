@@ -81,7 +81,10 @@ pub async fn prepare_documents_data(
     }
 
     combined.sort_by(|a, b| b.0.cmp(&a.0));
-    let items = combined.into_iter().map(|(_, item)| item).collect::<Vec<_>>();
+    let items = combined
+        .into_iter()
+        .map(|(_, item)| item)
+        .collect::<Vec<_>>();
     let total = items.len() as i32;
 
     DocumentsData { items, total }
@@ -134,10 +137,16 @@ fn optional_string(value: &str) -> Option<String> {
 }
 
 fn parse_document_ref(id: &str) -> Option<DocumentRef> {
-    if let Some(uuid) = id.strip_prefix("act:").and_then(|v| Uuid::parse_str(v).ok()) {
+    if let Some(uuid) = id
+        .strip_prefix("act:")
+        .and_then(|v| Uuid::parse_str(v).ok())
+    {
         return Some(DocumentRef::Act(uuid));
     }
-    if let Some(uuid) = id.strip_prefix("inv:").and_then(|v| Uuid::parse_str(v).ok()) {
+    if let Some(uuid) = id
+        .strip_prefix("inv:")
+        .and_then(|v| Uuid::parse_str(v).ok())
+    {
         return Some(DocumentRef::Invoice(uuid));
     }
     id.strip_prefix("wbl:")
@@ -203,7 +212,10 @@ fn split_visible_notes_and_chain_parent(notes: Option<&str>) -> (String, Option<
     (visible, parent_ref)
 }
 
-fn compose_notes_with_chain_parent(visible_notes: &str, parent_ref: Option<&str>) -> Option<String> {
+fn compose_notes_with_chain_parent(
+    visible_notes: &str,
+    parent_ref: Option<&str>,
+) -> Option<String> {
     let visible = visible_notes.trim();
     let parent_line = parent_ref
         .map(str::trim)
@@ -351,7 +363,8 @@ async fn load_document_snapshot(
                 kind: "act".to_string(),
                 number: act.number.clone(),
                 counterparty_id: act.counterparty_id,
-                counterparty_name: load_counterparty_name(pool, company_id, act.counterparty_id).await?,
+                counterparty_name: load_counterparty_name(pool, company_id, act.counterparty_id)
+                    .await?,
                 date: act.date,
                 total_amount: act.total_amount,
                 status: act.status.as_str().to_string(),
@@ -368,7 +381,12 @@ async fn load_document_snapshot(
                 kind: "invoice".to_string(),
                 number: invoice.number.clone(),
                 counterparty_id: invoice.counterparty_id,
-                counterparty_name: load_counterparty_name(pool, company_id, invoice.counterparty_id).await?,
+                counterparty_name: load_counterparty_name(
+                    pool,
+                    company_id,
+                    invoice.counterparty_id,
+                )
+                .await?,
                 date: invoice.date,
                 total_amount: invoice.total_amount,
                 status: invoice.status.as_str().to_string(),
@@ -385,7 +403,12 @@ async fn load_document_snapshot(
                 kind: "waybill".to_string(),
                 number: waybill.number.clone(),
                 counterparty_id: waybill.counterparty_id,
-                counterparty_name: load_counterparty_name(pool, company_id, waybill.counterparty_id).await?,
+                counterparty_name: load_counterparty_name(
+                    pool,
+                    company_id,
+                    waybill.counterparty_id,
+                )
+                .await?,
                 date: waybill.date,
                 total_amount: waybill.total_amount,
                 status: waybill.status.as_str().to_string(),
@@ -406,15 +429,22 @@ async fn find_document_by_parent_ref(
         Some("act") => {
             for row in db::acts::list(pool, company_id, None).await? {
                 if let Some((act, items)) = db::acts::get_by_id(pool, row.id).await? {
-                    if split_visible_notes_and_chain_parent(act.notes.as_deref()).1.as_deref() == Some(parent_ref)
+                    if split_visible_notes_and_chain_parent(act.notes.as_deref())
+                        .1
+                        .as_deref()
+                        == Some(parent_ref)
                     {
                         return Ok(Some(DocumentSnapshot {
                             ref_id: document_ref_string("act", act.id),
                             kind: "act".to_string(),
                             number: act.number,
                             counterparty_id: act.counterparty_id,
-                            counterparty_name: load_counterparty_name(pool, company_id, act.counterparty_id)
-                                .await?,
+                            counterparty_name: load_counterparty_name(
+                                pool,
+                                company_id,
+                                act.counterparty_id,
+                            )
+                            .await?,
                             date: act.date,
                             total_amount: act.total_amount,
                             status: act.status.as_str().to_string(),
@@ -429,7 +459,9 @@ async fn find_document_by_parent_ref(
         Some("invoice") => {
             for row in db::invoices::list(pool, company_id, None).await? {
                 if let Some((invoice, items)) = db::invoices::get_by_id(pool, row.id).await? {
-                    if split_visible_notes_and_chain_parent(invoice.notes.as_deref()).1.as_deref()
+                    if split_visible_notes_and_chain_parent(invoice.notes.as_deref())
+                        .1
+                        .as_deref()
                         == Some(parent_ref)
                     {
                         return Ok(Some(DocumentSnapshot {
@@ -457,7 +489,9 @@ async fn find_document_by_parent_ref(
         Some("waybill") => {
             for row in db::waybills::list(pool, company_id, None).await? {
                 if let Some((waybill, items)) = db::waybills::get_by_id(pool, row.id).await? {
-                    if split_visible_notes_and_chain_parent(waybill.notes.as_deref()).1.as_deref()
+                    if split_visible_notes_and_chain_parent(waybill.notes.as_deref())
+                        .1
+                        .as_deref()
                         == Some(parent_ref)
                     {
                         return Ok(Some(DocumentSnapshot {
@@ -482,11 +516,17 @@ async fn find_document_by_parent_ref(
             }
             Ok(None)
         }
-        _ => Err(anyhow!("Невідомий тип документа для ланцюжка: {target_kind}")),
+        _ => Err(anyhow!(
+            "Невідомий тип документа для ланцюжка: {target_kind}"
+        )),
     }
 }
 
-async fn load_counterparty_name(pool: &PgPool, company_id: Uuid, counterparty_id: Uuid) -> Result<String> {
+async fn load_counterparty_name(
+    pool: &PgPool,
+    company_id: Uuid,
+    counterparty_id: Uuid,
+) -> Result<String> {
     let counterparty = db::counterparties::get_by_id(pool, company_id, counterparty_id)
         .await?
         .ok_or_else(|| anyhow!("Контрагента не знайдено"))?;
@@ -503,7 +543,8 @@ async fn build_existing_document_form(
             let (act, items) = db::acts::get_by_id(pool, id)
                 .await?
                 .ok_or_else(|| anyhow!("Акт не знайдено"))?;
-            let counterparty_name = load_counterparty_name(pool, company_id, act.counterparty_id).await?;
+            let counterparty_name =
+                load_counterparty_name(pool, company_id, act.counterparty_id).await?;
             Ok((
                 crate::DocumentDraftForm {
                     id: format!("act:{id}").into(),
@@ -513,7 +554,9 @@ async fn build_existing_document_form(
                     title: kind_title("act", false).into(),
                     number: act.number.into(),
                     date: date_to_str(act.date),
-                    notes: split_visible_notes_and_chain_parent(act.notes.as_deref()).0.into(),
+                    notes: split_visible_notes_and_chain_parent(act.notes.as_deref())
+                        .0
+                        .into(),
                 },
                 act_items_to_draft(items),
             ))
@@ -533,7 +576,9 @@ async fn build_existing_document_form(
                     title: kind_title("invoice", false).into(),
                     number: invoice.number.into(),
                     date: date_to_str(invoice.date),
-                    notes: split_visible_notes_and_chain_parent(invoice.notes.as_deref()).0.into(),
+                    notes: split_visible_notes_and_chain_parent(invoice.notes.as_deref())
+                        .0
+                        .into(),
                 },
                 invoice_items_to_draft(items),
             ))
@@ -553,7 +598,9 @@ async fn build_existing_document_form(
                     title: kind_title("waybill", false).into(),
                     number: waybill.number.into(),
                     date: date_to_str(waybill.date),
-                    notes: split_visible_notes_and_chain_parent(waybill.notes.as_deref()).0.into(),
+                    notes: split_visible_notes_and_chain_parent(waybill.notes.as_deref())
+                        .0
+                        .into(),
                 },
                 waybill_items_to_draft(items),
             ))
@@ -696,7 +743,10 @@ async fn save_document_form(
                     category_id: act.category_id,
                     date,
                     expected_payment_date: act.expected_payment_date,
-                    notes: compose_notes_with_chain_parent(form.notes.as_str(), parent_ref.as_deref()),
+                    notes: compose_notes_with_chain_parent(
+                        form.notes.as_str(),
+                        parent_ref.as_deref(),
+                    ),
                 },
                 draft_items_to_new_act(items)?,
             )
@@ -717,7 +767,10 @@ async fn save_document_form(
                     category_id: invoice.category_id,
                     date,
                     expected_payment_date: invoice.expected_payment_date,
-                    notes: compose_notes_with_chain_parent(form.notes.as_str(), parent_ref.as_deref()),
+                    notes: compose_notes_with_chain_parent(
+                        form.notes.as_str(),
+                        parent_ref.as_deref(),
+                    ),
                 },
                 draft_items_to_new_invoice(items)?,
             )
@@ -737,7 +790,10 @@ async fn save_document_form(
                     contract_id: waybill.contract_id,
                     category_id: waybill.category_id,
                     date,
-                    notes: compose_notes_with_chain_parent(form.notes.as_str(), parent_ref.as_deref()),
+                    notes: compose_notes_with_chain_parent(
+                        form.notes.as_str(),
+                        parent_ref.as_deref(),
+                    ),
                 },
                 draft_items_to_new_waybill(items)?,
             )
@@ -778,7 +834,10 @@ async fn load_document_chain(
             .ok_or_else(|| anyhow!("Некоректний parent link у документі {}", current.number))?;
         let parent = load_document_snapshot(pool, company_id, parent_doc_ref).await?;
         if visited.contains(&parent.ref_id) {
-            tracing::warn!("chain: виявлено цикл у ланцюжку документів при обробці {}", current.number);
+            tracing::warn!(
+                "chain: виявлено цикл у ланцюжку документів при обробці {}",
+                current.number
+            );
             break;
         }
         visited.insert(parent.ref_id.clone());
@@ -799,39 +858,36 @@ async fn load_document_chain(
 
     if waybill.is_none() {
         if let Some(act_doc) = act.as_ref() {
-            waybill = find_document_by_parent_ref(pool, company_id, &act_doc.ref_id, "waybill").await?;
-        } else if let Some(invoice_doc) = invoice.as_ref() {
             waybill =
-                find_document_by_parent_ref(pool, company_id, &invoice_doc.ref_id, "waybill").await?;
+                find_document_by_parent_ref(pool, company_id, &act_doc.ref_id, "waybill").await?;
+        } else if let Some(invoice_doc) = invoice.as_ref() {
+            waybill = find_document_by_parent_ref(pool, company_id, &invoice_doc.ref_id, "waybill")
+                .await?;
         }
     }
 
-    Ok([
-        ("invoice", invoice),
-        ("act", act),
-        ("waybill", waybill),
-    ]
-    .into_iter()
-    .map(|(kind, document)| crate::ChainStep {
-        doc_type: kind.into(),
-        doc_number: document
-            .as_ref()
-            .map(|doc| doc.number.clone())
-            .unwrap_or_default()
-            .into(),
-        amount_str: document
-            .as_ref()
-            .map(|doc| format_money_ua(doc.total_amount))
-            .unwrap_or_default()
-            .into(),
-        status: document
-            .as_ref()
-            .map(|doc| doc.status.clone())
-            .unwrap_or_default()
-            .into(),
-        exists: document.is_some(),
-    })
-    .collect())
+    Ok([("invoice", invoice), ("act", act), ("waybill", waybill)]
+        .into_iter()
+        .map(|(kind, document)| crate::ChainStep {
+            doc_type: kind.into(),
+            doc_number: document
+                .as_ref()
+                .map(|doc| doc.number.clone())
+                .unwrap_or_default()
+                .into(),
+            amount_str: document
+                .as_ref()
+                .map(|doc| format_money_ua(doc.total_amount))
+                .unwrap_or_default()
+                .into(),
+            status: document
+                .as_ref()
+                .map(|doc| doc.status.clone())
+                .unwrap_or_default()
+                .into(),
+            exists: document.is_some(),
+        })
+        .collect())
 }
 
 pub async fn create_chain_draft_from_source(
@@ -855,7 +911,10 @@ pub async fn create_chain_draft_from_source(
     }
 
     let chain_steps = load_document_chain(pool, company_id, source_ref).await?;
-    if chain_steps.iter().any(|step| step.doc_type == target_kind && step.exists) {
+    if chain_steps
+        .iter()
+        .any(|step| step.doc_type == target_kind && step.exists)
+    {
         return Err(anyhow!("Документ цього типу в ланцюжку вже існує"));
     }
 
@@ -966,7 +1025,9 @@ pub async fn create_chain_draft_from_source(
                 draft_items,
             ))
         }
-        _ => Err(anyhow!("Невідомий тип документа для створення: {target_kind}")),
+        _ => Err(anyhow!(
+            "Невідомий тип документа для створення: {target_kind}"
+        )),
     }
 }
 
@@ -1020,12 +1081,12 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                     DocumentRef::Act(uuid) => {
                         db::acts::advance_status(ctx.pool(), uuid).await.map(|_| ())
                     }
-                    DocumentRef::Invoice(uuid) => {
-                        db::invoices::advance_status(ctx.pool(), uuid).await.map(|_| ())
-                    }
-                    DocumentRef::Waybill(uuid) => {
-                        db::waybills::advance_status(ctx.pool(), uuid).await.map(|_| ())
-                    }
+                    DocumentRef::Invoice(uuid) => db::invoices::advance_status(ctx.pool(), uuid)
+                        .await
+                        .map(|_| ()),
+                    DocumentRef::Waybill(uuid) => db::waybills::advance_status(ctx.pool(), uuid)
+                        .await
+                        .map(|_| ()),
                 };
 
                 match result {
@@ -1057,15 +1118,9 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                 };
 
                 let result = match doc_ref {
-                    DocumentRef::Act(uuid) => {
-                        db::acts::delete(ctx.pool(), uuid).await
-                    }
-                    DocumentRef::Invoice(uuid) => {
-                        db::invoices::delete(ctx.pool(), uuid).await
-                    }
-                    DocumentRef::Waybill(uuid) => {
-                        db::waybills::delete(ctx.pool(), uuid).await
-                    }
+                    DocumentRef::Act(uuid) => db::acts::delete(ctx.pool(), uuid).await,
+                    DocumentRef::Invoice(uuid) => db::invoices::delete(ctx.pool(), uuid).await,
+                    DocumentRef::Waybill(uuid) => db::waybills::delete(ctx.pool(), uuid).await,
                 };
 
                 match result {
@@ -1108,7 +1163,10 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
             let ui_weak = ui_weak.clone();
             tokio::spawn(async move {
                 let Ok(counterparty_id) = Uuid::parse_str(&selected_counterparty) else {
-                    notify_user("Помилка створення", "Некоректний ідентифікатор контрагента.");
+                    notify_user(
+                        "Помилка створення",
+                        "Некоректний ідентифікатор контрагента.",
+                    );
                     return;
                 };
 
@@ -1179,7 +1237,10 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
             let id = id.to_string();
             tokio::spawn(async move {
                 let Some(doc_ref) = parse_document_ref(&id) else {
-                    notify_user("Помилка редагування", "Некоректний ідентифікатор документа.");
+                    notify_user(
+                        "Помилка редагування",
+                        "Некоректний ідентифікатор документа.",
+                    );
                     return;
                 };
 
@@ -1242,10 +1303,14 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                             db::acts::advance_status(ctx.pool(), uuid).await.map(|_| ())
                         }
                         DocumentRef::Invoice(uuid) => {
-                            db::invoices::advance_status(ctx.pool(), uuid).await.map(|_| ())
+                            db::invoices::advance_status(ctx.pool(), uuid)
+                                .await
+                                .map(|_| ())
                         }
                         DocumentRef::Waybill(uuid) => {
-                            db::waybills::advance_status(ctx.pool(), uuid).await.map(|_| ())
+                            db::waybills::advance_status(ctx.pool(), uuid)
+                                .await
+                                .map(|_| ())
                         }
                     };
 
@@ -1320,10 +1385,14 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                             db::acts::advance_status(ctx.pool(), uuid).await.map(|_| ())
                         }
                         DocumentRef::Invoice(uuid) => {
-                            db::invoices::advance_status(ctx.pool(), uuid).await.map(|_| ())
+                            db::invoices::advance_status(ctx.pool(), uuid)
+                                .await
+                                .map(|_| ())
                         }
                         DocumentRef::Waybill(uuid) => {
-                            db::waybills::advance_status(ctx.pool(), uuid).await.map(|_| ())
+                            db::waybills::advance_status(ctx.pool(), uuid)
+                                .await
+                                .map(|_| ())
                         }
                     };
 
@@ -1358,7 +1427,8 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                 );
 
                 if result.has_successes() {
-                    let _ = crate::bootstrap::refresh_screen(ui_weak, ctx, AppScreen::Documents).await;
+                    let _ =
+                        crate::bootstrap::refresh_screen(ui_weak, ctx, AppScreen::Documents).await;
                 }
             });
         }
@@ -1437,7 +1507,8 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                 );
 
                 if result.has_successes() {
-                    let _ = crate::bootstrap::refresh_screen(ui_weak, ctx, AppScreen::Documents).await;
+                    let _ =
+                        crate::bootstrap::refresh_screen(ui_weak, ctx, AppScreen::Documents).await;
                 }
             });
         }
@@ -1485,11 +1556,7 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                         let _ = ui_weak.upgrade_in_event_loop(move |ui| {
                             set_document_state(&ui, form, vec![], false, true);
                         });
-                        crate::bootstrap::spawn_refresh_screen(
-                            ui_weak,
-                            ctx,
-                            AppScreen::Documents,
-                        );
+                        crate::bootstrap::spawn_refresh_screen(ui_weak, ctx, AppScreen::Documents);
                     }
                     Err(error) => {
                         tracing::error!("documents: create draft failed: {error}");
@@ -1520,12 +1587,7 @@ pub fn wire_document_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
                         let _ = ui_weak.upgrade_in_event_loop(move |ui| {
                             ui.set_show_doc_editor(false);
                         });
-                        crate::bootstrap::refresh_screen(
-                            ui_weak,
-                            ctx,
-                            AppScreen::Documents,
-                        )
-                        .await;
+                        crate::bootstrap::refresh_screen(ui_weak, ctx, AppScreen::Documents).await;
                         notify_user("Документ збережено", "Шапку документа оновлено.");
                     }
                     Err(error) => {
@@ -1708,14 +1770,17 @@ mod tests {
     fn optional_string_trims_empty_values() {
         assert_eq!(super::optional_string(""), None);
         assert_eq!(super::optional_string("   "), None);
-        assert_eq!(super::optional_string(" Нотатка "), Some("Нотатка".to_string()));
+        assert_eq!(
+            super::optional_string(" Нотатка "),
+            Some("Нотатка".to_string())
+        );
     }
 
     #[test]
     fn split_notes_extracts_parent_ref() {
-        let (visible, parent) = super::split_visible_notes_and_chain_parent(
-            Some("Видно користувачу\n\n[chain-parent:act:some-uuid]"),
-        );
+        let (visible, parent) = super::split_visible_notes_and_chain_parent(Some(
+            "Видно користувачу\n\n[chain-parent:act:some-uuid]",
+        ));
         assert_eq!(visible, "Видно користувачу");
         assert_eq!(parent.as_deref(), Some("act:some-uuid"));
     }
@@ -1745,8 +1810,7 @@ mod tests {
     #[test]
     fn compose_roundtrip_preserves_both_parts() {
         let composed = super::compose_notes_with_chain_parent("Примітка", Some("inv:some-uuid"));
-        let (visible, parent) =
-            super::split_visible_notes_and_chain_parent(composed.as_deref());
+        let (visible, parent) = super::split_visible_notes_and_chain_parent(composed.as_deref());
         assert_eq!(visible, "Примітка");
         assert_eq!(parent.as_deref(), Some("inv:some-uuid"));
     }

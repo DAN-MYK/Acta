@@ -243,6 +243,28 @@ pub async fn find_by_bas_id(pool: &PgPool, bas_id: &str) -> Result<Option<Counte
     Ok(row)
 }
 
+/// Знайти контрагента за ЄДРПОУ в межах компанії.
+pub async fn find_by_edrpou(
+    pool: &PgPool,
+    company_id: Uuid,
+    edrpou: &str,
+) -> Result<Option<Counterparty>> {
+    let row = sqlx::query_as::<_, Counterparty>(
+        r#"
+        SELECT id, name, edrpou, ipn, iban, address, phone, email, notes,
+               is_archived, bas_id, created_at, updated_at
+        FROM counterparties
+        WHERE company_id = $1 AND edrpou = $2
+        "#,
+    )
+    .bind(company_id)
+    .bind(edrpou)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -259,5 +281,6 @@ mod tests {
         let _ = archive;
         let _ = count_archived;
         let _ = find_by_bas_id;
+        let _ = find_by_edrpou;
     }
 }

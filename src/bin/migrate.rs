@@ -1,13 +1,21 @@
 // Утиліта імпорту даних з BAS.
 //
 // Поточний baseline:
-// - перевіряє вхідну директорію
-// - рекурсивно знаходить підтримувані файли експорту
-// - класифікує їх за типом сутності
-// - у dry-run виводить план імпорту без змін у БД
+// - counterparties XML
+// - contracts XML
+// - acts XML
+// - dry-run теж підключається до БД і показує реальний create/update/skip plan
 
 use std::fs;
 use std::path::{Path, PathBuf};
+
+use acta::import::bas_acts::{self, ActImportAction, ActImportReport};
+use acta::import::bas_contracts::{self, ContractImportAction, ContractImportReport};
+use acta::import::bas_counterparties::{self, CounterpartyImportReport, ImportAction};
+use anyhow::{anyhow, Context, Result};
+use sqlx::postgres::PgPoolOptions;
+use sqlx::PgPool;
+use uuid::Uuid;
 
 #[derive(Debug, PartialEq, Eq)]
 struct CliOptions {
@@ -65,7 +73,10 @@ impl DiscoveryReport {
     }
 
     fn count_by_kind(&self, kind: BasArtifactKind) -> usize {
-        self.artifacts.iter().filter(|item| item.kind == kind).count()
+        self.artifacts
+            .iter()
+            .filter(|item| item.kind == kind)
+            .count()
     }
 }
 
@@ -113,15 +124,18 @@ fn classify_artifact(path: &Path) -> Option<BasArtifactKind> {
     let kind = match extension.as_str() {
         "csv" => BasArtifactKind::BankCsv,
         "xml" | "xlsx" | "xls" => {
-            if name.contains("контраг") || name.contains("counterpart") || name.contains("client") {
+            if name.contains("контраг") || name.contains("counterpart") || name.contains("client")
+            {
                 BasArtifactKind::Counterparties
             } else if name.contains("догов") || name.contains("contract") {
                 BasArtifactKind::Contracts
             } else if name.contains("акт") || name.contains("act") {
                 BasArtifactKind::Acts
-            } else if name.contains("наклад") || name.contains("invoice") || name.contains("рах") {
+            } else if name.contains("наклад") || name.contains("invoice") || name.contains("рах")
+            {
                 BasArtifactKind::Invoices
-            } else if name.contains("плат") || name.contains("payment") || name.contains("bank") {
+            } else if name.contains("плат") || name.contains("payment") || name.contains("bank")
+            {
                 BasArtifactKind::Payments
             } else {
                 BasArtifactKind::Unknown
@@ -138,7 +152,10 @@ fn discover_artifacts(root: &Path) -> Result<DiscoveryReport, String> {
         return Err(format!("Вхідну директорію не знайдено: {}", root.display()));
     }
     if !root.is_dir() {
-        return Err(format!("Очікується директорія, а не файл: {}", root.display()));
+        return Err(format!(
+            "Очікується директорія, а не файл: {}",
+            root.display()
+        ));
     }
 
     let mut report = DiscoveryReport {
@@ -148,15 +165,21 @@ fn discover_artifacts(root: &Path) -> Result<DiscoveryReport, String> {
     };
 
     visit_dir(root, &mut report)?;
-    report.artifacts.sort_by(|left, right| left.path.cmp(&right.path));
+    report
+        .artifacts
+        .sort_by(|left, right| left.path.cmp(&right.path));
     report.skipped_files.sort();
 
     Ok(report)
 }
 
 fn visit_dir(path: &Path, report: &mut DiscoveryReport) -> Result<(), String> {
-    let entries = fs::read_dir(path)
-        .map_err(|error| format!("Не вдалося прочитати директорію {}: {error}", path.display()))?;
+    let entries = fs::read_dir(path).map_err(|error| {
+        format!(
+            "Не вдалося прочитати директорію {}: {error}",
+            path.display()
+        )
+    })?;
 
     for entry in entries {
         let entry = entry.map_err(|error| {
@@ -194,10 +217,10 @@ fn visit_dir(path: &Path, report: &mut DiscoveryReport) -> Result<(), String> {
     Ok(())
 }
 
-fn print_report(report: &DiscoveryReport, dry_run: bool) {
+fn print_discovery_report(report: &DiscoveryReport, dry_run: bool) {
     println!("Вхідна директорія: {}", report.root.display());
     if dry_run {
-        println!("Режим dry-run: зміни до БД не застосовуються");
+        println!("Режим dry-run: зміни до БД не застосовуються, але preview звіряється з поточним станом БД");
     }
 
     println!(
@@ -219,26 +242,151 @@ fn print_report(report: &DiscoveryReport, dry_run: bool) {
             println!("  - {}: {}", kind.label(), count);
         }
     }
+}
 
-    if report.artifacts.is_empty() {
-        println!("Підтримувані файли не знайдено.");
-        return;
-    }
+fn is_xml_artifact(path: &Path) -> bool {
+    path.extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.eq_ignore_ascii_case("xml"))
+        .unwrap_or(false)
+}
 
-    println!("План імпорту:");
-    for artifact in &report.artifacts {
-        println!("  - [{}] {}", artifact.kind.label(), artifact.path.display());
-    }
+fn collect_supported_artifacts<'a>(
+    report: &'a DiscoveryReport,
+    kind: BasArtifactKind,
+) -> Vec<&'a BasArtifact> {
+    report
+        .artifacts
+        .iter()
+        .filter(|artifact| artifact.kind == kind)
+        .filter(|artifact| is_xml_artifact(&artifact.path))
+        .collect()
+}
 
-    if !report.skipped_files.is_empty() {
-        println!(
-            "Пропущено {} файлів з непідтримуваними розширеннями.",
-            report.skipped_files.len()
-        );
+fn print_counterparty_report(path: &Path, report: &CounterpartyImportReport, dry_run: bool) {
+    let mode = if dry_run { "dry-run" } else { "import" };
+    println!(
+        "[{}] {}: parsed={}, create={}, update={}, skipped={}",
+        mode,
+        path.display(),
+        report.parsed,
+        report.created,
+        report.updated,
+        report.skipped
+    );
+
+    for row in &report.rows {
+        let action = match row.action {
+            ImportAction::Create => "create",
+            ImportAction::Update => "update",
+        };
+        let bas_id = row.bas_id.as_deref().unwrap_or("-");
+        println!("  - {} | {} | {}", action, bas_id, row.name);
     }
 }
 
-fn main() {
+fn print_contract_report(path: &Path, report: &ContractImportReport, dry_run: bool) {
+    let mode = if dry_run { "dry-run" } else { "import" };
+    println!(
+        "[{}] {}: parsed={}, create={}, update={}, skipped={}",
+        mode,
+        path.display(),
+        report.parsed,
+        report.created,
+        report.updated,
+        report.skipped
+    );
+
+    for row in &report.rows {
+        let action = match row.action {
+            ContractImportAction::Create => "create",
+            ContractImportAction::Update => "update",
+            ContractImportAction::Skip => "skip",
+        };
+        let bas_id = row.bas_id.as_deref().unwrap_or("-");
+        if let Some(note) = &row.note {
+            println!("  - {} | {} | {} | {}", action, bas_id, row.number, note);
+        } else {
+            println!("  - {} | {} | {}", action, bas_id, row.number);
+        }
+    }
+}
+
+fn print_act_report(path: &Path, report: &ActImportReport, dry_run: bool) {
+    let mode = if dry_run { "dry-run" } else { "import" };
+    println!(
+        "[{}] {}: parsed={}, create={}, update={}, skipped={}",
+        mode,
+        path.display(),
+        report.parsed,
+        report.created,
+        report.updated,
+        report.skipped
+    );
+
+    for row in &report.rows {
+        let action = match row.action {
+            ActImportAction::Create => "create",
+            ActImportAction::Update => "update",
+            ActImportAction::Skip => "skip",
+        };
+        let bas_id = row.bas_id.as_deref().unwrap_or("-");
+        if let Some(note) = &row.note {
+            println!("  - {} | {} | {} | {}", action, bas_id, row.number, note);
+        } else {
+            println!("  - {} | {} | {}", action, bas_id, row.number);
+        }
+    }
+}
+
+async fn connect_pool() -> Result<PgPool> {
+    let database_url = std::env::var("DATABASE_URL")
+        .context("DATABASE_URL не задано для BAS import preview/import")?;
+    let pool = PgPoolOptions::new()
+        .max_connections(5)
+        .connect(&database_url)
+        .await?;
+    Ok(pool)
+}
+
+async fn first_company_id(pool: &PgPool) -> Result<Uuid> {
+    let company = acta::db::companies::list(pool)
+        .await?
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow!("У БД немає активної компанії для імпорту"))?;
+    Ok(company.id)
+}
+
+async fn process_counterparties_artifact(
+    path: &Path,
+    pool: &PgPool,
+    company_id: Uuid,
+    dry_run: bool,
+) -> Result<CounterpartyImportReport> {
+    bas_counterparties::import_counterparties_from_xml(pool, company_id, path, dry_run).await
+}
+
+async fn process_contracts_artifact(
+    path: &Path,
+    pool: &PgPool,
+    company_id: Uuid,
+    dry_run: bool,
+) -> Result<ContractImportReport> {
+    bas_contracts::import_contracts_from_xml(pool, company_id, path, dry_run).await
+}
+
+async fn process_acts_artifact(
+    path: &Path,
+    pool: &PgPool,
+    company_id: Uuid,
+    dry_run: bool,
+) -> Result<ActImportReport> {
+    bas_acts::import_acts_from_xml(pool, company_id, path, dry_run).await
+}
+
+#[tokio::main]
+async fn main() {
     let args: Vec<String> = std::env::args().collect();
 
     let parsed = match parse_args(&args) {
@@ -268,19 +416,86 @@ fn main() {
         }
     };
 
-    print_report(&report, opts.dry_run);
+    print_discovery_report(&report, opts.dry_run);
 
-    if !opts.dry_run {
-        println!("Імпорт у БД ще не реалізований. Запустіть з --dry-run для перевірки експорту.");
-        std::process::exit(2);
+    let counterparty_artifacts =
+        collect_supported_artifacts(&report, BasArtifactKind::Counterparties);
+    let contract_artifacts = collect_supported_artifacts(&report, BasArtifactKind::Contracts);
+    let act_artifacts = collect_supported_artifacts(&report, BasArtifactKind::Acts);
+
+    if counterparty_artifacts.is_empty()
+        && contract_artifacts.is_empty()
+        && act_artifacts.is_empty()
+    {
+        println!("Не знайдено XML-файлів для реалізованих BAS importer-ів.");
+        if report.recognized_count() > 0 {
+            println!("Накладні, платежі та не-XML варіанти ще не реалізовані.");
+        }
+        return;
+    }
+
+    let pool = match connect_pool().await {
+        Ok(pool) => pool,
+        Err(error) => {
+            eprintln!("Помилка підключення до БД: {error}");
+            std::process::exit(1);
+        }
+    };
+    let company_id = match first_company_id(&pool).await {
+        Ok(company_id) => company_id,
+        Err(error) => {
+            eprintln!("Помилка вибору компанії: {error}");
+            std::process::exit(1);
+        }
+    };
+
+    let mut failed = false;
+
+    for artifact in counterparty_artifacts {
+        match process_counterparties_artifact(&artifact.path, &pool, company_id, opts.dry_run).await
+        {
+            Ok(import_report) => {
+                print_counterparty_report(&artifact.path, &import_report, opts.dry_run)
+            }
+            Err(error) => {
+                failed = true;
+                eprintln!("Помилка імпорту {}: {error}", artifact.path.display());
+            }
+        }
+    }
+
+    for artifact in contract_artifacts {
+        match process_contracts_artifact(&artifact.path, &pool, company_id, opts.dry_run).await {
+            Ok(import_report) => {
+                print_contract_report(&artifact.path, &import_report, opts.dry_run)
+            }
+            Err(error) => {
+                failed = true;
+                eprintln!("Помилка імпорту {}: {error}", artifact.path.display());
+            }
+        }
+    }
+
+    for artifact in act_artifacts {
+        match process_acts_artifact(&artifact.path, &pool, company_id, opts.dry_run).await {
+            Ok(import_report) => print_act_report(&artifact.path, &import_report, opts.dry_run),
+            Err(error) => {
+                failed = true;
+                eprintln!("Помилка імпорту {}: {error}", artifact.path.display());
+            }
+        }
+    }
+
+    if failed {
+        std::process::exit(1);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        classify_artifact, discover_artifacts, parse_args, BasArtifactKind, CliOptions,
-        ParseOutcome,
+        classify_artifact, collect_supported_artifacts, discover_artifacts, is_xml_artifact,
+        parse_args, BasArtifactKind, CliOptions, DiscoveryReport, ParseOutcome,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -349,9 +564,27 @@ mod tests {
     }
 
     #[test]
+    fn classify_artifact_detects_contracts_and_acts() {
+        assert_eq!(
+            classify_artifact(Path::new("contracts_export.xml")),
+            Some(BasArtifactKind::Contracts)
+        );
+        assert_eq!(
+            classify_artifact(Path::new("Акти.xml")),
+            Some(BasArtifactKind::Acts)
+        );
+    }
+
+    #[test]
     fn classify_artifact_detects_bank_csv() {
         let kind = classify_artifact(Path::new("statement.csv"));
         assert_eq!(kind, Some(BasArtifactKind::BankCsv));
+    }
+
+    #[test]
+    fn xml_filter_accepts_only_xml_files() {
+        assert!(is_xml_artifact(Path::new("contracts.xml")));
+        assert!(!is_xml_artifact(Path::new("contracts.xlsx")));
     }
 
     #[test]
@@ -361,12 +594,16 @@ mod tests {
         fs::create_dir_all(&nested).expect("вкладена директорія має створюватися");
 
         fs::write(root.join("Контрагенти.xml"), "<xml/>").expect("тестовий файл має створюватися");
-        fs::write(nested.join("acts_export.xml"), "<xml/>").expect("тестовий файл має створюватися");
+        fs::write(nested.join("contracts_export.xml"), "<xml/>")
+            .expect("тестовий файл має створюватися");
+        fs::write(nested.join("acts_export.xml"), "<xml/>")
+            .expect("тестовий файл має створюватися");
         fs::write(nested.join("notes.txt"), "skip").expect("тестовий файл має створюватися");
 
         let report = discover_artifacts(&root).expect("discovery має спрацювати");
-        assert_eq!(report.recognized_count(), 2);
+        assert_eq!(report.recognized_count(), 3);
         assert_eq!(report.count_by_kind(BasArtifactKind::Counterparties), 1);
+        assert_eq!(report.count_by_kind(BasArtifactKind::Contracts), 1);
         assert_eq!(report.count_by_kind(BasArtifactKind::Acts), 1);
         assert_eq!(report.skipped_files.len(), 1);
 
@@ -379,5 +616,31 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
         let error = discover_artifacts(&root).expect_err("має бути помилка для відсутньої папки");
         assert!(error.contains("Вхідну директорію не знайдено"));
+    }
+
+    #[test]
+    fn collect_supported_artifacts_keeps_only_xml_of_requested_kind() {
+        let report = DiscoveryReport {
+            root: PathBuf::from("."),
+            artifacts: vec![
+                super::BasArtifact {
+                    path: PathBuf::from("contracts.xml"),
+                    kind: BasArtifactKind::Contracts,
+                },
+                super::BasArtifact {
+                    path: PathBuf::from("contracts.xlsx"),
+                    kind: BasArtifactKind::Contracts,
+                },
+                super::BasArtifact {
+                    path: PathBuf::from("acts.xml"),
+                    kind: BasArtifactKind::Acts,
+                },
+            ],
+            skipped_files: Vec::new(),
+        };
+
+        let contracts = collect_supported_artifacts(&report, BasArtifactKind::Contracts);
+        assert_eq!(contracts.len(), 1);
+        assert_eq!(contracts[0].path, PathBuf::from("contracts.xml"));
     }
 }

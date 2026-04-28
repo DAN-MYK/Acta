@@ -77,7 +77,14 @@ $notifier.Show($toast)
         );
 
         let status = Command::new("powershell.exe")
-            .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", &script])
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                &script,
+            ])
             .status()
             .map_err(|error| error.to_string())?;
 

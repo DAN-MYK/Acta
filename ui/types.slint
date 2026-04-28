@@ -184,6 +184,7 @@ export struct TaskItem {
     reminder-at: string,   // "dd.mm.yyyy" or ""
     done: bool,
     status-label: string,
+    status-code: string,   // "open" | "in_progress" | "done" | "cancelled"
     priority: Priority,
     linked-doc: string,    // document id or ""
 }

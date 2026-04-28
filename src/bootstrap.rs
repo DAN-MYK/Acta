@@ -709,7 +709,9 @@ fn wire_stub_callbacks(ui: &AppWindow, ctx: &Arc<AppCtx>) {
             let ui_weak = ui_weak.clone();
             let id = id.to_string();
             tokio::spawn(async move {
-                match crate::ui::documents::load_chain_from_id(ctx.pool(), ctx.company_id(), &id).await {
+                match crate::ui::documents::load_chain_from_id(ctx.pool(), ctx.company_id(), &id)
+                    .await
+                {
                     Ok(steps) => {
                         let step_count = steps.len();
                         let _ = ui_weak.upgrade_in_event_loop(move |ui| {

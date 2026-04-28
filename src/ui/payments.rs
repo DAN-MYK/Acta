@@ -315,6 +315,39 @@ pub fn wire_payment_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
             });
         }
     });
+
+    ui.on_pay_unreconcile({
+        let ctx = ctx.clone();
+        let ui_weak = ui.as_weak();
+        move |id| {
+            let ctx = ctx.clone();
+            let ui_weak = ui_weak.clone();
+            let id = id.to_string();
+            tokio::spawn(async move {
+                let Ok(payment_id) = Uuid::parse_str(&id) else {
+                    notify_user(
+                        "Помилка скасування звірки",
+                        "Невалідний ідентифікатор платежу",
+                    );
+                    return;
+                };
+
+                match db::payments::mark_unreconciled(ctx.pool(), payment_id).await {
+                    Ok(()) => {
+                        reload_payments(ui_weak, ctx).await;
+                        notify_user(
+                            "Звірку скасовано",
+                            "Платіж знову позначено як незвірений",
+                        );
+                    }
+                    Err(error) => {
+                        tracing::error!("payments: unreconcile failed: {error}");
+                        notify_user("Помилка скасування звірки", &error.to_string());
+                    }
+                }
+            });
+        }
+    });
 }
 
 #[cfg(test)]

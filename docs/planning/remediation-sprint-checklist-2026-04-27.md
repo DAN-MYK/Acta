@@ -12,12 +12,12 @@
 
 ## Workstream 1. Documents
 
-- [ ] Реалізувати `doc_new`
-- [ ] Реалізувати `doc_open`
-- [ ] Реалізувати `doc_edit`
-- [ ] Визначити долю `doc_more_actions`
-- [ ] Визначити долю bulk-дій
-- [ ] Якщо треба, прибрати misleading UI/state для нереалізованих дій
+- [x] Реалізувати `doc_new`
+- [x] Реалізувати `doc_open`
+- [x] Реалізувати `doc_edit`
+- [x] Визначити долю `doc_more_actions`
+- [x] Визначити долю bulk-дій
+- [x] Якщо треба, прибрати misleading UI/state для нереалізованих дій
 
 ## Workstream 2. Tasks
 

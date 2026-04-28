@@ -63,6 +63,7 @@ component PaymentRow inherits Rectangle {
     in property <PaymentItem> payment;
     in property <image> icon-link;
     callback link-clicked(string);
+    callback unreconcile-clicked(string);
 
     property <bool> hovered: false;
 
@@ -126,16 +127,47 @@ component PaymentRow inherits Rectangle {
             horizontal-stretch: 0;
             width: 180px;
 
-            if payment.matched-doc != "" : HorizontalLayout {
-                spacing: 6px;
+            if payment.matched-doc != "" : VerticalLayout {
+                spacing: 4px;
 
-                InlineIcon { icon: root.icon-link; icon-size: 11px; tint: AppTheme.success; }
-                Text {
-                    text: payment.matched-doc;
-                    color: AppTheme.accent-text;
-                    font-family: AppTheme.font-mono;
-                    font-size: 11.5px;
-                    vertical-alignment: center;
+                HorizontalLayout {
+                    spacing: 6px;
+
+                    InlineIcon { icon: root.icon-link; icon-size: 11px; tint: AppTheme.success; }
+                    Text {
+                        text: payment.matched-doc;
+                        color: AppTheme.accent-text;
+                        font-family: AppTheme.font-mono;
+                        font-size: 11.5px;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    height: 22px;
+                    min-width: unlink-label.preferred-width + 12px;
+                    background: unlink-hover.has-hover ? AppTheme.bg-hover : transparent;
+                    border-width: unlink-hover.has-hover ? 1px : 0px;
+                    border-color: AppTheme.border;
+                    border-radius: AppTheme.radius-sm;
+
+                    HorizontalLayout {
+                        padding-left: 6px;
+                        padding-right: 6px;
+
+                        unlink-label := Text {
+                            text: "Скасувати звірку";
+                            color: AppTheme.text-muted;
+                            font-size: 11px;
+                            font-family: AppTheme.font-sans;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    unlink-hover := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.unreconcile-clicked(root.payment.id); }
+                    }
                 }
             }
 
@@ -223,6 +255,7 @@ export component Payments inherits Rectangle {
     callback sync-bank;
     callback new-payment;
     callback link-payment(string);
+    callback unreconcile-payment(string);
 
     background: AppTheme.bg;
 
@@ -329,6 +362,7 @@ export component Payments inherits Rectangle {
                         payment: payment;
                         icon-link: root.icon-link;
                         link-clicked(id) => { root.link-payment(id); }
+                        unreconcile-clicked(id) => { root.unreconcile-payment(id); }
                     }
                 }
             }

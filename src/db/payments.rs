@@ -311,6 +311,15 @@ pub async fn mark_reconciled(pool: &PgPool, id: Uuid) -> Result<()> {
     Ok(())
 }
 
+/// Зняти позначку звірки з платежу (is_reconciled = false).
+pub async fn mark_unreconciled(pool: &PgPool, id: Uuid) -> Result<()> {
+    sqlx::query("UPDATE payments SET is_reconciled = FALSE, updated_at = NOW() WHERE id = $1")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Видалити платіж.
 pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
     sqlx::query("DELETE FROM payments WHERE id = $1")

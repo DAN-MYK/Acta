@@ -62,11 +62,9 @@ component NavItem inherits Rectangle {
     accessible-role: button;
     accessible-label: root.label;
 
-    property <bool> hovered: false;
-
     height: 36px;
     border-radius: AppTheme.radius-lg;
-    background: active ? AppTheme.bg-elevated : (hovered ? AppTheme.bg-hover : transparent);
+    background: active ? AppTheme.bg-elevated : (nav-touch.has-hover ? AppTheme.bg-hover : transparent);
     border-width: active ? 1px : 0px;
     border-color: AppTheme.border;
 
@@ -113,13 +111,8 @@ component NavItem inherits Rectangle {
         }
     }
 
-    TouchArea {
+    nav-touch := TouchArea {
         mouse-cursor: pointer;
-        pointer-event(e) => {
-            if (e.kind == PointerEventKind.move) {
-                root.hovered = self.has-hover;
-            }
-        }
         clicked => { root.clicked(); }
     }
 }
@@ -131,11 +124,9 @@ component SavedViewItem inherits Rectangle {
     in property <image> star-icon;
     callback clicked;
 
-    property <bool> hovered: false;
-
     height: 24px;
     border-radius: AppTheme.radius-sm;
-    background: hovered ? AppTheme.bg-hover : transparent;
+    background: svi-touch.has-hover ? AppTheme.bg-hover : transparent;
 
     HorizontalLayout {
         padding-left: 10px;
@@ -151,7 +142,7 @@ component SavedViewItem inherits Rectangle {
 
         Text {
             text: root.label;
-            color: hovered ? AppTheme.text : AppTheme.text-muted;
+            color: svi-touch.has-hover ? AppTheme.text : AppTheme.text-muted;
             font-size: 12px;
             font-family: AppTheme.font-sans;
             vertical-alignment: center;
@@ -170,13 +161,8 @@ component SavedViewItem inherits Rectangle {
         }
     }
 
-    TouchArea {
+    svi-touch := TouchArea {
         mouse-cursor: pointer;
-        pointer-event(e) => {
-            if (e.kind == PointerEventKind.move) {
-                root.hovered = self.has-hover;
-            }
-        }
         clicked => { root.clicked(); }
     }
 }
@@ -273,10 +259,8 @@ component PaletteItem inherits Rectangle {
     in property <string> meta: "";
     callback clicked;
 
-    property <bool> hovered: false;
-
     height: 36px;
-    background: hovered ? AppTheme.bg-subtle : transparent;
+    background: pi-touch.has-hover ? AppTheme.bg-subtle : transparent;
 
     HorizontalLayout {
         padding-left: 16px;
@@ -287,7 +271,7 @@ component PaletteItem inherits Rectangle {
         InlineIcon {
             icon: root.icon;
             icon-size: 14px;
-            tint: hovered ? AppTheme.text : AppTheme.text-muted;
+            tint: pi-touch.has-hover ? AppTheme.text : AppTheme.text-muted;
         }
 
         Text {
@@ -326,13 +310,8 @@ component PaletteItem inherits Rectangle {
         }
     }
 
-    TouchArea {
+    pi-touch := TouchArea {
         mouse-cursor: pointer;
-        pointer-event(e) => {
-            if (e.kind == PointerEventKind.move) {
-                root.hovered = self.has-hover;
-            }
-        }
         clicked => { root.clicked(); }
     }
 }

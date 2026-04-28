@@ -297,6 +297,24 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<(Act, Vec<ActIt
     Ok(Some((act, items)))
 }
 
+/// Знайти акт за bas_id для повторного імпорту без дублювання.
+pub async fn find_by_bas_id(pool: &PgPool, bas_id: &str) -> Result<Option<Act>> {
+    let act = sqlx::query_as::<_, Act>(
+        r#"
+        SELECT id, number, counterparty_id, contract_id, category_id, direction,
+               date, expected_payment_date, total_amount,
+               status, notes, bas_id, created_at, updated_at
+        FROM acts
+        WHERE bas_id = $1
+        "#,
+    )
+    .bind(bas_id)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(act)
+}
+
 /// Створити новий акт разом з позиціями в одній транзакції.
 ///
 /// Транзакція потрібна щоб акт без позицій або позиції без акту
@@ -616,12 +634,16 @@ mod tests {
         let _ = counterparties_for_select;
         let _ = list;
         let _ = list_filtered;
+        let _ = count_by_status;
+        let _ = get_kpi;
         let _ = get_by_id;
+        let _ = find_by_bas_id;
         let _ = create;
         let _ = update;
         let _ = change_status;
         let _ = get_for_edit;
         let _ = update_with_items;
         let _ = advance_status;
+        let _ = delete;
     }
 }

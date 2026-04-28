@@ -236,6 +236,24 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Contract> {
     Ok(row)
 }
 
+/// Знайти договір за bas_id для ідемпотентного імпорту з BAS.
+pub async fn find_by_bas_id(pool: &PgPool, bas_id: &str) -> Result<Option<Contract>> {
+    let row = sqlx::query_as::<_, Contract>(
+        r#"
+        SELECT id, company_id, counterparty_id, number, subject,
+               date, expires_at, amount, notes, bas_id, status,
+               created_at, updated_at
+        FROM contracts
+        WHERE bas_id = $1
+        "#,
+    )
+    .bind(bas_id)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row)
+}
+
 /// Створити новий договір.
 pub async fn create(pool: &PgPool, data: NewContract) -> Result<Contract> {
     let row = sqlx::query_as::<_, Contract>(
@@ -255,6 +273,45 @@ pub async fn create(pool: &PgPool, data: NewContract) -> Result<Contract> {
     .bind(data.date)
     .bind(data.expires_at)
     .bind(data.amount)
+    .fetch_one(pool)
+    .await?;
+    Ok(row)
+}
+
+/// Створити договір із повним payload для імпорту з BAS.
+pub async fn create_imported(
+    pool: &PgPool,
+    company_id: Uuid,
+    counterparty_id: Uuid,
+    number: &str,
+    subject: Option<&str>,
+    date: chrono::NaiveDate,
+    expires_at: Option<chrono::NaiveDate>,
+    amount: Option<rust_decimal::Decimal>,
+    notes: Option<&str>,
+    bas_id: Option<&str>,
+    status: ContractStatus,
+) -> Result<Contract> {
+    let row = sqlx::query_as::<_, Contract>(
+        r#"
+        INSERT INTO contracts
+            (company_id, counterparty_id, number, subject, date, expires_at, amount, notes, bas_id, status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        RETURNING id, company_id, counterparty_id, number, subject,
+                  date, expires_at, amount, notes, bas_id, status,
+                  created_at, updated_at
+        "#,
+    )
+    .bind(company_id)
+    .bind(counterparty_id)
+    .bind(number)
+    .bind(subject)
+    .bind(date)
+    .bind(expires_at)
+    .bind(amount)
+    .bind(notes)
+    .bind(bas_id)
+    .bind(status)
     .fetch_one(pool)
     .await?;
     Ok(row)
@@ -292,6 +349,48 @@ pub async fn update(pool: &PgPool, id: Uuid, data: UpdateContract) -> Result<Con
     Ok(row)
 }
 
+/// Оновити договір із повним payload під час імпорту з BAS.
+pub async fn update_imported(
+    pool: &PgPool,
+    id: Uuid,
+    number: &str,
+    subject: Option<&str>,
+    date: chrono::NaiveDate,
+    expires_at: Option<chrono::NaiveDate>,
+    amount: Option<rust_decimal::Decimal>,
+    status: ContractStatus,
+    notes: Option<&str>,
+) -> Result<Contract> {
+    let row = sqlx::query_as::<_, Contract>(
+        r#"
+        UPDATE contracts
+        SET number     = $2,
+            subject    = $3,
+            date       = $4,
+            expires_at = $5,
+            amount     = $6,
+            status     = $7,
+            notes      = $8,
+            updated_at = NOW()
+        WHERE id = $1
+        RETURNING id, company_id, counterparty_id, number, subject,
+                  date, expires_at, amount, notes, bas_id, status,
+                  created_at, updated_at
+        "#,
+    )
+    .bind(id)
+    .bind(number)
+    .bind(subject)
+    .bind(date)
+    .bind(expires_at)
+    .bind(amount)
+    .bind(status)
+    .bind(notes)
+    .fetch_one(pool)
+    .await?;
+    Ok(row)
+}
+
 /// Видалити договір.
 pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
     sqlx::query("DELETE FROM contracts WHERE id = $1")
@@ -299,4 +398,23 @@ pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
         .execute(pool)
         .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn db_contracts_public_api_is_exposed() {
+        let _ = list;
+        let _ = list_by_counterparty;
+        let _ = list_for_select;
+        let _ = get_by_id;
+        let _ = find_by_bas_id;
+        let _ = create;
+        let _ = create_imported;
+        let _ = update;
+        let _ = update_imported;
+        let _ = delete;
+    }
 }

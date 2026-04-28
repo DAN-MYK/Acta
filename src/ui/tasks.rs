@@ -92,6 +92,16 @@ fn parse_task_priority(value: &str) -> TaskPriority {
     }
 }
 
+fn parse_task_status(value: &str) -> Option<TaskStatus> {
+    match value {
+        "open" => Some(TaskStatus::Open),
+        "in_progress" => Some(TaskStatus::InProgress),
+        "done" => Some(TaskStatus::Done),
+        "cancelled" => Some(TaskStatus::Cancelled),
+        _ => None,
+    }
+}
+
 fn parse_optional_task_date(value: &str) -> Option<DateTime<Utc>> {
     let value = value.trim();
     if value.is_empty() {
@@ -159,8 +169,12 @@ fn build_day_events(tasks: &[Task]) -> Vec<crate::DayEvent> {
                     crate::DayEvent {
                         hour: reminder.hour() as i32,
                         title: task.title.clone().into(),
-                        subtitle: format!("Нагадування • {}", priority_label(&task.priority)).into(),
-                        is_primary: matches!(task.priority, TaskPriority::High | TaskPriority::Critical),
+                        subtitle: format!("Нагадування • {}", priority_label(&task.priority))
+                            .into(),
+                        is_primary: matches!(
+                            task.priority,
+                            TaskPriority::High | TaskPriority::Critical
+                        ),
                     },
                 ));
             }
@@ -180,7 +194,10 @@ fn build_day_events(tasks: &[Task]) -> Vec<crate::DayEvent> {
                             hour: due.hour() as i32,
                             title: task.title.clone().into(),
                             subtitle: "Дедлайн на сьогодні".into(),
-                            is_primary: matches!(task.priority, TaskPriority::High | TaskPriority::Critical),
+                            is_primary: matches!(
+                                task.priority,
+                                TaskPriority::High | TaskPriority::Critical
+                            ),
                         },
                     ));
                 }
@@ -188,12 +205,18 @@ fn build_day_events(tasks: &[Task]) -> Vec<crate::DayEvent> {
         }
     }
 
-    timed_events.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.title.as_str().cmp(b.1.title.as_str())));
+    timed_events.sort_by(|a, b| {
+        a.0.cmp(&b.0)
+            .then_with(|| a.1.title.as_str().cmp(b.1.title.as_str()))
+    });
 
     let mut events = Vec::new();
     for hour in 8..=18 {
         let mut has_entries = false;
-        for (_, event) in timed_events.iter().filter(|(event_hour, _)| *event_hour == hour) {
+        for (_, event) in timed_events
+            .iter()
+            .filter(|(event_hour, _)| *event_hour == hour)
+        {
             has_entries = true;
             events.push(event.clone());
         }
@@ -293,6 +316,47 @@ pub fn wire_task_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
     ui.on_task_more(|id| {
         tracing::info!("task_more: відкрито деталі задачі {id}");
     });
+
+    ui.on_task_status_set({
+        let ctx = ctx.clone();
+        let ui_weak = ui.as_weak();
+        move |id, status| {
+            let ctx = ctx.clone();
+            let ui_weak = ui_weak.clone();
+            let id_str = id.to_string();
+            let status_str = status.to_string();
+
+            tokio::spawn(async move {
+                let Ok(task_id) = Uuid::parse_str(&id_str) else {
+                    tracing::warn!("task_status_set: некоректний id задачі {id_str}");
+                    return;
+                };
+
+                let Some(task_status) = parse_task_status(&status_str) else {
+                    tracing::warn!("task_status_set: невідомий статус {status_str}");
+                    return;
+                };
+
+                match db::tasks::set_status(ctx.pool(), task_id, task_status).await {
+                    Ok(Some(_)) => {
+                        crate::bootstrap::refresh_screen(
+                            ui_weak.clone(),
+                            ctx.clone(),
+                            AppScreen::Tasks,
+                        )
+                        .await;
+                        crate::bootstrap::refresh_screen(ui_weak, ctx, AppScreen::Dashboard).await;
+                    }
+                    Ok(None) => {
+                        tracing::warn!("task_status_set: задачу {task_id} не знайдено");
+                    }
+                    Err(error) => {
+                        tracing::error!("task_status_set: не вдалося оновити статус: {error}");
+                    }
+                }
+            });
+        }
+    });
 }
 
 #[cfg(test)]
@@ -315,6 +379,15 @@ mod tests {
         assert_eq!(parse_task_priority("high"), TaskPriority::High);
         assert_eq!(parse_task_priority("critical"), TaskPriority::Critical);
         assert_eq!(parse_task_priority("unknown"), TaskPriority::Normal);
+    }
+
+    #[test]
+    fn task_status_parser_maps_known_values() {
+        assert_eq!(parse_task_status("open"), Some(TaskStatus::Open));
+        assert_eq!(parse_task_status("in_progress"), Some(TaskStatus::InProgress));
+        assert_eq!(parse_task_status("done"), Some(TaskStatus::Done));
+        assert_eq!(parse_task_status("cancelled"), Some(TaskStatus::Cancelled));
+        assert_eq!(parse_task_status("unknown"), None);
     }
 
     #[test]
@@ -355,15 +428,11 @@ mod tests {
         };
 
         let events = build_day_events(&[task]);
-        assert!(
-            events
-                .iter()
-                .any(|event| event.hour == 11 && event.title.as_str() == "Подзвонити клієнту")
-        );
-        assert!(
-            events
-                .iter()
-                .any(|event| event.hour == 8 && event.title.as_str().is_empty())
-        );
+        assert!(events
+            .iter()
+            .any(|event| event.hour == 11 && event.title.as_str() == "Подзвонити клієнту"));
+        assert!(events
+            .iter()
+            .any(|event| event.hour == 8 && event.title.as_str().is_empty()));
     }
 }

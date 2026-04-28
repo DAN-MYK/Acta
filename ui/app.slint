@@ -81,6 +81,7 @@ export component AppWindow inherits Window {
     callback context-archive(string);
     callback context-delete(string);
     callback cp-selected(string);
+    callback cp-edit(string);
     callback cp-search-changed(string);
     callback cp-new;
     callback cp-draft-saved(CounterpartyDraftForm);
@@ -90,12 +91,14 @@ export component AppWindow inherits Window {
     callback pay-sync-bank;
     callback pay-new;
     callback pay-link(string);
+    callback pay-unreconcile(string);
     callback rep-period-changed(int);
     callback rep-category-drilled(string);
     callback rep-export-csv;
     callback rep-export-pdf;
     callback task-toggled(string, bool);
     callback task-more(string);
+    callback task-status-set(string, string);
     callback task-new;
     callback task-save(string, string, string, string);
     callback task-filter-changed(string);
@@ -314,7 +317,7 @@ export component AppWindow inherits Window {
             create-counterparty => { root.cp-new(); }
             draft-saved(form) => { root.cp-draft-saved(form); }
             tab-changed(t) => { root.cp-detail-tab-state = t; root.cp-tab-changed(t); }
-            edit-cp(id) => { root.cp-selected(id); }
+            edit-cp(id) => { root.cp-edit(id); }
             create-doc(id) => { root.cp-create-doc(id); }
             chain-create(t, id) => { root.doc-chain-create(t, id); }
         }
@@ -339,6 +342,7 @@ export component AppWindow inherits Window {
             sync-bank => { root.pay-sync-bank(); }
             new-payment => { root.pay-new(); }
             link-payment(id) => { root.pay-link(id); }
+            unreconcile-payment(id) => { root.pay-unreconcile(id); }
         }
 
         if root.current-screen == NavScreen.Reports : Reports {
@@ -385,6 +389,7 @@ export component AppWindow inherits Window {
             filter-changed(f) => { root.tasks-filter-state = f; root.task-filter-changed(f); }
             task-toggled(id, done) => { root.task-toggled(id, done); }
             task-more(id) => { root.task-more(id); }
+            task-status-set(id, status) => { root.task-status-set(id, status); }
             new-task => { root.task-new(); }
             task-save(title, priority, due-date, reminder-at) => {
                 root.task-save(title, priority, due-date, reminder-at);

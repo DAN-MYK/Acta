@@ -440,6 +440,20 @@ mod app_window_contract {
         assert_eq!(cp_id.borrow().as_str(), "cp-uuid-001");
 
         let fired = capture_bool();
+        let cp_id = capture_string();
+        {
+            let fired = fired.clone();
+            let cp_id_capture = cp_id.clone();
+            ui.on_cp_edit(move |id| {
+                fired.set(true);
+                *cp_id_capture.borrow_mut() = id;
+            });
+        }
+        ui.invoke_cp_edit("cp-uuid-edit".into());
+        assert!(fired.get(), "cp: edit");
+        assert_eq!(cp_id.borrow().as_str(), "cp-uuid-edit");
+
+        let fired = capture_bool();
         let query = capture_string();
         {
             let fired = fired.clone();
@@ -555,6 +569,20 @@ mod app_window_contract {
         ui.invoke_pay_link("pay-uuid-link".into());
         assert!(fired.get(), "pay: link");
         assert_eq!(payment_id.borrow().as_str(), "pay-uuid-link");
+
+        let fired = capture_bool();
+        let payment_id = capture_string();
+        {
+            let fired = fired.clone();
+            let payment_id_capture = payment_id.clone();
+            ui.on_pay_unreconcile(move |id| {
+                fired.set(true);
+                *payment_id_capture.borrow_mut() = id;
+            });
+        }
+        ui.invoke_pay_unreconcile("pay-uuid-unreconcile".into());
+        assert!(fired.get(), "pay: unreconcile");
+        assert_eq!(payment_id.borrow().as_str(), "pay-uuid-unreconcile");
     }
 
     fn reports() {
@@ -639,6 +667,24 @@ mod app_window_contract {
         ui.invoke_task_more("task-uuid-more".into());
         assert!(fired.get(), "task: more");
         assert_eq!(task_id.borrow().as_str(), "task-uuid-more");
+
+        let fired = capture_bool();
+        let task_id = capture_string();
+        let status = capture_string();
+        {
+            let fired = fired.clone();
+            let task_id_capture = task_id.clone();
+            let status_capture = status.clone();
+            ui.on_task_status_set(move |id, value| {
+                fired.set(true);
+                *task_id_capture.borrow_mut() = id;
+                *status_capture.borrow_mut() = value;
+            });
+        }
+        ui.invoke_task_status_set("task-uuid-status".into(), "done".into());
+        assert!(fired.get(), "task: status-set");
+        assert_eq!(task_id.borrow().as_str(), "task-uuid-status");
+        assert_eq!(status.borrow().as_str(), "done");
 
         let fired = capture_bool();
         {
