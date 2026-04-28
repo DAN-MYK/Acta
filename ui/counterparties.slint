@@ -3,7 +3,7 @@
 // No gradient avatars, flat metric strip matching Dashboard pattern.
 
 import { AppTheme } from "design-tokens.slint";
-import { CounterpartyItem, CounterpartyDetails, DocumentItem, PaymentItem, DocumentKind, DocumentStatus, ChainStep, DocChainGroup } from "types.slint";
+import { CounterpartyItem, CounterpartyDetails, DocumentItem, PaymentItem, DocumentKind, DocumentStatus, CounterpartyDraftForm, DocChainGroup } from "types.slint";
 import {
     Card, HDivider, VDivider, Badge, StatusDot,
     GhostButton, SecondaryButton, PrimaryButton, IconButton,
@@ -199,6 +199,195 @@ component DetailTab inherits Rectangle {
     TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
 }
 
+component CounterpartyDraftOverlay inherits Rectangle {
+    in-out property <bool> open;
+    in-out property <CounterpartyDraftForm> form;
+    callback saved(CounterpartyDraftForm);
+
+    x: 0px;
+    y: 0px;
+    width: 100%;
+    height: 100%;
+    background: #0b122033;
+
+    if root.open : Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: 56px;
+        width: 640px;
+        height: 620px;
+        background: AppTheme.bg-elevated;
+        border-width: 1px;
+        border-color: AppTheme.border;
+        border-radius: AppTheme.radius-xl;
+
+        VerticalLayout {
+            padding: 24px;
+            spacing: 16px;
+
+            HorizontalLayout {
+                alignment: stretch;
+
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: 4px;
+
+                    Text {
+                        text: root.form.title;
+                        color: AppTheme.text;
+                        font-size: AppTheme.font-lg;
+                        font-family: AppTheme.font-serif;
+                        font-weight: 600;
+                    }
+
+                    Text {
+                        text: "Заповніть ключові реквізити контрагента для подальших документів.";
+                        color: AppTheme.text-muted;
+                        font-size: 12px;
+                        font-family: AppTheme.font-sans;
+                    }
+                }
+
+                GhostButton {
+                    text: "Закрити";
+                    clicked => { root.open = false; }
+                }
+            }
+
+            HDivider { }
+
+            GridLayout {
+                spacing: 12px;
+
+                Row {
+                    Text { text: "Назва"; color: AppTheme.text-muted; font-size: 12px; vertical-alignment: center; }
+                    Rectangle {
+                        height: 34px; border-width: 1px; border-color: AppTheme.border; border-radius: AppTheme.radius-md; background: AppTheme.bg;
+                        TextInput {
+                            x: 10px; y: 8px; width: parent.width - 20px;
+                            text <=> root.form.name; color: AppTheme.text; font-size: 12px; font-family: AppTheme.font-sans; single-line: true;
+                            selection-background-color: AppTheme.accent-soft; selection-foreground-color: AppTheme.accent-text;
+                            accessible-label: "Назва контрагента";
+                        }
+                    }
+                }
+
+                Row {
+                    Text { text: "ЄДРПОУ"; color: AppTheme.text-muted; font-size: 12px; vertical-alignment: center; }
+                    Rectangle {
+                        height: 34px; border-width: 1px; border-color: AppTheme.border; border-radius: AppTheme.radius-md; background: AppTheme.bg;
+                        TextInput {
+                            x: 10px; y: 8px; width: parent.width - 20px;
+                            text <=> root.form.edrpou; color: AppTheme.text; font-size: 12px; font-family: AppTheme.font-mono; single-line: true;
+                            selection-background-color: AppTheme.accent-soft; selection-foreground-color: AppTheme.accent-text;
+                            accessible-label: "ЄДРПОУ";
+                        }
+                    }
+                }
+
+                Row {
+                    Text { text: "ІПН"; color: AppTheme.text-muted; font-size: 12px; vertical-alignment: center; }
+                    Rectangle {
+                        height: 34px; border-width: 1px; border-color: AppTheme.border; border-radius: AppTheme.radius-md; background: AppTheme.bg;
+                        TextInput {
+                            x: 10px; y: 8px; width: parent.width - 20px;
+                            text <=> root.form.ipn; color: AppTheme.text; font-size: 12px; font-family: AppTheme.font-mono; single-line: true;
+                            selection-background-color: AppTheme.accent-soft; selection-foreground-color: AppTheme.accent-text;
+                            accessible-label: "ІПН";
+                        }
+                    }
+                }
+
+                Row {
+                    Text { text: "IBAN"; color: AppTheme.text-muted; font-size: 12px; vertical-alignment: center; }
+                    Rectangle {
+                        height: 34px; border-width: 1px; border-color: AppTheme.border; border-radius: AppTheme.radius-md; background: AppTheme.bg;
+                        TextInput {
+                            x: 10px; y: 8px; width: parent.width - 20px;
+                            text <=> root.form.iban; color: AppTheme.text; font-size: 12px; font-family: AppTheme.font-mono; single-line: true;
+                            selection-background-color: AppTheme.accent-soft; selection-foreground-color: AppTheme.accent-text;
+                            accessible-label: "IBAN";
+                        }
+                    }
+                }
+
+                Row {
+                    Text { text: "Телефон"; color: AppTheme.text-muted; font-size: 12px; vertical-alignment: center; }
+                    Rectangle {
+                        height: 34px; border-width: 1px; border-color: AppTheme.border; border-radius: AppTheme.radius-md; background: AppTheme.bg;
+                        TextInput {
+                            x: 10px; y: 8px; width: parent.width - 20px;
+                            text <=> root.form.phone; color: AppTheme.text; font-size: 12px; font-family: AppTheme.font-sans; single-line: true;
+                            selection-background-color: AppTheme.accent-soft; selection-foreground-color: AppTheme.accent-text;
+                            accessible-label: "Телефон";
+                        }
+                    }
+                }
+
+                Row {
+                    Text { text: "Email"; color: AppTheme.text-muted; font-size: 12px; vertical-alignment: center; }
+                    Rectangle {
+                        height: 34px; border-width: 1px; border-color: AppTheme.border; border-radius: AppTheme.radius-md; background: AppTheme.bg;
+                        TextInput {
+                            x: 10px; y: 8px; width: parent.width - 20px;
+                            text <=> root.form.email; color: AppTheme.text; font-size: 12px; font-family: AppTheme.font-sans; single-line: true;
+                            selection-background-color: AppTheme.accent-soft; selection-foreground-color: AppTheme.accent-text;
+                            accessible-label: "Email";
+                        }
+                    }
+                }
+
+                Row {
+                    Text { text: "Адреса"; color: AppTheme.text-muted; font-size: 12px; vertical-alignment: center; }
+                    Rectangle {
+                        height: 34px; border-width: 1px; border-color: AppTheme.border; border-radius: AppTheme.radius-md; background: AppTheme.bg;
+                        TextInput {
+                            x: 10px; y: 8px; width: parent.width - 20px;
+                            text <=> root.form.address; color: AppTheme.text; font-size: 12px; font-family: AppTheme.font-sans; single-line: true;
+                            selection-background-color: AppTheme.accent-soft; selection-foreground-color: AppTheme.accent-text;
+                            accessible-label: "Адреса";
+                        }
+                    }
+                }
+
+                Row {
+                    Text { text: "Нотатки"; color: AppTheme.text-muted; font-size: 12px; }
+                    Rectangle {
+                        height: 96px; border-width: 1px; border-color: AppTheme.border; border-radius: AppTheme.radius-md; background: AppTheme.bg;
+                        TextInput {
+                            x: 10px; y: 8px; width: parent.width - 20px; height: parent.height - 16px;
+                            text <=> root.form.notes; color: AppTheme.text; font-size: 12px; font-family: AppTheme.font-sans; single-line: false;
+                            selection-background-color: AppTheme.accent-soft; selection-foreground-color: AppTheme.accent-text;
+                            accessible-label: "Нотатки";
+                        }
+                    }
+                }
+            }
+
+            Rectangle { vertical-stretch: 1; }
+            HDivider { }
+
+            HorizontalLayout {
+                alignment: end;
+                spacing: 10px;
+
+                SecondaryButton {
+                    text: "Скасувати";
+                    clicked => { root.open = false; }
+                }
+
+                PrimaryButton {
+                    text: "Зберегти";
+                    enabled: root.form.name != "";
+                    clicked => {
+                        root.saved(root.form);
+                        root.open = false;
+                    }
+                }
+            }
+        }
+    }
+}
+
 // ── Counterparties screen ─────────────────────────────────────────────────────
 export component Counterparties inherits Rectangle {
     // Data
@@ -220,8 +409,10 @@ export component Counterparties inherits Rectangle {
 
     // Callbacks
     callback select(string);
+    callback create-counterparty;
     callback create-doc(string);
     callback edit-cp(string);
+    callback draft-saved(CounterpartyDraftForm);
     callback search-changed(string);
     callback tab-changed(string);
 
@@ -232,6 +423,19 @@ export component Counterparties inherits Rectangle {
     in-out property <string> selected-id: "";
     in-out property <string> active-tab: "docs";
     in-out property <string> search-query: "";
+    in-out property <bool> show-editor: false;
+    in-out property <CounterpartyDraftForm> draft-form: {
+        id: "",
+        title: "",
+        name: "",
+        edrpou: "",
+        ipn: "",
+        iban: "",
+        address: "",
+        phone: "",
+        email: "",
+        notes: "",
+    };
 
     background: AppTheme.bg;
 
@@ -268,7 +472,7 @@ export component Counterparties inherits Rectangle {
                         border-color: AppTheme.border;
 
                         Image { x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; source: root.icon-plus; width: 15px; height: 15px; colorize: AppTheme.text-muted; image-fit: contain; }
-                        add-hover := TouchArea { mouse-cursor: pointer; }
+                        add-hover := TouchArea { mouse-cursor: pointer; clicked => { root.create-counterparty(); } }
                     }
                 }
 
@@ -351,8 +555,15 @@ export component Counterparties inherits Rectangle {
                                         more-h := TouchArea { mouse-cursor: pointer; }
                                     }
 
-                                    SecondaryButton { text: "Редагувати"; small: true; }
-                                    PrimaryButton { text: "Створити документ"; }
+                                    SecondaryButton {
+                                        text: "Редагувати";
+                                        small: true;
+                                        clicked => { root.edit-cp(root.info.id); }
+                                    }
+                                    PrimaryButton {
+                                        text: "Створити документ";
+                                        clicked => { root.create-doc(root.info.id); }
+                                    }
                                 }
                             }
 
@@ -600,5 +811,11 @@ export component Counterparties inherits Rectangle {
                 }
             }
         }
+    }
+
+    if root.show-editor : CounterpartyDraftOverlay {
+        open <=> root.show-editor;
+        form <=> root.draft-form;
+        saved(form) => { root.draft-saved(form); }
     }
 }

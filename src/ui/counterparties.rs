@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use anyhow::{anyhow, Result};
 use slint::{ComponentHandle, ModelRc, VecModel};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -10,6 +11,8 @@ use crate::ui::helpers::{
 };
 use acta::app_ctx::{AppCtx, AppScreen};
 use acta::db;
+use acta::models::counterparty::{is_valid_edrpou, is_valid_iban, is_valid_ipn};
+use acta::models::NewCounterparty;
 
 pub struct CounterpartiesData {
     pub items: Vec<crate::CounterpartyItem>,
@@ -119,6 +122,79 @@ pub fn apply_counterparty_detail_to_ui(ui: &crate::AppWindow, data: Counterparty
     });
 }
 
+fn optional_string(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn new_counterparty_form() -> crate::CounterpartyDraftForm {
+    crate::CounterpartyDraftForm {
+        id: "".into(),
+        title: "Новий контрагент".into(),
+        name: "".into(),
+        edrpou: "".into(),
+        ipn: "".into(),
+        iban: "".into(),
+        address: "".into(),
+        phone: "".into(),
+        email: "".into(),
+        notes: "".into(),
+    }
+}
+
+fn set_counterparty_form_state(
+    ui: &crate::AppWindow,
+    form: crate::CounterpartyDraftForm,
+    show_editor: bool,
+) {
+    ui.set_cp_draft_form(form);
+    ui.set_show_cp_editor(show_editor);
+}
+
+fn validate_counterparty_form(form: &crate::CounterpartyDraftForm) -> Result<NewCounterparty> {
+    let name = form.name.trim();
+    if name.is_empty() {
+        return Err(anyhow!("Назва контрагента є обов'язковою"));
+    }
+
+    let edrpou = optional_string(form.edrpou.as_str());
+    if let Some(value) = edrpou.as_deref() {
+        if !is_valid_edrpou(value) {
+            return Err(anyhow!("ЄДРПОУ має містити рівно 8 цифр"));
+        }
+    }
+
+    let ipn = optional_string(form.ipn.as_str());
+    if let Some(value) = ipn.as_deref() {
+        if !is_valid_ipn(value) {
+            return Err(anyhow!("ІПН має містити рівно 10 цифр"));
+        }
+    }
+
+    let iban = optional_string(form.iban.as_str());
+    if let Some(value) = iban.as_deref() {
+        if !is_valid_iban(value) {
+            return Err(anyhow!("IBAN має починатися з UA і містити 29 символів"));
+        }
+    }
+
+    Ok(NewCounterparty {
+        name: name.to_string(),
+        edrpou,
+        ipn,
+        iban,
+        address: optional_string(form.address.as_str()),
+        phone: optional_string(form.phone.as_str()),
+        email: optional_string(form.email.as_str()),
+        notes: optional_string(form.notes.as_str()),
+        bas_id: None,
+    })
+}
+
 pub fn wire_counterparty_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
     ui.on_cp_selected({
         let ctx = ctx.clone();
@@ -164,8 +240,60 @@ pub fn wire_counterparty_callbacks(ui: &crate::AppWindow, ctx: &Arc<AppCtx>) {
         }
     });
 
-    ui.on_cp_new(|| {
-        tracing::warn!("TODO: створення контрагента ще не реалізоване");
+    ui.on_cp_new({
+        let ui_weak = ui.as_weak();
+        move || {
+            let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                set_counterparty_form_state(&ui, new_counterparty_form(), true);
+            });
+        }
+    });
+
+    ui.on_cp_draft_saved({
+        let ctx = ctx.clone();
+        let ui_weak = ui.as_weak();
+        move |form| {
+            let ctx = ctx.clone();
+            let ui_weak = ui_weak.clone();
+            tokio::spawn(async move {
+                let payload = match validate_counterparty_form(&form) {
+                    Ok(payload) => payload,
+                    Err(error) => {
+                        tracing::warn!("cp_draft_saved: {error}");
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            ui.set_show_cp_editor(true);
+                        });
+                        return;
+                    }
+                };
+
+                match db::counterparties::create(ctx.pool(), ctx.company_id(), &payload).await {
+                    Ok(counterparty) => {
+                        let list_data = prepare_counterparties_data(ctx.pool(), ctx.company_id(), None).await;
+                        let detail_data =
+                            prepare_counterparty_detail(ctx.pool(), ctx.company_id(), counterparty.id).await;
+                        let selected_id = counterparty.id.to_string();
+
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            apply_counterparties_to_ui(&ui, list_data);
+                            if let Some(detail) = detail_data {
+                                apply_counterparty_detail_to_ui(&ui, detail);
+                            }
+                            ui.set_cp_selected_id(selected_id.into());
+                            ui.set_show_cp_editor(false);
+                        });
+
+                        tracing::info!("counterparties: created counterparty {}", counterparty.id);
+                    }
+                    Err(error) => {
+                        tracing::error!("cp_draft_saved: create failed: {error}");
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            ui.set_show_cp_editor(true);
+                        });
+                    }
+                }
+            });
+        }
     });
 
     ui.on_cp_create_doc({

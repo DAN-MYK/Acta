@@ -23,6 +23,7 @@ import {
     CounterpartyDetailViewData,
     PaymentsViewData, ReportsViewData, TasksViewData, SettingsViewData,
     CompanyInfo, CompanySwitcherItem, PaletteItemData, DocumentDraftForm, DocumentDraftItem,
+    CounterpartyDraftForm,
 } from "types.slint";
 
 // ── AppWindow ─────────────────────────────────────────────────────────────────
@@ -82,6 +83,7 @@ export component AppWindow inherits Window {
     callback cp-selected(string);
     callback cp-search-changed(string);
     callback cp-new;
+    callback cp-draft-saved(CounterpartyDraftForm);
     callback cp-create-doc(string);
     callback cp-tab-changed(string);
     callback pay-import-csv;
@@ -119,6 +121,19 @@ export component AppWindow inherits Window {
     private property <int> rep-period-state: 1;
     in-out property <string> cp-selected-id: "";
     in-out property <string> cp-search: "";
+    in-out property <CounterpartyDraftForm> cp-draft-form: {
+        id: "",
+        title: "",
+        name: "",
+        edrpou: "",
+        ipn: "",
+        iban: "",
+        address: "",
+        phone: "",
+        email: "",
+        notes: "",
+    };
+    in-out property <bool> show-cp-editor: false;
     in-out property <DocumentDraftForm> doc-draft-form: {
         id: "",
         kind: "",
@@ -284,6 +299,8 @@ export component AppWindow inherits Window {
             info-balance-str: root.counterparty-detail.info.balance-str;
             info-balance-is-negative: root.counterparty-detail.info.balance-is-negative;
             info-overdue-str: root.counterparty-detail.info.overdue-amount-str;
+            show-editor: root.show-cp-editor;
+            draft-form: root.cp-draft-form;
 
             icon-search: Icons.search;
             icon-plus: Icons.plus;
@@ -294,6 +311,8 @@ export component AppWindow inherits Window {
 
             select(id) => { root.cp-selected-id = id; root.cp-selected(id); }
             search-changed(q) => { root.cp-search = q; root.cp-search-changed(q); }
+            create-counterparty => { root.cp-new(); }
+            draft-saved(form) => { root.cp-draft-saved(form); }
             tab-changed(t) => { root.cp-detail-tab-state = t; root.cp-tab-changed(t); }
             edit-cp(id) => { root.cp-selected(id); }
             create-doc(id) => { root.cp-create-doc(id); }

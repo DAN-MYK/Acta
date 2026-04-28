@@ -462,6 +462,31 @@ mod app_window_contract {
         assert!(fired.get(), "cp: new");
 
         let fired = capture_bool();
+        let name = capture_string();
+        {
+            let fired = fired.clone();
+            let name_capture = name.clone();
+            ui.on_cp_draft_saved(move |form| {
+                fired.set(true);
+                *name_capture.borrow_mut() = form.name;
+            });
+        }
+        ui.invoke_cp_draft_saved(CounterpartyDraftForm {
+            id: "".into(),
+            title: "Новий контрагент".into(),
+            name: "ТОВ Ромашка".into(),
+            edrpou: "12345678".into(),
+            ipn: "".into(),
+            iban: "".into(),
+            address: "".into(),
+            phone: "".into(),
+            email: "".into(),
+            notes: "".into(),
+        });
+        assert!(fired.get(), "cp: draft-saved");
+        assert_eq!(name.borrow().as_str(), "ТОВ Ромашка");
+
+        let fired = capture_bool();
         let cp_id = capture_string();
         {
             let fired = fired.clone();
