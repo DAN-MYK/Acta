@@ -1415,10 +1415,13 @@ export component Shell inherits Rectangle {
                 clip: true;
                 background: AppTheme.bg-stripe;
 
+                // Якір фокусу для SkipNav (activated => content-area.focus()).
+                // FocusScope навмисно порожній — є додатковим Tab-stop між sidebar і
+                // першим елементом екрану. В Slint 1.9 прибрати з Tab-order неможливо
+                // без видалення елементу.
                 content-area := FocusScope {
                     width: parent.width;
                     height: parent.height;
-                    // Якір фокусу: Tab з цього FocusScope переходить до першого елементу екрану нижче
                 }
 
                 @children
