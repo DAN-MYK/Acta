@@ -810,15 +810,15 @@ export component Shell inherits Rectangle {
     in-out property <bool> is-dark: AppTheme.is-dark;
 
     // Company info
-    in property <string> company-name: "ТОВ «Альфа-Бізнес»";
+    in property <string> company-name: "";
     in property <[CompanySwitcherItem]> company-items;
-    in property <string> user-name: "Михайло Дан";
-    in property <string> user-role: "Адміністратор";
-    in property <string> user-initials: "МД";
+    in property <string> user-name: "";
+    in property <string> user-role: "";
+    in property <string> user-initials: "";
 
     // Notification badge counts
-    in property <int> documents-badge: 3;
-    in property <int> tasks-badge: 4;
+    in property <int> documents-badge: 0;
+    in property <int> tasks-badge: 0;
 
     // Command palette
     in-out property <bool> cmd-palette-open: false;
