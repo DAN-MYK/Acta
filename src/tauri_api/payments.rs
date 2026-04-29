@@ -39,7 +39,7 @@ pub struct CounterpartyItemDto {
     pub name: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PaymentItemDto {
     pub id: String,
