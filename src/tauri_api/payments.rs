@@ -17,14 +17,14 @@ use crate::models::payment::{NewPayment, PaymentDirection, UpdatePayment};
 
 // ─── DTOs ────────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct MutationResultDto {
     pub ok: bool,
     pub message: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenTemplateResultDto {
     pub ok: bool,
@@ -32,14 +32,14 @@ pub struct OpenTemplateResultDto {
     pub message: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CounterpartyItemDto {
     pub id: String,
     pub name: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PaymentItemDto {
     pub id: String,
@@ -51,7 +51,7 @@ pub struct PaymentItemDto {
     pub account: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PaymentsKpiDto {
     pub incoming_str: String,
@@ -63,7 +63,7 @@ pub struct PaymentsKpiDto {
     pub unmatched_count: i32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PaymentsScreenDto {
     pub items: Vec<PaymentItemDto>,
@@ -71,7 +71,7 @@ pub struct PaymentsScreenDto {
     pub kpi: PaymentsKpiDto,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PaymentCreateOrUpdateRequest {
     pub id: String,
@@ -87,7 +87,7 @@ pub struct PaymentCreateOrUpdateRequest {
 
 // ─── Private helpers ──────────────────────────────────────────────────────────
 
-fn format_money_ua(value: Decimal) -> String {
+fn format_decimal_ua(value: Decimal) -> String {
     let normalized = format!("{:.2}", value.round_dp(2)).replace('.', ",");
     let (sign, digits) = normalized
         .strip_prefix('-')
@@ -122,7 +122,11 @@ fn parse_payment_date(value: &str) -> Result<NaiveDate> {
 }
 
 fn parse_payment_amount(value: &str) -> Result<Decimal> {
-    let normalized = value.trim().replace(' ', "").replace(',', ".");
+    let normalized = value
+        .trim()
+        .replace('\u{00A0}', "")
+        .replace(' ', "")
+        .replace(',', ".");
     let amount = normalized
         .parse::<Decimal>()
         .map_err(|_| anyhow!("Невірна сума платежу"))?;
@@ -319,7 +323,7 @@ pub async fn payments_list(ctx: &AppCtx) -> Result<PaymentsScreenDto> {
             id: r.id.to_string(),
             date: r.date.clone(),
             counterparty: r.counterparty_name.as_deref().unwrap_or("").to_string(),
-            amount_str: format_money_ua(r.amount),
+            amount_str: format_decimal_ua(r.amount),
             direction: direction_to_str(&r.direction).to_string(),
             matched_doc: String::new(),
             account: r.bank_name.as_deref().unwrap_or("").to_string(),
@@ -338,9 +342,9 @@ pub async fn payments_list(ctx: &AppCtx) -> Result<PaymentsScreenDto> {
         items,
         counterparties: counterparty_items,
         kpi: PaymentsKpiDto {
-            incoming_str: format_money_ua(kpi.incoming_month),
-            outgoing_str: format_money_ua(kpi.outgoing_month),
-            net_str: format_money_ua(net),
+            incoming_str: format_decimal_ua(kpi.incoming_month),
+            outgoing_str: format_decimal_ua(kpi.outgoing_month),
+            net_str: format_decimal_ua(net),
             unmatched_str: kpi.unmatched_count.to_string(),
             incoming_sub: "поточний місяць".to_string(),
             outgoing_sub: "поточний місяць".to_string(),
@@ -371,7 +375,9 @@ pub async fn payments_sync_bank(ctx: &AppCtx) -> Result<MutationResultDto> {
 pub async fn payments_open_manual_template(_ctx: &AppCtx) -> Result<OpenTemplateResultDto> {
     let path = ensure_manual_import_template().await?;
     let open_path = path.clone();
-    let _ = tokio::task::spawn_blocking(move || open::that(open_path)).await;
+    if let Ok(Err(e)) = tokio::task::spawn_blocking(move || open::that(open_path)).await {
+        tracing::warn!("payments: не вдалося відкрити шаблон CSV: {e}");
+    }
     Ok(OpenTemplateResultDto {
         ok: true,
         path: path.to_string_lossy().into_owned(),
@@ -596,23 +602,23 @@ mod tests {
     }
 
     #[test]
-    fn format_money_ua_basic() {
-        assert_eq!(format_money_ua(dec!(1234.56)), "1\u{00a0}234,56");
+    fn format_decimal_ua_basic() {
+        assert_eq!(format_decimal_ua(dec!(1234.56)), "1\u{00a0}234,56");
     }
 
     #[test]
-    fn format_money_ua_small() {
-        assert_eq!(format_money_ua(dec!(5.00)), "5,00");
+    fn format_decimal_ua_small() {
+        assert_eq!(format_decimal_ua(dec!(5.00)), "5,00");
     }
 
     #[test]
-    fn format_money_ua_negative() {
-        assert_eq!(format_money_ua(dec!(-1234.56)), "-1\u{00a0}234,56");
+    fn format_decimal_ua_negative() {
+        assert_eq!(format_decimal_ua(dec!(-1234.56)), "-1\u{00a0}234,56");
     }
 
     #[test]
-    fn format_money_ua_zero() {
-        assert_eq!(format_money_ua(dec!(0)), "0,00");
+    fn format_decimal_ua_zero() {
+        assert_eq!(format_decimal_ua(dec!(0)), "0,00");
     }
 
     #[test]
