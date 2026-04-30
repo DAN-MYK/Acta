@@ -851,6 +851,7 @@ body[data-theme="dark"] .editor-grid textarea {
   inset: 0;
   background: var(--bg-overlay);
   border: 0;
+  z-index: 40;
 }
 
 .palette {
@@ -860,6 +861,7 @@ body[data-theme="dark"] .editor-grid textarea {
   transform: translateX(-50%);
   width: min(760px, calc(100vw - 32px));
   padding: 16px;
+  z-index: 50;
 }
 
 .palette input {
