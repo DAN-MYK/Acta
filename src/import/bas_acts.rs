@@ -11,7 +11,7 @@ use tokio::fs;
 use uuid::Uuid;
 
 use crate::db;
-use crate::models::act::{ActStatus, NewAct, NewActItem, UpdateAct};
+use crate::models::act::{Act, ActItem, ActStatus, NewAct, NewActItem, UpdateAct};
 use crate::models::DocumentDirection;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,6 +41,7 @@ pub enum ActImportAction {
     Create,
     Update,
     Skip,
+    Conflict,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57,7 +58,14 @@ pub struct ActImportReport {
     pub created: usize,
     pub updated: usize,
     pub skipped: usize,
+    pub conflicts: usize,
     pub rows: Vec<ActImportPlanRow>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Resolution<T> {
+    value: T,
+    source: &'static str,
 }
 
 pub async fn parse_acts_xml_file(path: &Path) -> Result<Vec<ImportedAct>> {
@@ -95,24 +103,11 @@ pub fn parse_acts_xml(xml: &str) -> Result<Vec<ImportedAct>> {
             }
             Event::Text(event) => {
                 let value = String::from_utf8_lossy(event.as_ref()).trim().to_string();
-                if value.is_empty() {
-                    buf.clear();
-                    continue;
-                }
-
-                if let Some(fields) = current_item_fields.as_mut() {
-                    if let Some(tag) = stack.last() {
-                        if let Some(field) = map_act_item_field_name(tag) {
-                            fields.entry(field.to_string()).or_insert(value);
-                        }
-                    }
-                } else if let Some(fields) = current_fields.as_mut() {
-                    if let Some(tag) = stack.last() {
-                        if let Some(field) = map_act_field_name(tag) {
-                            fields.entry(field.to_string()).or_insert(value);
-                        }
-                    }
-                }
+                capture_text_value(&stack, &mut current_fields, &mut current_item_fields, value);
+            }
+            Event::CData(event) => {
+                let value = String::from_utf8_lossy(event.as_ref()).trim().to_string();
+                capture_text_value(&stack, &mut current_fields, &mut current_item_fields, value);
             }
             Event::End(event) => {
                 let tag = normalize_tag(&String::from_utf8_lossy(event.name().as_ref()));
@@ -168,7 +163,7 @@ pub async fn apply_imported_acts(
     };
 
     for row in rows {
-        let Some(counterparty_id) =
+        let Some(counterparty) =
             resolve_counterparty_id(pool, row.counterparty_bas_id.as_deref()).await?
         else {
             report.skipped += 1;
@@ -194,20 +189,95 @@ pub async fn apply_imported_acts(
             continue;
         }
 
-        let payload = to_new_act(row, counterparty_id, contract_id);
-        let existing = match row.bas_id.as_deref() {
-            Some(bas_id) => db::acts::find_by_bas_id(pool, bas_id).await?,
-            None => None,
+        let payload = to_new_act(
+            row,
+            counterparty.value,
+            contract_id.as_ref().map(|item| item.value),
+        );
+
+        if row.bas_id.is_none() {
+            let matches = db::acts::list_import_candidates(
+                pool,
+                company_id,
+                counterparty.value,
+                contract_id.as_ref().map(|item| item.value),
+                &row.number,
+                row.direction.clone(),
+                row.date,
+                total_amount(&payload.items),
+            )
+            .await?;
+            if matches.len() > 1 {
+                report.conflicts += 1;
+                report.skipped += 1;
+                report.rows.push(ActImportPlanRow {
+                    bas_id: row.bas_id.clone(),
+                    number: row.number.clone(),
+                    action: ActImportAction::Conflict,
+                    note: Some(format!(
+                        "conflict: знайдено {} актів за тим самим fingerprint",
+                        matches.len()
+                    )),
+                });
+                continue;
+            }
+        }
+
+        let (existing, match_source): (_, Option<&'static str>) = match row.bas_id.as_deref() {
+            Some(bas_id) => (
+                db::acts::find_by_bas_id(pool, bas_id).await?,
+                Some("bas_id"),
+            ),
+            None => (
+                db::acts::find_import_candidate(
+                    pool,
+                    company_id,
+                    counterparty.value,
+                    contract_id.as_ref().map(|item| item.value),
+                    &row.number,
+                    row.direction.clone(),
+                    row.date,
+                    total_amount(&payload.items),
+                )
+                .await?,
+                Some("header fingerprint"),
+            ),
         };
+        let note = Some(build_act_note(
+            &counterparty,
+            contract_id.as_ref(),
+            match_source,
+        ));
 
         match existing {
             Some(act) => {
+                let loaded = db::acts::get_by_id(pool, act.id).await?.ok_or_else(|| {
+                    anyhow!("Акт знайдено для preview, але не вдалося перечитати його позиції")
+                })?;
+                if let Some(conflict_note) = detect_act_conflict(
+                    &loaded.0,
+                    &loaded.1,
+                    counterparty.value,
+                    contract_id.as_ref().map(|item| item.value),
+                    row,
+                ) {
+                    report.conflicts += 1;
+                    report.skipped += 1;
+                    report.rows.push(ActImportPlanRow {
+                        bas_id: row.bas_id.clone(),
+                        number: row.number.clone(),
+                        action: ActImportAction::Conflict,
+                        note: Some(conflict_note),
+                    });
+                    continue;
+                }
+
                 report.updated += 1;
                 report.rows.push(ActImportPlanRow {
                     bas_id: row.bas_id.clone(),
                     number: row.number.clone(),
                     action: ActImportAction::Update,
-                    note: None,
+                    note,
                 });
                 if !dry_run {
                     let (header, items) = split_new_act_for_update(payload);
@@ -220,7 +290,7 @@ pub async fn apply_imported_acts(
                     bas_id: row.bas_id.clone(),
                     number: row.number.clone(),
                     action: ActImportAction::Create,
-                    note: None,
+                    note,
                 });
                 if !dry_run {
                     let _ = db::acts::create(pool, company_id, &payload).await?;
@@ -235,7 +305,7 @@ pub async fn apply_imported_acts(
 async fn resolve_counterparty_id(
     pool: &PgPool,
     counterparty_bas_id: Option<&str>,
-) -> Result<Option<Uuid>> {
+) -> Result<Option<Resolution<Uuid>>> {
     let Some(counterparty_bas_id) = counterparty_bas_id else {
         return Ok(None);
     };
@@ -243,7 +313,10 @@ async fn resolve_counterparty_id(
     Ok(
         db::counterparties::find_by_bas_id(pool, counterparty_bas_id)
             .await?
-            .map(|cp| cp.id),
+            .map(|cp| Resolution {
+                value: cp.id,
+                source: "counterparty bas_id",
+            }),
     )
 }
 
@@ -251,7 +324,7 @@ async fn resolve_contract_id(
     pool: &PgPool,
     company_id: Uuid,
     contract_bas_id: Option<&str>,
-) -> Result<Option<Uuid>> {
+) -> Result<Option<Resolution<Uuid>>> {
     let Some(contract_bas_id) = contract_bas_id else {
         return Ok(None);
     };
@@ -259,7 +332,10 @@ async fn resolve_contract_id(
     Ok(db::contracts::find_by_bas_id(pool, contract_bas_id)
         .await?
         .filter(|contract| contract.company_id == company_id)
-        .map(|contract| contract.id))
+        .map(|contract| Resolution {
+            value: contract.id,
+            source: "contract bas_id",
+        }))
 }
 
 fn to_new_act(row: &ImportedAct, counterparty_id: Uuid, contract_id: Option<Uuid>) -> NewAct {
@@ -285,6 +361,99 @@ fn to_new_act(row: &ImportedAct, counterparty_id: Uuid, contract_id: Option<Uuid
             })
             .collect(),
     }
+}
+
+fn total_amount(items: &[NewActItem]) -> Decimal {
+    items
+        .iter()
+        .fold(Decimal::ZERO, |acc, item| {
+            acc + (item.quantity * item.unit_price).round_dp(2)
+        })
+        .round_dp(2)
+}
+
+fn build_act_note(
+    counterparty: &Resolution<Uuid>,
+    contract: Option<&Resolution<Uuid>>,
+    match_source: Option<&'static str>,
+) -> String {
+    let mut parts = vec![format!("cp: {}", counterparty.source)];
+    if let Some(contract) = contract {
+        parts.push(format!("contract: {}", contract.source));
+    }
+    if let Some(match_source) = match_source {
+        parts.push(format!("match: {}", match_source));
+    }
+    parts.join("; ")
+}
+
+fn detect_act_conflict(
+    existing: &Act,
+    existing_items: &[ActItem],
+    counterparty_id: Uuid,
+    contract_id: Option<Uuid>,
+    imported: &ImportedAct,
+) -> Option<String> {
+    if existing.counterparty_id != counterparty_id {
+        return Some("conflict: імпортований акт прив'язується до іншого контрагента".to_string());
+    }
+    if existing.contract_id != contract_id {
+        return Some("conflict: імпортований акт прив'язується до іншого договору".to_string());
+    }
+    if existing.direction != imported.direction {
+        return Some("conflict: напрям акту не збігається з existing row".to_string());
+    }
+    if existing.date != imported.date {
+        return Some("conflict: дата акту не збігається з existing row".to_string());
+    }
+    if normalize_optional_text(Some(&existing.number))
+        != normalize_optional_text(Some(&imported.number))
+    {
+        return Some("conflict: номер акту не збігається з existing row".to_string());
+    }
+
+    let imported_items = imported
+        .items
+        .iter()
+        .map(|item| {
+            (
+                normalize_text(&item.description),
+                item.quantity,
+                normalize_text(&item.unit),
+                item.unit_price,
+            )
+        })
+        .collect::<Vec<_>>();
+    let stored_items = existing_items
+        .iter()
+        .map(|item| {
+            (
+                normalize_text(&item.description),
+                item.quantity,
+                normalize_text(&item.unit),
+                item.unit_price,
+            )
+        })
+        .collect::<Vec<_>>();
+    if imported_items.len() != stored_items.len() {
+        return Some("conflict: кількість позицій акту не збігається з existing row".to_string());
+    }
+    if imported_items != stored_items {
+        return Some("conflict: позиції акту відрізняються від existing row".to_string());
+    }
+
+    None
+}
+
+fn normalize_text(value: &str) -> String {
+    value.trim().to_lowercase()
+}
+
+fn normalize_optional_text(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_lowercase())
 }
 
 fn split_new_act_for_update(data: NewAct) -> (UpdateAct, Vec<NewActItem>) {
@@ -406,55 +575,160 @@ fn normalize_value(raw: &str) -> String {
     raw.trim().to_lowercase()
 }
 
+fn capture_text_value(
+    stack: &[String],
+    current_fields: &mut Option<BTreeMap<String, String>>,
+    current_item_fields: &mut Option<BTreeMap<String, String>>,
+    value: String,
+) {
+    if value.is_empty() {
+        return;
+    }
+
+    if let Some(fields) = current_item_fields.as_mut() {
+        if let Some(field) = map_act_item_field_name_for_stack(stack) {
+            fields.entry(field.to_string()).or_insert(value);
+        }
+    } else if let Some(fields) = current_fields.as_mut() {
+        if let Some(field) = map_act_field_name_for_stack(stack) {
+            fields.entry(field.to_string()).or_insert(value);
+        }
+    }
+}
+
 fn is_act_record_tag(tag: &str) -> bool {
-    matches!(tag, "акт" | "act" | "document" | "record" | "row")
+    matches!(
+        tag,
+        "акт"
+            | "act"
+            | "document"
+            | "record"
+            | "row"
+            | "документ"
+            | "актвиконанихробіт"
+            | "актвыполненныхработ"
+    )
 }
 
 fn is_act_item_tag(tag: &str) -> bool {
     matches!(
         tag,
-        "item" | "позиція" | "позиции" | "position" | "service" | "товар"
+        "item"
+            | "позиція"
+            | "позиции"
+            | "position"
+            | "service"
+            | "товар"
+            | "послуга"
+            | "строка"
+            | "рядок"
+            | "line"
+            | "serviceline"
     )
+}
+
+fn map_act_field_name_for_stack(stack: &[String]) -> Option<&'static str> {
+    let tag = stack.last()?.as_str();
+    let parent = stack
+        .iter()
+        .rev()
+        .nth(1)
+        .map(String::as_str)
+        .unwrap_or_default();
+
+    if matches!(tag, "id" | "uid" | "uuid" | "код") {
+        if is_counterparty_container_tag(parent) {
+            return Some("counterparty_bas_id");
+        }
+        if is_contract_container_tag(parent) {
+            return Some("contract_bas_id");
+        }
+    }
+
+    map_act_field_name(tag)
 }
 
 fn map_act_field_name(tag: &str) -> Option<&'static str> {
     match tag {
         "id" | "bas_id" | "basid" | "uid" | "uuid" | "код" => Some("bas_id"),
-        "number" | "номер" | "num" => Some("number"),
-        "date" | "дата" | "documentdate" => Some("date"),
-        "expected_payment_date" | "payment_date" | "expecteddate" | "датаплатежу" => {
-            Some("expected_payment_date")
+        "number" | "номер" | "num" | "docnumber" | "номердокумента" => {
+            Some("number")
         }
-        "direction" | "напрям" => Some("direction"),
+        "date" | "дата" | "documentdate" | "docdate" | "датадокумента" => {
+            Some("date")
+        }
+        "expected_payment_date"
+        | "payment_date"
+        | "expecteddate"
+        | "датаплатежу"
+        | "датапогашення" => Some("expected_payment_date"),
+        "direction" | "напрям" | "doctype" | "типдокумента" => Some("direction"),
         "status" | "статус" => Some("status"),
         "notes" | "comment" | "description" | "примітка" | "коментар" => {
             Some("notes")
         }
-        "subject" | "title" | "name" | "назва" => Some("subject"),
-        "amount" | "sum" | "total" | "сума" => Some("amount"),
+        "subject" | "title" | "name" | "назва" | "content" | "зміст" => Some("subject"),
+        "amount" | "sum" | "total" | "сума" | "summa" | "documenttotal" => Some("amount"),
         "counterparty_id"
         | "counterparty_bas_id"
         | "client_id"
         | "partner_id"
+        | "partner"
+        | "counterparty"
         | "контрагентid"
+        | "контрагент"
         | "кодконтрагента"
         | "контрагенткод" => Some("counterparty_bas_id"),
-        "contract_id" | "contract_bas_id" | "договірid" | "коддоговору" | "contractref" => {
-            Some("contract_bas_id")
-        }
+        "contract_id"
+        | "contract_bas_id"
+        | "contract"
+        | "agreement"
+        | "договір"
+        | "договор"
+        | "договірid"
+        | "коддоговору"
+        | "contractref" => Some("contract_bas_id"),
         _ => None,
     }
 }
 
+fn is_counterparty_container_tag(tag: &str) -> bool {
+    matches!(
+        tag,
+        "counterparty" | "partner" | "client" | "контрагент" | "партнер" | "клиент"
+    )
+}
+
+fn is_contract_container_tag(tag: &str) -> bool {
+    matches!(tag, "contract" | "agreement" | "договір" | "договор")
+}
+
+fn map_act_item_field_name_for_stack(stack: &[String]) -> Option<&'static str> {
+    let tag = stack.last()?.as_str();
+    map_act_item_field_name(tag)
+}
+
 fn map_act_item_field_name(tag: &str) -> Option<&'static str> {
     match tag {
-        "description" | "name" | "title" | "послуга" | "опис" | "номенклатура" => {
-            Some("description")
+        "description"
+        | "name"
+        | "title"
+        | "послуга"
+        | "опис"
+        | "номенклатура"
+        | "найменування"
+        | "содержание"
+        | "service_name" => Some("description"),
+        "quantity" | "qty" | "count" | "кількість" | "количество" | "обсяг" => {
+            Some("quantity")
         }
-        "quantity" | "qty" | "кількість" | "количество" => Some("quantity"),
-        "unit" | "одиниця" | "единица" => Some("unit"),
-        "price" | "unit_price" | "ціна" | "цена" => Some("unit_price"),
-        "amount" | "sum" | "total" | "сума" => Some("amount"),
+        "unit" | "uom" | "measure" | "одиниця" | "единица" | "одвим" => {
+            Some("unit")
+        }
+        "price" | "unit_price" | "rate" | "cost" | "tariff" | "ціна" | "цена" => {
+            Some("unit_price")
+        }
+        "amount" | "sum" | "total" | "сума" | "summa" | "linetotal" => Some("amount"),
         _ => None,
     }
 }
@@ -554,6 +828,59 @@ mod tests {
         assert_eq!(rows[0].items.len(), 1);
         assert_eq!(rows[0].items[0].unit_price, Decimal::new(320000, 2));
         assert_eq!(rows[0].status, ActStatus::Issued);
+    }
+
+    #[test]
+    fn parse_acts_xml_supports_nested_bas_like_fields() {
+        let xml = r#"
+            <Документ>
+                <Код>act-777</Код>
+                <НомерДокумента>АКТ-777</НомерДокумента>
+                <ДатаДокумента>2026-04-10</ДатаДокумента>
+                <Контрагент>
+                    <Код>cp-777</Код>
+                </Контрагент>
+                <Договір>
+                    <Код>ctr-777</Код>
+                </Договір>
+                <Строка>
+                    <Найменування>Послуги підтримки</Найменування>
+                    <Кількість>2</Кількість>
+                    <ОдВим>послуга</ОдВим>
+                    <Сума>3000</Сума>
+                </Строка>
+            </Документ>
+        "#;
+
+        let rows = parse_acts_xml(xml).expect("вкладений BAS XML має парситися");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].bas_id.as_deref(), Some("act-777"));
+        assert_eq!(rows[0].counterparty_bas_id.as_deref(), Some("cp-777"));
+        assert_eq!(rows[0].contract_bas_id.as_deref(), Some("ctr-777"));
+        assert_eq!(rows[0].items.len(), 1);
+        assert_eq!(rows[0].items[0].description, "Послуги підтримки");
+        assert_eq!(rows[0].items[0].quantity, Decimal::new(2, 0));
+        assert_eq!(rows[0].items[0].unit_price, Decimal::new(1500, 0));
+    }
+
+    #[test]
+    fn parse_acts_xml_reads_cdata_and_fallback_total() {
+        let xml = r#"
+            <АктВиконанихРобіт>
+                <Код><![CDATA[act-900]]></Код>
+                <НомерДокумента><![CDATA[АКТ-900]]></НомерДокумента>
+                <ДатаДокумента>2026-04-11</ДатаДокумента>
+                <Назва><![CDATA[Супровід]]></Назва>
+                <DocumentTotal>4500</DocumentTotal>
+            </АктВиконанихРобіт>
+        "#;
+
+        let rows = parse_acts_xml(xml).expect("CDATA і fallback total мають парситися");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].bas_id.as_deref(), Some("act-900"));
+        assert_eq!(rows[0].items.len(), 1);
+        assert_eq!(rows[0].items[0].description, "Супровід");
+        assert_eq!(rows[0].items[0].unit_price, Decimal::new(4500, 0));
     }
 
     #[test]

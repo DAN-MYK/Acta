@@ -254,6 +254,63 @@ pub async fn find_by_bas_id(pool: &PgPool, bas_id: &str) -> Result<Option<Contra
     Ok(row)
 }
 
+/// Знайти договір за номером у межах компанії та контрагента.
+pub async fn find_by_number(
+    pool: &PgPool,
+    company_id: Uuid,
+    counterparty_id: Uuid,
+    number: &str,
+) -> Result<Option<Contract>> {
+    let row = sqlx::query_as::<_, Contract>(
+        r#"
+        SELECT id, company_id, counterparty_id, number, subject,
+               date, expires_at, amount, notes, bas_id, status,
+               created_at, updated_at
+        FROM contracts
+        WHERE company_id = $1
+          AND counterparty_id = $2
+          AND lower(trim(number)) = lower(trim($3))
+        ORDER BY date DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(company_id)
+    .bind(counterparty_id)
+    .bind(number)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row)
+}
+
+/// Знайти всі договори за номером у межах компанії та контрагента.
+pub async fn list_by_number_exact(
+    pool: &PgPool,
+    company_id: Uuid,
+    counterparty_id: Uuid,
+    number: &str,
+) -> Result<Vec<Contract>> {
+    let rows = sqlx::query_as::<_, Contract>(
+        r#"
+        SELECT id, company_id, counterparty_id, number, subject,
+               date, expires_at, amount, notes, bas_id, status,
+               created_at, updated_at
+        FROM contracts
+        WHERE company_id = $1
+          AND counterparty_id = $2
+          AND lower(trim(number)) = lower(trim($3))
+        ORDER BY date DESC, created_at DESC
+        "#,
+    )
+    .bind(company_id)
+    .bind(counterparty_id)
+    .bind(number)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows)
+}
+
 /// Створити новий договір.
 pub async fn create(pool: &PgPool, data: NewContract) -> Result<Contract> {
     let row = sqlx::query_as::<_, Contract>(
@@ -411,6 +468,8 @@ mod tests {
         let _ = list_for_select;
         let _ = get_by_id;
         let _ = find_by_bas_id;
+        let _ = find_by_number;
+        let _ = list_by_number_exact;
         let _ = create;
         let _ = create_imported;
         let _ = update;

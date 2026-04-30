@@ -265,6 +265,53 @@ pub async fn find_by_edrpou(
     Ok(row)
 }
 
+/// Знайти контрагента за точною назвою в межах компанії.
+pub async fn find_by_name(
+    pool: &PgPool,
+    company_id: Uuid,
+    name: &str,
+) -> Result<Option<Counterparty>> {
+    let row = sqlx::query_as::<_, Counterparty>(
+        r#"
+        SELECT id, name, edrpou, ipn, iban, address, phone, email, notes,
+               is_archived, bas_id, created_at, updated_at
+        FROM counterparties
+        WHERE company_id = $1
+          AND lower(trim(name)) = lower(trim($2))
+        "#,
+    )
+    .bind(company_id)
+    .bind(name)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row)
+}
+
+/// Знайти всіх контрагентів за точною назвою в межах компанії.
+pub async fn list_by_name_exact(
+    pool: &PgPool,
+    company_id: Uuid,
+    name: &str,
+) -> Result<Vec<Counterparty>> {
+    let rows = sqlx::query_as::<_, Counterparty>(
+        r#"
+        SELECT id, name, edrpou, ipn, iban, address, phone, email, notes,
+               is_archived, bas_id, created_at, updated_at
+        FROM counterparties
+        WHERE company_id = $1
+          AND lower(trim(name)) = lower(trim($2))
+        ORDER BY created_at
+        "#,
+    )
+    .bind(company_id)
+    .bind(name)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -282,5 +329,7 @@ mod tests {
         let _ = count_archived;
         let _ = find_by_bas_id;
         let _ = find_by_edrpou;
+        let _ = find_by_name;
+        let _ = list_by_name_exact;
     }
 }

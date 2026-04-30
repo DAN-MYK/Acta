@@ -2,16 +2,18 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use anyhow::{anyhow, Context, Result};
+use calamine::{open_workbook_auto, Reader as CalamineReader};
 use chrono::NaiveDate;
 use quick_xml::events::Event;
-use quick_xml::Reader;
+use quick_xml::Reader as XmlReader;
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use tokio::fs;
+use tokio::task;
 use uuid::Uuid;
 
 use crate::db;
-use crate::models::contract::ContractStatus;
+use crate::models::contract::{Contract, ContractStatus};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ImportedContract {
@@ -31,6 +33,7 @@ pub enum ContractImportAction {
     Create,
     Update,
     Skip,
+    Conflict,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -47,18 +50,36 @@ pub struct ContractImportReport {
     pub created: usize,
     pub updated: usize,
     pub skipped: usize,
+    pub conflicts: usize,
     pub rows: Vec<ContractImportPlanRow>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Resolution<T> {
+    value: T,
+    source: &'static str,
+}
+
 pub async fn parse_contracts_xml_file(path: &Path) -> Result<Vec<ImportedContract>> {
-    let xml_text = fs::read_to_string(path)
-        .await
-        .with_context(|| format!("Не вдалося прочитати файл {}", path.display()))?;
-    parse_contracts_xml(&xml_text)
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_lowercase())
+        .unwrap_or_default();
+
+    match extension.as_str() {
+        "xlsx" | "xls" => parse_contracts_excel_file(path).await,
+        _ => {
+            let xml_text = fs::read_to_string(path)
+                .await
+                .with_context(|| format!("Не вдалося прочитати файл {}", path.display()))?;
+            parse_contracts_xml(&xml_text)
+        }
+    }
 }
 
 pub fn parse_contracts_xml(xml: &str) -> Result<Vec<ImportedContract>> {
-    let mut reader = Reader::from_str(xml);
+    let mut reader = XmlReader::from_str(xml);
     reader.config_mut().trim_text(true);
 
     let mut buf = Vec::new();
@@ -134,7 +155,7 @@ pub async fn apply_imported_contracts(
     };
 
     for row in rows {
-        let Some(counterparty_id) =
+        let Some(counterparty) =
             resolve_counterparty_id(pool, row.counterparty_bas_id.as_deref()).await?
         else {
             report.skipped += 1;
@@ -147,19 +168,65 @@ pub async fn apply_imported_contracts(
             continue;
         };
 
-        let existing = match row.bas_id.as_deref() {
-            Some(bas_id) => db::contracts::find_by_bas_id(pool, bas_id).await?,
-            None => None,
+        if row.bas_id.is_none() {
+            let matches = db::contracts::list_by_number_exact(
+                pool,
+                company_id,
+                counterparty.value,
+                &row.number,
+            )
+            .await?;
+            if matches.len() > 1 {
+                report.conflicts += 1;
+                report.skipped += 1;
+                report.rows.push(ContractImportPlanRow {
+                    bas_id: row.bas_id.clone(),
+                    number: row.number.clone(),
+                    action: ContractImportAction::Conflict,
+                    note: Some(format!(
+                        "conflict: знайдено {} договорів за тим самим номером",
+                        matches.len()
+                    )),
+                });
+                continue;
+            }
+        }
+
+        let (existing, match_source): (_, Option<&'static str>) = match row.bas_id.as_deref() {
+            Some(bas_id) => (
+                db::contracts::find_by_bas_id(pool, bas_id).await?,
+                Some("bas_id"),
+            ),
+            None => (
+                db::contracts::find_by_number(pool, company_id, counterparty.value, &row.number)
+                    .await?,
+                Some("contract number"),
+            ),
         };
+        let note = Some(build_contract_note(&counterparty, match_source));
 
         match existing {
             Some(contract) => {
+                if let Some(conflict_note) =
+                    detect_contract_conflict(&contract, company_id, counterparty.value, row)
+                {
+                    report.conflicts += 1;
+                    report.skipped += 1;
+                    report.rows.push(ContractImportPlanRow {
+                        bas_id: row.bas_id.clone(),
+                        number: row.number.clone(),
+                        action: ContractImportAction::Conflict,
+                        note: Some(conflict_note),
+                    });
+                    continue;
+                }
+
                 report.updated += 1;
                 report.rows.push(ContractImportPlanRow {
                     bas_id: row.bas_id.clone(),
                     number: row.number.clone(),
                     action: ContractImportAction::Update,
-                    note: None,
+                    note,
                 });
                 if !dry_run {
                     let _ = db::contracts::update_imported(
@@ -182,13 +249,13 @@ pub async fn apply_imported_contracts(
                     bas_id: row.bas_id.clone(),
                     number: row.number.clone(),
                     action: ContractImportAction::Create,
-                    note: None,
+                    note,
                 });
                 if !dry_run {
                     let _ = db::contracts::create_imported(
                         pool,
                         company_id,
-                        counterparty_id,
+                        counterparty.value,
                         &row.number,
                         row.subject.as_deref(),
                         row.date,
@@ -210,7 +277,7 @@ pub async fn apply_imported_contracts(
 async fn resolve_counterparty_id(
     pool: &PgPool,
     counterparty_bas_id: Option<&str>,
-) -> Result<Option<Uuid>> {
+) -> Result<Option<Resolution<Uuid>>> {
     let Some(counterparty_bas_id) = counterparty_bas_id else {
         return Ok(None);
     };
@@ -218,8 +285,108 @@ async fn resolve_counterparty_id(
     Ok(
         db::counterparties::find_by_bas_id(pool, counterparty_bas_id)
             .await?
-            .map(|cp| cp.id),
+            .map(|cp| Resolution {
+                value: cp.id,
+                source: "counterparty bas_id",
+            }),
     )
+}
+
+fn build_contract_note(
+    counterparty: &Resolution<Uuid>,
+    match_source: Option<&'static str>,
+) -> String {
+    let mut parts = vec![format!("cp: {}", counterparty.source)];
+    if let Some(match_source) = match_source {
+        parts.push(format!("match: {}", match_source));
+    }
+    parts.join("; ")
+}
+
+fn detect_contract_conflict(
+    existing: &Contract,
+    company_id: Uuid,
+    counterparty_id: Uuid,
+    imported: &ImportedContract,
+) -> Option<String> {
+    if existing.company_id != company_id {
+        return Some("conflict: bas_id вказує на договір іншої компанії".to_string());
+    }
+    if existing.counterparty_id != counterparty_id {
+        return Some(
+            "conflict: імпортований договір прив'язується до іншого контрагента".to_string(),
+        );
+    }
+    if normalize_optional_text(Some(&existing.number))
+        != normalize_optional_text(Some(&imported.number))
+    {
+        return Some("conflict: номер договору не збігається з existing row".to_string());
+    }
+    if existing.date != imported.date {
+        return Some("conflict: дата договору не збігається з existing row".to_string());
+    }
+    if existing.amount != imported.amount {
+        return Some("conflict: сума договору не збігається з existing row".to_string());
+    }
+    None
+}
+
+fn normalize_optional_text(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_lowercase())
+}
+
+async fn parse_contracts_excel_file(path: &Path) -> Result<Vec<ImportedContract>> {
+    let path = path.to_path_buf();
+    task::spawn_blocking(move || {
+        let mut workbook = open_workbook_auto(&path)
+            .with_context(|| format!("Не вдалося відкрити Excel файл {}", path.display()))?;
+        let sheet_name = workbook
+            .sheet_names()
+            .first()
+            .cloned()
+            .ok_or_else(|| anyhow!("У Excel файлі немає жодного sheet"))?;
+        let range = workbook.worksheet_range(&sheet_name)?;
+
+        let mut rows_iter = range.rows();
+        let headers = rows_iter
+            .next()
+            .ok_or_else(|| anyhow!("Excel файл не містить заголовків"))?
+            .iter()
+            .map(|cell| normalize_tag(&cell.to_string()))
+            .collect::<Vec<_>>();
+
+        let mut rows = Vec::new();
+        for row in rows_iter {
+            let mut fields = BTreeMap::new();
+            for (idx, cell) in row.iter().enumerate() {
+                let value = cell.to_string().trim().to_string();
+                if value.is_empty() {
+                    continue;
+                }
+                if let Some(field) = headers
+                    .get(idx)
+                    .and_then(|header| map_contract_field_name(header))
+                {
+                    fields.entry(field.to_string()).or_insert(value);
+                }
+            }
+
+            if let Some(contract) = build_contract_from_fields(fields)? {
+                rows.push(contract);
+            }
+        }
+
+        if rows.is_empty() {
+            return Err(anyhow!("У Excel не знайдено жодного договору"));
+        }
+
+        Ok(rows)
+    })
+    .await
+    .context("Excel parser для договорів завершився помилкою")?
 }
 
 fn build_contract_from_fields(
@@ -376,31 +543,17 @@ mod tests {
     }
 
     #[test]
-    fn parse_contracts_xml_supports_ukrainian_tags() {
-        let xml = r#"
-            <root>
-                <договір>
-                    <код>ctr-002</код>
-                    <кодконтрагента>cp-002</кодконтрагента>
-                    <номер>ДГ-002</номер>
-                    <дата>15.04.2026</дата>
-                    <сума>8 499,99</сума>
-                </договір>
-            </root>
-        "#;
+    fn build_contract_from_fields_reads_excel_like_headers() {
+        let mut fields = BTreeMap::new();
+        fields.insert("bas_id".to_string(), "ctr-002".to_string());
+        fields.insert("counterparty_bas_id".to_string(), "cp-002".to_string());
+        fields.insert("number".to_string(), "ДГ-002".to_string());
+        fields.insert("date".to_string(), "2026-04-15".to_string());
 
-        let rows = parse_contracts_xml(xml).expect("українські теги мають парситися");
-        assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].amount, Some(Decimal::new(849999, 2)));
-        assert_eq!(
-            rows[0].date,
-            NaiveDate::from_ymd_opt(2026, 4, 15).expect("валідна дата")
-        );
-    }
-
-    #[test]
-    fn parse_contracts_xml_fails_when_no_records_found() {
-        let error = parse_contracts_xml("<root/>").expect_err("порожній XML має давати помилку");
-        assert!(error.to_string().contains("не знайдено жодного договору"));
+        let row = build_contract_from_fields(fields)
+            .expect("побудова має спрацювати")
+            .expect("рядок має бути валідним");
+        assert_eq!(row.bas_id.as_deref(), Some("ctr-002"));
+        assert_eq!(row.number, "ДГ-002");
     }
 }

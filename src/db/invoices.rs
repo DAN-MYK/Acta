@@ -195,6 +195,480 @@ pub async fn get_for_edit(pool: &PgPool, id: Uuid) -> Result<Option<(Invoice, Ve
     get_by_id(pool, id).await
 }
 
+/// Знайти накладну за bas_id для ідемпотентного імпорту з BAS.
+pub async fn find_by_bas_id(pool: &PgPool, bas_id: &str) -> Result<Option<Invoice>> {
+    let invoice = sqlx::query_as::<_, Invoice>(
+        r#"
+        SELECT id, company_id, number, counterparty_id, contract_id, category_id, direction,
+               date, expected_payment_date, total_amount, vat_amount,
+               status, notes, pdf_path, bas_id, created_at, updated_at
+        FROM invoices
+        WHERE bas_id = $1
+        "#,
+    )
+    .bind(bas_id)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(invoice)
+}
+
+/// Створити header-level накладну з BAS без позицій.
+///
+/// Це partial importer: зберігаємо заголовок документа і суми, а line items
+/// буде імпортовано окремим наступним кроком.
+#[allow(clippy::too_many_arguments)]
+pub async fn create_imported_header(
+    pool: &PgPool,
+    company_id: Uuid,
+    counterparty_id: Uuid,
+    contract_id: Option<Uuid>,
+    number: &str,
+    direction: DocumentDirection,
+    date: chrono::NaiveDate,
+    expected_payment_date: Option<chrono::NaiveDate>,
+    total_amount: Decimal,
+    vat_amount: Decimal,
+    status: InvoiceStatus,
+    notes: Option<&str>,
+    bas_id: Option<&str>,
+) -> Result<Invoice> {
+    let invoice = sqlx::query_as::<_, Invoice>(
+        r#"
+        INSERT INTO invoices (
+            company_id, counterparty_id, contract_id, number, direction,
+            date, expected_payment_date, total_amount, vat_amount,
+            status, notes, bas_id
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        RETURNING id, company_id, number, counterparty_id, contract_id, category_id, direction,
+                  date, expected_payment_date, total_amount, vat_amount,
+                  status, notes, pdf_path, bas_id, created_at, updated_at
+        "#,
+    )
+    .bind(company_id)
+    .bind(counterparty_id)
+    .bind(contract_id)
+    .bind(number)
+    .bind(direction)
+    .bind(date)
+    .bind(expected_payment_date)
+    .bind(total_amount)
+    .bind(vat_amount)
+    .bind(status)
+    .bind(notes)
+    .bind(bas_id)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(invoice)
+}
+
+/// Оновити header-level накладну з BAS без заміни позицій.
+#[allow(clippy::too_many_arguments)]
+pub async fn update_imported_header(
+    pool: &PgPool,
+    id: Uuid,
+    counterparty_id: Uuid,
+    contract_id: Option<Uuid>,
+    number: &str,
+    direction: DocumentDirection,
+    date: chrono::NaiveDate,
+    expected_payment_date: Option<chrono::NaiveDate>,
+    total_amount: Decimal,
+    vat_amount: Decimal,
+    status: InvoiceStatus,
+    notes: Option<&str>,
+) -> Result<Invoice> {
+    let invoice = sqlx::query_as::<_, Invoice>(
+        r#"
+        UPDATE invoices
+        SET counterparty_id       = $2,
+            contract_id           = $3,
+            number                = $4,
+            direction             = $5,
+            date                  = $6,
+            expected_payment_date = $7,
+            total_amount          = $8,
+            vat_amount            = $9,
+            status                = $10,
+            notes                 = $11,
+            updated_at            = NOW()
+        WHERE id = $1
+        RETURNING id, company_id, number, counterparty_id, contract_id, category_id, direction,
+                  date, expected_payment_date, total_amount, vat_amount,
+                  status, notes, pdf_path, bas_id, created_at, updated_at
+        "#,
+    )
+    .bind(id)
+    .bind(counterparty_id)
+    .bind(contract_id)
+    .bind(number)
+    .bind(direction)
+    .bind(date)
+    .bind(expected_payment_date)
+    .bind(total_amount)
+    .bind(vat_amount)
+    .bind(status)
+    .bind(notes)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(invoice)
+}
+
+/// Знайти кандидат на дубль імпортованої накладної за стабільним header fingerprint.
+pub async fn find_import_candidate(
+    pool: &PgPool,
+    company_id: Uuid,
+    counterparty_id: Uuid,
+    contract_id: Option<Uuid>,
+    number: &str,
+    direction: DocumentDirection,
+    date: chrono::NaiveDate,
+    total_amount: Decimal,
+) -> Result<Option<Invoice>> {
+    let invoice = sqlx::query_as::<_, Invoice>(
+        r#"
+        SELECT id, company_id, number, counterparty_id, contract_id, category_id, direction,
+               date, expected_payment_date, total_amount, vat_amount,
+               status, notes, pdf_path, bas_id, created_at, updated_at
+        FROM invoices
+        WHERE company_id = $1
+          AND counterparty_id = $2
+          AND contract_id IS NOT DISTINCT FROM $3
+          AND lower(trim(number)) = lower(trim($4))
+          AND direction = $5
+          AND date = $6
+          AND total_amount = $7
+        ORDER BY updated_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(company_id)
+    .bind(counterparty_id)
+    .bind(contract_id)
+    .bind(number)
+    .bind(direction)
+    .bind(date)
+    .bind(total_amount)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(invoice)
+}
+
+/// Знайти всіх кандидатів на дубль імпортованої накладної за точним header fingerprint.
+#[allow(clippy::too_many_arguments)]
+pub async fn list_import_candidates(
+    pool: &PgPool,
+    company_id: Uuid,
+    counterparty_id: Uuid,
+    contract_id: Option<Uuid>,
+    number: &str,
+    direction: DocumentDirection,
+    date: chrono::NaiveDate,
+    total_amount: Decimal,
+) -> Result<Vec<Invoice>> {
+    let invoices = sqlx::query_as::<_, Invoice>(
+        r#"
+        SELECT id, company_id, number, counterparty_id, contract_id, category_id, direction,
+               date, expected_payment_date, total_amount, vat_amount,
+               status, notes, pdf_path, bas_id, created_at, updated_at
+        FROM invoices
+        WHERE company_id = $1
+          AND counterparty_id = $2
+          AND contract_id IS NOT DISTINCT FROM $3
+          AND lower(trim(number)) = lower(trim($4))
+          AND direction = $5
+          AND date = $6
+          AND total_amount = $7
+        ORDER BY updated_at DESC, created_at DESC
+        "#,
+    )
+    .bind(company_id)
+    .bind(counterparty_id)
+    .bind(contract_id)
+    .bind(number)
+    .bind(direction)
+    .bind(date)
+    .bind(total_amount)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(invoices)
+}
+
+/// Знайти кандидат на дубль за header fingerprint з допустимим відхиленням суми.
+#[allow(clippy::too_many_arguments)]
+pub async fn find_import_candidate_loose(
+    pool: &PgPool,
+    company_id: Uuid,
+    counterparty_id: Uuid,
+    contract_id: Option<Uuid>,
+    number: &str,
+    direction: DocumentDirection,
+    date: chrono::NaiveDate,
+    total_amount: Decimal,
+    tolerance: Decimal,
+) -> Result<Option<Invoice>> {
+    let invoice = sqlx::query_as::<_, Invoice>(
+        r#"
+        SELECT id, company_id, number, counterparty_id, contract_id, category_id, direction,
+               date, expected_payment_date, total_amount, vat_amount,
+               status, notes, pdf_path, bas_id, created_at, updated_at
+        FROM invoices
+        WHERE company_id = $1
+          AND counterparty_id = $2
+          AND contract_id IS NOT DISTINCT FROM $3
+          AND lower(trim(number)) = lower(trim($4))
+          AND direction = $5
+          AND date = $6
+          AND abs(total_amount - $7) <= $8
+        ORDER BY abs(total_amount - $7) ASC, updated_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(company_id)
+    .bind(counterparty_id)
+    .bind(contract_id)
+    .bind(number)
+    .bind(direction)
+    .bind(date)
+    .bind(total_amount)
+    .bind(tolerance)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(invoice)
+}
+
+/// Знайти всіх кандидатів на дубль за tolerant header fingerprint.
+#[allow(clippy::too_many_arguments)]
+pub async fn list_import_candidates_loose(
+    pool: &PgPool,
+    company_id: Uuid,
+    counterparty_id: Uuid,
+    contract_id: Option<Uuid>,
+    number: &str,
+    direction: DocumentDirection,
+    date: chrono::NaiveDate,
+    total_amount: Decimal,
+    tolerance: Decimal,
+) -> Result<Vec<Invoice>> {
+    let invoices = sqlx::query_as::<_, Invoice>(
+        r#"
+        SELECT id, company_id, number, counterparty_id, contract_id, category_id, direction,
+               date, expected_payment_date, total_amount, vat_amount,
+               status, notes, pdf_path, bas_id, created_at, updated_at
+        FROM invoices
+        WHERE company_id = $1
+          AND counterparty_id = $2
+          AND contract_id IS NOT DISTINCT FROM $3
+          AND lower(trim(number)) = lower(trim($4))
+          AND direction = $5
+          AND date = $6
+          AND abs(total_amount - $7) <= $8
+        ORDER BY abs(total_amount - $7) ASC, updated_at DESC, created_at DESC
+        "#,
+    )
+    .bind(company_id)
+    .bind(counterparty_id)
+    .bind(contract_id)
+    .bind(number)
+    .bind(direction)
+    .bind(date)
+    .bind(total_amount)
+    .bind(tolerance)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(invoices)
+}
+
+/// Створити імпортовану накладну разом з позиціями, зберігши BAS-статус та напрям.
+#[allow(clippy::too_many_arguments)]
+pub async fn create_imported_with_items(
+    pool: &PgPool,
+    company_id: Uuid,
+    counterparty_id: Uuid,
+    contract_id: Option<Uuid>,
+    number: &str,
+    direction: DocumentDirection,
+    date: chrono::NaiveDate,
+    expected_payment_date: Option<chrono::NaiveDate>,
+    vat_amount: Decimal,
+    status: InvoiceStatus,
+    notes: Option<&str>,
+    bas_id: Option<&str>,
+    items: &[NewInvoiceItem],
+) -> Result<Invoice> {
+    let mut tx = pool.begin().await?;
+
+    let invoice = sqlx::query_as::<_, Invoice>(
+        r#"
+        INSERT INTO invoices (
+            company_id, counterparty_id, contract_id, number, direction,
+            date, expected_payment_date, total_amount, vat_amount,
+            status, notes, bas_id
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8, $9, $10, $11)
+        RETURNING id, company_id, number, counterparty_id, contract_id, category_id, direction,
+                  date, expected_payment_date, total_amount, vat_amount,
+                  status, notes, pdf_path, bas_id, created_at, updated_at
+        "#,
+    )
+    .bind(company_id)
+    .bind(counterparty_id)
+    .bind(contract_id)
+    .bind(number)
+    .bind(direction)
+    .bind(date)
+    .bind(expected_payment_date)
+    .bind(vat_amount)
+    .bind(status)
+    .bind(notes)
+    .bind(bas_id)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    let mut total = Decimal::ZERO;
+    for item in items {
+        let amount = (item.quantity * item.price).round_dp(2);
+        total += amount;
+
+        sqlx::query(
+            r#"
+            INSERT INTO invoice_items (invoice_id, position, description, unit, quantity, price, amount)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            "#,
+        )
+        .bind(invoice.id)
+        .bind(item.position)
+        .bind(&item.description)
+        .bind(&item.unit)
+        .bind(item.quantity)
+        .bind(item.price)
+        .bind(amount)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    let invoice = sqlx::query_as::<_, Invoice>(
+        r#"
+        UPDATE invoices
+        SET total_amount = $2, updated_at = NOW()
+        WHERE id = $1
+        RETURNING id, company_id, number, counterparty_id, contract_id, category_id, direction,
+                  date, expected_payment_date, total_amount, vat_amount,
+                  status, notes, pdf_path, bas_id, created_at, updated_at
+        "#,
+    )
+    .bind(invoice.id)
+    .bind(total)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+    Ok(invoice)
+}
+
+/// Оновити імпортовану накладну разом з повною заміною позицій.
+#[allow(clippy::too_many_arguments)]
+pub async fn update_imported_with_items(
+    pool: &PgPool,
+    id: Uuid,
+    counterparty_id: Uuid,
+    contract_id: Option<Uuid>,
+    number: &str,
+    direction: DocumentDirection,
+    date: chrono::NaiveDate,
+    expected_payment_date: Option<chrono::NaiveDate>,
+    vat_amount: Decimal,
+    status: InvoiceStatus,
+    notes: Option<&str>,
+    items: &[NewInvoiceItem],
+) -> Result<Invoice> {
+    let mut tx = pool.begin().await?;
+
+    let invoice = sqlx::query_as::<_, Invoice>(
+        r#"
+        UPDATE invoices
+        SET counterparty_id       = $2,
+            contract_id           = $3,
+            number                = $4,
+            direction             = $5,
+            date                  = $6,
+            expected_payment_date = $7,
+            vat_amount            = $8,
+            status                = $9,
+            notes                 = $10,
+            updated_at            = NOW()
+        WHERE id = $1
+        RETURNING id, company_id, number, counterparty_id, contract_id, category_id, direction,
+                  date, expected_payment_date, total_amount, vat_amount,
+                  status, notes, pdf_path, bas_id, created_at, updated_at
+        "#,
+    )
+    .bind(id)
+    .bind(counterparty_id)
+    .bind(contract_id)
+    .bind(number)
+    .bind(direction)
+    .bind(date)
+    .bind(expected_payment_date)
+    .bind(vat_amount)
+    .bind(status)
+    .bind(notes)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    sqlx::query("DELETE FROM invoice_items WHERE invoice_id = $1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+
+    let mut total = Decimal::ZERO;
+    for item in items {
+        let amount = (item.quantity * item.price).round_dp(2);
+        total += amount;
+
+        sqlx::query(
+            r#"
+            INSERT INTO invoice_items (invoice_id, position, description, unit, quantity, price, amount)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            "#,
+        )
+        .bind(invoice.id)
+        .bind(item.position)
+        .bind(&item.description)
+        .bind(&item.unit)
+        .bind(item.quantity)
+        .bind(item.price)
+        .bind(amount)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    let invoice = sqlx::query_as::<_, Invoice>(
+        r#"
+        UPDATE invoices
+        SET total_amount = $2, updated_at = NOW()
+        WHERE id = $1
+        RETURNING id, company_id, number, counterparty_id, contract_id, category_id, direction,
+                  date, expected_payment_date, total_amount, vat_amount,
+                  status, notes, pdf_path, bas_id, created_at, updated_at
+        "#,
+    )
+    .bind(invoice.id)
+    .bind(total)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+    Ok(invoice)
+}
+
 /// Створити нову накладну разом з позиціями в одній транзакції.
 ///
 /// `vat_amount` = 0 для ФОП без ПДВ (можна розширити логікою у майбутньому).
@@ -534,8 +1008,17 @@ mod tests {
         let _ = list;
         let _ = list_filtered;
         let _ = get_by_id;
+        let _ = find_by_bas_id;
+        let _ = find_import_candidate;
+        let _ = list_import_candidates;
+        let _ = find_import_candidate_loose;
+        let _ = list_import_candidates_loose;
         let _ = create;
+        let _ = create_imported_header;
+        let _ = create_imported_with_items;
         let _ = update_with_items;
+        let _ = update_imported_header;
+        let _ = update_imported_with_items;
         let _ = change_status;
         let _ = get_for_edit;
         let _ = advance_status;

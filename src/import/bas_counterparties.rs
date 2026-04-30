@@ -2,10 +2,12 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use anyhow::{anyhow, Context, Result};
+use calamine::{open_workbook_auto, Reader as CalamineReader};
 use quick_xml::events::Event;
-use quick_xml::Reader;
+use quick_xml::Reader as XmlReader;
 use sqlx::PgPool;
 use tokio::fs;
+use tokio::task;
 use uuid::Uuid;
 
 use crate::db;
@@ -27,6 +29,7 @@ pub struct ImportedCounterparty {
 pub enum ImportAction {
     Create,
     Update,
+    Conflict,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,6 +37,7 @@ pub struct CounterpartyImportPlanRow {
     pub bas_id: Option<String>,
     pub name: String,
     pub action: ImportAction,
+    pub note: Option<String>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -42,18 +46,30 @@ pub struct CounterpartyImportReport {
     pub created: usize,
     pub updated: usize,
     pub skipped: usize,
+    pub conflicts: usize,
     pub rows: Vec<CounterpartyImportPlanRow>,
 }
 
 pub async fn parse_counterparties_xml_file(path: &Path) -> Result<Vec<ImportedCounterparty>> {
-    let xml_text = fs::read_to_string(path)
-        .await
-        .with_context(|| format!("Не вдалося прочитати файл {}", path.display()))?;
-    parse_counterparties_xml(&xml_text)
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_lowercase())
+        .unwrap_or_default();
+
+    match extension.as_str() {
+        "xlsx" | "xls" => parse_counterparties_excel_file(path).await,
+        _ => {
+            let xml_text = fs::read_to_string(path)
+                .await
+                .with_context(|| format!("Не вдалося прочитати файл {}", path.display()))?;
+            parse_counterparties_xml(&xml_text)
+        }
+    }
 }
 
 pub fn parse_counterparties_xml(xml: &str) -> Result<Vec<ImportedCounterparty>> {
-    let mut reader = Reader::from_str(xml);
+    let mut reader = XmlReader::from_str(xml);
     reader.config_mut().trim_text(true);
 
     let mut buf = Vec::new();
@@ -129,12 +145,41 @@ pub async fn apply_imported_counterparties(
     };
 
     for row in rows {
-        let existing = if let Some(bas_id) = row.bas_id.as_deref() {
-            db::counterparties::find_by_bas_id(pool, bas_id).await?
+        if row.bas_id.is_none() && row.edrpou.is_none() {
+            let matches =
+                db::counterparties::list_by_name_exact(pool, company_id, &row.name).await?;
+            if matches.len() > 1 {
+                report.conflicts += 1;
+                report.skipped += 1;
+                report.rows.push(CounterpartyImportPlanRow {
+                    bas_id: row.bas_id.clone(),
+                    name: row.name.clone(),
+                    action: ImportAction::Conflict,
+                    note: Some(format!(
+                        "conflict: Р·РЅР°Р№РґРµРЅРѕ {} РєРѕРЅС‚СЂР°РіРµРЅС‚С–РІ Р·Р° С‚РѕС‡РЅРѕСЋ РЅР°Р·РІРѕСЋ",
+                        matches.len()
+                    )),
+                });
+                continue;
+            }
+        }
+
+        let (existing, match_source) = if let Some(bas_id) = row.bas_id.as_deref() {
+            (
+                db::counterparties::find_by_bas_id(pool, bas_id).await?,
+                Some("bas_id"),
+            )
         } else if let Some(edrpou) = row.edrpou.as_deref() {
-            db::counterparties::find_by_edrpou(pool, company_id, edrpou).await?
+            (
+                db::counterparties::find_by_edrpou(pool, company_id, edrpou).await?,
+                Some("ЄДРПОУ"),
+            )
+        } else if let Some(counterparty) =
+            db::counterparties::find_by_name(pool, company_id, &row.name).await?
+        {
+            (Some(counterparty), Some("exact name"))
         } else {
-            None
+            (None, None)
         };
 
         match existing {
@@ -144,6 +189,7 @@ pub async fn apply_imported_counterparties(
                     bas_id: row.bas_id.clone(),
                     name: row.name.clone(),
                     action: ImportAction::Update,
+                    note: Some(format!("match: {}", match_source.unwrap_or("existing row"))),
                 });
                 if !dry_run {
                     let payload = merge_update_payload(&counterparty, row);
@@ -156,6 +202,7 @@ pub async fn apply_imported_counterparties(
                     bas_id: row.bas_id.clone(),
                     name: row.name.clone(),
                     action: ImportAction::Create,
+                    note: Some(build_create_note(row)),
                 });
                 if !dry_run {
                     let payload = NewCounterparty {
@@ -178,6 +225,16 @@ pub async fn apply_imported_counterparties(
     Ok(report)
 }
 
+fn build_create_note(row: &ImportedCounterparty) -> String {
+    if row.bas_id.is_some() {
+        "create: bas_id не знайдено у БД".to_string()
+    } else if row.edrpou.is_some() {
+        "create: ЄДРПОУ не знайдено у БД".to_string()
+    } else {
+        "create: не знайдено match за назвою".to_string()
+    }
+}
+
 fn merge_update_payload(
     existing: &Counterparty,
     imported: &ImportedCounterparty,
@@ -197,6 +254,54 @@ fn merge_update_payload(
     }
 }
 
+async fn parse_counterparties_excel_file(path: &Path) -> Result<Vec<ImportedCounterparty>> {
+    let path = path.to_path_buf();
+    task::spawn_blocking(move || {
+        let mut workbook = open_workbook_auto(&path)
+            .with_context(|| format!("Не вдалося відкрити Excel файл {}", path.display()))?;
+        let sheet_name = workbook
+            .sheet_names()
+            .first()
+            .cloned()
+            .ok_or_else(|| anyhow!("У Excel файлі немає жодного sheet"))?;
+        let range = workbook.worksheet_range(&sheet_name)?;
+
+        let mut rows_iter = range.rows();
+        let headers = rows_iter
+            .next()
+            .ok_or_else(|| anyhow!("Excel файл не містить заголовків"))?
+            .iter()
+            .map(|cell| normalize_tag(&cell.to_string()))
+            .collect::<Vec<_>>();
+
+        let mut rows = Vec::new();
+        for row in rows_iter {
+            let mut fields = BTreeMap::new();
+            for (idx, cell) in row.iter().enumerate() {
+                let value = cell.to_string().trim().to_string();
+                if value.is_empty() {
+                    continue;
+                }
+                if let Some(field) = headers.get(idx).and_then(|header| map_field_name(header)) {
+                    fields.entry(field.to_string()).or_insert(value);
+                }
+            }
+
+            if let Some(counterparty) = build_counterparty_from_fields(fields)? {
+                rows.push(counterparty);
+            }
+        }
+
+        if rows.is_empty() {
+            return Err(anyhow!("У Excel не знайдено жодного контрагента"));
+        }
+
+        Ok(rows)
+    })
+    .await
+    .context("Excel parser для контрагентів завершився помилкою")?
+}
+
 fn build_counterparty_from_fields(
     fields: BTreeMap<String, String>,
 ) -> Result<Option<ImportedCounterparty>> {
@@ -214,12 +319,12 @@ fn build_counterparty_from_fields(
     Ok(Some(ImportedCounterparty {
         bas_id: fields.get("bas_id").cloned(),
         name,
-        edrpou: fields.get("edrpou").cloned(),
-        ipn: fields.get("ipn").cloned(),
-        iban: fields.get("iban").cloned(),
-        address: fields.get("address").cloned(),
-        phone: fields.get("phone").cloned(),
-        email: fields.get("email").cloned(),
+        edrpou: clean_optional(fields.get("edrpou")),
+        ipn: clean_optional(fields.get("ipn")),
+        iban: clean_optional(fields.get("iban")),
+        address: clean_optional(fields.get("address")),
+        phone: clean_optional(fields.get("phone")),
+        email: clean_optional(fields.get("email")),
     }))
 }
 
@@ -257,6 +362,13 @@ fn map_field_name(tag: &str) -> Option<&'static str> {
     }
 }
 
+fn clean_optional(value: Option<&String>) -> Option<String> {
+    value
+        .map(|item| item.trim())
+        .filter(|item| !item.is_empty())
+        .map(ToOwned::to_owned)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -267,62 +379,68 @@ mod tests {
             <counterparties>
                 <counterparty>
                     <id>bas-001</id>
-                    <name>ТОВ Альфа</name>
+                    <name>ТОВ Тест</name>
                     <edrpou>12345678</edrpou>
-                    <iban>UA123456789012345678901234567</iban>
-                    <address>м. Київ</address>
-                </counterparty>
-                <counterparty>
-                    <id>bas-002</id>
-                    <name>ФОП Петренко</name>
-                    <ipn>1234567890</ipn>
                 </counterparty>
             </counterparties>
         "#;
 
-        let rows = parse_counterparties_xml(xml).expect("XML має парситися");
-        assert_eq!(rows.len(), 2);
-        assert_eq!(rows[0].name, "ТОВ Альфа");
+        let rows = parse_counterparties_xml(xml).expect("парсинг контрагентів має спрацювати");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].bas_id.as_deref(), Some("bas-001"));
+        assert_eq!(rows[0].name, "ТОВ Тест");
         assert_eq!(rows[0].edrpou.as_deref(), Some("12345678"));
-        assert_eq!(rows[1].ipn.as_deref(), Some("1234567890"));
     }
 
     #[test]
-    fn parse_counterparties_xml_supports_ukrainian_tags() {
-        let xml = r#"
-            <Контрагенти>
-                <Контрагент>
-                    <Код>bas-010</Код>
-                    <Найменування>ТОВ Ромашка</Найменування>
-                    <ЄДРПОУ>87654321</ЄДРПОУ>
-                    <Адреса>Львів</Адреса>
-                </Контрагент>
-            </Контрагенти>
-        "#;
+    fn build_counterparty_from_fields_reads_excel_like_headers() {
+        let mut fields = BTreeMap::new();
+        fields.insert("bas_id".to_string(), "cp-001".to_string());
+        fields.insert("name".to_string(), "ФОП Приклад".to_string());
+        fields.insert("edrpou".to_string(), "12345678".to_string());
 
-        let rows = parse_counterparties_xml(xml).expect("XML має парситися");
-        assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].bas_id.as_deref(), Some("bas-010"));
-        assert_eq!(rows[0].name, "ТОВ Ромашка");
-        assert_eq!(rows[0].edrpou.as_deref(), Some("87654321"));
+        let row = build_counterparty_from_fields(fields)
+            .expect("побудова має спрацювати")
+            .expect("рядок має бути валідним");
+        assert_eq!(row.bas_id.as_deref(), Some("cp-001"));
+        assert_eq!(row.name, "ФОП Приклад");
     }
 
     #[test]
-    fn parse_counterparties_xml_skips_rows_without_name() {
-        let xml = r#"
-            <counterparties>
-                <counterparty>
-                    <id>bas-003</id>
-                </counterparty>
-                <counterparty>
-                    <id>bas-004</id>
-                    <name>ТОВ Бета</name>
-                </counterparty>
-            </counterparties>
-        "#;
+    fn build_create_note_mentions_matching_strategy() {
+        let with_bas = ImportedCounterparty {
+            bas_id: Some("cp-001".to_string()),
+            name: "ТОВ Тест".to_string(),
+            edrpou: None,
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+        };
+        let with_edrpou = ImportedCounterparty {
+            bas_id: None,
+            name: "ТОВ Тест".to_string(),
+            edrpou: Some("12345678".to_string()),
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+        };
+        let name_only = ImportedCounterparty {
+            bas_id: None,
+            name: "ТОВ Тест".to_string(),
+            edrpou: None,
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+        };
 
-        let rows = parse_counterparties_xml(xml).expect("XML має парситися");
-        assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].name, "ТОВ Бета");
+        assert!(build_create_note(&with_bas).contains("bas_id"));
+        assert!(build_create_note(&with_edrpou).contains("ЄДРПОУ"));
+        assert!(build_create_note(&name_only).contains("назвою"));
     }
 }

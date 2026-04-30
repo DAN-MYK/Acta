@@ -1,17 +1,25 @@
 // Утиліта імпорту даних з BAS.
 //
-// Поточний baseline:
-// - counterparties XML
-// - contracts XML
-// - acts XML
-// - dry-run теж підключається до БД і показує реальний create/update/skip plan
+// Поточний expanded baseline:
+// - counterparties: XML + XLSX/XLS
+// - contracts: XML + XLSX/XLS
+// - acts: XML
+// - invoices: XML + XLSX/XLS
+// - payments: CSV
+// - dry-run підключається до БД і показує aggregated DB-aware preview
 
+use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::fs;
+use std::future::Future;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 
 use acta::import::bas_acts::{self, ActImportAction, ActImportReport};
 use acta::import::bas_contracts::{self, ContractImportAction, ContractImportReport};
 use acta::import::bas_counterparties::{self, CounterpartyImportReport, ImportAction};
+use acta::import::bas_invoices::{self, InvoiceImportAction, InvoiceImportReport};
+use acta::import::bas_payments::{self, PaymentImportAction, PaymentImportReport};
 use anyhow::{anyhow, Context, Result};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
@@ -40,6 +48,50 @@ enum BasArtifactKind {
     Unknown,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum ImporterKey {
+    Counterparties,
+    Contracts,
+    Acts,
+    Invoices,
+    Payments,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ImporterSpec {
+    key: ImporterKey,
+    artifact_kinds: &'static [BasArtifactKind],
+    totals_label: &'static str,
+}
+
+const IMPORTER_SPECS: &[ImporterSpec] = &[
+    ImporterSpec {
+        key: ImporterKey::Counterparties,
+        artifact_kinds: &[BasArtifactKind::Counterparties],
+        totals_label: "контрагентів",
+    },
+    ImporterSpec {
+        key: ImporterKey::Contracts,
+        artifact_kinds: &[BasArtifactKind::Contracts],
+        totals_label: "договорів",
+    },
+    ImporterSpec {
+        key: ImporterKey::Acts,
+        artifact_kinds: &[BasArtifactKind::Acts],
+        totals_label: "актів",
+    },
+    ImporterSpec {
+        key: ImporterKey::Invoices,
+        artifact_kinds: &[BasArtifactKind::Invoices],
+        totals_label: "накладних",
+    },
+    ImporterSpec {
+        key: ImporterKey::Payments,
+        artifact_kinds: &[BasArtifactKind::Payments, BasArtifactKind::BankCsv],
+        totals_label: "платежів",
+    },
+];
+
 impl BasArtifactKind {
     fn label(self) -> &'static str {
         match self {
@@ -65,6 +117,18 @@ struct DiscoveryReport {
     root: PathBuf,
     artifacts: Vec<BasArtifact>,
     skipped_files: Vec<PathBuf>,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+struct ImportTotals {
+    files: usize,
+    parsed: usize,
+    created: usize,
+    updated: usize,
+    skipped: usize,
+    conflicts: usize,
+    errors: usize,
+    reasons: BTreeMap<String, usize>,
 }
 
 impl DiscoveryReport {
@@ -122,7 +186,13 @@ fn classify_artifact(path: &Path) -> Option<BasArtifactKind> {
         .unwrap_or_default();
 
     let kind = match extension.as_str() {
-        "csv" => BasArtifactKind::BankCsv,
+        "csv" => {
+            if name.contains("payment") || name.contains("bank") || name.contains("statement") {
+                BasArtifactKind::Payments
+            } else {
+                BasArtifactKind::BankCsv
+            }
+        }
         "xml" | "xlsx" | "xls" => {
             if name.contains("контраг") || name.contains("counterpart") || name.contains("client")
             {
@@ -218,13 +288,17 @@ fn visit_dir(path: &Path, report: &mut DiscoveryReport) -> Result<(), String> {
 }
 
 fn print_discovery_report(report: &DiscoveryReport, dry_run: bool) {
+    println!("=== BAS MIGRATE ===");
     println!("Вхідна директорія: {}", report.root.display());
     if dry_run {
-        println!("Режим dry-run: зміни до БД не застосовуються, але preview звіряється з поточним станом БД");
+        println!("Режим: dry-run / DB-aware preview");
+        println!("Preview звіряється з поточним станом БД, але змін не записує.");
+    } else {
+        println!("Режим: імпорт у БД");
     }
 
     println!(
-        "Знайдено {} підтримуваних файлів експорту",
+        "Знайдено підтримуваних файлів: {}",
         report.recognized_count()
     );
 
@@ -239,16 +313,28 @@ fn print_discovery_report(report: &DiscoveryReport, dry_run: bool) {
     ] {
         let count = report.count_by_kind(kind);
         if count > 0 {
-            println!("  - {}: {}", kind.label(), count);
+            println!("  - {} -> {}", kind.label(), count);
         }
     }
 }
 
-fn is_xml_artifact(path: &Path) -> bool {
-    path.extension()
+fn is_importable_artifact(kind: BasArtifactKind, path: &Path) -> bool {
+    let extension = path
+        .extension()
         .and_then(|value| value.to_str())
-        .map(|value| value.eq_ignore_ascii_case("xml"))
-        .unwrap_or(false)
+        .map(|value| value.to_lowercase())
+        .unwrap_or_default();
+
+    match kind {
+        BasArtifactKind::Counterparties
+        | BasArtifactKind::Contracts
+        | BasArtifactKind::Invoices => {
+            matches!(extension.as_str(), "xml" | "xlsx" | "xls")
+        }
+        BasArtifactKind::Acts => extension == "xml",
+        BasArtifactKind::Payments | BasArtifactKind::BankCsv => extension == "csv",
+        BasArtifactKind::Unknown => false,
+    }
 }
 
 fn collect_supported_artifacts<'a>(
@@ -259,84 +345,465 @@ fn collect_supported_artifacts<'a>(
         .artifacts
         .iter()
         .filter(|artifact| artifact.kind == kind)
-        .filter(|artifact| is_xml_artifact(&artifact.path))
+        .filter(|artifact| is_importable_artifact(kind, &artifact.path))
         .collect()
 }
 
-fn print_counterparty_report(path: &Path, report: &CounterpartyImportReport, dry_run: bool) {
-    let mode = if dry_run { "dry-run" } else { "import" };
-    println!(
-        "[{}] {}: parsed={}, create={}, update={}, skipped={}",
-        mode,
-        path.display(),
-        report.parsed,
-        report.created,
-        report.updated,
-        report.skipped
-    );
+fn collect_supported_artifacts_multi<'a>(
+    report: &'a DiscoveryReport,
+    kinds: &[BasArtifactKind],
+) -> Vec<&'a BasArtifact> {
+    let mut artifacts = Vec::new();
+    for kind in kinds {
+        artifacts.extend(collect_supported_artifacts(report, *kind));
+    }
+    artifacts.sort_by(|left, right| left.path.cmp(&right.path));
+    artifacts
+}
 
-    for row in &report.rows {
-        let action = match row.action {
-            ImportAction::Create => "create",
-            ImportAction::Update => "update",
-        };
-        let bas_id = row.bas_id.as_deref().unwrap_or("-");
-        println!("  - {} | {} | {}", action, bas_id, row.name);
+fn build_importer_artifacts<'a>(
+    report: &'a DiscoveryReport,
+) -> BTreeMap<ImporterKey, Vec<&'a BasArtifact>> {
+    IMPORTER_SPECS
+        .iter()
+        .map(|spec| {
+            (
+                spec.key,
+                collect_supported_artifacts_multi(report, spec.artifact_kinds),
+            )
+        })
+        .collect()
+}
+
+fn build_importer_totals() -> BTreeMap<ImporterKey, ImportTotals> {
+    IMPORTER_SPECS
+        .iter()
+        .map(|spec| (spec.key, ImportTotals::default()))
+        .collect()
+}
+
+fn push_reason(reasons: &mut BTreeMap<String, usize>, label: impl Into<String>) {
+    let label = label.into();
+    *reasons.entry(label).or_insert(0) += 1;
+}
+
+fn merge_reason_counts(
+    target: &mut BTreeMap<String, usize>,
+    additions: impl IntoIterator<Item = (String, usize)>,
+) {
+    for (label, count) in additions {
+        *target.entry(label).or_insert(0) += count;
     }
 }
 
-fn print_contract_report(path: &Path, report: &ContractImportReport, dry_run: bool) {
-    let mode = if dry_run { "dry-run" } else { "import" };
-    println!(
-        "[{}] {}: parsed={}, create={}, update={}, skipped={}",
-        mode,
-        path.display(),
-        report.parsed,
-        report.created,
-        report.updated,
-        report.skipped
-    );
+fn print_reason_summary(reasons: &BTreeMap<String, usize>) {
+    if reasons.is_empty() {
+        return;
+    }
 
-    for row in &report.rows {
+    println!("  Зведення причин:");
+    for (label, count) in reasons {
+        println!("    - {} -> {}", label, count);
+    }
+}
+
+fn accumulate_totals(
+    totals: &mut ImportTotals,
+    parsed: usize,
+    created: usize,
+    updated: usize,
+    skipped: usize,
+    conflicts: usize,
+    reasons: BTreeMap<String, usize>,
+) {
+    totals.files += 1;
+    totals.parsed += parsed;
+    totals.created += created;
+    totals.updated += updated;
+    totals.skipped += skipped;
+    totals.conflicts += conflicts;
+    merge_reason_counts(&mut totals.reasons, reasons);
+}
+
+fn collect_reason_counts<Row>(
+    rows: &[Row],
+    label_for: impl Fn(&Row) -> Cow<'_, str>,
+) -> BTreeMap<String, usize> {
+    let mut reasons = BTreeMap::new();
+    for row in rows {
+        push_reason(&mut reasons, label_for(row).into_owned());
+    }
+    reasons
+}
+
+fn action_label(action: &str) -> &'static str {
+    match action {
+        "create" => "СТВОРИТИ",
+        "update" => "ОНОВИТИ",
+        "skip" => "ПРОПУСТИТИ",
+        "conflict" => "КОНФЛІКТ",
+        _ => "ДІЯ",
+    }
+}
+
+fn format_counts(
+    parsed: usize,
+    created: usize,
+    updated: usize,
+    skipped: usize,
+    conflicts: usize,
+) -> String {
+    format!(
+        "рядків: {}, створити: {}, оновити: {}, пропустити: {}, конфлікти: {}",
+        parsed, created, updated, skipped, conflicts
+    )
+}
+
+fn format_counts_no_update(
+    parsed: usize,
+    created: usize,
+    skipped: usize,
+    conflicts: usize,
+) -> String {
+    format!(
+        "рядків: {}, створити: {}, пропустити: {}, конфлікти: {}",
+        parsed, created, skipped, conflicts
+    )
+}
+
+fn print_report_header(path: &Path, dry_run: bool, summary: &str) {
+    let mode = if dry_run { "PREVIEW" } else { "ІМПОРТ" };
+    println!();
+    println!("=== {} :: {} ===", mode, path.display());
+    println!("  {}", summary);
+}
+
+fn print_report_rows<Row>(rows: &[Row], render: impl Fn(&Row) -> String) {
+    for row in rows {
+        println!("  • {}", render(row));
+    }
+}
+
+fn counterparty_reason_counts(report: &CounterpartyImportReport) -> BTreeMap<String, usize> {
+    collect_reason_counts(&report.rows, |row| {
+        match (&row.action, row.note.as_deref()) {
+            (ImportAction::Create, Some(note)) => Cow::Borrowed(note),
+            (ImportAction::Create, None) => Cow::Borrowed("create: новий контрагент"),
+            (ImportAction::Update, Some(note)) => Cow::Borrowed(note),
+            (ImportAction::Update, None) => Cow::Borrowed("update: знайдено existing row у БД"),
+            (ImportAction::Conflict, Some(note)) => Cow::Borrowed(note),
+            (ImportAction::Conflict, None) => Cow::Borrowed("conflict: неоднозначний match"),
+        }
+    })
+}
+
+fn contract_reason_counts(report: &ContractImportReport) -> BTreeMap<String, usize> {
+    collect_reason_counts(&report.rows, |row| {
+        match (&row.action, row.note.as_deref()) {
+            (ContractImportAction::Create, Some(note)) => Cow::Borrowed(note),
+            (ContractImportAction::Create, None) => {
+                Cow::Borrowed("create: нового договору в БД ще немає")
+            }
+            (ContractImportAction::Update, Some(note)) => Cow::Borrowed(note),
+            (ContractImportAction::Update, None) => {
+                Cow::Borrowed("update: знайдено existing row у БД")
+            }
+            (ContractImportAction::Conflict, Some(note)) => Cow::Borrowed(note),
+            (ContractImportAction::Conflict, None) => {
+                Cow::Borrowed("conflict: неоднозначний match")
+            }
+            (ContractImportAction::Skip, Some(note)) => Cow::Borrowed(note),
+            (ContractImportAction::Skip, None) => Cow::Borrowed("skip: без уточненої причини"),
+        }
+    })
+}
+
+fn act_reason_counts(report: &ActImportReport) -> BTreeMap<String, usize> {
+    collect_reason_counts(&report.rows, |row| {
+        match (&row.action, row.note.as_deref()) {
+            (ActImportAction::Create, Some(note)) => Cow::Borrowed(note),
+            (ActImportAction::Create, None) => Cow::Borrowed("create: нового акту в БД ще немає"),
+            (ActImportAction::Update, Some(note)) => Cow::Borrowed(note),
+            (ActImportAction::Update, None) => Cow::Borrowed("update: знайдено existing row у БД"),
+            (ActImportAction::Conflict, Some(note)) => Cow::Borrowed(note),
+            (ActImportAction::Conflict, None) => Cow::Borrowed("conflict: неоднозначний match"),
+            (ActImportAction::Skip, Some(note)) => Cow::Borrowed(note),
+            (ActImportAction::Skip, None) => Cow::Borrowed("skip: без уточненої причини"),
+        }
+    })
+}
+
+fn payment_reason_counts(report: &PaymentImportReport) -> BTreeMap<String, usize> {
+    collect_reason_counts(&report.rows, |row| {
+        match (&row.action, row.note.as_deref()) {
+            (PaymentImportAction::Create, Some(note)) => Cow::Borrowed(note),
+            (PaymentImportAction::Create, None) => {
+                Cow::Borrowed("create: не знайдено дубліката в БД")
+            }
+            (PaymentImportAction::Skip, Some(note)) => Cow::Borrowed(note),
+            (PaymentImportAction::Skip, None) => Cow::Borrowed("skip: без уточненої причини"),
+        }
+    })
+}
+
+fn invoice_reason_counts(report: &InvoiceImportReport) -> BTreeMap<String, usize> {
+    collect_reason_counts(&report.rows, |row| {
+        match (&row.action, row.note.as_deref()) {
+            (InvoiceImportAction::Create, Some(note)) => Cow::Borrowed(note),
+            (InvoiceImportAction::Create, None) => {
+                Cow::Borrowed("create: нової накладної в БД ще немає")
+            }
+            (InvoiceImportAction::Update, Some(note)) => Cow::Borrowed(note),
+            (InvoiceImportAction::Update, None) => {
+                Cow::Borrowed("update: знайдено existing row у БД")
+            }
+            (InvoiceImportAction::Conflict, Some(note)) => Cow::Borrowed(note),
+            (InvoiceImportAction::Conflict, None) => Cow::Borrowed("conflict: неоднозначний match"),
+            (InvoiceImportAction::Skip, Some(note)) => Cow::Borrowed(note),
+            (InvoiceImportAction::Skip, None) => Cow::Borrowed("skip: без уточненої причини"),
+        }
+    })
+}
+
+fn print_counterparty_report(path: &Path, report: &CounterpartyImportReport, dry_run: bool) {
+    print_report_header(
+        path,
+        dry_run,
+        &format_counts(
+            report.parsed,
+            report.created,
+            report.updated,
+            report.skipped,
+            report.conflicts,
+        ),
+    );
+    print_report_rows(&report.rows, |row| {
+        let action = match row.action {
+            ImportAction::Create => "create",
+            ImportAction::Update => "update",
+            ImportAction::Conflict => "conflict",
+        };
+        let bas_id = row.bas_id.as_deref().unwrap_or("-");
+        if let Some(note) = &row.note {
+            format!(
+                "{} | bas_id={} | {} | {}",
+                action_label(action),
+                bas_id,
+                row.name,
+                note
+            )
+        } else {
+            format!(
+                "{} | bas_id={} | {}",
+                action_label(action),
+                bas_id,
+                row.name
+            )
+        }
+    });
+    print_reason_summary(&counterparty_reason_counts(report));
+}
+
+fn print_contract_report(path: &Path, report: &ContractImportReport, dry_run: bool) {
+    print_report_header(
+        path,
+        dry_run,
+        &format_counts(
+            report.parsed,
+            report.created,
+            report.updated,
+            report.skipped,
+            report.conflicts,
+        ),
+    );
+    print_report_rows(&report.rows, |row| {
         let action = match row.action {
             ContractImportAction::Create => "create",
             ContractImportAction::Update => "update",
             ContractImportAction::Skip => "skip",
+            ContractImportAction::Conflict => "conflict",
         };
         let bas_id = row.bas_id.as_deref().unwrap_or("-");
         if let Some(note) = &row.note {
-            println!("  - {} | {} | {} | {}", action, bas_id, row.number, note);
+            format!(
+                "{} | bas_id={} | договір {} | {}",
+                action_label(action),
+                bas_id,
+                row.number,
+                note
+            )
         } else {
-            println!("  - {} | {} | {}", action, bas_id, row.number);
+            format!(
+                "{} | bas_id={} | договір {}",
+                action_label(action),
+                bas_id,
+                row.number
+            )
         }
-    }
+    });
+    print_reason_summary(&contract_reason_counts(report));
 }
 
 fn print_act_report(path: &Path, report: &ActImportReport, dry_run: bool) {
-    let mode = if dry_run { "dry-run" } else { "import" };
-    println!(
-        "[{}] {}: parsed={}, create={}, update={}, skipped={}",
-        mode,
-        path.display(),
-        report.parsed,
-        report.created,
-        report.updated,
-        report.skipped
+    print_report_header(
+        path,
+        dry_run,
+        &format_counts(
+            report.parsed,
+            report.created,
+            report.updated,
+            report.skipped,
+            report.conflicts,
+        ),
     );
-
-    for row in &report.rows {
+    print_report_rows(&report.rows, |row| {
         let action = match row.action {
             ActImportAction::Create => "create",
             ActImportAction::Update => "update",
             ActImportAction::Skip => "skip",
+            ActImportAction::Conflict => "conflict",
         };
         let bas_id = row.bas_id.as_deref().unwrap_or("-");
         if let Some(note) = &row.note {
-            println!("  - {} | {} | {} | {}", action, bas_id, row.number, note);
+            format!(
+                "{} | bas_id={} | акт {} | {}",
+                action_label(action),
+                bas_id,
+                row.number,
+                note
+            )
         } else {
-            println!("  - {} | {} | {}", action, bas_id, row.number);
+            format!(
+                "{} | bas_id={} | акт {}",
+                action_label(action),
+                bas_id,
+                row.number
+            )
+        }
+    });
+    print_reason_summary(&act_reason_counts(report));
+}
+
+fn print_payment_report(path: &Path, report: &PaymentImportReport, dry_run: bool) {
+    print_report_header(
+        path,
+        dry_run,
+        &format_counts_no_update(
+            report.parsed,
+            report.created,
+            report.skipped,
+            report.conflicts,
+        ),
+    );
+    print_report_rows(&report.rows, |row| {
+        let action = match row.action {
+            PaymentImportAction::Create => "create",
+            PaymentImportAction::Skip => "skip",
+        };
+        let bank_ref = row.bank_ref.as_deref().unwrap_or("-");
+        if let Some(note) = &row.note {
+            format!(
+                "{} | bank_ref={} | {} | {}",
+                action_label(action),
+                bank_ref,
+                row.description,
+                note
+            )
+        } else {
+            format!(
+                "{} | bank_ref={} | {}",
+                action_label(action),
+                bank_ref,
+                row.description
+            )
+        }
+    });
+    print_reason_summary(&payment_reason_counts(report));
+}
+
+fn print_invoice_report(path: &Path, report: &InvoiceImportReport, dry_run: bool) {
+    print_report_header(
+        path,
+        dry_run,
+        &format_counts(
+            report.parsed,
+            report.created,
+            report.updated,
+            report.skipped,
+            report.conflicts,
+        ),
+    );
+    print_report_rows(&report.rows, |row| {
+        let action = match row.action {
+            InvoiceImportAction::Create => "create",
+            InvoiceImportAction::Update => "update",
+            InvoiceImportAction::Skip => "skip",
+            InvoiceImportAction::Conflict => "conflict",
+        };
+        let bas_id = row.bas_id.as_deref().unwrap_or("-");
+        if let Some(note) = &row.note {
+            format!(
+                "{} | bas_id={} | накладна {} | {}",
+                action_label(action),
+                bas_id,
+                row.number,
+                note
+            )
+        } else {
+            format!(
+                "{} | bas_id={} | накладна {}",
+                action_label(action),
+                bas_id,
+                row.number
+            )
+        }
+    });
+    print_reason_summary(&invoice_reason_counts(report));
+}
+
+fn print_totals(label: &str, totals: &ImportTotals) {
+    if totals.files == 0 {
+        return;
+    }
+
+    println!();
+    println!("=== ПІДСУМОК: {} ===", label);
+    println!("  файлів: {}", totals.files);
+    println!("  рядків: {}", totals.parsed);
+    println!("  створити: {}", totals.created);
+    println!("  оновити: {}", totals.updated);
+    println!("  пропустити: {}", totals.skipped);
+    println!("  конфлікти: {}", totals.conflicts);
+    println!("  помилок: {}", totals.errors);
+
+    print_reason_summary(&totals.reasons);
+}
+
+fn has_supported_artifacts(
+    artifacts_by_importer: &BTreeMap<ImporterKey, Vec<&BasArtifact>>,
+) -> bool {
+    artifacts_by_importer
+        .values()
+        .any(|artifacts| !artifacts.is_empty())
+}
+
+fn sum_totals_from_map(totals_by_importer: &BTreeMap<ImporterKey, ImportTotals>) -> ImportTotals {
+    let mut overall = ImportTotals::default();
+
+    for spec in IMPORTER_SPECS {
+        if let Some(totals) = totals_by_importer.get(&spec.key) {
+            overall.files += totals.files;
+            overall.parsed += totals.parsed;
+            overall.created += totals.created;
+            overall.updated += totals.updated;
+            overall.skipped += totals.skipped;
+            overall.conflicts += totals.conflicts;
+            overall.errors += totals.errors;
+            merge_reason_counts(&mut overall.reasons, totals.reasons.clone());
         }
     }
+
+    overall
 }
 
 async fn connect_pool() -> Result<PgPool> {
@@ -358,31 +825,54 @@ async fn first_company_id(pool: &PgPool) -> Result<Uuid> {
     Ok(company.id)
 }
 
-async fn process_counterparties_artifact(
-    path: &Path,
+async fn process_artifacts<Report, ProcessFn, PrintFn, StatsFn, ReasonsFn>(
+    artifacts: &[&BasArtifact],
     pool: &PgPool,
     company_id: Uuid,
     dry_run: bool,
-) -> Result<CounterpartyImportReport> {
-    bas_counterparties::import_counterparties_from_xml(pool, company_id, path, dry_run).await
-}
+    totals: &mut ImportTotals,
+    process: ProcessFn,
+    print_report: PrintFn,
+    stats: StatsFn,
+    reason_counts: ReasonsFn,
+) -> bool
+where
+    ProcessFn: for<'a> Fn(
+        &'a Path,
+        &'a PgPool,
+        Uuid,
+        bool,
+    ) -> Pin<Box<dyn Future<Output = Result<Report>> + 'a>>,
+    PrintFn: Fn(&Path, &Report, bool),
+    StatsFn: Fn(&Report) -> (usize, usize, usize, usize, usize),
+    ReasonsFn: Fn(&Report) -> BTreeMap<String, usize>,
+{
+    let mut failed = false;
 
-async fn process_contracts_artifact(
-    path: &Path,
-    pool: &PgPool,
-    company_id: Uuid,
-    dry_run: bool,
-) -> Result<ContractImportReport> {
-    bas_contracts::import_contracts_from_xml(pool, company_id, path, dry_run).await
-}
+    for artifact in artifacts {
+        match process(&artifact.path, pool, company_id, dry_run).await {
+            Ok(import_report) => {
+                let (parsed, created, updated, skipped, conflicts) = stats(&import_report);
+                accumulate_totals(
+                    totals,
+                    parsed,
+                    created,
+                    updated,
+                    skipped,
+                    conflicts,
+                    reason_counts(&import_report),
+                );
+                print_report(&artifact.path, &import_report, dry_run);
+            }
+            Err(error) => {
+                failed = true;
+                totals.errors += 1;
+                eprintln!("Помилка імпорту {}: {error}", artifact.path.display());
+            }
+        }
+    }
 
-async fn process_acts_artifact(
-    path: &Path,
-    pool: &PgPool,
-    company_id: Uuid,
-    dry_run: bool,
-) -> Result<ActImportReport> {
-    bas_acts::import_acts_from_xml(pool, company_id, path, dry_run).await
+    failed
 }
 
 #[tokio::main]
@@ -390,9 +880,9 @@ async fn main() {
     let args: Vec<String> = std::env::args().collect();
 
     let parsed = match parse_args(&args) {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("{e}");
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("{error}");
             eprintln!("Використання: migrate --input <директорія> [--dry-run]");
             std::process::exit(1);
         }
@@ -418,18 +908,12 @@ async fn main() {
 
     print_discovery_report(&report, opts.dry_run);
 
-    let counterparty_artifacts =
-        collect_supported_artifacts(&report, BasArtifactKind::Counterparties);
-    let contract_artifacts = collect_supported_artifacts(&report, BasArtifactKind::Contracts);
-    let act_artifacts = collect_supported_artifacts(&report, BasArtifactKind::Acts);
+    let artifacts_by_importer = build_importer_artifacts(&report);
 
-    if counterparty_artifacts.is_empty()
-        && contract_artifacts.is_empty()
-        && act_artifacts.is_empty()
-    {
-        println!("Не знайдено XML-файлів для реалізованих BAS importer-ів.");
+    if !has_supported_artifacts(&artifacts_by_importer) {
+        println!("Не знайдено файлів для реалізованих BAS importer-ів.");
         if report.recognized_count() > 0 {
-            println!("Накладні, платежі та не-XML варіанти ще не реалізовані.");
+            println!("Накладні та інші нерозпізнані формати ще не реалізовані.");
         }
         return;
     }
@@ -450,41 +934,167 @@ async fn main() {
     };
 
     let mut failed = false;
+    let mut totals_by_importer = build_importer_totals();
 
-    for artifact in counterparty_artifacts {
-        match process_counterparties_artifact(&artifact.path, &pool, company_id, opts.dry_run).await
-        {
-            Ok(import_report) => {
-                print_counterparty_report(&artifact.path, &import_report, opts.dry_run)
-            }
-            Err(error) => {
-                failed = true;
-                eprintln!("Помилка імпорту {}: {error}", artifact.path.display());
-            }
+    failed |= process_artifacts(
+        artifacts_by_importer
+            .get(&ImporterKey::Counterparties)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]),
+        &pool,
+        company_id,
+        opts.dry_run,
+        totals_by_importer
+            .get_mut(&ImporterKey::Counterparties)
+            .expect("totals for counterparties must exist"),
+        |path, pool, company_id, dry_run| {
+            Box::pin(bas_counterparties::import_counterparties_from_xml(
+                pool, company_id, path, dry_run,
+            ))
+        },
+        print_counterparty_report,
+        |report| {
+            (
+                report.parsed,
+                report.created,
+                report.updated,
+                report.skipped,
+                report.conflicts,
+            )
+        },
+        counterparty_reason_counts,
+    )
+    .await;
+
+    failed |= process_artifacts(
+        artifacts_by_importer
+            .get(&ImporterKey::Contracts)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]),
+        &pool,
+        company_id,
+        opts.dry_run,
+        totals_by_importer
+            .get_mut(&ImporterKey::Contracts)
+            .expect("totals for contracts must exist"),
+        |path, pool, company_id, dry_run| {
+            Box::pin(bas_contracts::import_contracts_from_xml(
+                pool, company_id, path, dry_run,
+            ))
+        },
+        print_contract_report,
+        |report| {
+            (
+                report.parsed,
+                report.created,
+                report.updated,
+                report.skipped,
+                report.conflicts,
+            )
+        },
+        contract_reason_counts,
+    )
+    .await;
+
+    failed |= process_artifacts(
+        artifacts_by_importer
+            .get(&ImporterKey::Acts)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]),
+        &pool,
+        company_id,
+        opts.dry_run,
+        totals_by_importer
+            .get_mut(&ImporterKey::Acts)
+            .expect("totals for acts must exist"),
+        |path, pool, company_id, dry_run| {
+            Box::pin(bas_acts::import_acts_from_xml(
+                pool, company_id, path, dry_run,
+            ))
+        },
+        print_act_report,
+        |report| {
+            (
+                report.parsed,
+                report.created,
+                report.updated,
+                report.skipped,
+                report.conflicts,
+            )
+        },
+        act_reason_counts,
+    )
+    .await;
+
+    failed |= process_artifacts(
+        artifacts_by_importer
+            .get(&ImporterKey::Invoices)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]),
+        &pool,
+        company_id,
+        opts.dry_run,
+        totals_by_importer
+            .get_mut(&ImporterKey::Invoices)
+            .expect("totals for invoices must exist"),
+        |path, pool, company_id, dry_run| {
+            Box::pin(bas_invoices::import_invoices_from_file(
+                pool, company_id, path, dry_run,
+            ))
+        },
+        print_invoice_report,
+        |report| {
+            (
+                report.parsed,
+                report.created,
+                report.updated,
+                report.skipped,
+                report.conflicts,
+            )
+        },
+        invoice_reason_counts,
+    )
+    .await;
+
+    failed |= process_artifacts(
+        artifacts_by_importer
+            .get(&ImporterKey::Payments)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]),
+        &pool,
+        company_id,
+        opts.dry_run,
+        totals_by_importer
+            .get_mut(&ImporterKey::Payments)
+            .expect("totals for payments must exist"),
+        |path, pool, company_id, dry_run| {
+            Box::pin(bas_payments::import_payments_from_csv(
+                pool, company_id, path, dry_run,
+            ))
+        },
+        print_payment_report,
+        |report| {
+            (
+                report.parsed,
+                report.created,
+                report.updated,
+                report.skipped,
+                report.conflicts,
+            )
+        },
+        payment_reason_counts,
+    )
+    .await;
+
+    println!();
+    for spec in IMPORTER_SPECS {
+        if let Some(totals) = totals_by_importer.get(&spec.key) {
+            print_totals(spec.totals_label, totals);
         }
     }
 
-    for artifact in contract_artifacts {
-        match process_contracts_artifact(&artifact.path, &pool, company_id, opts.dry_run).await {
-            Ok(import_report) => {
-                print_contract_report(&artifact.path, &import_report, opts.dry_run)
-            }
-            Err(error) => {
-                failed = true;
-                eprintln!("Помилка імпорту {}: {error}", artifact.path.display());
-            }
-        }
-    }
-
-    for artifact in act_artifacts {
-        match process_acts_artifact(&artifact.path, &pool, company_id, opts.dry_run).await {
-            Ok(import_report) => print_act_report(&artifact.path, &import_report, opts.dry_run),
-            Err(error) => {
-                failed = true;
-                eprintln!("Помилка імпорту {}: {error}", artifact.path.display());
-            }
-        }
-    }
+    let overall = sum_totals_from_map(&totals_by_importer);
+    print_totals("усього", &overall);
 
     if failed {
         std::process::exit(1);
@@ -494,8 +1104,9 @@ async fn main() {
 #[cfg(test)]
 mod tests {
     use super::{
-        classify_artifact, collect_supported_artifacts, discover_artifacts, is_xml_artifact,
-        parse_args, BasArtifactKind, CliOptions, DiscoveryReport, ParseOutcome,
+        classify_artifact, collect_supported_artifacts, collect_supported_artifacts_multi,
+        discover_artifacts, is_importable_artifact, parse_args, BasArtifact, BasArtifactKind,
+        CliOptions, DiscoveryReport, ParseOutcome,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -566,7 +1177,7 @@ mod tests {
     #[test]
     fn classify_artifact_detects_contracts_and_acts() {
         assert_eq!(
-            classify_artifact(Path::new("contracts_export.xml")),
+            classify_artifact(Path::new("contracts_export.xlsx")),
             Some(BasArtifactKind::Contracts)
         );
         assert_eq!(
@@ -576,15 +1187,33 @@ mod tests {
     }
 
     #[test]
-    fn classify_artifact_detects_bank_csv() {
-        let kind = classify_artifact(Path::new("statement.csv"));
-        assert_eq!(kind, Some(BasArtifactKind::BankCsv));
+    fn classify_artifact_detects_payments_csv() {
+        let kind = classify_artifact(Path::new("payment_statement.csv"));
+        assert_eq!(kind, Some(BasArtifactKind::Payments));
     }
 
     #[test]
-    fn xml_filter_accepts_only_xml_files() {
-        assert!(is_xml_artifact(Path::new("contracts.xml")));
-        assert!(!is_xml_artifact(Path::new("contracts.xlsx")));
+    fn importable_extensions_match_kind() {
+        assert!(is_importable_artifact(
+            BasArtifactKind::Counterparties,
+            Path::new("counterparties.xlsx")
+        ));
+        assert!(is_importable_artifact(
+            BasArtifactKind::Contracts,
+            Path::new("contracts.xls")
+        ));
+        assert!(is_importable_artifact(
+            BasArtifactKind::Payments,
+            Path::new("payments.csv")
+        ));
+        assert!(is_importable_artifact(
+            BasArtifactKind::Invoices,
+            Path::new("invoices.xlsx")
+        ));
+        assert!(!is_importable_artifact(
+            BasArtifactKind::Acts,
+            Path::new("acts.xlsx")
+        ));
     }
 
     #[test]
@@ -593,10 +1222,10 @@ mod tests {
         let nested = root.join("nested");
         fs::create_dir_all(&nested).expect("вкладена директорія має створюватися");
 
-        fs::write(root.join("Контрагенти.xml"), "<xml/>").expect("тестовий файл має створюватися");
+        fs::write(root.join("Контрагенти.xlsx"), "stub").expect("тестовий файл має створюватися");
         fs::write(nested.join("contracts_export.xml"), "<xml/>")
             .expect("тестовий файл має створюватися");
-        fs::write(nested.join("acts_export.xml"), "<xml/>")
+        fs::write(nested.join("payment_statement.csv"), "date,amount")
             .expect("тестовий файл має створюватися");
         fs::write(nested.join("notes.txt"), "skip").expect("тестовий файл має створюватися");
 
@@ -604,7 +1233,7 @@ mod tests {
         assert_eq!(report.recognized_count(), 3);
         assert_eq!(report.count_by_kind(BasArtifactKind::Counterparties), 1);
         assert_eq!(report.count_by_kind(BasArtifactKind::Contracts), 1);
-        assert_eq!(report.count_by_kind(BasArtifactKind::Acts), 1);
+        assert_eq!(report.count_by_kind(BasArtifactKind::Payments), 1);
         assert_eq!(report.skipped_files.len(), 1);
 
         let _ = fs::remove_dir_all(&root);
@@ -619,28 +1248,42 @@ mod tests {
     }
 
     #[test]
-    fn collect_supported_artifacts_keeps_only_xml_of_requested_kind() {
+    fn collect_supported_artifacts_keeps_requested_extensions() {
         let report = DiscoveryReport {
             root: PathBuf::from("."),
             artifacts: vec![
-                super::BasArtifact {
+                BasArtifact {
                     path: PathBuf::from("contracts.xml"),
                     kind: BasArtifactKind::Contracts,
                 },
-                super::BasArtifact {
+                BasArtifact {
                     path: PathBuf::from("contracts.xlsx"),
                     kind: BasArtifactKind::Contracts,
                 },
-                super::BasArtifact {
+                BasArtifact {
                     path: PathBuf::from("acts.xml"),
                     kind: BasArtifactKind::Acts,
+                },
+                BasArtifact {
+                    path: PathBuf::from("payments.csv"),
+                    kind: BasArtifactKind::Payments,
+                },
+                BasArtifact {
+                    path: PathBuf::from("bank_statement.csv"),
+                    kind: BasArtifactKind::BankCsv,
                 },
             ],
             skipped_files: Vec::new(),
         };
 
         let contracts = collect_supported_artifacts(&report, BasArtifactKind::Contracts);
-        assert_eq!(contracts.len(), 1);
-        assert_eq!(contracts[0].path, PathBuf::from("contracts.xml"));
+        let payments = collect_supported_artifacts_multi(
+            &report,
+            &[BasArtifactKind::Payments, BasArtifactKind::BankCsv],
+        );
+        assert_eq!(contracts.len(), 2);
+        assert_eq!(payments.len(), 2);
+        assert_eq!(payments[0].path, PathBuf::from("bank_statement.csv"));
+        assert_eq!(payments[1].path, PathBuf::from("payments.csv"));
     }
 }

@@ -11,10 +11,28 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Налаштування програми що зберігаються між запусками.
-#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AppConfig {
     /// UUID останньої активної компанії — автоматично обирається при наступному запуску.
     pub last_company_id: Option<Uuid>,
+    #[serde(default)]
+    pub dark_mode: bool,
+    #[serde(default = "default_density")]
+    pub density: u8,
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            last_company_id: None,
+            dark_mode: false,
+            density: default_density(),
+        }
+    }
+}
+
+fn default_density() -> u8 {
+    1
 }
 
 impl AppConfig {
@@ -55,6 +73,10 @@ impl AppConfig {
 ///   - macOS: ~/Library/Application Support
 ///   - Linux: ~/.config
 fn config_path() -> std::path::PathBuf {
+    if let Ok(dir) = std::env::var("ACTA_CONFIG_DIR") {
+        return std::path::PathBuf::from(dir).join("config.toml");
+    }
+
     dirs::config_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("acta")
@@ -69,6 +91,8 @@ mod tests {
     fn default_config_has_no_company() {
         let cfg = AppConfig::default();
         assert!(cfg.last_company_id.is_none());
+        assert!(!cfg.dark_mode);
+        assert_eq!(cfg.density, 1);
     }
 
     #[test]
@@ -82,6 +106,8 @@ mod tests {
         let id = Uuid::new_v4();
         let cfg = AppConfig {
             last_company_id: Some(id),
+            dark_mode: true,
+            density: 2,
         };
 
         let path = std::env::temp_dir().join(format!("acta_config_test_{}.toml", id));
@@ -90,6 +116,8 @@ mod tests {
         let _ = std::fs::remove_file(&path);
 
         assert_eq!(loaded.last_company_id, Some(id));
+        assert!(loaded.dark_mode);
+        assert_eq!(loaded.density, 2);
     }
 
     #[test]
@@ -97,6 +125,8 @@ mod tests {
         let path = std::env::temp_dir().join("acta_config_nonexistent_xyz.toml");
         let cfg = AppConfig::load_from(&path);
         assert!(cfg.last_company_id.is_none());
+        assert!(!cfg.dark_mode);
+        assert_eq!(cfg.density, 1);
     }
 
     #[test]
@@ -106,6 +136,8 @@ mod tests {
         let cfg = AppConfig::load_from(&path);
         let _ = std::fs::remove_file(&path);
         assert!(cfg.last_company_id.is_none());
+        assert!(!cfg.dark_mode);
+        assert_eq!(cfg.density, 1);
     }
 
     #[test]
@@ -115,6 +147,8 @@ mod tests {
         let cfg = AppConfig::load_from(&path);
         let _ = std::fs::remove_file(&path);
         assert_eq!(cfg.last_company_id, None);
+        assert!(!cfg.dark_mode);
+        assert_eq!(cfg.density, 1);
     }
 
     #[test]
@@ -125,6 +159,8 @@ mod tests {
         let _ = std::fs::remove_file(&path);
         assert_eq!(cfg.last_company_id, None);
         assert_eq!(cfg.last_company_id, AppConfig::default().last_company_id);
+        assert!(!cfg.dark_mode);
+        assert_eq!(cfg.density, 1);
     }
 
     #[test]
@@ -132,6 +168,8 @@ mod tests {
         let id = Uuid::new_v4();
         let cfg = AppConfig {
             last_company_id: Some(id),
+            dark_mode: false,
+            density: 1,
         };
         let base = std::env::temp_dir().join(format!("acta_config_nested_{id}"));
         let path = base.join("nested").join("config.toml");
@@ -143,12 +181,16 @@ mod tests {
         let _ = std::fs::remove_dir_all(&base);
 
         assert_eq!(loaded.last_company_id, Some(id));
+        assert!(!loaded.dark_mode);
+        assert_eq!(loaded.density, 1);
     }
 
     #[test]
     fn save_and_load_roundtrip_with_none_company_id() {
         let cfg = AppConfig {
             last_company_id: None,
+            dark_mode: true,
+            density: 0,
         };
 
         let path = std::env::temp_dir().join("acta_config_none_roundtrip.toml");
@@ -157,5 +199,19 @@ mod tests {
         let _ = std::fs::remove_file(&path);
 
         assert_eq!(loaded.last_company_id, None);
+        assert!(loaded.dark_mode);
+        assert_eq!(loaded.density, 0);
+    }
+
+    #[test]
+    fn load_from_legacy_toml_keeps_new_defaults() {
+        let path = std::env::temp_dir().join("acta_config_legacy_roundtrip.toml");
+        let _ = std::fs::write(&path, br#"last_company_id = "00000000-0000-0000-0000-000000000000""#);
+        let loaded = AppConfig::load_from(&path);
+        let _ = std::fs::remove_file(&path);
+
+        assert_eq!(loaded.last_company_id, Some(Uuid::nil()));
+        assert!(!loaded.dark_mode);
+        assert_eq!(loaded.density, 1);
     }
 }

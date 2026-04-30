@@ -315,6 +315,89 @@ pub async fn find_by_bas_id(pool: &PgPool, bas_id: &str) -> Result<Option<Act>> 
     Ok(act)
 }
 
+/// Знайти кандидата на дубль імпортованого акту за header fingerprint.
+#[allow(clippy::too_many_arguments)]
+pub async fn find_import_candidate(
+    pool: &PgPool,
+    company_id: Uuid,
+    counterparty_id: Uuid,
+    contract_id: Option<Uuid>,
+    number: &str,
+    direction: DocumentDirection,
+    date: chrono::NaiveDate,
+    total_amount: Decimal,
+) -> Result<Option<Act>> {
+    let act = sqlx::query_as::<_, Act>(
+        r#"
+        SELECT id, number, counterparty_id, contract_id, category_id, direction,
+               date, expected_payment_date, total_amount,
+               status, notes, bas_id, created_at, updated_at
+        FROM acts
+        WHERE company_id = $1
+          AND counterparty_id = $2
+          AND contract_id IS NOT DISTINCT FROM $3
+          AND lower(trim(number)) = lower(trim($4))
+          AND direction = $5
+          AND date = $6
+          AND total_amount = $7
+        ORDER BY updated_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(company_id)
+    .bind(counterparty_id)
+    .bind(contract_id)
+    .bind(number)
+    .bind(direction)
+    .bind(date)
+    .bind(total_amount)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(act)
+}
+
+/// Знайти всіх кандидатів на дубль імпортованого акту за header fingerprint.
+#[allow(clippy::too_many_arguments)]
+pub async fn list_import_candidates(
+    pool: &PgPool,
+    company_id: Uuid,
+    counterparty_id: Uuid,
+    contract_id: Option<Uuid>,
+    number: &str,
+    direction: DocumentDirection,
+    date: chrono::NaiveDate,
+    total_amount: Decimal,
+) -> Result<Vec<Act>> {
+    let acts = sqlx::query_as::<_, Act>(
+        r#"
+        SELECT id, number, counterparty_id, contract_id, category_id, direction,
+               date, expected_payment_date, total_amount,
+               status, notes, bas_id, created_at, updated_at
+        FROM acts
+        WHERE company_id = $1
+          AND counterparty_id = $2
+          AND contract_id IS NOT DISTINCT FROM $3
+          AND lower(trim(number)) = lower(trim($4))
+          AND direction = $5
+          AND date = $6
+          AND total_amount = $7
+        ORDER BY updated_at DESC, created_at DESC
+        "#,
+    )
+    .bind(company_id)
+    .bind(counterparty_id)
+    .bind(contract_id)
+    .bind(number)
+    .bind(direction)
+    .bind(date)
+    .bind(total_amount)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(acts)
+}
+
 /// Створити новий акт разом з позиціями в одній транзакції.
 ///
 /// Транзакція потрібна щоб акт без позицій або позиції без акту
@@ -638,6 +721,8 @@ mod tests {
         let _ = get_kpi;
         let _ = get_by_id;
         let _ = find_by_bas_id;
+        let _ = find_import_candidate;
+        let _ = list_import_candidates;
         let _ = create;
         let _ = update;
         let _ = change_status;

@@ -244,6 +244,28 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<Payment>> {
     Ok(row)
 }
 
+/// Отримати платіж за ID у межах конкретної компанії.
+pub async fn get_by_id_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+) -> Result<Option<Payment>> {
+    let row = sqlx::query_as::<_, Payment>(
+        r#"
+        SELECT id, company_id, date, amount, direction, counterparty_id,
+               bank_name, bank_ref, description, is_reconciled, bas_id,
+               created_at, updated_at
+        FROM payments
+        WHERE id = $1 AND company_id = $2
+        "#,
+    )
+    .bind(id)
+    .bind(company_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row)
+}
+
 /// Створити платіж.
 pub async fn create(pool: &PgPool, data: NewPayment) -> Result<Payment> {
     let row = sqlx::query_as::<_, Payment>(
@@ -302,6 +324,45 @@ pub async fn update(pool: &PgPool, id: Uuid, data: UpdatePayment) -> Result<Opti
     Ok(row)
 }
 
+/// Оновити платіж лише в межах конкретної компанії.
+pub async fn update_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+    data: UpdatePayment,
+) -> Result<Option<Payment>> {
+    let row = sqlx::query_as::<_, Payment>(
+        r#"
+        UPDATE payments
+        SET date            = $3,
+            amount          = $4,
+            direction       = $5,
+            counterparty_id = $6,
+            bank_name       = $7,
+            bank_ref        = $8,
+            description     = $9,
+            updated_at      = NOW()
+        WHERE id = $1
+          AND company_id = $2
+        RETURNING id, company_id, date, amount, direction, counterparty_id,
+                  bank_name, bank_ref, description, is_reconciled, bas_id,
+                  created_at, updated_at
+        "#,
+    )
+    .bind(id)
+    .bind(company_id)
+    .bind(data.date)
+    .bind(data.amount)
+    .bind(data.direction)
+    .bind(data.counterparty_id)
+    .bind(data.bank_name)
+    .bind(data.bank_ref)
+    .bind(data.description)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row)
+}
+
 /// Позначити платіж як зведений (is_reconciled = true).
 pub async fn mark_reconciled(pool: &PgPool, id: Uuid) -> Result<()> {
     sqlx::query("UPDATE payments SET is_reconciled = TRUE, updated_at = NOW() WHERE id = $1")
@@ -309,6 +370,19 @@ pub async fn mark_reconciled(pool: &PgPool, id: Uuid) -> Result<()> {
         .execute(pool)
         .await?;
     Ok(())
+}
+
+/// Позначити платіж як звірений лише в межах конкретної компанії.
+pub async fn mark_reconciled_scoped(pool: &PgPool, company_id: Uuid, id: Uuid) -> Result<bool> {
+    let affected = sqlx::query(
+        "UPDATE payments SET is_reconciled = TRUE, updated_at = NOW() WHERE id = $1 AND company_id = $2",
+    )
+    .bind(id)
+    .bind(company_id)
+    .execute(pool)
+    .await?
+    .rows_affected();
+    Ok(affected > 0)
 }
 
 /// Зняти позначку звірки з платежу (is_reconciled = false).
@@ -320,6 +394,19 @@ pub async fn mark_unreconciled(pool: &PgPool, id: Uuid) -> Result<()> {
     Ok(())
 }
 
+/// Зняти позначку звірки лише в межах конкретної компанії.
+pub async fn mark_unreconciled_scoped(pool: &PgPool, company_id: Uuid, id: Uuid) -> Result<bool> {
+    let affected = sqlx::query(
+        "UPDATE payments SET is_reconciled = FALSE, updated_at = NOW() WHERE id = $1 AND company_id = $2",
+    )
+    .bind(id)
+    .bind(company_id)
+    .execute(pool)
+    .await?
+    .rows_affected();
+    Ok(affected > 0)
+}
+
 /// Видалити платіж.
 pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
     sqlx::query("DELETE FROM payments WHERE id = $1")
@@ -327,6 +414,17 @@ pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
         .execute(pool)
         .await?;
     Ok(())
+}
+
+/// Видалити платіж лише в межах конкретної компанії.
+pub async fn delete_scoped(pool: &PgPool, company_id: Uuid, id: Uuid) -> Result<bool> {
+    let affected = sqlx::query("DELETE FROM payments WHERE id = $1 AND company_id = $2")
+        .bind(id)
+        .bind(company_id)
+        .execute(pool)
+        .await?
+        .rows_affected();
+    Ok(affected > 0)
 }
 
 /// Прив'язати платіж до акту (часткова оплата).
