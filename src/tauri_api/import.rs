@@ -59,7 +59,19 @@ fn route_file(path: &Path) -> Option<FileType> {
     let name = path.file_stem()?.to_str()?.to_lowercase();
     match ext.as_str() {
         "csv" => Some(FileType::Payments),
-        "xml" | "xlsx" | "xls" => {
+        "xlsx" | "xls" => {
+            if name.contains("counterpart") || name.contains("контрагент") {
+                Some(FileType::Counterparties)
+            } else if name.contains("invoice")
+                || name.contains("рахунок")
+                || name.contains("накладна")
+            {
+                Some(FileType::Invoices)
+            } else {
+                None
+            }
+        }
+        "xml" => {
             if name.contains("counterpart") || name.contains("контрагент") {
                 Some(FileType::Counterparties)
             } else if name.contains("contract")
@@ -319,5 +331,17 @@ mod tests {
     fn route_unrecognized_returns_none() {
         assert_eq!(route_file(Path::new("data.txt")), None);
         assert_eq!(route_file(Path::new("report.xml")), None);
+    }
+
+    #[test]
+    fn xlsx_acts_not_routed() {
+        let path = Path::new("acts_2024.xlsx");
+        assert_eq!(route_file(path), None);
+    }
+
+    #[test]
+    fn xlsx_contracts_not_routed() {
+        let path = Path::new("contracts_2024.xlsx");
+        assert_eq!(route_file(path), None);
     }
 }
