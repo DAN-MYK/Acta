@@ -322,12 +322,6 @@ fn detect_contract_conflict(
     {
         return Some("conflict: номер договору не збігається з existing row".to_string());
     }
-    if existing.date != imported.date {
-        return Some("conflict: дата договору не збігається з existing row".to_string());
-    }
-    if existing.amount != imported.amount {
-        return Some("conflict: сума договору не збігається з existing row".to_string());
-    }
     None
 }
 

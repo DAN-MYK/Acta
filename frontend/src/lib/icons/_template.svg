@@ -1,0 +1,18 @@
+<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    Acta SVG starter template
+    Rules:
+    - keep viewBox 24x24
+    - use currentColor
+    - default stroke-width 1.8
+    - prefer round caps and joins
+    - keep optical padding from edges
+  -->
+  <path
+    d="M6 12H18"
+    stroke="currentColor"
+    stroke-width="1.8"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>

@@ -46,7 +46,7 @@ pub async fn generate_next_number(pool: &PgPool, company_id: Uuid) -> Result<Str
         .max()
         .unwrap_or(0);
 
-    Ok(format!("РАХ-{year}-{:03}", max_seq + 1))
+    Ok(format!("НАК-{year}-{:03}", max_seq + 1))
 }
 
 /// Отримати активних контрагентів компанії для ComboBox у формі накладної.
