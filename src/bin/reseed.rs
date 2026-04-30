@@ -1,11 +1,13 @@
 use anyhow::Result;
 use sqlx::postgres::PgPoolOptions;
 
+const DEMO_COMPANY_EMAIL_SQL_FILTER: &str = "email LIKE 'company%@example.test'";
+
 const CLEANUP_SQL: &str = r#"
 WITH demo_companies AS (
     SELECT id
     FROM companies
-    WHERE name LIKE 'РўРћР’ "РўРµСЃС‚РѕРІР° РєРѕРјРїР°РЅС–СЏ %'
+    WHERE email LIKE 'company%@example.test'
 )
 DELETE FROM tasks
 WHERE company_id IN (SELECT id FROM demo_companies);
@@ -15,7 +17,7 @@ const CLEANUP_PAYMENTS_SQL: &str = r#"
 WITH demo_companies AS (
     SELECT id
     FROM companies
-    WHERE name LIKE 'РўРћР’ "РўРµСЃС‚РѕРІР° РєРѕРјРїР°РЅС–СЏ %'
+    WHERE email LIKE 'company%@example.test'
 )
 DELETE FROM payments
 WHERE company_id IN (SELECT id FROM demo_companies);
@@ -25,7 +27,7 @@ const CLEANUP_SCHEDULE_SQL: &str = r#"
 WITH demo_companies AS (
     SELECT id
     FROM companies
-    WHERE name LIKE 'РўРћР’ "РўРµСЃС‚РѕРІР° РєРѕРјРїР°РЅС–СЏ %'
+    WHERE email LIKE 'company%@example.test'
 )
 DELETE FROM payment_schedule
 WHERE company_id IN (SELECT id FROM demo_companies);
@@ -35,7 +37,7 @@ const CLEANUP_ACTS_SQL: &str = r#"
 WITH demo_companies AS (
     SELECT id
     FROM companies
-    WHERE name LIKE 'РўРћР’ "РўРµСЃС‚РѕРІР° РєРѕРјРїР°РЅС–СЏ %'
+    WHERE email LIKE 'company%@example.test'
 )
 DELETE FROM acts
 WHERE company_id IN (SELECT id FROM demo_companies);
@@ -45,7 +47,7 @@ const CLEANUP_INVOICES_SQL: &str = r#"
 WITH demo_companies AS (
     SELECT id
     FROM companies
-    WHERE name LIKE 'РўРћР’ "РўРµСЃС‚РѕРІР° РєРѕРјРїР°РЅС–СЏ %'
+    WHERE email LIKE 'company%@example.test'
 )
 DELETE FROM invoices
 WHERE company_id IN (SELECT id FROM demo_companies);
@@ -55,7 +57,7 @@ const CLEANUP_COUNTERPARTIES_SQL: &str = r#"
 WITH demo_companies AS (
     SELECT id
     FROM companies
-    WHERE name LIKE 'РўРћР’ "РўРµСЃС‚РѕРІР° РєРѕРјРїР°РЅС–СЏ %'
+    WHERE email LIKE 'company%@example.test'
 )
 DELETE FROM counterparties
 WHERE company_id IN (SELECT id FROM demo_companies);
@@ -63,7 +65,7 @@ WHERE company_id IN (SELECT id FROM demo_companies);
 
 const CLEANUP_COMPANIES_SQL: &str = r#"
 DELETE FROM companies
-WHERE name LIKE 'РўРћР’ "РўРµСЃС‚РѕРІР° РєРѕРјРїР°РЅС–СЏ %';
+WHERE email LIKE 'company%@example.test';
 "#;
 
 const SEED_SQL: &str = include_str!("../../migrations/022_seed_demo_data.sql");
@@ -109,12 +111,15 @@ async fn main() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{cleanup_statements, SEED_SQL};
+    use super::{cleanup_statements, DEMO_COMPANY_EMAIL_SQL_FILTER, SEED_SQL};
 
     #[test]
     fn cleanup_statements_cover_all_demo_entities() {
         let statements = cleanup_statements();
         assert_eq!(statements.len(), 7);
+        assert!(statements
+            .iter()
+            .all(|sql| sql.contains(DEMO_COMPANY_EMAIL_SQL_FILTER)));
         assert!(statements
             .iter()
             .any(|sql| sql.contains("DELETE FROM tasks")));
