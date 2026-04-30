@@ -218,20 +218,21 @@ pub async fn upcoming_payments(
     let rows = sqlx::query_as::<_, Row>(
         r#"
         SELECT
-            p.id::text                                  AS id,
-            EXTRACT(DAY   FROM p.date)::int             AS date_day,
-            EXTRACT(MONTH FROM p.date)::int             AS date_month,
-            COALESCE(c.name, COALESCE(p.bank_name, '__NO_COUNTERPARTY__')) AS contractor,
-            p.amount                                    AS amount,
-            p.date <= CURRENT_DATE                      AS is_overdue
-        FROM payments p
-        LEFT JOIN counterparties c ON c.id = p.counterparty_id
-        WHERE p.company_id = $1
-          AND p.is_reconciled = FALSE
+            a.id::text                                        AS id,
+            EXTRACT(DAY   FROM a.expected_payment_date)::int   AS date_day,
+            EXTRACT(MONTH FROM a.expected_payment_date)::int   AS date_month,
+            COALESCE(c.name, '__NO_COUNTERPARTY__')            AS contractor,
+            a.total_amount                                     AS amount,
+            a.expected_payment_date <= CURRENT_DATE            AS is_overdue
+        FROM acts a
+        LEFT JOIN counterparties c ON c.id = a.counterparty_id
+        WHERE a.company_id = $1
+          AND a.status IN ('issued', 'signed')
+          AND a.expected_payment_date IS NOT NULL
         ORDER BY
-            p.date <= CURRENT_DATE DESC,
-            p.date ASC,
-            p.created_at ASC
+            a.expected_payment_date <= CURRENT_DATE DESC,
+            a.expected_payment_date ASC,
+            a.created_at ASC
         LIMIT $2
         "#,
     )
