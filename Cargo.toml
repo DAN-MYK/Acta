@@ -2,11 +2,6 @@
 name = "acta"
 version = "0.1.0"
 edition = "2021"
-default-run = "acta"
-
-[[bin]]
-name = "acta"
-path = "src/main.rs"
 
 [[bin]]
 name = "migrate"
@@ -17,9 +12,6 @@ name = "reseed"
 path = "src/bin/reseed.rs"
 
 [dependencies]
-# UI
-slint = { version = "1.15", features = ["serde"] }
-
 # БД
 sqlx = { version = "0.8", features = [
     "runtime-tokio",
@@ -84,10 +76,5 @@ dirs = "5"
 open = "5"
 
 [dev-dependencies]
-# Headless Slint backend for unit tests (no display required)
-i-slint-backend-testing = "=1.15.1"
 # tokio::time::advance / #[tokio::test(start_paused = true)]
 tokio = { version = "1", features = ["test-util"] }
-
-[build-dependencies]
-slint-build = "1.15"
