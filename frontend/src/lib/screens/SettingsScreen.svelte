@@ -208,7 +208,7 @@
                 <div class="settings-actions-row" style="margin-top: 0.5rem;">
                   <button
                     class="action-button compact"
-                    on:click={() => importBas.plan()}
+                    on:click={() => importBas.fetchPlan()}
                     disabled={$importBas.loading}
                   >
                     <AppIcon name="refresh" size={14} />
@@ -242,7 +242,7 @@
                     <button
                       class="action-button compact"
                       on:click={() => importBas.execute()}
-                      disabled={$importBas.loading || $importBas.plan!.entities.every(e => !e.fileName || !!e.error)}
+                      disabled={$importBas.loading || ($importBas.plan?.entities.every(e => !e.fileName || !!e.error) ?? true)}
                     >
                       <AppIcon name="save" size={14} />
                       <span>{$importBas.loading ? "Виконання..." : "Виконати імпорт"}</span>

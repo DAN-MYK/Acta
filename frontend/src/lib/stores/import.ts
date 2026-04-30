@@ -17,7 +17,7 @@ function createImportStore() {
     error: null
   });
 
-  async function plan() {
+  async function fetchPlan() {
     update((state) => ({ ...state, loading: true, error: null }));
     try {
       const data = await importBasPlan();
@@ -41,7 +41,7 @@ function createImportStore() {
     set({ plan: null, result: null, loading: false, error: null });
   }
 
-  return { subscribe, plan, execute, reset };
+  return { subscribe, fetchPlan, execute, reset };
 }
 
 export const importStore = createImportStore();
