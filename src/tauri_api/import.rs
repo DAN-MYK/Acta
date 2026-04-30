@@ -10,6 +10,11 @@ use crate::import::bas_contracts::parse_contracts_xml_file;
 use crate::import::bas_counterparties::parse_counterparties_xml_file;
 use crate::import::bas_invoices::parse_invoices_file;
 use crate::import::bas_payments::{apply_imported_payments, parse_payments_csv_file};
+use crate::import::bas_acts::import_acts_from_xml;
+use crate::import::bas_contracts::import_contracts_from_xml;
+use crate::import::bas_counterparties::import_counterparties_from_xml;
+use crate::import::bas_invoices::import_invoices_from_file;
+use crate::import::bas_payments::import_payments_from_csv;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -204,6 +209,87 @@ pub async fn import_bas_plan(ctx: &AppCtx) -> Result<ImportPlanDto> {
     }
 
     Ok(ImportPlanDto { entities })
+}
+
+pub async fn import_bas_execute(ctx: &AppCtx) -> Result<ImportResultDto> {
+    let dir = bas_import_dir();
+    fs::create_dir_all(&dir).await?;
+    let files = collect_sorted_files(&dir).await?;
+
+    const ENTITY_TYPES: &[(&str, FileType)] = &[
+        ("counterparties", FileType::Counterparties),
+        ("contracts", FileType::Contracts),
+        ("acts", FileType::Acts),
+        ("invoices", FileType::Invoices),
+        ("payments", FileType::Payments),
+    ];
+
+    let mut entities = Vec::new();
+    for &(entity_type, file_type) in ENTITY_TYPES {
+        let matched = files.iter().find(|p| route_file(p) == Some(file_type));
+        let dto = match matched {
+            None => ImportEntityResultDto {
+                entity_type: entity_type.to_string(),
+                created: 0,
+                updated: 0,
+                skipped: 0,
+                conflicts: 0,
+                error: None,
+            },
+            Some(path) => {
+                let pool = ctx.pool();
+                let company_id = ctx.company_id();
+                let result = match file_type {
+                    FileType::Counterparties => {
+                        import_counterparties_from_xml(pool, company_id, path, false)
+                            .await
+                            .map(|r| (r.created, r.updated, r.skipped, r.conflicts))
+                    }
+                    FileType::Contracts => {
+                        import_contracts_from_xml(pool, company_id, path, false)
+                            .await
+                            .map(|r| (r.created, r.updated, r.skipped, r.conflicts))
+                    }
+                    FileType::Acts => {
+                        import_acts_from_xml(pool, company_id, path, false)
+                            .await
+                            .map(|r| (r.created, r.updated, r.skipped, r.conflicts))
+                    }
+                    FileType::Invoices => {
+                        import_invoices_from_file(pool, company_id, path, false)
+                            .await
+                            .map(|r| (r.created, r.updated, r.skipped, r.conflicts))
+                    }
+                    FileType::Payments => {
+                        import_payments_from_csv(pool, company_id, path, false)
+                            .await
+                            .map(|r| (r.created, r.updated, r.skipped, r.conflicts))
+                    }
+                };
+                match result {
+                    Ok((created, updated, skipped, conflicts)) => ImportEntityResultDto {
+                        entity_type: entity_type.to_string(),
+                        created,
+                        updated,
+                        skipped,
+                        conflicts,
+                        error: None,
+                    },
+                    Err(e) => ImportEntityResultDto {
+                        entity_type: entity_type.to_string(),
+                        created: 0,
+                        updated: 0,
+                        skipped: 0,
+                        conflicts: 0,
+                        error: Some(e.to_string()),
+                    },
+                }
+            }
+        };
+        entities.push(dto);
+    }
+
+    Ok(ImportResultDto { entities })
 }
 
 #[cfg(test)]
