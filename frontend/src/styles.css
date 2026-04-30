@@ -76,14 +76,6 @@ textarea {
   color: inherit;
 }
 
-body[data-theme="dark"] .nav button,
-body[data-theme="dark"] .theme-switcher button,
-body[data-theme="dark"] .topbar-actions button,
-body[data-theme="dark"] .doc-row,
-body[data-theme="dark"] .palette-item {
-  background: var(--bg-glass);
-  color: inherit;
-}
 
 .nav button.active {
   background: var(--accent);
@@ -108,12 +100,6 @@ body[data-theme="dark"] .palette-item {
   border-radius: var(--radius-3xl);
 }
 
-body[data-theme="dark"] .topbar,
-body[data-theme="dark"] .panel,
-body[data-theme="dark"] .editor-sheet,
-body[data-theme="dark"] .palette {
-  background: var(--bg-glass);
-}
 
 .topbar {
   padding: 18px 22px;
@@ -153,13 +139,6 @@ body[data-theme="dark"] .palette {
   color: inherit;
 }
 
-body[data-theme="dark"] .topbar-actions select,
-body[data-theme="dark"] .panel-header input,
-body[data-theme="dark"] .editor-grid input,
-body[data-theme="dark"] .palette input {
-  background: var(--bg-elevated);
-  color: inherit;
-}
 
 .panel {
   margin-top: var(--space-5);
@@ -253,9 +232,6 @@ body[data-theme="dark"] .palette input {
   background: var(--bg-card);
 }
 
-body[data-theme="dark"] .task-kpi-card {
-  background: var(--bg-card);
-}
 
 .task-tabs {
   display: flex;
@@ -272,11 +248,6 @@ body[data-theme="dark"] .task-kpi-card {
   cursor: pointer;
 }
 
-body[data-theme="dark"] .task-tabs button,
-body[data-theme="dark"] .task-row button:last-child {
-  background: var(--bg-card);
-  color: inherit;
-}
 
 .task-tabs button.active {
   background: var(--accent);
@@ -303,10 +274,6 @@ body[data-theme="dark"] .task-row button:last-child {
   cursor: pointer;
 }
 
-body[data-theme="dark"] .task-row-main {
-  background: var(--bg-card);
-  color: inherit;
-}
 
 .task-row-main p {
   margin: 6px 0 0;
@@ -353,11 +320,6 @@ body[data-theme="dark"] .task-row-main {
   background: var(--bg-field);
 }
 
-body[data-theme="dark"] .reports-filter-grid select,
-body[data-theme="dark"] .reports-filter-grid input {
-  background: var(--bg-field);
-  color: inherit;
-}
 
 .reports-kpis {
   display: grid;
@@ -391,12 +353,6 @@ body[data-theme="dark"] .reports-filter-grid input {
   cursor: pointer;
 }
 
-body[data-theme="dark"] .settings-nav button,
-body[data-theme="dark"] .settings-actions-row button,
-body[data-theme="dark"] .settings-row-actions button {
-  background: var(--bg-card);
-  color: inherit;
-}
 
 .settings-nav button.active,
 .settings-actions-row button.active {
@@ -410,9 +366,6 @@ body[data-theme="dark"] .settings-row-actions button {
   background: var(--bg-card);
 }
 
-body[data-theme="dark"] .settings-card {
-  background: var(--bg-card);
-}
 
 .settings-actions-row {
   display: flex;
@@ -428,10 +381,6 @@ body[data-theme="dark"] .settings-card {
   background: var(--bg-field);
 }
 
-body[data-theme="dark"] .settings-actions-row select {
-  background: var(--bg-field);
-  color: inherit;
-}
 
 .settings-row {
   display: flex;
@@ -443,9 +392,6 @@ body[data-theme="dark"] .settings-actions-row select {
   background: var(--bg-card);
 }
 
-body[data-theme="dark"] .settings-row {
-  background: var(--bg-card);
-}
 
 .settings-row p,
 .settings-card p {
@@ -493,9 +439,6 @@ body[data-theme="dark"] .settings-row {
   font-weight: 700;
 }
 
-body[data-theme="dark"] .reports-table-row {
-  background: var(--bg-card);
-}
 
 body[data-theme="dark"] .reports-table-head {
   background: var(--accent-soft);
@@ -511,11 +454,6 @@ body[data-theme="dark"] .reports-table-head {
   cursor: pointer;
 }
 
-body[data-theme="dark"] .counterparty-row,
-body[data-theme="dark"] .linked-row {
-  background: var(--bg-card);
-  color: inherit;
-}
 
 .counterparty-row.active {
   outline: 2px solid var(--accent);
@@ -624,9 +562,6 @@ body[data-theme="dark"] .linked-row {
   background: var(--bg-subtle);
 }
 
-body[data-theme="dark"] .chain-panel {
-  background: var(--bg-subtle);
-}
 
 .chain-panel-header {
   display: flex;
@@ -660,9 +595,6 @@ body[data-theme="dark"] .chain-panel {
   background: var(--bg-card);
 }
 
-body[data-theme="dark"] .chain-step {
-  background: var(--bg-card);
-}
 
 .chain-step p {
   margin: 6px 0 0;
@@ -707,11 +639,6 @@ body[data-theme="dark"] .dashboard-panel {
   box-shadow: var(--floating-shadow);
 }
 
-body[data-theme="dark"] .dashboard-kpi-card,
-body[data-theme="dark"] .dashboard-card {
-  background: var(--bg-card);
-  border-color: var(--border-hairline);
-}
 
 .dashboard-kpi-card {
   display: grid;
@@ -725,11 +652,6 @@ body[data-theme="dark"] .dashboard-card {
   color: var(--text-muted);
 }
 
-body[data-theme="dark"] .dashboard-kpi-card span,
-body[data-theme="dark"] .dashboard-kpi-card small,
-body[data-theme="dark"] .card-title span {
-  color: var(--text-muted);
-}
 
 .dashboard-kpi-card strong {
   font-size: clamp(1.35rem, 2.4vw, 2rem);
@@ -822,9 +744,6 @@ body[data-theme="dark"] .card-title span {
   color: inherit;
 }
 
-body[data-theme="dark"] .dashboard-list-row {
-  background: var(--bg-stripe);
-}
 
 .editor-item {
   display: grid;
@@ -835,9 +754,6 @@ body[data-theme="dark"] .dashboard-list-row {
   background: var(--bg-subtle);
 }
 
-body[data-theme="dark"] .editor-item {
-  background: var(--bg-subtle);
-}
 
 .editor-item-head {
   background: transparent;
@@ -859,13 +775,6 @@ body[data-theme="dark"] .editor-item {
   font: inherit;
 }
 
-body[data-theme="dark"] .create-strip input,
-body[data-theme="dark"] .create-strip select,
-body[data-theme="dark"] .editor-item input,
-body[data-theme="dark"] .editor-grid textarea {
-  background: var(--bg-field);
-  color: inherit;
-}
 
 .palette-backdrop {
   position: fixed;
