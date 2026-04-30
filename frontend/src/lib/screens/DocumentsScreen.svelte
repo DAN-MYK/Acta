@@ -2,9 +2,11 @@
   import AppIcon from "../components/AppIcon.svelte";
   import type { AppIconName } from "../icons";
   import { documentsStore } from "../stores/documents";
+  import { counterpartiesStore } from "../stores/counterparties";
   import type { DocumentKind } from "../types";
 
   const documents = documentsStore;
+  const counterparties = counterpartiesStore;
 
   let createCounterpartyId = "";
   let createKind: DocumentKind = "act";
@@ -139,7 +141,12 @@
   </div>
 
   <div class="create-strip">
-    <input bind:value={createCounterpartyId} placeholder="UUID контрагента для нового документа" />
+    <select bind:value={createCounterpartyId}>
+      <option value="">— Оберіть контрагента —</option>
+      {#each $counterparties.screen?.items ?? [] as cp}
+        <option value={cp.id}>{cp.name}</option>
+      {/each}
+    </select>
     <select bind:value={createKind}>
       <option value="act">Акт</option>
       <option value="invoice">Рахунок</option>
@@ -150,10 +157,6 @@
       <span>Створити чернетку</span>
     </button>
   </div>
-
-  {#if $documents.draftContext?.counterpartyName}
-    <p class="hint">Поточний create context: {$documents.draftContext.counterpartyName}</p>
-  {/if}
 
   {#if $documents.message}
     <p class="message">{$documents.message}</p>
