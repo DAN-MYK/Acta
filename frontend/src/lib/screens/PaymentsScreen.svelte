@@ -35,7 +35,7 @@
     </div>
     <div class="task-kpi-card">
       <strong>{$payments.list?.kpi.netStr ?? "0,00"}</strong>
-      <span>Net</span>
+      <span>Баланс</span>
     </div>
     <div class="task-kpi-card">
       <strong>{$payments.list?.kpi.unmatchedCount ?? 0}</strong>

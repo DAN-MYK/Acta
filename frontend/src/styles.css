@@ -320,7 +320,12 @@ body[data-theme="dark"] .task-row-main {
 }
 
 .task-pill {
+  display: inline-block;
   color: var(--accent-text);
+  background: var(--accent-soft);
+  border-radius: var(--radius-md);
+  padding: 3px 8px;
+  font-size: var(--font-sm);
 }
 
 .reports-filters {
