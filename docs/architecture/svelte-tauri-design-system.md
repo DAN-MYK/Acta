@@ -52,8 +52,10 @@
 
 Ризикові screen-рівні покриваються Vitest + jsdom:
 
+- root shell: bootstrap, theme wiring, company switch, command palette, keyboard shortcuts;
 - dashboard: sections, empty state, drill-ins;
 - documents: list/editor/chain actions;
 - payments: KPI rows, editor open, reconciliation actions.
+- settings: appearance controls, BAS import flow, company settings save.
 
 Новий screen або суттєва зміна screen поведінки має додати тест у `frontend/src/lib/screens/__tests__`.

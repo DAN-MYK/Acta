@@ -22,9 +22,11 @@
 
 Поточний P1 coverage:
 
+- `App.test.ts` - root shell contract: bootstrap load, theme wiring, command palette, company switch і keyboard shortcuts.
 - `DashboardScreen.test.ts` - ініціалізація summary секцій, drill-in у documents/payments/tasks, empty-state платежів.
 - `DocumentsScreen.test.ts` - list/editor/chain controls, пошук, створення draft, save/advance.
 - `PaymentsScreen.test.ts` - KPI/rows, відкриття editor, reconcile/unreconcile, створення платежу.
+- `SettingsScreen.test.ts` - appearance controls, company settings save, BAS import plan/execute flow.
 
 Ці тести навмисно мокають stores на межі screen contract. Бізнес-логіку, DTO parsing і DB behavior треба покривати нижче, у store/Rust tests.
 
@@ -33,11 +35,15 @@
 `e2e-tests/` запускає реальний Tauri desktop shell і перевіряє, що WebView ініціалізується та проходить базову навігацію:
 
 - старт на `Дашборд`;
+- shell bootstrap виставляє `body[data-theme]`;
+- topbar показує company switcher;
 - перехід у `Документи`;
 - перехід у `Платежі`;
+- quick theme toggle міняє theme signal;
 - shortcut `Ctrl+1` назад на dashboard.
 
 У CI smoke працює під `xvfb-run` на Linux і використовує `tauri-driver`.
+На локальному Windows запуску `npm run test:e2e` автоматично резолвить native Edge driver через `e2e-tests` dependency `edgedriver`, тому smoke не повинен залежати від ручного `msedgedriver.exe` у `PATH`.
 
 ## Правила розширення
 

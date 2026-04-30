@@ -25,6 +25,13 @@
 - `frontend/src/lib/stores/*` — orchestration на фронтенді.
 - `src/tauri_api/*` — backend DTO/command surface для Tauri.
 
+## CI та packaging gates
+
+- `tauri-e2e-smoke` у [.github/workflows/ci.yml](/C:/Users/MykhailoDan/apps/Acta/.github/workflows/ci.yml) вже є live gate для реального WebView smoke на Linux.
+- `tauri-windows-build` у тому ж workflow вже є live release-oriented gate для Windows packaging і збирає `src-tauri/target/release/bundle/**`.
+- Отже, окремий новий Windows packaging gate для цього sprint не потрібен: вимога вже активна в CI і має підтримуватися як release requirement, а не як future TODO.
+- Якщо змінюється `tauri.conf.json`, signing/bundle resources або installer wiring, зміни треба валідувати проти цього існуючого Windows gate, а не створювати паралельний другий gate.
+
 ## Shared backend
 
 `acta::runtime` лишається спільним bootstrap/runtime шаром для Tauri та тестів:
