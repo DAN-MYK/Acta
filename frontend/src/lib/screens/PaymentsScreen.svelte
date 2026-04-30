@@ -35,7 +35,7 @@
     </div>
     <div class="task-kpi-card">
       <strong>{$payments.list?.kpi.netStr ?? "0,00"}</strong>
-      <span>Net</span>
+      <span>Баланс</span>
     </div>
     <div class="task-kpi-card">
       <strong>{$payments.list?.kpi.unmatchedCount ?? 0}</strong>
@@ -87,8 +87,8 @@
         <p>Картка платежу</p>
       </div>
       <div class="editor-actions">
-        <button on:click={() => payments.save()}>Зберегти</button>
-        <button on:click={() => payments.closeEditor()}>Закрити</button>
+        <button class="btn-primary" on:click={() => payments.save()}>Зберегти</button>
+        <button class="btn-ghost" on:click={() => payments.closeEditor()}>Закрити</button>
       </div>
     </div>
 

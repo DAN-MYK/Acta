@@ -2,9 +2,11 @@
   import AppIcon from "../components/AppIcon.svelte";
   import type { AppIconName } from "../icons";
   import { documentsStore } from "../stores/documents";
+  import { counterpartiesStore } from "../stores/counterparties";
   import type { DocumentKind } from "../types";
 
   const documents = documentsStore;
+  const counterparties = counterpartiesStore;
 
   let createCounterpartyId = "";
   let createKind: DocumentKind = "act";
@@ -139,7 +141,12 @@
   </div>
 
   <div class="create-strip">
-    <input bind:value={createCounterpartyId} placeholder="UUID контрагента для нового документа" />
+    <select bind:value={createCounterpartyId}>
+      <option value="">— Оберіть контрагента —</option>
+      {#each $counterparties.screen?.items ?? [] as cp}
+        <option value={cp.id}>{cp.name}</option>
+      {/each}
+    </select>
     <select bind:value={createKind}>
       <option value="act">Акт</option>
       <option value="invoice">Рахунок</option>
@@ -150,10 +157,6 @@
       <span>Створити чернетку</span>
     </button>
   </div>
-
-  {#if $documents.draftContext?.counterpartyName}
-    <p class="hint">Поточний create context: {$documents.draftContext.counterpartyName}</p>
-  {/if}
 
   {#if $documents.message}
     <p class="message">{$documents.message}</p>
@@ -194,11 +197,11 @@
         <p>{$documents.editor.form.counterpartyName}</p>
       </div>
       <div class="editor-actions">
-        <button on:click={() => documents.addItem()}>Додати позицію</button>
-        <button on:click={() => documents.save()}>Зберегти</button>
-        <button on:click={() => documents.advanceStatus()}>Наступний статус</button>
-        <button class="ghost-danger" on:click={onDeleteCurrent}>Видалити</button>
-        <button on:click={() => documents.closeEditor()}>Закрити</button>
+        <button class="btn-ghost" on:click={() => documents.addItem()}>Додати позицію</button>
+        <button class="btn-primary" on:click={() => documents.save()}>Зберегти</button>
+        <button class="btn-ghost" on:click={() => documents.advanceStatus()}>Наступний статус</button>
+        <button class="btn-danger" on:click={onDeleteCurrent}>Видалити</button>
+        <button class="btn-ghost" on:click={() => documents.closeEditor()}>Закрити</button>
       </div>
     </div>
 
@@ -256,6 +259,15 @@
     </div>
 
     <div class="editor-items">
+      {#if $documents.editor.items.length > 0}
+        <div class="editor-item editor-item-head">
+          <span>Опис</span>
+          <span>Од.</span>
+          <span>Кількість</span>
+          <span>Ціна, грн</span>
+          <span></span>
+        </div>
+      {/if}
       {#each $documents.editor.items as item, index}
         <div class="editor-item">
           <input value={item.description} placeholder="Опис" on:input={(event) => onItemFieldChange(index, "description", event)} />

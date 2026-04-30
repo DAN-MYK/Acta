@@ -1,8 +1,10 @@
 # Remediation Master Plan
 
+> **Archived/pre-cutover:** цей remediation plan описує Slint-era архітектуру до Tauri cutover. Після `2026-04-30` не використовуй `ui/*.slint`, `src/ui/*` або `tests/ui_events.rs` з цього документа як live contract.
+
 Оновлено: `2026-04-27`  
 Горизонт: `4-6 тижнів`  
-Статус: `active`
+Статус: `archived/pre-cutover`
 
 ## Мета
 

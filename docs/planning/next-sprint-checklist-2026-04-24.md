@@ -1,5 +1,7 @@
 # Next Sprint Checklist
 
+> **Archived/pre-cutover:** це Slint-era checklist. Після `2026-04-30` live UI, test safety net і design-system рішення ведуться через Tauri/Svelte docs; посилання на `ui/*.slint`, `src/ui/*` і `tests/ui_events.rs` тут не є поточним contract.
+
 Оновлено: `2026-04-27`
 Статус: `historical execution checklist`
 

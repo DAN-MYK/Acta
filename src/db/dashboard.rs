@@ -1,7 +1,7 @@
-// Dashboard DB запити — агрегація для головного екрану.
+// Dashboard DB Р·Р°РїРёС‚Рё вЂ” Р°РіСЂРµРіР°С†С–СЏ РґР»СЏ РіРѕР»РѕРІРЅРѕРіРѕ РµРєСЂР°РЅСѓ.
 //
-// Використовує runtime-style sqlx::query_as::<_, T>() без макросів
-// щоб не залежати від cargo sqlx prepare при нових запитах.
+// Р’РёРєРѕСЂРёСЃС‚РѕРІСѓС” runtime-style sqlx::query_as::<_, T>() Р±РµР· РјР°РєСЂРѕСЃС–РІ
+// С‰РѕР± РЅРµ Р·Р°Р»РµР¶Р°С‚Рё РІС–Рґ cargo sqlx prepare РїСЂРё РЅРѕРІРёС… Р·Р°РїРёС‚Р°С….
 
 use anyhow::Result;
 use chrono::{Datelike, Local};
@@ -13,13 +13,13 @@ use crate::models::dashboard::{
     CategoryRevenue, KpiSummary, MonthRevenue, RecentAct, StatusSlice, UpcomingPayment,
 };
 
-/// Один SQL-запит з агрегатами для KPI-карток Dashboard.
+/// РћРґРёРЅ SQL-Р·Р°РїРёС‚ Р· Р°РіСЂРµРіР°С‚Р°РјРё РґР»СЏ KPI-РєР°СЂС‚РѕРє Dashboard.
 ///
-/// Паралельно рахує:
-/// - виручка поточного місяця (оплачені акти)
-/// - загальний борг (виставлені + підписані)
-/// - кількість актів за місяць
-/// - активних контрагентів
+/// РџР°СЂР°Р»РµР»СЊРЅРѕ СЂР°С…СѓС”:
+/// - РІРёСЂСѓС‡РєР° РїРѕС‚РѕС‡РЅРѕРіРѕ РјС–СЃСЏС†СЏ (РѕРїР»Р°С‡РµРЅС– Р°РєС‚Рё)
+/// - Р·Р°РіР°Р»СЊРЅРёР№ Р±РѕСЂРі (РІРёСЃС‚Р°РІР»РµРЅС– + РїС–РґРїРёСЃР°РЅС–)
+/// - РєС–Р»СЊРєС–СЃС‚СЊ Р°РєС‚С–РІ Р·Р° РјС–СЃСЏС†СЊ
+/// - Р°РєС‚РёРІРЅРёС… РєРѕРЅС‚СЂР°РіРµРЅС‚С–РІ
 pub async fn get_kpi_summary(pool: &PgPool, company_id: Uuid) -> Result<KpiSummary> {
     struct Row {
         revenue_this_month: Decimal,
@@ -76,10 +76,10 @@ pub async fn get_kpi_summary(pool: &PgPool, company_id: Uuid) -> Result<KpiSumma
     })
 }
 
-/// Виручка по місяцях за останні `months` місяців (оплачені акти).
+/// Р’РёСЂСѓС‡РєР° РїРѕ РјС–СЃСЏС†СЏС… Р·Р° РѕСЃС‚Р°РЅРЅС– `months` РјС–СЃСЏС†С–РІ (РѕРїР»Р°С‡РµРЅС– Р°РєС‚Рё).
 ///
-/// Повертає рівно `months` записів, заповнюючи нулями відсутні місяці.
-/// Відсортовано від найстарішого до поточного.
+/// РџРѕРІРµСЂС‚Р°С” СЂС–РІРЅРѕ `months` Р·Р°РїРёСЃС–РІ, Р·Р°РїРѕРІРЅСЋСЋС‡Рё РЅСѓР»СЏРјРё РІС–РґСЃСѓС‚РЅС– РјС–СЃСЏС†С–.
+/// Р’С–РґСЃРѕСЂС‚РѕРІР°РЅРѕ РІС–Рґ РЅР°Р№СЃС‚Р°СЂС–С€РѕРіРѕ РґРѕ РїРѕС‚РѕС‡РЅРѕРіРѕ.
 pub async fn revenue_by_month(
     pool: &PgPool,
     company_id: Uuid,
@@ -121,12 +121,12 @@ pub async fn revenue_by_month(
     .fetch_all(pool)
     .await?;
 
-    // Заповнюємо всі N місяців, вставляємо 0 для місяців без даних
+    // Р—Р°РїРѕРІРЅСЋС”РјРѕ РІСЃС– N РјС–СЃСЏС†С–РІ, РІСЃС‚Р°РІР»СЏС”РјРѕ 0 РґР»СЏ РјС–СЃСЏС†С–РІ Р±РµР· РґР°РЅРёС…
     let today = Local::now().date_naive();
     let mut result: Vec<MonthRevenue> = Vec::with_capacity(months as usize);
 
     for i in (0..months).rev() {
-        // i=0 — поточний місяць, i=months-1 — найстаріший
+        // i=0 вЂ” РїРѕС‚РѕС‡РЅРёР№ РјС–СЃСЏС†СЊ, i=months-1 вЂ” РЅР°Р№СЃС‚Р°СЂС–С€РёР№
         let target_month = subtract_months(today, i);
         let found = rows.iter().find(|r| {
             r.month_num as u32 == target_month.month() && r.year_num == target_month.year()
@@ -138,12 +138,12 @@ pub async fn revenue_by_month(
         });
     }
 
-    // result[0] = найстаріший, result[months-1] = поточний
+    // result[0] = РЅР°Р№СЃС‚Р°СЂС–С€РёР№, result[months-1] = РїРѕС‚РѕС‡РЅРёР№
     result.reverse();
     Ok(result)
 }
 
-/// Розподіл актів за статусами за поточний місяць.
+/// Р РѕР·РїРѕРґС–Р» Р°РєС‚С–РІ Р·Р° СЃС‚Р°С‚СѓСЃР°РјРё Р·Р° РїРѕС‚РѕС‡РЅРёР№ РјС–СЃСЏС†СЊ.
 pub async fn acts_status_distribution(pool: &PgPool, company_id: Uuid) -> Result<Vec<StatusSlice>> {
     struct Row {
         status: String,
@@ -184,15 +184,16 @@ pub async fn acts_status_distribution(pool: &PgPool, company_id: Uuid) -> Result
         .collect())
 }
 
-/// Найближчі очікувані платежі (акти з expected_payment_date IS NOT NULL, статус ≠ paid/draft).
+/// РќР°Р№Р±Р»РёР¶С‡С– РЅРµР·РІС–СЂРµРЅС– РїР»Р°С‚РµР¶С– РґР»СЏ dashboard drill-in.
 ///
-/// Прострочені (expected_payment_date <= сьогодні) йдуть першими.
+/// РџСЂРѕСЃС‚СЂРѕС‡РµРЅС– (date <= СЃСЊРѕРіРѕРґРЅС–) Р№РґСѓС‚СЊ РїРµСЂС€РёРјРё.
 pub async fn upcoming_payments(
     pool: &PgPool,
     company_id: Uuid,
     limit: i64,
 ) -> Result<Vec<UpcomingPayment>> {
     struct Row {
+        id: String,
         date_day: i32,
         date_month: i32,
         contractor: String,
@@ -204,6 +205,7 @@ pub async fn upcoming_payments(
         fn from_row(r: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
             use sqlx::Row as _;
             Ok(Self {
+                id: r.try_get("id")?,
                 date_day: r.try_get("date_day")?,
                 date_month: r.try_get("date_month")?,
                 contractor: r.try_get("contractor")?,
@@ -216,19 +218,21 @@ pub async fn upcoming_payments(
     let rows = sqlx::query_as::<_, Row>(
         r#"
         SELECT
-            EXTRACT(DAY   FROM a.expected_payment_date)::int AS date_day,
-            EXTRACT(MONTH FROM a.expected_payment_date)::int AS date_month,
-            c.name                                           AS contractor,
-            a.total_amount                                   AS amount,
-            a.expected_payment_date <= CURRENT_DATE          AS is_overdue
+            a.id::text                                        AS id,
+            EXTRACT(DAY   FROM a.expected_payment_date)::int   AS date_day,
+            EXTRACT(MONTH FROM a.expected_payment_date)::int   AS date_month,
+            COALESCE(c.name, '__NO_COUNTERPARTY__')            AS contractor,
+            a.total_amount                                     AS amount,
+            a.expected_payment_date <= CURRENT_DATE            AS is_overdue
         FROM acts a
-        JOIN counterparties c ON c.id = a.counterparty_id
+        LEFT JOIN counterparties c ON c.id = a.counterparty_id
         WHERE a.company_id = $1
-          AND a.expected_payment_date IS NOT NULL
           AND a.status IN ('issued', 'signed')
+          AND a.expected_payment_date IS NOT NULL
         ORDER BY
             a.expected_payment_date <= CURRENT_DATE DESC,
-            a.expected_payment_date ASC
+            a.expected_payment_date ASC,
+            a.created_at ASC
         LIMIT $2
         "#,
     )
@@ -239,18 +243,18 @@ pub async fn upcoming_payments(
 
     let month_abbr = |m: i32| -> &'static str {
         match m {
-            1 => "Січ",
-            2 => "Лют",
-            3 => "Бер",
-            4 => "Кві",
-            5 => "Тра",
-            6 => "Чер",
-            7 => "Лип",
-            8 => "Сер",
-            9 => "Вер",
-            10 => "Жов",
-            11 => "Лис",
-            12 => "Гру",
+            1 => "РЎС–С‡",
+            2 => "Р›СЋС‚",
+            3 => "Р‘РµСЂ",
+            4 => "РљРІС–",
+            5 => "РўСЂР°",
+            6 => "Р§РµСЂ",
+            7 => "Р›РёРї",
+            8 => "РЎРµСЂ",
+            9 => "Р’РµСЂ",
+            10 => "Р–РѕРІ",
+            11 => "Р›РёСЃ",
+            12 => "Р“СЂСѓ",
             _ => "???",
         }
     };
@@ -258,15 +262,20 @@ pub async fn upcoming_payments(
     Ok(rows
         .into_iter()
         .map(|r| UpcomingPayment {
+            id: r.id,
             date_label: format!("{:02} {}", r.date_day, month_abbr(r.date_month)),
-            contractor: r.contractor,
+            contractor: if r.contractor == "__NO_COUNTERPARTY__" {
+                "Без контрагента".to_string()
+            } else {
+                r.contractor
+            },
             amount: r.amount,
             is_overdue: r.is_overdue,
         })
         .collect())
 }
 
-/// Останні `limit` актів для таблиці на Dashboard.
+/// РћСЃС‚Р°РЅРЅС– `limit` Р°РєС‚С–РІ РґР»СЏ С‚Р°Р±Р»РёС†С– РЅР° Dashboard.
 pub async fn get_recent_acts(
     pool: &PgPool,
     company_id: Uuid,
@@ -325,9 +334,9 @@ pub async fn get_recent_acts(
         .collect())
 }
 
-// ── Inbox — дії, що потребують уваги ─────────────────────────────────────────
+// в”Ђв”Ђ Inbox вЂ” РґС–С—, С‰Рѕ РїРѕС‚СЂРµР±СѓСЋС‚СЊ СѓРІР°РіРё в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
-/// Рядок inbox: прострочені акти та неузгоджені платежі.
+/// Р СЏРґРѕРє inbox: РїСЂРѕСЃС‚СЂРѕС‡РµРЅС– Р°РєС‚Рё С‚Р° РЅРµСѓР·РіРѕРґР¶РµРЅС– РїР»Р°С‚РµР¶С–.
 pub struct InboxRow {
     pub doc_id: String,
     pub doc_number: String,
@@ -353,9 +362,9 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for InboxRow {
     }
 }
 
-/// Прострочені акти (>14 днів без оплати) та неузгоджені платежі.
-/// Відсортовано за кількістю днів очікування (найдавніші — першими).
-/// Повертає не більше 20 записів.
+/// РџСЂРѕСЃС‚СЂРѕС‡РµРЅС– Р°РєС‚Рё (>14 РґРЅС–РІ Р±РµР· РѕРїР»Р°С‚Рё) С‚Р° РЅРµСѓР·РіРѕРґР¶РµРЅС– РїР»Р°С‚РµР¶С–.
+/// Р’С–РґСЃРѕСЂС‚РѕРІР°РЅРѕ Р·Р° РєС–Р»СЊРєС–СЃС‚СЋ РґРЅС–РІ РѕС‡С–РєСѓРІР°РЅРЅСЏ (РЅР°Р№РґР°РІРЅС–С€С– вЂ” РїРµСЂС€РёРјРё).
+/// РџРѕРІРµСЂС‚Р°С” РЅРµ Р±С–Р»СЊС€Рµ 20 Р·Р°РїРёСЃС–РІ.
 pub async fn inbox_items(pool: &PgPool, company_id: Uuid) -> Result<Vec<InboxRow>> {
     sqlx::query_as::<_, InboxRow>(
         r#"
@@ -366,7 +375,7 @@ pub async fn inbox_items(pool: &PgPool, company_id: Uuid) -> Result<Vec<InboxRow
             a.total_amount                 AS amount,
             (CURRENT_DATE - a.date)::int   AS age_days,
             'overdue'::text                AS kind,
-            'Нагадати'::text               AS action_label
+            'РќР°РіР°РґР°С‚Рё'::text               AS action_label
         FROM acts a
         JOIN counterparties c ON c.id = a.counterparty_id
         WHERE a.company_id = $1
@@ -375,12 +384,12 @@ pub async fn inbox_items(pool: &PgPool, company_id: Uuid) -> Result<Vec<InboxRow
         UNION ALL
         SELECT
             'pay:' || p.id::text,
-            'ПЛТ-' || LEFT(p.id::text, 8),
-            COALESCE(c.name, '—'),
+            'РџР›Рў-' || LEFT(p.id::text, 8),
+            COALESCE(c.name, 'вЂ”'),
             p.amount,
             (CURRENT_DATE - p.date)::int,
             'unmatched'::text,
-            'Поєднати'::text
+            'РџРѕС”РґРЅР°С‚Рё'::text
         FROM payments p
         LEFT JOIN counterparties c ON c.id = p.counterparty_id
         WHERE p.company_id = $1
@@ -395,7 +404,7 @@ pub async fn inbox_items(pool: &PgPool, company_id: Uuid) -> Result<Vec<InboxRow
     .map_err(anyhow::Error::from)
 }
 
-/// Витрати по місяцях за категоріями типу `expense`.
+/// Р’РёС‚СЂР°С‚Рё РїРѕ РјС–СЃСЏС†СЏС… Р·Р° РєР°С‚РµРіРѕСЂС–СЏРјРё С‚РёРїСѓ `expense`.
 pub async fn expenses_by_month(
     pool: &PgPool,
     company_id: Uuid,
@@ -470,7 +479,7 @@ pub async fn expenses_by_month(
     Ok(result)
 }
 
-/// Розподіл витрат за категоріями для екрана звітів.
+/// Р РѕР·РїРѕРґС–Р» РІРёС‚СЂР°С‚ Р·Р° РєР°С‚РµРіРѕСЂС–СЏРјРё РґР»СЏ РµРєСЂР°РЅР° Р·РІС–С‚С–РІ.
 pub async fn category_breakdown(
     pool: &PgPool,
     company_id: Uuid,
@@ -530,9 +539,9 @@ pub async fn category_breakdown(
         .collect())
 }
 
-// ── Допоміжна функція ────────────────────────────────────────────────────────
+// в”Ђв”Ђ Р”РѕРїРѕРјС–Р¶РЅР° С„СѓРЅРєС†С–СЏ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
-/// Відняти `months` місяців від дати (без зміщення по днях).
+/// Р’С–РґРЅСЏС‚Рё `months` РјС–СЃСЏС†С–РІ РІС–Рґ РґР°С‚Рё (Р±РµР· Р·РјС–С‰РµРЅРЅСЏ РїРѕ РґРЅСЏС…).
 fn subtract_months(date: chrono::NaiveDate, months: u32) -> chrono::NaiveDate {
     let total_months = date.year() * 12 + date.month() as i32 - 1 - months as i32;
     let year = total_months / 12;

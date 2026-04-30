@@ -1,5 +1,7 @@
 # Remediation Sprint Checklist
 
+> **Archived/pre-cutover:** цей checklist описує Slint-era remediation. Після `2026-04-30` не використовуй `tests/ui_events.rs` або `ui/*.slint` з цього документа як live quality gate.
+
 Оновлено: `2026-04-27`
 Статус: `open`
 План: [remediation-sprint-2026-04-27.md](/C:/Users/MykhailoDan/apps/Acta/docs/planning/remediation-sprint-2026-04-27.md)

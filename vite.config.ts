@@ -5,6 +5,15 @@ export default defineConfig({
   plugins: [svelte()],
   server: {
     port: 1420,
-    strictPort: true
+    strictPort: true,
+    watch: {
+      ignored: [
+        "**/.tmp*/**",
+        "**/target/**",
+        "**/src-tauri/target/**",
+        "**/dist/**",
+        "**/storage/**"
+      ]
+    }
   }
 });

@@ -1,6 +1,11 @@
 /target
 /target_codex_run/
 /target_codex_test/
+/dist/
+node_modules/
+e2e-tests/node_modules/
+.gh-cache/
+.superpowers/
 .env
 .claude/
 .claude/worktrees/
@@ -10,7 +15,12 @@
 temp_*.ps1
 temp_*.md
 tmp_*.md
+.tmp-pr*.md
 *.ps1
 
 # Згенеровані PDF документи
 storage/documents/
+storage/backups/
+storage/logs/
+storage/reports/
+storage/test-config/

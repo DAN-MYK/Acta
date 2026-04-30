@@ -1,5 +1,7 @@
 # Shell + Navigation → Tauri spec — 2026-04-29
 
+> **Pre-cutover source note:** документ був написаний під час перенесення зі Slint. Посилання на `src/bootstrap/*` і `ui/*.slint` нижче є historical reference; live shell/navigation contract зараз у `frontend/src/App.svelte`, `frontend/src/lib/stores/navigation.ts`, `frontend/src/lib/stores/shell.ts` і `src-tauri/src/commands/shell.rs`.
+
 ## Призначення
 
 Цей документ фіксує цільовий Tauri/frontend contract для root shell, navigation, company switcher і command palette.

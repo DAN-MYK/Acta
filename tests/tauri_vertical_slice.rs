@@ -541,11 +541,12 @@ async fn tauri_vertical_slice_payments_smoke() -> Result<()> {
     let count_before = screen_before.items.len();
 
     // 2. Створити тестовий платіж
+    let today = Utc::now().format("%Y-%m-%d").to_string();
     let create_result = acta::tauri_api::payments::payment_create_or_update(
         &ctx,
         acta::tauri_api::payments::PaymentCreateOrUpdateRequest {
             id: String::new(),
-            date: "2026-01-01".to_string(),
+            date: today,
             amount: "100.00".to_string(),
             direction: "income".to_string(),
             counterparty_id: String::new(),
@@ -575,6 +576,15 @@ async fn tauri_vertical_slice_payments_smoke() -> Result<()> {
         .find(|p| !before_ids.contains(p.id.as_str()))
         .ok_or_else(|| anyhow!("новий платіж не знайдено у списку після створення"))?;
     let new_payment_id = new_payment.id.clone();
+
+    let dashboard_after_create = acta::tauri_api::dashboard::dashboard_load(&ctx).await?;
+    assert!(
+        dashboard_after_create
+            .upcoming_payments
+            .iter()
+            .any(|payment| payment.id == new_payment_id),
+        "dashboard upcoming payments мають віддавати id реального payment record для drill-in"
+    );
 
     // Виконати решту кроків з гарантованим cleanup
     let payment_result: Result<()> = async {

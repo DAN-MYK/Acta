@@ -1,37 +1,37 @@
 # UI Canonicalization
 
-Оновлено: `2026-04-23`
+Оновлено: `2026-04-30`
 
-## Канонічний статус
+## Канонічний UI
 
-Єдиний канонічний UI Acta — `ui/`.
+Канонічний desktop UI Acta після cutover:
 
-- `build.rs` компілює тільки `ui/app.slint`.
-- `slint::include_modules!()` у runtime працює з generated contract від `ui`.
-- `tests/ui_events.rs` перевіряє актуальний `AppWindow` із `ui`.
-- Папка `ui/` не є runtime-джерелом істини.
+- [src-tauri](/C:/Users/MykhailoDan/apps/Acta/src-tauri) - Tauri entrypoint, config, commands;
+- [frontend/src/App.svelte](/C:/Users/MykhailoDan/apps/Acta/frontend/src/App.svelte) - shell/root component;
+- [frontend/src/lib/screens](/C:/Users/MykhailoDan/apps/Acta/frontend/src/lib/screens) - feature screens;
+- [frontend/src/lib/stores](/C:/Users/MykhailoDan/apps/Acta/frontend/src/lib/stores) - frontend orchestration;
+- [frontend/src/lib/styles/tokens.css](/C:/Users/MykhailoDan/apps/Acta/frontend/src/lib/styles/tokens.css) - design tokens.
 
-## Inventory legacy UI artifacts
+Slint runtime видалено 2026-04-30. `ui/`, root `build.rs`, `src/ui/*`, `src/bootstrap/*` Slint wiring і `tests/ui_events.rs` не є live runtime.
 
-| Артефакт | Статус | Рішення |
-|---|---|---|
-| legacy `.slint` дерево в `ui/` | retired | `remove` |
-| legacy Rust presenter-модулі `src/ui/{acts,companies,invoices,waybills}.rs` | retired | `remove` |
-| runtime build path | уже на `ui/app.slint` | `keep` |
-| `tests/ui_events.rs` | уже на новому contract | `keep` |
-| посилання в інструкціях/документації на `ui/` як current UI | retired | `remove` |
+## Archived Slint references
+
+Slint можна цитувати лише як historical/pre-cutover reference:
+
+- `.worktrees/sprint-2026-04-24/ui/*.slint`;
+- `.worktrees/sprint-2026-04-24/src/ui/*`;
+- старі planning/audit docs, якщо вони явно позначені як archived або pre-cutover.
+
+Нові planning docs не повинні подавати Slint callback/property contract як поточний UI contract.
 
 ## Правило для розробки
 
-Усі нові UI-зміни, callback-и, screen contracts і accessibility-оновлення потрібно вносити тільки в `ui/`.
+Усі нові UI-зміни йдуть у Svelte/Tauri шлях:
 
-Legacy Slint-дерево в `ui/` та legacy Rust presenter-шар для старого `MainWindow`
-в `src/ui/{acts,companies,invoices,waybills}.rs` уже прибрано з репозиторію.
-Історичний контекст по міграції збережено лише в документації.
+- screen markup: `frontend/src/lib/screens/*.svelte`;
+- reusable UI: `frontend/src/lib/components/*.svelte`;
+- icons: `frontend/src/lib/icons/*` + `AppIcon.svelte`;
+- tokens and page styling: `frontend/src/lib/styles/tokens.css` і `frontend/src/styles.css`;
+- data contract: `src/tauri_api/*`, `src-tauri/src/commands/*`, `frontend/src/lib/api.ts`, `frontend/src/lib/types.ts`.
 
-## Що вважається закритим у межах Epic 1
-
-1. `ui` зафіксовано як єдиний current UI у build/runtime/docs.
-2. Старий `MainWindow` не використовується як поточний binding contract.
-3. Legacy UI не подає хибний сигнал як active runtime layer.
-4. Є явний inventory legacy artifacts з рішенням `keep` або `remove`.
+Якщо потрібно повернути старий Slint-only UX (`journal`, `inbox`, accounts block), це нова Tauri feature spec, а не задача "догнати parity".

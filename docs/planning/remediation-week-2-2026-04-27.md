@@ -1,5 +1,7 @@
 # Remediation Week 2
 
+> **Archived/pre-cutover:** цей план описує Slint-era editor flow. Після `2026-04-30` `ui/*.slint` references не є live UI contract; нові screen specs мають бути Tauri/Svelte.
+
 Оновлено: `2026-04-27`  
 Горизонт: `5 робочих днів`  
 Статус: `planned`

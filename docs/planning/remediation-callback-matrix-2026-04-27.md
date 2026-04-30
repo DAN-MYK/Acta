@@ -1,5 +1,7 @@
 # Remediation Callback Matrix
 
+> **Archived/pre-cutover:** матриця фіксує Slint callback contract до Tauri cutover. Для live invoke/store contract використовуй `tauri-migration-contract-matrix-2026-04-29.md` і `frontend/src/lib/*`; посилання на `src/ui/*` тут історичні.
+
 Оновлено: `2026-04-29`  
 Призначення: швидка карта того, що вже wired, що реально працює, а що ще лишається на наступний cleanup-шар.
 

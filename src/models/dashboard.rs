@@ -55,13 +55,14 @@ pub struct StatusSlice {
 
 /// Рядок очікуваного платежу (акт або накладна з expected_payment_date).
 pub struct UpcomingPayment {
+    pub id: String,
     /// Форматована дата: "05 Кві".
     pub date_label: String,
     /// Назва контрагента.
     pub contractor: String,
     /// Сума.
     pub amount: Decimal,
-    /// true якщо expected_payment_date <= сьогодні.
+    /// true якщо дата платежу <= сьогодні.
     pub is_overdue: bool,
 }
 

@@ -1,303 +1,112 @@
-# Roadmap міграції на Tauri — 2026-04-29
+# Roadmap міграції на Tauri - post-cutover стан на 2026-04-30
 
-## Принцип
+## Канонічний стан
 
-Міграція має йти паралельно до чинного Slint UI, а не через миттєвий cutover. Найменш ризиковий шлях:
+Tauri runtime є канонічним desktop shell для Acta. Поточний live UI складається з:
 
-1. Підняти Tauri поруч.
-2. Винести backend contract.
-3. Перенести shell і екрани по одному.
-4. Переписати тести й CI.
-5. Лише після цього прибрати Slint.
+- `src-tauri/` - Tauri entrypoint, invoke handler і command wrappers.
+- `frontend/src/` - Svelte screens, stores, typed frontend API.
+- `src/tauri_api/` - backend DTO/command contract для Tauri.
+- `src/` - домен, DB, імпорт, PDF та shared backend logic.
 
-## Етап 1. Tauri scaffold
+Root Slint runtime більше не є live runtime: `ui/`, `src/ui/`, root `build.rs`, `tests/ui_events.rs` і Slint dependencies відсутні в поточному дереві. Будь-які Slint-файли можна використовувати лише як історичну довідку з worktree/archive, а не як джерело truth для продуктового контракту.
 
-### Ціль
+## Що завершено
 
-Підготувати новий runtime без впливу на Slint.
+- Tauri scaffold піднято в `src-tauri/`.
+- Svelte/Vite frontend є єдиним desktop UI.
+- Shared Rust backend працює через `AppCtx` і `src/tauri_api/*`.
+- Shell, navigation, command palette, company switcher і settings-backed theme flow перенесені в Tauri/Svelte.
+- Основні vertical slices мають frontend stores/screens і Tauri commands: dashboard, documents, counterparties, payments, reports, tasks, settings, BAS import.
+- Dashboard реалізований як backend-backed Tauri screen, не як placeholder.
+- Slint runtime, wiring і Slint test suite прибрані з live root.
+- CI має frontend checks, backend checks, DB vertical slice, Linux Tauri smoke і Windows Tauri build gate.
 
-### Нові файли
+## Що є deliberate redesign
 
-- `src-tauri/Cargo.toml`
-- `src-tauri/src/main.rs`
-- `src-tauri/src/lib.rs`
-- `src-tauri/build.rs`
-- `src-tauri/tauri.conf.json`
-- `package.json`
-- `vite.config.ts`
-- `svelte.config.js`
-- `tsconfig.json`
-- `index.html`
-- `src/` frontend
+Dashboard у Tauri зафіксований як redesign-first screen, а не strict Slint parity migration. Це означає:
 
-### Ризик
+- Tauri dashboard показує operational summary: KPI, cashflow, recent documents, upcoming payments, urgent tasks.
+- Старі Slint-only affordances `journal`, `inbox`, accounts sidebar, sparkline/delta strip і chart-first layout не вважаються незавершеним переносом.
+- Якщо ці сценарії потрібні знову, вони мають входити в backlog як нові Tauri product requirements із власним контрактом, а не як механічне відновлення Slint UI.
 
-Низький.
+## Архівна Slint reference
 
-## Етап 2. Shared backend bootstrap
+Slint можна дивитися тільки як historical reference:
 
-### Ціль
+- `.worktrees/sprint-2026-04-24/ui/dashboard.slint`
+- `.worktrees/sprint-2026-04-24/src/ui/dashboard.rs`
+- `.worktrees/slint-audit-2026-04-24/`
+- planning/audit docs, які явно позначені як pre-cutover або archived reference
 
-Зробити так, щоб Tauri міг використовувати той самий Rust backend, що й нинішній Slint app.
+Не використовувати як live source:
 
-### Поточні точки інтеграції
-
-- [src/main.rs](/C:/Users/MykhailoDan/apps/Acta/src/main.rs:13)
-- [src/bootstrap.rs](/C:/Users/MykhailoDan/apps/Acta/src/bootstrap.rs:34)
-- [src/app_ctx.rs](/C:/Users/MykhailoDan/apps/Acta/src/app_ctx.rs:54)
-
-### Що переносимо
-
-- `AppCtx`
-- `PgPool`
-- міграції
-- background tasks
-- active company context
-
-### Ризик
-
-Низький-середній.
-
-## Етап 3. Command contract
-
-### Ціль
-
-Замінити Slint callbacks на Tauri commands.
-
-### Джерела контракту
-
-- [src/ui/mod.rs](/C:/Users/MykhailoDan/apps/Acta/src/ui/mod.rs:1)
-- [tests/ui_events.rs](/C:/Users/MykhailoDan/apps/Acta/tests/ui_events.rs:1)
-- presenter-модулі у [src/ui](/C:/Users/MykhailoDan/apps/Acta/src/ui)
-
-### Ключове правило
-
-- гроші лишаються рядками;
-- дати на межі API лишаються рядками;
-- валідація і `Decimal` лишаються в Rust.
-
-### Ризик
-
-Середній.
-
-## Етап 4. Shell і navigation
-
-### Ціль
-
-Перенести root shell, navigation, company switcher, palette, theme toggle, shortcuts.
-
-### Поточні Slint джерела
-
-- [ui/app.slint](/C:/Users/MykhailoDan/apps/Acta/ui/app.slint:30)
-- [ui/shell.slint](/C:/Users/MykhailoDan/apps/Acta/ui/shell.slint)
-- [ui/types.slint](/C:/Users/MykhailoDan/apps/Acta/ui/types.slint:210)
-- [src/bootstrap/navigation.rs](/C:/Users/MykhailoDan/apps/Acta/src/bootstrap/navigation.rs:35)
-- [src/bootstrap/shell.rs](/C:/Users/MykhailoDan/apps/Acta/src/bootstrap/shell.rs)
-- [src/bootstrap/palette.rs](/C:/Users/MykhailoDan/apps/Acta/src/bootstrap/palette.rs:154)
-
-### Нові frontend модулі
-
-- `src/App.svelte`
-- `src/lib/stores/navigation.ts`
-- `src/lib/stores/shell.ts`
-- `src/lib/stores/theme.ts`
-- `src/lib/stores/palette.ts`
-- `src/lib/components/Shell.svelte`
-- `src/lib/components/Sidebar.svelte`
-- `src/lib/components/CommandPalette.svelte`
-
-### Ризик
-
-Середній.
-
-## Етап 5. Перенос feature screens
-
-### Статус на 2026-04-30
-
-- `dashboard` більше не є placeholder у Tauri UI.
-- Пілотний екран працює через `dashboard_load` + `frontend/src/lib/stores/dashboard.ts` і тягне дані з Rust backend для KPI, cashflow, останніх актів, найближчих платежів і задач у фокусі.
-- Канонічний Slint baseline для parity-аудиту зараз лежить у `.worktrees/sprint-2026-04-24/ui/dashboard.slint` та `.worktrees/sprint-2026-04-24/src/ui/dashboard.rs`, а не в root `ui/`, як у старішій документації.
-- Dashboard parity зі Slint ще не досягнуто: Tauri покриває лише backend-backed operational slice, але ще не переносить Slint `inbox` mode, journal table, блок рахунків, dashboard-local task actions, YTD/delta/sparkline метрики та chart-first layout.
-- Наступні vertical slices залишаються: `documents`, `counterparties`, `payments`, `tasks`, `reports`, `settings`.
-
-### Dashboard parity note — аудит 2026-04-30
-
-Базові джерела для звірки:
-
-- Slint UI: `.worktrees/sprint-2026-04-24/ui/dashboard.slint`
-- Slint wiring/data prep: `.worktrees/sprint-2026-04-24/src/ui/dashboard.rs`
-- Tauri screen: `frontend/src/lib/screens/DashboardScreen.svelte`
-- Tauri store/API/backend: `frontend/src/lib/stores/dashboard.ts`, `frontend/src/lib/api.ts`, `src/tauri_api/dashboard.rs`, `src-tauri/src/commands/dashboard.rs`
-
-#### Що вже перенесено
-
-- Dashboard у Tauri завантажується окремою командою `dashboard_load`.
-- Дані йдуть з реального Rust backend, а не з frontend mock state.
-- На екрані вже є п'ять реальних секцій: KPI summary, cashflow, recent acts, upcoming payments і urgent tasks.
-- Доступний refresh поточного slice, переходи до `documents`, `payments`, `tasks`, а також drill-in у document/task flows.
-- Клік по recent act переводить на `documents` і викликає `documents.open(docId)`; клік по urgent task переводить на `tasks` і викликає `tasks.openEditor(taskId)`.
-
-#### Що перенесено частково
-
-- KPI перенесені як новий Tauri-набір, але це не 1:1 зі Slint KPI strip: у Slint були `дохід`, `витрати`, `чистий прибуток`, `заборгованість`, `прострочка`, delta-рядки та sparklines, а в Tauri зараз інший набір business counters без цих visual/data affordances.
-- Cashflow перенесено по даних, але не по UI-flow: Slint мав bar chart з легендою, YTD summary і empty-state навколо normalized bars; Tauri зараз показує read-only tabular/list presentation тих самих місячних агрегатів.
-- Tasks slice на dashboard перенесено як список urgent tasks, але не як interactive sidebar widget зі switch done/open і quick add прямо з dashboard.
-- Recent documents перенесено лише для актів; Slint journal показував ширший operational log із колонками `дата / id / операція / контрагент / дебет / кредит / статус`.
-- Upcoming payments присутні як backend-backed список, але тільки як read-only rows без row-level drill-in, reconcile або dashboard-specific quick action.
-
-#### Що свідомо опущено або відкладено
-
-- `Inbox`/`Вхідні` режим старого dashboard.
-- Sidebar блок `Рахунки` з total balance.
-- Dashboard-local task toggle і quick add.
-- Journal-level filters/buttons типу `Усі типи` / `Всі операції`.
-- Slint-specific visual parity: KPI strip, right sidebar, chart-first composition, sparkline usage.
-
-#### Що ще бракує для parity
-
-1. Або перенести `journal + inbox + accounts` як окремі Tauri sections, або формально зафіксувати їх як deliberate cut із новим product contract.
-2. Визначити долю dashboard-specific actions зі Slint: task toggle, new task, all tasks, all operations, inbox actions.
-3. Вирівняти data contract: або дотягнути Tauri до Slint метрик/YTD/delta, або явно зафіксувати dashboard як redesign з частковим reuse backend-агрегатів, а не як strict parity migration.
-
-### Рекомендований порядок
-
-1. `dashboard`
-2. `documents`
-3. `counterparties`
-4. `payments`
-5. `tasks`
-6. `reports`
-7. `settings`
-
-### Поточні Rust presenter-модулі
-
-- [src/ui/dashboard.rs](/C:/Users/MykhailoDan/apps/Acta/src/ui/dashboard.rs:145)
-- [src/ui/documents.rs](/C:/Users/MykhailoDan/apps/Acta/src/ui/documents.rs:1046)
-- [src/ui/counterparties.rs](/C:/Users/MykhailoDan/apps/Acta/src/ui/counterparties.rs:229)
-- [src/ui/payments.rs](/C:/Users/MykhailoDan/apps/Acta/src/ui/payments.rs:364)
-- [src/ui/tasks.rs](/C:/Users/MykhailoDan/apps/Acta/src/ui/tasks.rs:239)
-- [src/ui/reports.rs](/C:/Users/MykhailoDan/apps/Acta/src/ui/reports.rs:370)
-- [src/ui/settings.rs](/C:/Users/MykhailoDan/apps/Acta/src/ui/settings.rs:512)
-
-### Ризик
-
-Середній-високий.
-
-## Етап 6. Заміна refresh/wiring моделі
-
-### Поточна модель
-
-- `Weak<AppWindow>`
-- `apply_*_to_ui`
-- `wire_*_callbacks`
-- `VecModel` / `ModelRc`
-
-### Цільова модель
-
-- `invoke()` / `#[tauri::command]`
-- Svelte stores
-- targeted re-fetch після mutation
-- мінімум глобального imperative refresh
-
-### Поточні файли
-
-- [src/bootstrap/refresh.rs](/C:/Users/MykhailoDan/apps/Acta/src/bootstrap/refresh.rs:99)
-- [src/bootstrap/wiring.rs](/C:/Users/MykhailoDan/apps/Acta/src/bootstrap/wiring.rs:7)
-- [src/bootstrap/document_chain.rs](/C:/Users/MykhailoDan/apps/Acta/src/bootstrap/document_chain.rs:9)
-
-### Ризик
-
-Високий.
-
-## Етап 7. Дизайн-система
-
-### Джерела
-
-- [ui/design-tokens.slint](/C:/Users/MykhailoDan/apps/Acta/ui/design-tokens.slint)
-- [ui/components.slint](/C:/Users/MykhailoDan/apps/Acta/ui/components.slint)
-- [ui/icons.slint](/C:/Users/MykhailoDan/apps/Acta/ui/icons.slint)
-- `ui/assets/...`
-
-### Ціль
-
-- перенести токени в CSS custom properties;
-- перенести reusable components;
-- перепідключити SVG assets.
-
-### Ризик
-
-Середній.
-
-## Етап 8. Тести
-
-### Поточний стан
-
-- [tests/ui_events.rs](/C:/Users/MykhailoDan/apps/Acta/tests/ui_events.rs:6) є Slint-specific test suite.
-
-### Цільовий стан
-
-- Rust unit/integration tests на backend commands;
-- frontend component tests;
-- Tauri/e2e smoke tests.
-
-### Мінімальний набір
-
-- command tests
-- navigation smoke test
-- documents CRUD smoke test
-- payments flow smoke test
-- settings persistence smoke test
-
-### Ризик
-
-Середній.
-
-## Етап 9. CI
-
-### Поточний стан
-
-- [ci.yml](/C:/Users/MykhailoDan/apps/Acta/.github/workflows/ci.yml:39) має Slint UI job.
-
-### Цільовий стан
-
-- frontend install
-- typecheck
-- frontend build
-- Tauri build smoke test
-- backend tests
-- DB integration tests
-
-### Ризик
-
-Низький-середній.
-
-## Етап 10. Фінальний cutover
-
-### Прибираємо лише після green build
-
+- `ui/app.slint`
 - `ui/*.slint`
-- поточний [build.rs](/C:/Users/MykhailoDan/apps/Acta/build.rs:1)
-- `slint`
-- `slint-build`
-- `i-slint-backend-testing`
-- Slint bootstrap/wiring
+- `src/ui/*`
+- `src/bootstrap/*` Slint wiring
+- `tests/ui_events.rs`
 
-### Ризик
+Якщо новий документ посилається на Slint, він має прямо казати: archived reference, not live runtime.
 
-Високий, якщо зробити передчасно.
+## Live contract rule
 
-## Найкращий практичний порядок виконання
+Для будь-якої зміни frontend/backend contract синхронізувати весь ланцюг:
 
-1. Tauri scaffold
-2. shared backend bootstrap
-3. shell/navigation
-4. `dashboard` як пілот
-5. `documents`
-6. `payments`
-7. решта screens
-8. тести
-9. CI
-10. видалення Slint
+- `src-tauri/src/commands/*`
+- `src-tauri/src/lib.rs`
+- `src/tauri_api/*`
+- `frontend/src/lib/api.ts`
+- `frontend/src/lib/types.ts`
+- відповідний store у `frontend/src/lib/stores/`
+- відповідний screen у `frontend/src/lib/screens/`
+- frontend/Rust тести
+- planning docs, якщо змінюється public surface або продуктове рішення
+
+Public Tauri invoke surface має відповідати поточному frontend product surface. Backend helper у `src/tauri_api/*` не стає public command автоматично.
+
+## Поточний backlog
+
+### P0
+
+Немає відкритих P0 для cutover. Tauri є канонічним runtime.
+
+### P1
+
+- ✅ `2026-04-30`: app-level Tauri e2e smoke додано в `e2e-tests/`; CI job `tauri-e2e-smoke` запускає реальний WebView через `tauri-driver` + `xvfb`.
+- ✅ `2026-04-30`: Windows CI розширено до packaging gate через `npm run tauri build` і artifact upload з `src-tauri/target/release/bundle/**`.
+- ✅ `2026-04-30`: frontend component tests додано для ризикових screen-рівнів: dashboard, documents, payments.
+
+### P2
+
+- Винести dashboard `journal`, `inbox` або accounts у нові Tauri feature specs, якщо вони знову стануть продуктовою потребою.
+- ✅ `2026-04-30`: старі migration/audit/architecture docs позначено або переписано як archived/pre-cutover там, де Slint більше не є live runtime.
+- ✅ `2026-04-30`: довгострокову design-system опору перенесено в `docs/architecture/svelte-tauri-design-system.md`.
+
+## CI contract
+
+Мінімальний post-cutover CI має ловити такі класи регресій:
+
+- frontend typecheck/build/store+component tests - `npm run check`, `npm run build`, `npm run test:frontend`;
+- Rust backend compile/unit tests - `cargo check`, backend tests;
+- DB-backed vertical slice - `cargo test --test tauri_vertical_slice`;
+- Linux Tauri compile smoke - `cargo check --manifest-path src-tauri/Cargo.toml`;
+- Linux real WebView e2e smoke - `xvfb-run -a npm run test:e2e`;
+- Windows Tauri packaging gate - `npm run tauri build` на `windows-latest`.
+
+Windows job потрібен окремо, бо Windows-specific Tauri compile/link/bundling regressions не гарантується зловити Linux `cargo check`.
+
+## Definition of done для майбутніх cutover-змін
+
+- Немає live-посилань на видалений Slint runtime.
+- Кожен public command має frontend use-case або тест, який пояснює його наявність.
+- Frontend theme/settings/shell state синхронізовані через backend-backed settings.
+- Required checks green:
+  - `cargo build --manifest-path src-tauri/Cargo.toml`
+  - `cargo test --no-run`
+  - `cargo test --test tauri_vertical_slice`
+  - `npm run check`
+  - `npm run test:frontend`, якщо змінювалась frontend logic
 
 ## Пов'язані документи
 
@@ -305,11 +114,3 @@
 - [tauri-migration-contract-matrix-2026-04-29.md](./tauri-migration-contract-matrix-2026-04-29.md)
 - [tauri-documents-command-spec-2026-04-29.md](./tauri-documents-command-spec-2026-04-29.md)
 - [dashboard-migration-contract-2026-04-30.md](./dashboard-migration-contract-2026-04-30.md)
-
-### Dashboard migration contract
-
-- `dashboard implemented`
-- `dashboard parity partial by design`
-- `redesign-first, not strict Slint parity`
-
-Dashboard: реалізовано у Tauri як redesign-first screen; strict parity зі Slint не є поточною ціллю.

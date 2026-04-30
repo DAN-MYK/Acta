@@ -1,5 +1,7 @@
 # Shell.slint Code Review — Implementation Plan
 
+> **Archived/pre-cutover:** Slint review plan збережено як історичний контекст. Після `2026-04-30` live shell/navigation work іде через Tauri/Svelte, не через `ui/shell.slint`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Виправити 11 проблем знайдених в ревью `ui/shell.slint`: баги hover-state, SkipNav, CommandPalette, хибні дефолти, заглушки даних та технічний борг.

@@ -1,7 +1,7 @@
 use acta::tauri_api::documents::{
-    BulkDocumentRequest, BulkMutationResultDto, CreateChainDraftRequest, CreateDocumentDraftRequest,
+    CreateChainDraftRequest, CreateDocumentDraftRequest,
     DocumentChainDto, DocumentEditorDto, DocumentsListDto, DocumentsListRequest,
-    MutationResultDto, NewDocumentContextDto, SaveDocumentRequest, SaveDocumentResponse,
+    MutationResultDto, SaveDocumentRequest, SaveDocumentResponse,
 };
 use tauri::State;
 
@@ -25,16 +25,6 @@ pub async fn document_open(
     doc_id: String,
 ) -> CommandResult<DocumentEditorDto> {
     acta::tauri_api::documents::document_open(&state.ctx, doc_id)
-        .await
-        .map_err(|error| error.to_string())
-}
-
-#[tauri::command]
-pub async fn document_prepare_new(
-    state: State<'_, TauriState>,
-    counterparty_id: String,
-) -> CommandResult<NewDocumentContextDto> {
-    acta::tauri_api::documents::document_prepare_new(&state.ctx, counterparty_id)
         .await
         .map_err(|error| error.to_string())
 }
@@ -75,26 +65,6 @@ pub async fn document_delete(
     doc_id: String,
 ) -> CommandResult<MutationResultDto> {
     acta::tauri_api::documents::document_delete(&state.ctx, doc_id)
-        .await
-        .map_err(|error| error.to_string())
-}
-
-#[tauri::command]
-pub async fn documents_bulk_advance_status(
-    state: State<'_, TauriState>,
-    request: BulkDocumentRequest,
-) -> CommandResult<BulkMutationResultDto> {
-    acta::tauri_api::documents::documents_bulk_advance_status(&state.ctx, request)
-        .await
-        .map_err(|error| error.to_string())
-}
-
-#[tauri::command]
-pub async fn documents_bulk_delete(
-    state: State<'_, TauriState>,
-    request: BulkDocumentRequest,
-) -> CommandResult<BulkMutationResultDto> {
-    acta::tauri_api::documents::documents_bulk_delete(&state.ctx, request)
         .await
         .map_err(|error| error.to_string())
 }

@@ -22,6 +22,7 @@ Tauri dashboard у поточній міграції вважається **rede
 - urgent/focus tasks;
 - переходи з dashboard у documents / payments / tasks;
 - відкриття recent act у documents;
+- відкриття upcoming payment у конкретний payment editor;
 - відкриття urgent task у task editor.
 
 ### Вважаємо зміненим відносно Slint

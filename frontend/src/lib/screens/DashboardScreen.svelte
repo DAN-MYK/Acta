@@ -2,11 +2,13 @@
   import { dashboardStore } from "../stores/dashboard";
   import { documentsStore } from "../stores/documents";
   import { navigationStore } from "../stores/navigation";
+  import { paymentsStore } from "../stores/payments";
   import { tasksStore } from "../stores/tasks";
 
   const dashboard = dashboardStore;
   const documents = documentsStore;
   const navigation = navigationStore;
+  const payments = paymentsStore;
   const tasks = tasksStore;
 
   function openDashboardDocument(docId: string) {
@@ -18,6 +20,11 @@
     navigation.go("tasks");
     void tasks.openEditor(taskId);
   }
+
+  function openDashboardPayment(paymentId: string) {
+    navigation.go("payments");
+    void payments.openById(paymentId);
+  }
 </script>
 
 <section class="panel dashboard-panel">
@@ -26,7 +33,7 @@
       <h2>Дашборд</h2>
       <p>Операційна картина по активній компанії</p>
     </div>
-    <button on:click={() => dashboard.load()} disabled={$dashboard.loading}>
+    <button class="btn-ghost" on:click={() => dashboard.load()} disabled={$dashboard.loading}>
       {$dashboard.loading ? "Оновлення..." : "Оновити"}
     </button>
   </div>
@@ -52,16 +59,18 @@
         <span>Останні 90 днів</span>
       </div>
       <div class="cashflow-list">
+        <div class="cashflow-row cashflow-head">
+          <span style="text-align:left">Місяць</span>
+          <span style="text-align:right">Нетто</span>
+          <span style="text-align:right">Надходження</span>
+          <span style="text-align:right">Витрати</span>
+        </div>
         {#each $dashboard.screen?.cashflowRows ?? [] as row}
           <div class="cashflow-row">
-            <div>
-              <strong>{row.label}</strong>
-              <span>{row.netStr}</span>
-            </div>
-            <div class="cashflow-bars">
-              <span class="income">{row.incomeStr}</span>
-              <span class="expense">{row.expenseStr}</span>
-            </div>
+            <strong>{row.label}</strong>
+            <span class="cashflow-net">{row.netStr}</span>
+            <span class="cashflow-income">{row.incomeStr}</span>
+            <span class="cashflow-expense">{row.expenseStr}</span>
           </div>
         {/each}
       </div>
@@ -78,6 +87,23 @@
           <strong>{doc.amountStr}</strong>
         </button>
       {/each}
+    </article>
+
+    <article class="dashboard-card">
+      <div class="card-title">
+        <h3>Найближчі платежі</h3>
+        <button on:click={() => navigation.go("payments")}>Відкрити</button>
+      </div>
+      {#if ($dashboard.screen?.upcomingPayments?.length ?? 0) === 0}
+        <p class="dashboard-list-empty">Очікуваних платежів поки немає.</p>
+      {:else}
+        {#each $dashboard.screen?.upcomingPayments ?? [] as payment}
+          <button class:overdue={payment.isOverdue} class="dashboard-list-row" on:click={() => openDashboardPayment(payment.id)}>
+            <span>{payment.contractor} · {payment.dateLabel}</span>
+            <strong>{payment.amountStr}</strong>
+          </button>
+        {/each}
+      {/if}
     </article>
 
     <article class="dashboard-card">

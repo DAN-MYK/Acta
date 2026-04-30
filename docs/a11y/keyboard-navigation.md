@@ -1,10 +1,7 @@
 # Accessibility / Keyboard Navigation — Acta
 
-> Перевірено: 2026-04-22
-> Оновлено: 2026-04-24
-> Статус: P1 + P2 + залишкові TODO повністю виконано в `ui/`
->
-> **Важливо:** Компільований UI — `ui/` (build.rs). Усі accessibility зміни застосовано там.
+Оновлено: `2026-04-30`
+Статус: базові вимоги виконані у Svelte UI
 
 ## Навігація клавіатурою
 
@@ -22,54 +19,32 @@
 
 | Сценарій | Статус | Примітка |
 |----------|--------|----------|
-| Перший фокус при завантаженні | ✅ | `nav-scope` FocusScope отримує `init => { self.focus(); }` |
-| Фокус після modal close | ✅ | `changed cmd-palette-open` повертає фокус на `nav-scope` |
-| Фокус після screen switch | ✅ | Sidebar залишається accessible |
-| Focus ring visible | ✅ | `AppTheme.focus-ring` використовується |
-| Keyboard trap | ✅ | Немає відомих traps |
+| Перший фокус при завантаженні | ✅ | sidebar nav отримує фокус |
+| Фокус після modal close | ✅ | повертається на елемент що відкрив |
+| Фокус після screen switch | ✅ | sidebar залишається accessible |
+| Focus ring visible | ✅ | глобальні focus styles у CSS |
+| Keyboard trap | ✅ | немає відомих traps |
 
 ## Кольори та контраст
 
 | Елемент | Контраст | Норма WCAG AA |
 |---------|----------|---------------|
 | Text main on bg | ✅ | ≥ 4.5:1 |
-| Text muted on bg | ✅ | 4.93:1 / 4.64:1 — #696A71 (виправлено) |
+| Text muted on bg | ✅ | 4.93:1 / 4.64:1 — #696A71 |
 | Success/WARNING/Danger | ✅ | Колір + іконка (не тільки колір) |
 | StatusDot + Badge | ✅ | Подвійне кодування (колір + текст) |
 
-## Screen reader (декларація для майбутнього)
+## Screen reader (HTML/Svelte)
 
-- `aria-label` у Slint не підтримується напряму — використати `accessible-role` та `accessible-label`
-- Icon buttons мають мати text fallback
-- Form fields потребують `accessible-label`
+- `aria-label` на icon buttons — обов'язково
+- `role` на кастомних інтерактивних елементах
+- Form fields потребують `<label>` або `aria-label`
 
-## Відомі проблеми
+## Keyboard shortcuts
 
-1. ✅ Sidebar nav items — `accessible-label` / `accessible-role: button` → `ui/shell.slint` NavItem
-2. ✅ Search input — `accessible-label` → `ui/components.slint` SearchInput + shell CommandPalette
-3. ✅ Table rows — `accessible-role: list-item` + `accessible-label` → documents, counterparties, payments, tasks
-4. ✅ Focus після закриття Command Palette — реалізовано в ui/shell.slint
-5. ✅ `text-faint` — оновлено до #696A71 (4.87:1 на bg, 4.58:1 на sidebar-bg) → `ui/design-tokens.slint`
-6. ✅ Skip navigation link — `SkipNav` компонент у `ui/shell.slint`
-7. ✅ `IconButton` — `accessible-role: button` + `accessible-label: tooltip` → `ui/components.slint`
-8. N/A Focus trap — `ui/` використовує screen-based навігацію без modal overlays
-
-## Пріоритети виправлень
-
-### P0 (критичні)
-- focus ring завжди visible (✅)
-- Escape закриває modals (✅)
-- Немає keyboard traps (✅)
-
-### P1 (важливі) — ✅ ВИКОНАНО
-- `accessible-label` до icon buttons (IconButton, TableActionButton) — ✅
-- `accessible-label` до всіх search inputs — ✅
-- `accessible-label` + `accessible-role` на NavItem та company switcher — ✅
-- `accessible-role: list-item` + `accessible-label` на всі рядки списків — ✅
-- Focus return після закриття палітри — ✅ вже був реалізований
-
-### P2 (поліпшення)
-- ✅ Skip navigation link — реалізовано в `ui/shell.slint`
-- N/A Focus trap — screen-based архітектура (немає modal overlays)
-- ✅ Keyboard shortcuts cheatsheet (Ctrl+/ → показати) — реалізовано в `ui/shell.slint`
-- ✅ `text-faint` — виправлено (#696A71, ≥ 4.5:1 на всіх фонах)
+| Shortcut | Дія |
+|----------|-----|
+| Ctrl+1..7 | навігація між screens |
+| Ctrl+K | Command Palette |
+| Ctrl+/ | shortcuts cheatsheet |
+| Escape | закрити modal / palette |

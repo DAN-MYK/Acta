@@ -1,64 +1,54 @@
 # UI Safety Net
 
-Оновлено: `2026-04-23`
+Оновлено: `2026-04-30`
 
-## Мета
+## Статус
 
-`tests/ui_events.rs` — це headless safety net для канонічного Slint UI в `ui/`.
+Цей документ описує post-cutover safety net для канонічного Tauri/Svelte UI.
 
-Тестовий файл призначений для швидкого виявлення regression по:
+Старий `tests/ui_events.rs` був Slint-era headless safety net і більше не є live test contract. Якщо треба читати його або `ui/*.slint`, трактуй їх лише як archived/pre-cutover reference.
 
-- root callback wiring;
-- shell callback contracts;
-- command palette contracts;
-- базових navigation / inbox / documents / tasks / settings flows.
+## Поточний набір перевірок
 
-## Поточна структура
+- `npm run check` - Svelte/TypeScript typecheck.
+- `npm run build` - Vite production build і перевірка frontend assets для Tauri.
+- `npm run test:frontend` - store tests + screen-level component tests.
+- `npm run test:e2e` - app-level Tauri WebView smoke через `tauri-driver`.
+- `cargo test -j 1 --test tauri_vertical_slice` - Rust/Tauri command vertical slice.
 
-Файл `tests/ui_events.rs` поділено на логічні блоки:
+## Frontend component tests
 
-- `helpers` — спільні helper-и для створення компонентів і capture state;
-- `app_window_contract` — перевірки callback-ів `AppWindow`;
-- `shell_contract` — перевірки shell-level callback contract;
-- `keyboard_palette_regressions` — окремі regression-тести для shell/palette routing contract;
-- `shell_test_components` — test-only host components для `Shell` і `CommandPalette`.
+Компонентні тести живуть у `frontend/src/lib/screens/__tests__/`.
+
+Поточний P1 coverage:
+
+- `App.test.ts` - root shell contract: bootstrap load, theme wiring, command palette, company switch і keyboard shortcuts.
+- `DashboardScreen.test.ts` - ініціалізація summary секцій, drill-in у documents/payments/tasks, empty-state платежів.
+- `DocumentsScreen.test.ts` - list/editor/chain controls, пошук, створення draft, save/advance.
+- `PaymentsScreen.test.ts` - KPI/rows, відкриття editor, reconcile/unreconcile, створення платежу.
+- `SettingsScreen.test.ts` - appearance controls, company settings save, BAS import plan/execute flow.
+
+Ці тести навмисно мокають stores на межі screen contract. Бізнес-логіку, DTO parsing і DB behavior треба покривати нижче, у store/Rust tests.
+
+## App-level desktop smoke
+
+`e2e-tests/` запускає реальний Tauri desktop shell і перевіряє, що WebView ініціалізується та проходить базову навігацію:
+
+- старт на `Дашборд`;
+- shell bootstrap виставляє `body[data-theme]`;
+- topbar показує company switcher;
+- перехід у `Документи`;
+- перехід у `Платежі`;
+- quick theme toggle міняє theme signal;
+- shortcut `Ctrl+1` назад на dashboard.
+
+У CI smoke працює під `xvfb-run` на Linux і використовує `tauri-driver`.
+На локальному Windows запуску `npm run test:e2e` автоматично резолвить native Edge driver через `e2e-tests` dependency `edgedriver`, тому smoke не повинен залежати від ручного `msedgedriver.exe` у `PATH`.
 
 ## Правила розширення
 
-Коли додаєш новий interaction test:
-
-1. Якщо callback належить `AppWindow`, тест додається в `app_window_contract`.
-2. Якщо callback живе в `ui/shell.slint`, тест додається в `shell_contract` або `keyboard_palette_regressions`.
-3. Якщо потрібен новий test-only wrapper для внутрішнього Slint component, додавай його в `shell_test_components` або окремий test-only host module.
-4. Не повертайся до legacy `ui/` і не тестуй старий `MainWindow`.
-
-## Чому тут string-based routing для shell host
-
-У test-only wrappers для `Shell` і `CommandPalette` routing переведений у рядкові ідентифікатори (`"dashboard"`, `"documents"` тощо), бо окремі `slint!` host-компоненти генерують власні enum namespace-и.
-
-Це зроблено навмисно, щоб regression-тести перевіряли стабільність callback contract, а не ламались через конфлікти generated типів.
-
-## Мінімальний набір перевірок
-
-Для `Epic 2` покрито:
-
-- `nav-changed`
-- `inbox-action`
-- `doc-*`
-- `task-*`
-- `settings-*`
-- `palette-*`
-- `Shell.navigate`
-- `Shell.toggle-theme`
-- `Shell.open-cmd-palette`
-- `Shell.close-cmd-palette`
-- `CommandPalette.closed`
-- `CommandPalette.navigated`
-- `CommandPalette.query-changed`
-
-## Базові команди перевірки
-
-```bash
-SQLX_OFFLINE=true cargo test --test ui_events --no-run
-SQLX_OFFLINE=true cargo test --test ui_events
-```
+1. Якщо змінюється screen-level UX або wiring store -> screen, додай/онови компонентний тест у `frontend/src/lib/screens/__tests__/`.
+2. Якщо змінюється store behavior або frontend invoke contract, додай/онови store test у `frontend/src/lib/stores/__tests__/`.
+3. Якщо змінюється Tauri command або backend DTO, додай Rust vertical/integration coverage.
+4. Якщо змінюється shell startup, routing або WebView initialization, онови `e2e-tests/test/specs/app-smoke.e2e.js`.
+5. Не додавай нові Slint safety-net tests; Slint references лишаються historical/pre-cutover.

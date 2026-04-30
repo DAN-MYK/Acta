@@ -1,45 +1,55 @@
 # App State
 
-Канонічний state path у `Acta`:
+Оновлено: `2026-04-30`
 
-- shared runtime state живе в [src/app_ctx.rs](/C:/Users/MykhailoDan/apps/Acta/src/app_ctx.rs)
-- screen refresh coordination живе в [src/bootstrap.rs](/C:/Users/MykhailoDan/apps/Acta/src/bootstrap.rs)
+## Канонічний state path
 
-## Що зберігає `AppCtx`
+Acta після cutover працює через Tauri + Svelte:
 
-- active company
-- active screen
-- documents list snapshot
-- counterparties list snapshot
-- reports snapshot
-- tasks snapshot
+- backend runtime state: [src/app_ctx.rs](/C:/Users/MykhailoDan/apps/Acta/src/app_ctx.rs)
+- Tauri commands: [src-tauri/src/commands](/C:/Users/MykhailoDan/apps/Acta/src-tauri/src/commands)
+- frontend invoke layer: [frontend/src/lib/api.ts](/C:/Users/MykhailoDan/apps/Acta/frontend/src/lib/api.ts)
+- frontend stores: [frontend/src/lib/stores](/C:/Users/MykhailoDan/apps/Acta/frontend/src/lib/stores)
+- Svelte screens: [frontend/src/lib/screens](/C:/Users/MykhailoDan/apps/Acta/frontend/src/lib/screens)
 
-Feature callbacks не повинні будувати другий паралельний state container.
-Вони оновлюють snapshot у `AppCtx`, після чого викликають canonical refresh API з bootstrap coordinator-а.
+`AppWindow`, `Weak<AppWindow>`, `ModelRc`, `VecModel`, `apply_*_to_ui()` і `wire_*_callbacks()` більше не є live state model.
 
-Починаючи з `Epic 5`, callback-и також не повинні працювати з `Mutex` напряму.
-Для цього `AppCtx` дає `update_documents_state()`, `update_counterparty_state()`,
-`update_reports_state()` і `update_task_state()`, а mutex-backed поля лишаються внутрішніми.
+## Backend state
 
-## Canonical refresh API
+`AppCtx` тримає тільки shared backend context:
 
-- `load_initial_ui_data()` для стартового завантаження
-- `refresh_screen()` для явного screen refresh
-- `refresh_current_screen()` коли треба перевантажити поточний екран
-- `spawn_refresh_screen()` як безпечний async entrypoint з UI callback-ів
+- `PgPool`;
+- `active_company_id`;
+- доступ до доменних DB/API функцій через `src/tauri_api/*`.
 
-Це прибирає дублювання між initial load, navigation refresh і feature-triggered reload.
+Backend не зберігає Svelte screen-local стан. Пошук, активні tabs, відкриті редактори та transient повідомлення живуть у frontend stores, якщо вони не потрібні як domain state.
 
-## UI contract після Epic 6
+## Frontend state
 
-`AppWindow` більше не повинен розростатися через flat data properties під кожен екран.
-Канонічний підхід для redesign:
+Кожен slice має власний store:
 
-- shell/chrome дані йдуть окремим `ShellChrome`
-- screen data йде через feature-specific view models:
-  `DashboardViewData`, `DocumentsViewData`, `CounterpartiesViewData`,
-  `PaymentsViewData`, `ReportsViewData`, `TasksViewData`, `SettingsViewData`
-- screen-local UI state на кшталт активної вкладки, пошуку чи drill selection
-  лишається локальним `AppWindow`/screen state, якщо це не shared runtime snapshot
+- `shell.ts` - chrome, active company, command palette handoff;
+- `navigation.ts` - поточний screen id;
+- `dashboard.ts`, `documents.ts`, `counterparties.ts`, `payments.ts`, `tasks.ts`, `reports.ts`, `settings.ts` - screen data, loading/error/message, локальні editor states;
+- `theme.ts` - поточне theme відображення, синхронізоване через settings/shell.
 
-Це зменшує surface area root component і відділяє shell contract від feature payload-ів.
+Screen components читають store через `$store` і викликають тільки методи свого store або явний cross-slice flow, зафіксований у contract docs.
+
+## Refresh model
+
+Canonical refresh після mutation:
+
+1. store викликає Tauri command через `api.ts`;
+2. backend повертає DTO або mutation result;
+3. store оновлює власний snapshot або робить targeted reload;
+4. інші slices перевантажуються тільки якщо це продуктово потрібно.
+
+Глобального imperative refresh поверх усього UI більше немає.
+
+## Test contract
+
+State regressions ловляться трьома рівнями:
+
+- store tests у [frontend/src/lib/stores/__tests__](/C:/Users/MykhailoDan/apps/Acta/frontend/src/lib/stores/__tests__);
+- screen component tests у [frontend/src/lib/screens/__tests__](/C:/Users/MykhailoDan/apps/Acta/frontend/src/lib/screens/__tests__);
+- backend/Tauri vertical slice tests у [tests/tauri_vertical_slice.rs](/C:/Users/MykhailoDan/apps/Acta/tests/tauri_vertical_slice.rs).

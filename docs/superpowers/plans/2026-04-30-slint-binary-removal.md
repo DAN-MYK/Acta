@@ -1,5 +1,7 @@
 # Slint Binary Removal — Implementation Plan
 
+> **Archived/pre-cutover:** execution plan збережено як історичний cleanup trace. Поточний runtime — Tauri/Svelte; Slint file lists тут не є live backlog.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Видалити legacy Slint binary (`[[bin]] acta`) разом із усіма його приватними модулями (`src/bootstrap/`, `src/ui/`), зберігши при цьому Slint runtime для `tests/ui_events.rs`, та підготувати фінальний cascade-removal diff.

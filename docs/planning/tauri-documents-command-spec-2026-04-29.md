@@ -1,8 +1,10 @@
 # Documents → Tauri command spec — 2026-04-29
 
+> **Pre-cutover source note:** документ був написаний під час перенесення зі Slint. Посилання на `src/ui/*` нижче є historical reference; live implementation зараз у `src/tauri_api/documents.rs`, `src-tauri/src/commands/documents.rs`, `frontend/src/lib/stores/documents.ts` і `frontend/src/lib/screens/DocumentsScreen.svelte`.
+
 ## Призначення
 
-Цей документ фіксує цільовий Tauri API для модуля `documents` на базі поточного Slint/Rust контракту.
+Цей документ фіксує Tauri API для модуля `documents`. Slint/Rust references нижче залишені тільки як джерело історичної логіки.
 
 Основне джерело логіки:
 

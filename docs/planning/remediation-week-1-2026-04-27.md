@@ -1,5 +1,7 @@
 # Remediation Week 1
 
+> **Archived/pre-cutover:** цей план описує Slint-era presenter cleanup. Після `2026-04-30` `src/ui/*` є історичною довідкою, а live Tauri contract живе в `src/tauri_api/*`, `src-tauri/src/commands/*` і `frontend/src/lib/*`.
+
 Оновлено: `2026-04-27`  
 Горизонт: `5 робочих днів`  
 Статус: `planned`
