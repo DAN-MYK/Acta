@@ -1,6 +1,6 @@
 # Remediation Callback Matrix
 
-Оновлено: `2026-04-28`  
+Оновлено: `2026-04-29`  
 Призначення: швидка карта того, що вже wired, що реально працює, а що ще лишається на наступний cleanup-шар.
 
 ## Documents
@@ -18,8 +18,8 @@
 | Bulk send | `doc_bulk_send` | `src/ui/documents.rs` | так | `Documents` | works |
 | Bulk archive | `doc_bulk_archive` | `src/ui/documents.rs` | так | `Documents` | works |
 | Bulk delete | `doc_bulk_delete` | `src/ui/documents.rs` | так | `Documents` | works |
-| Load chain | `doc_chain_load` | `src/bootstrap.rs` | ні | chain state | works |
-| Create from chain | `doc_chain_create` | `src/bootstrap.rs` | так / draft create | editor state | works |
+| Load chain | `doc_chain_load` | `src/bootstrap/document_chain.rs` | ні | chain state | works |
+| Create from chain | `doc_chain_create` | `src/bootstrap/document_chain.rs` | так / draft create | editor state | works |
 
 ## Counterparties
 
@@ -61,18 +61,18 @@
 | Save company | `settings_company_saved` | `src/ui/settings.rs` | так | `Settings` + shell data | works |
 | Configure integration | `settings_integration_configure` | `src/ui/settings.rs` | файл | `Settings` | works |
 | Team invite | `settings_team_invite` | `src/ui/settings.rs` | файл | `Settings` | works |
-| Backup now | `settings_backup_now` | `src/ui/settings.rs` | файл | `Settings` | partial |
-| Backup download/open | `settings_backup_download` | `src/ui/settings.rs` | ні | ні | partial |
+| Backup now | `settings_backup_now` | `src/ui/settings.rs` | файл | `Settings` | works |
+| Backup download/open | `settings_backup_download` | `src/ui/settings.rs` | ні | ні | works |
 
 ## Navigation / Shell
 
 | UI дія | Callback | Поточний handler | DB effect | Refresh | Статус |
 |---|---|---|---|---|---|
-| Перехід між screens | `nav_changed` | `src/bootstrap.rs` | ні | current screen | works |
-| Company switch | `company_selected` | `src/bootstrap.rs` | ні | all screens | works |
-| Inbox action | `inbox_action` | `src/bootstrap.rs` | інколи так | dashboard/tasks/payments | partial |
-| Palette search | `palette_query_changed` | `src/bootstrap.rs` | ні | palette items | works |
-| Palette activate | `palette_item_activated` | `src/bootstrap.rs` | інколи ні | різні | partial |
+| Перехід між screens | `nav_changed` | `src/bootstrap/wiring.rs` | ні | current screen | works |
+| Company switch | `company_selected` | `src/bootstrap/wiring.rs` | ні | all screens | works |
+| Inbox action | `inbox_action` | `src/bootstrap/inbox.rs` | інколи так | dashboard/tasks/payments | works |
+| Palette search | `palette_query_changed` | `src/bootstrap/palette.rs` | ні | palette items | works |
+| Palette activate | `palette_item_activated` | `src/bootstrap/palette.rs` | інколи ні | різні | works |
 
 ## BAS Import CLI
 
@@ -84,6 +84,8 @@
 | Counterparties XML import | `src/import/bas_counterparties.rs` | real importer | так | works |
 | Contracts XML import | `src/import/bas_contracts.rs` | real importer | так | works |
 | Acts XML import | `src/import/bas_acts.rs` | real importer | так | works |
+| Payments / Bank CSV import | `src/import/bas_payments.rs` | parser fallback + duplicate-aware import | так | works |
+| Invoices XML import | `src/import/bas_invoices.rs` | real importer | так | works |
 
 ## Висновок
 
@@ -91,7 +93,12 @@
 
 Те, що реально лишається після цієї матриці:
 
-1. Planning/docs sync
-2. Navigation/search/inbox orchestration cleanup
-3. Подальше розширення BAS import pipeline
-4. Backup/settings clarification
+1. Подальше розширення BAS import pipeline
+2. Доведення `pay_new` від template-flow до повнішого create-flow
+3. Витягування reusable app actions зі Slint bootstrap для Tauri migration
+
+Це означає:
+
+- `src/bootstrap/*` лишається тимчасовим wiring-шаром до повного зрізу Slint UI
+- нова інвестиція йде не в cosmetic cleanup bootstrap, а у reusable application logic
+- пріоритетні кандидати на винесення: `palette`, `inbox`, `document_chain`, screen load/refresh flows

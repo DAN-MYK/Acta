@@ -1,6 +1,6 @@
 # Sprint Report
 
-Оновлено: `2026-04-28`
+Оновлено: `2026-04-29`
 План: [next-sprint-2026-04-24.md](/C:/Users/MykhailoDan/apps/Acta/docs/planning/next-sprint-2026-04-24.md)
 Статус: `completed later than initially tracked / docs were stale`
 
@@ -24,18 +24,18 @@
 
 ### 1. BAS Import MVP
 
-Статус: `baseline delivered`
+Статус: `baseline delivered and expanded`
 
 Підтверджено в коді:
 
-- [src/bin/migrate.rs](/C:/Users/MykhailoDan/apps/Acta/src/bin/migrate.rs:1) має discovery, `--dry-run` і dispatcher
+- [src/bin/migrate.rs](/C:/Users/MykhailoDan/apps/Acta/src/bin/migrate.rs:1) має discovery, `--dry-run`, DB-aware preview і dispatcher
 - у [src/import/mod.rs](/C:/Users/MykhailoDan/apps/Acta/src/import/mod.rs:1) є окремі importer-модулі
-- реальні XML importer-и є для контрагентів, договорів і актів
+- реальні importer-и є для контрагентів, договорів, актів, накладних і платежів
 
 Що ще не варто перебільшувати:
 
 - pipeline ще можна розширювати
-- dry-run / UX можна робити глибшими
+- preview / UX можна робити глибшими
 
 ### 2. Documents Flow Completion
 
@@ -83,11 +83,12 @@
 
 ## Що лишається після цього sprint
 
-- синхронізація planning-документів із кодом
-- cleanup `inbox_action` і `palette_item_activated`
 - подальше розширення BAS import coverage
-- backup/settings clarification
+- доведення `pay_new` до повнішого create-flow
+- витягування reusable app actions зі Slint bootstrap для Tauri migration
 
 ## Рекомендована інтерпретація
 
 Цей sprint коректно трактувати як такий, що фактично завершився через remediation-хвилю, а не в момент першого написання старих checklist/report нотаток.
+
+Окреме уточнення на наступний етап: оскільки UI мігрує на Tauri, `src/bootstrap/*` не варто далі "чистити" як самостійну Slint-архітектуру. Правильний наступний крок — витягувати з цього шару reusable application logic, яку зможе повторно використати новий Tauri UI.

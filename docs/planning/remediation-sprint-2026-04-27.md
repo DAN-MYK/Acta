@@ -1,8 +1,8 @@
 # Remediation Sprint Plan
 
-Оновлено: `2026-04-28`
+Оновлено: `2026-04-29`
 Горизонт: `5-7 робочих днів`
-Статус: `mostly completed / docs sync pending`
+Статус: `completed / follow-up backlog identified`
 Базується на: [sprint-report-2026-04-24.md](/C:/Users/MykhailoDan/apps/Acta/docs/planning/sprint-report-2026-04-24.md)
 
 ## Мета
@@ -35,8 +35,8 @@
 
 Що ще лишається поза цим спринтом:
 
-- розширення coverage по форматах
-- глибший DB-aware dry-run diff
+- подальше розширення coverage по форматах і сценаріях імпорту
+- глибший import diff / richer preview UX поверх уже наявного DB-aware dry-run
 - подальший cleanup import UX
 
 ### 2. Documents User-Facing Flows ✅ Delivered
@@ -89,14 +89,19 @@
 
 ## Підсумок по backlog
 
-Після фактичного виконання спринту в open remediation scope більше не лишилось базових user-facing `TODO` для `documents`, `tasks` і `payments`.
+Після фактичного виконання спринту в open remediation scope більше не лишилось базових user-facing `TODO` для `documents`, `tasks`, `payments`, `settings backup` і shell-level callback wiring.
 
 Що тепер логічно виносити в наступний шар:
 
-1. Оновлення planning / sprint-report під фактичний стан
-2. Navigation / shell cleanup (`inbox_action`, `palette_item_activated`)
-3. Подальше розширення BAS import pipeline
-4. Архітектурне схуднення orchestration у `bootstrap.rs`
+1. Подальше розширення BAS import pipeline
+2. Доведення `pay_new` від template-flow до повнішого create-flow
+3. Витягування reusable app actions зі Slint bootstrap для Tauri migration
+
+Що це означає practically:
+
+- не інвестувати в Slint-only cleanup `src/bootstrap/*` заради самого рефакторингу
+- виносити сценарну логіку в нейтральний шар `actions` / `services`, який переживе заміну UI
+- готувати backend surface для Tauri commands замість поглиблення старого callback orchestration
 
 ## Acceptance Criteria
 
