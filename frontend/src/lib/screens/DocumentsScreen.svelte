@@ -1,18 +1,29 @@
 <script lang="ts">
+  import AppIcon from "../components/AppIcon.svelte";
+  import type { AppIconName } from "../icons";
   import { documentsStore } from "../stores/documents";
   import type { DocumentKind } from "../types";
 
   const documents = documentsStore;
 
+  let createCounterpartyId = "";
   let createKind: DocumentKind = "act";
 
-  const chainTargetLabels: Record<DocumentKind, string> = {
+  const documentKindLabels: Record<DocumentKind, string> = {
     invoice: "Рахунок",
     act: "Акт",
     waybill: "Накладна"
   };
 
-  $: createCounterpartyId = $documents.draftContext?.counterpartyId ?? "";
+  const documentKindIcons: Record<DocumentKind, AppIconName> = {
+    invoice: "invoice",
+    act: "act",
+    waybill: "waybill"
+  };
+
+  $: if ($documents.draftContext?.counterpartyId) {
+    createCounterpartyId = $documents.draftContext.counterpartyId;
+  }
 
   function onDocumentSearch(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
@@ -59,7 +70,7 @@
     void documents.reloadCurrent();
   }
 
-  function getChainTargets(kind: DocumentKind): DocumentKind[] {
+  function getChainTargets(kind: string): DocumentKind[] {
     if (kind === "invoice") {
       return ["act", "waybill"];
     }
@@ -67,6 +78,54 @@
       return ["waybill"];
     }
     return [];
+  }
+
+  function getDocumentKindIcon(kind: string): AppIconName {
+    const normalized = kind.toLowerCase();
+
+    if (normalized === "invoice" || normalized.includes("рах")) {
+      return "invoice";
+    }
+    if (normalized === "act" || normalized.includes("акт")) {
+      return "act";
+    }
+    if (normalized === "waybill" || normalized.includes("наклад")) {
+      return "waybill";
+    }
+    if (normalized.includes("догов")) {
+      return "contract";
+    }
+    if (normalized.includes("pdf")) {
+      return "pdf";
+    }
+    if (normalized.includes("excel") || normalized.includes("xls")) {
+      return "excel";
+    }
+    return "documents";
+  }
+
+  function getDocumentKindLabel(kind: string): string {
+    const normalized = kind.toLowerCase();
+
+    if (normalized === "invoice" || normalized.includes("рах")) {
+      return "Рахунок";
+    }
+    if (normalized === "act" || normalized.includes("акт")) {
+      return "Акт";
+    }
+    if (normalized === "waybill" || normalized.includes("наклад")) {
+      return "Накладна";
+    }
+    if (normalized.includes("догов")) {
+      return "Договір";
+    }
+    if (normalized.includes("pdf")) {
+      return "PDF";
+    }
+    if (normalized.includes("excel") || normalized.includes("xls")) {
+      return "Excel";
+    }
+    return kind;
   }
 </script>
 
@@ -86,7 +145,10 @@
       <option value="invoice">Рахунок</option>
       <option value="waybill">Накладна</option>
     </select>
-    <button on:click={onCreateDraft}>Створити чернетку</button>
+    <button class="create-doc-button" on:click={onCreateDraft}>
+      <AppIcon name={documentKindIcons[createKind]} surface={true} />
+      <span>Створити чернетку</span>
+    </button>
   </div>
 
   {#if $documents.draftContext?.counterpartyName}
@@ -105,11 +167,17 @@
     {#each $documents.list?.items ?? [] as item}
       <button class="doc-row" on:click={() => documents.open(item.id)}>
         <div>
-          <strong>{item.number}</strong>
+          <strong class="doc-row-title">
+            <AppIcon name={getDocumentKindIcon(item.kind)} surface={true} size={16} />
+            <span>{item.number}</span>
+          </strong>
           <p>{item.counterparty}</p>
         </div>
         <div>
-          <span class="doc-kind">{item.kind}</span>
+          <span class="doc-kind-badge">
+            <AppIcon name={getDocumentKindIcon(item.kind)} size={14} />
+            <span>{getDocumentKindLabel(item.kind)}</span>
+          </span>
           <span>{item.amountStr}</span>
           <span>{item.statusLabel}</span>
         </div>
@@ -158,7 +226,10 @@
         <div class="chain-actions">
           <button on:click={onReloadChain}>Оновити</button>
           {#each getChainTargets($documents.editor.form.kind) as targetKind}
-            <button on:click={() => onCreateChainDraft(targetKind)}>+ {chainTargetLabels[targetKind]}</button>
+            <button class="chain-action-button" on:click={() => onCreateChainDraft(targetKind)}>
+              <AppIcon name={documentKindIcons[targetKind]} size={16} />
+              <span>+ {documentKindLabels[targetKind]}</span>
+            </button>
           {/each}
         </div>
       </div>
@@ -168,7 +239,10 @@
           {#each $documents.chain.steps as step}
             <div class:missing={!step.exists} class="chain-step">
               <div>
-                <strong>{step.docType}</strong>
+                <strong class="chain-doc-title">
+                  <AppIcon name={getDocumentKindIcon(step.docType)} surface={true} size={16} />
+                  <span>{getDocumentKindLabel(step.docType)}</span>
+                </strong>
                 <p>{step.docNumber}</p>
               </div>
               <div>

@@ -191,8 +191,8 @@
       <PaymentsScreen />
     {:else}
       <section class="panel empty-screen">
-        <h2>{currentScreen}</h2>
-        <p>Для першого vertical slice зараз реалізовано shell, documents, counterparties, tasks та reports.</p>
+        <h2>Невідомий екран</h2>
+        <p>Сторінку не знайдено.</p>
       </section>
     {/if}
 
