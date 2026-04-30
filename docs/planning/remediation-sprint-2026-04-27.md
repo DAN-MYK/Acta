@@ -1,5 +1,7 @@
 # Remediation Sprint Plan
 
+> **Archived/pre-cutover:** цей sprint plan описує Slint-era remediation до Tauri cutover. Після `2026-04-30` live UI/test/design-system рішення ведуться через Tauri/Svelte docs.
+
 Оновлено: `2026-04-29`
 Горизонт: `5-7 робочих днів`
 Статус: `completed / follow-up backlog identified`

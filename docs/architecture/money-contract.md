@@ -1,29 +1,45 @@
 # Money Contract
 
-Канонічне правило для `Acta`: бізнесові грошові значення не передаються в Slint як `float`.
+Оновлено: `2026-04-30`
 
-## Що вважається money-facing
+Канонічне правило для `Acta`: бізнесові грошові значення не передаються як `float`.
 
-- суми документів
-- KPI totals
-- balances
-- overdue / outstanding amounts
-- payment amounts
-- будь-які display fields, які користувач читає як гривневі значення
+## Backend
 
-Усі такі значення мають приходити в Slint уже підготовленими як `string`.
-Форматування виконується в [src/ui/helpers.rs](/C:/Users/MykhailoDan/apps/Acta/src/ui/helpers.rs).
+- Для всіх фінансових сум у Rust використовується `rust_decimal::Decimal`.
+- У БД суми зберігаються як `DECIMAL(15,2)`.
+- Кількості зберігаються як `DECIMAL(15,4)`.
+- `f32` / `f64` не використовуються для грошей, балансів, цін або кількостей.
 
-## Де `float` дозволений
+## Tauri DTO
 
-- [ui/types.slint](/C:/Users/MykhailoDan/apps/Acta/ui/types.slint) у `ChartBar.rev-h` / `ChartBar.exp-h`
-- sparkline arrays у [ui/dashboard.slint](/C:/Users/MykhailoDan/apps/Acta/ui/dashboard.slint), бо це normalized render data
+Frontend-facing грошові поля передаються вже відформатованими рядками:
 
-Це render-only значення в діапазоні `0.0..1.0`, а не бізнесові суми.
+- `amountStr`;
+- `balanceStr`;
+- `incomeStr`;
+- `expenseStr`;
+- `netStr`;
+- `overdueAmountStr`;
+- інші поля, які користувач читає як гривневі значення.
 
-## Rust side
+TypeScript DTO у [frontend/src/lib/types.ts](/C:/Users/MykhailoDan/apps/Acta/frontend/src/lib/types.ts) має зберігати такі значення як `string`.
 
-- `format_money()`, `format_money_round()`, `format_money_ua()` відповідають за money display
-- `normalize_chart_value()` та `max_chart_value()` відповідають тільки за chart normalization
+## Frontend
 
-Змішувати ці два шляхи не можна: formatter-и для display, normalizer-и тільки для geometry/render.
+Svelte screens не рахують гроші через `number`. Вони:
+
+- показують `*Str` поля з backend DTO;
+- передають draft input назад як `string`;
+- не виконують фінансове округлення у компоненті;
+- не перетворюють display amount у `number`, якщо це не суто UI-only поле без бізнесового сенсу.
+
+## Chart/display винятки
+
+Нормалізовані значення для візуальної геометрії можуть бути `number`, якщо:
+
+- це не сума;
+- діапазон документовано як render-only, наприклад `0.0..1.0`;
+- поруч існує окреме `*Str` поле для користувацького money display.
+
+Поточний Svelte/Tauri contract не переносить старі Slint `ChartBar.rev-h` / `exp-h` як live правило; це лишається archived reference.

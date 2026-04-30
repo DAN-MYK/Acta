@@ -1,5 +1,7 @@
 # Slint — Фінальне каскадне видалення
 
+> **Archived execution note:** документ збережено як audit trail фінального Slint cutover. Поточний runtime — Tauri/Svelte; не використовуй перелік Slint файлів як live backlog.
+
 > **Статус: ВИКОНАНО** — 2026-04-30
 >
 > Всі кроки виконані в одному cleanup pass разом із Category 1.
@@ -51,6 +53,7 @@
 - **Tauri binary** (`src-tauri/`) — основний UI entry point
 - **Тести** — `db_integration`, `tauri_vertical_slice`, `unit_business_logic`
 - **Утиліти** — `cargo run --bin migrate`, `cargo run --bin reseed`
+- **Desktop build check** — канонічний локальний build тепер `cargo build --manifest-path src-tauri/Cargo.toml`
 
 ## Перевірка
 

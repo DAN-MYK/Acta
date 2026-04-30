@@ -1,106 +1,73 @@
-# Tauri migration contract matrix — 2026-04-29
+# Tauri contract matrix - post-cutover стан на 2026-04-30
 
 ## Призначення
 
-Цей документ фіксує відповідність між поточними Slint callback/property контрактами та майбутніми Tauri commands і frontend stores.
+Цей документ більше не є матрицею перенесення Slint callback/property contract. Після cutover він фіксує live Tauri invoke surface, відповідний frontend contract і рішення щодо archived Slint references.
 
-## Matrix
+Канонічний продукт зараз визначають:
 
-| Поточний контракт | Де зараз | Майбутній Tauri backend | Frontend | Пріоритет |
-| --- | --- | --- | --- | --- |
-| `nav_changed(screen)` | [tests/ui_events.rs](/C:/Users/MykhailoDan/apps/Acta/tests/ui_events.rs:129) | не command | `navigation.ts` | P0 |
-| `Shell.navigate(screen)` | [tests/ui_events.rs](/C:/Users/MykhailoDan/apps/Acta/tests/ui_events.rs:21) | не command | `navigation.ts`, `Shell.svelte` | P0 |
-| `company-selected(id)` | [tests/ui_events.rs](/C:/Users/MykhailoDan/apps/Acta/tests/ui_events.rs:34) | `set_active_company(...)` | `shell.ts` | P0 |
-| `company-manage-requested` | [tests/ui_events.rs](/C:/Users/MykhailoDan/apps/Acta/tests/ui_events.rs:35) | залежить від UX сценарію | `shell.ts` | P1 |
-| `toggle-theme` | [tests/ui_events.rs](/C:/Users/MykhailoDan/apps/Acta/tests/ui_events.rs:36) | опційно `save_theme(...)` | `theme.ts` | P1 |
-| `open-cmd-palette` / `close-cmd-palette` | [tests/ui_events.rs](/C:/Users/MykhailoDan/apps/Acta/tests/ui_events.rs:37) | не command | `palette.ts` | P1 |
-| `CommandPalette.query-changed(value)` | [tests/ui_events.rs](/C:/Users/MykhailoDan/apps/Acta/tests/ui_events.rs:65) | опційно `search_global(...)` | `palette.ts` | P1 |
-| `CommandPalette.navigated(screen)` | [tests/ui_events.rs](/C:/Users/MykhailoDan/apps/Acta/tests/ui_events.rs:56) | не command | `navigation.ts` | P1 |
-| `inbox_action(id, action)` | [src/actions/inbox.rs](/C:/Users/MykhailoDan/apps/Acta/src/actions/inbox.rs:24) | `handle_inbox_action(...)` або явні commands | `inbox.ts` | P2 |
-| `doc_search_changed(query)` | [src/ui/documents.rs](/C:/Users/MykhailoDan/apps/Acta/src/ui/documents.rs:1047) | `documents_list(...)` | `documents.ts` | P0 |
-| `doc_tab_changed(tab)` | [src/ui/documents.rs](/C:/Users/MykhailoDan/apps/Acta/src/ui/documents.rs:1063) | `documents_list(...)` або frontend-only filter | `documents.ts` | P0 |
-| `doc_toggled(id, selected)` | [src/ui/documents.rs](/C:/Users/MykhailoDan/apps/Acta/src/ui/documents.rs:1274) | не command | `documents.ts` | P1 |
-| `wire_document_callbacks(...)` | [src/ui/documents.rs](/C:/Users/MykhailoDan/apps/Acta/src/ui/documents.rs:1046) | `documents_list`, `document_open`, `document_create_draft`, `document_save`, `document_delete`, `document_advance_status`, `document_chain_*` | `documents.ts`, `Documents.svelte` | P0 |
-| `apply_documents_to_ui(...)` | [src/ui/documents.rs](/C:/Users/MykhailoDan/apps/Acta/src/ui/documents.rs:93) | DTO response | `documents.ts` | P0 |
-| `wire_counterparty_callbacks(...)` | [src/ui/counterparties.rs](/C:/Users/MykhailoDan/apps/Acta/src/ui/counterparties.rs:229) | `load_counterparties`, `save_counterparty`, `delete_counterparty` | `counterparties.ts` | P0 |
-| `on_doc_new` create-context | [src/ui/documents.rs](/C:/Users/MykhailoDan/apps/Acta/src/ui/documents.rs:1153) | `counterparty_create_document_context(...)`, не окремий `documents` command | `counterparties.ts`, `documents.ts` | P1 |
-| `apply_counterparties_to_ui(...)` | [src/ui/counterparties.rs](/C:/Users/MykhailoDan/apps/Acta/src/ui/counterparties.rs:111) | DTO response | `counterparties.ts` | P0 |
-| `wire_payment_callbacks(...)` | [src/ui/payments.rs](/C:/Users/MykhailoDan/apps/Acta/src/ui/payments.rs:364) | `load_payments`, `save_payment`, `delete_payment`, `link_payment`, `reconcile_payment` | `payments.ts` | P0 |
-| `apply_payments_to_ui(...)` | [src/ui/payments.rs](/C:/Users/MykhailoDan/apps/Acta/src/ui/payments.rs:61) | DTO response | `payments.ts` | P0 |
-| `wire_task_callbacks(...)` | [src/ui/tasks.rs](/C:/Users/MykhailoDan/apps/Acta/src/ui/tasks.rs:239) | `load_tasks`, `save_task`, `toggle_task`, `delete_task` | `tasks.ts` | P1 |
-| `apply_tasks_to_ui(...)` | [src/ui/tasks.rs](/C:/Users/MykhailoDan/apps/Acta/src/ui/tasks.rs:65) | DTO response | `tasks.ts` | P1 |
-| `wire_reports_callbacks(...)` | [src/ui/reports.rs](/C:/Users/MykhailoDan/apps/Acta/src/ui/reports.rs:370) | `load_reports`, `export_report` | `reports.ts` | P1 |
-| `apply_reports_to_ui(...)` | [src/ui/reports.rs](/C:/Users/MykhailoDan/apps/Acta/src/ui/reports.rs:247) | DTO response | `reports.ts` | P1 |
-| `wire_settings_callbacks(...)` | [src/ui/settings.rs](/C:/Users/MykhailoDan/apps/Acta/src/ui/settings.rs:512) | `load_settings`, `save_settings`, `test_integration` | `settings.ts` | P1 |
-| `apply_settings_to_ui(...)` | [src/ui/settings.rs](/C:/Users/MykhailoDan/apps/Acta/src/ui/settings.rs:498) | DTO response | `settings.ts` | P1 |
-| dashboard initial load | [.worktrees/sprint-2026-04-24/src/ui/dashboard.rs](/C:/Users/MykhailoDan/apps/Acta/.worktrees/sprint-2026-04-24/src/ui/dashboard.rs:145) | `dashboard_load` | `dashboard.ts` | P0 |
-| dashboard KPI/cashflow/recent acts/upcoming payments/urgent tasks screen data | [.worktrees/sprint-2026-04-24/ui/dashboard.slint](/C:/Users/MykhailoDan/apps/Acta/.worktrees/sprint-2026-04-24/ui/dashboard.slint:517) | `dashboard_load` | `dashboard.ts`, `DashboardScreen.svelte` | P0 |
-| dashboard `mode-state` (`journal` / `inbox`) | [.worktrees/sprint-2026-04-24/ui/dashboard.slint](/C:/Users/MykhailoDan/apps/Acta/.worktrees/sprint-2026-04-24/ui/dashboard.slint:551) | відсутній у поточному Tauri contract | `DashboardScreen.svelte` | P2 |
-| dashboard `task-toggled(id, done)` | [.worktrees/sprint-2026-04-24/ui/dashboard.slint](/C:/Users/MykhailoDan/apps/Acta/.worktrees/sprint-2026-04-24/ui/dashboard.slint:560) | потенційно `task_set_status(...)`, але не exposed на dashboard surface | `tasks.ts`, `DashboardScreen.svelte` | P1 |
-| dashboard `new-task` | [.worktrees/sprint-2026-04-24/ui/dashboard.slint](/C:/Users/MykhailoDan/apps/Acta/.worktrees/sprint-2026-04-24/ui/dashboard.slint:561) | потенційно `task_open_editor(...)`, але не exposed на dashboard surface | `tasks.ts`, `DashboardScreen.svelte` | P1 |
-| dashboard `all-tasks` | [.worktrees/sprint-2026-04-24/ui/dashboard.slint](/C:/Users/MykhailoDan/apps/Acta/.worktrees/sprint-2026-04-24/ui/dashboard.slint:562) | не command, зараз лише screen-level navigation до `tasks` | `navigation.ts`, `DashboardScreen.svelte` | P1 |
-| dashboard `all-operations` | [.worktrees/sprint-2026-04-24/ui/dashboard.slint](/C:/Users/MykhailoDan/apps/Acta/.worktrees/sprint-2026-04-24/ui/dashboard.slint:563) | відсутній у поточному Tauri contract | — | P2 |
-| dashboard `inbox-action(id, kind)` | [.worktrees/sprint-2026-04-24/ui/dashboard.slint](/C:/Users/MykhailoDan/apps/Acta/.worktrees/sprint-2026-04-24/ui/dashboard.slint:550) | відсутній у поточному Tauri surface; backend action логіка лишається в Rust | — | P2 |
-| dashboard recent act drill-in | `frontend/src/lib/screens/DashboardScreen.svelte` | reuse `document_open(...)` після navigation | `documents.ts`, `DashboardScreen.svelte` | P1 |
-| dashboard urgent task drill-in | `frontend/src/lib/screens/DashboardScreen.svelte` | reuse `task_open_editor(...)` після navigation | `tasks.ts`, `DashboardScreen.svelte` | P1 |
-| shell state load/apply | [src/bootstrap/shell.rs](/C:/Users/MykhailoDan/apps/Acta/src/bootstrap/shell.rs) | `load_shell_state` або кілька точкових commands | `shell.ts` | P0 |
-| `refresh_all_ui` / `refresh_screen` | [src/bootstrap/refresh.rs](/C:/Users/MykhailoDan/apps/Acta/src/bootstrap/refresh.rs:99) | targeted re-fetch | усі stores | P0 |
-| document chain callbacks | [src/bootstrap/document_chain.rs](/C:/Users/MykhailoDan/apps/Acta/src/bootstrap/document_chain.rs:9) | `document_chain_get`, `document_chain_create_draft` | `documents.ts` | P2 |
+- `src-tauri/src/lib.rs` - public invoke handler.
+- `src-tauri/src/commands/*` - Tauri command wrappers.
+- `src/tauri_api/*` - backend DTO і mutation/load contract.
+- `frontend/src/lib/api.ts` - frontend invoke calls.
+- `frontend/src/lib/types.ts` - TypeScript DTO mirror.
+- `frontend/src/lib/stores/*` і `frontend/src/lib/screens/*` - product UX surface.
 
-Стан на 2026-04-30: для `dashboard` у Tauri вже реалізовано backend command + frontend store/screen без placeholder-маршруту. Водночас перенесено лише operational subset Slint contract: load + summary sections + two drill-ins. `inbox`, `journal`, `accounts` і dashboard-local actions залишаються поза поточним Tauri surface.
+## Live Tauri matrix
 
-## Пріоритети
+| Slice | Public commands | Frontend contract | Notes |
+| --- | --- | --- | --- |
+| Shell/navigation | `shell_load`, `shell_set_active_company`, `shell_palette_search`, `shell_palette_activate` | `shell.ts`, `palette.ts`, `navigation.ts`, `App.svelte` | Navigation stays frontend-local; shell state comes from backend. |
+| Theme/settings chrome | `settings_load`, `settings_save_preferences`, `shell_load` | `settings.ts`, `theme.ts`, `SettingsScreen.svelte`, `App.svelte` | Sidebar quick toggle persists via settings save and re-syncs from shell `isDark`. |
+| Dashboard | `dashboard_load` | `dashboard.ts`, `DashboardScreen.svelte` | Redesign-first operational summary, not strict Slint dashboard parity. |
+| Documents | `documents_list`, `document_open`, `document_create_draft`, `document_save`, `document_advance_status`, `document_delete`, `document_chain_get`, `document_chain_create_draft` | `documents.ts`, `DocumentsScreen.svelte`, `api.ts`, `types.ts` | Public surface is single-item document flow plus chain flow. |
+| Counterparties | `counterparties_list`, `counterparty_get`, `counterparty_open_editor`, `counterparty_save`, `counterparty_archive`, `counterparty_create_document_context` | `counterparties.ts`, `CounterpartiesScreen.svelte` | Create-document context lives here, not in an extra `document_prepare_new` command. |
+| Payments | `payments_list`, `payments_import_latest_csv`, `payments_sync_bank`, `payments_open_manual_template`, `payment_create_or_update`, `payment_reconcile`, `payment_unreconcile` | `payments.ts`, `PaymentsScreen.svelte` | Current UI supports list, manual editor, import/sync/template and reconcile actions. |
+| Tasks | `tasks_list`, `task_open_editor`, `task_save`, `task_delete`, `task_set_status` | `tasks.ts`, `TasksScreen.svelte`, dashboard drill-in | Dashboard reuses task editor/status contracts; no dashboard-only task command. |
+| Reports | `reports_load`, `reports_export_csv` | `reports.ts`, `ReportsScreen.svelte` | Reports filter is frontend DTO mirrored to Rust request. |
+| Settings | `settings_load`, `settings_save_preferences`, `settings_save_company`, `settings_configure_integration`, `settings_team_invite`, `settings_backup_now`, `settings_backup_open_latest` | `settings.ts`, `SettingsScreen.svelte` | Appearance, company, integrations, team and backup flows are backend-backed. |
+| BAS import | `import_bas_plan`, `import_bas_execute` | `import.ts`, `SettingsScreen.svelte` | Import is exposed from settings/integrations UI. |
 
-### P0
+## Commands intentionally not public
 
-Без цього Tauri UI не стане робочою заміною Slint.
+These backend functions are not part of the current frontend product surface and must not be registered in `tauri::generate_handler!` unless a real frontend path and tests are added:
 
-### P1
+| Command/function | Decision | Reason |
+| --- | --- | --- |
+| `document_prepare_new` | Not public | Current product uses `counterparty_create_document_context` plus `document_create_draft`. |
+| `documents_bulk_advance_status` | Not public | No bulk-selection UX exists in the Svelte documents screen. |
+| `documents_bulk_delete` | Not public | No bulk-delete UX exists in the Svelte documents screen. |
 
-Потрібно для повноцінного cutover, але не обов'язково для першого vertical slice.
+If any of these return, update all layers in one change: `src-tauri/src/commands/*`, `src-tauri/src/lib.rs`, `src/tauri_api/*`, `frontend/src/lib/api.ts`, `frontend/src/lib/types.ts`, store, screen, tests and docs.
 
-### P2
+## Archived Slint reference policy
 
-Можна переносити після стабілізації базових flows.
+Slint callbacks/properties are no longer live contracts. Historical references are allowed only when explicitly labeled as archived:
 
-## Правило міграції
+| Archived reference | Current Tauri decision |
+| --- | --- |
+| `.worktrees/sprint-2026-04-24/ui/dashboard.slint` | Historical dashboard UI reference only. |
+| `.worktrees/sprint-2026-04-24/src/ui/dashboard.rs` | Historical dashboard data-prep reference only. |
+| Slint `journal`/`inbox` dashboard modes | Deliberate cut from current Tauri dashboard, not unfinished migration. |
+| Slint accounts sidebar and chart-first layout | Deliberate redesign; reintroduce only through a new Tauri feature spec. |
+| Slint `tests/ui_events.rs` callbacks | Replaced by frontend store tests, Rust integration tests and Tauri build checks. |
 
-Усе, що зараз є:
+Do not cite `ui/app.slint`, `src/ui/*`, root `build.rs` or `tests/ui_events.rs` as live files in new planning docs.
 
-- `apply_*_to_ui(...)`
-- `wire_*_callbacks(...)`
-- `Weak<AppWindow>`
-- `ModelRc` / `VecModel`
+## Backlog contract matrix
 
-має перейти в одну з двох форм:
+| Backlog item | Contract/status | Priority |
+| --- | --- | --- |
+| Real WebView e2e smoke | Implemented in `e2e-tests/`; CI runs Tauri shell through `tauri-driver` and validates navigation | P1 done 2026-04-30 |
+| Windows packaging gate | Implemented in `.github/workflows/ci.yml` via `npm run tauri build` + bundle artifact upload | P1 done 2026-04-30 |
+| Dashboard journal/inbox revival | New Tauri DTOs, commands and screens; not a Slint parity task | P2 |
+| Bulk document actions | Bulk-selection UX, frontend API functions and Rust command tests | P2 |
+| Svelte design-system docs | Implemented in `docs/architecture/svelte-tauri-design-system.md`; Slint token docs are archived/pre-cutover | P2 done 2026-04-30 |
 
-- Rust `#[tauri::command]`, якщо це дані або mutation;
-- frontend store/local state, якщо це чисто UI-стан.
+## Review checklist for contract changes
 
-## Рекомендований порядок переносу
-
-1. navigation + shell
-2. dashboard
-3. documents
-4. counterparties
-5. payments
-6. tasks
-7. reports
-8. settings
-9. inbox
-10. document chain
-
-## Пов'язані документи
-
-- [tauri-migration-audit-2026-04-29.md](./tauri-migration-audit-2026-04-29.md)
-- [tauri-migration-roadmap-2026-04-29.md](./tauri-migration-roadmap-2026-04-29.md)
-- [tauri-documents-command-spec-2026-04-29.md](./tauri-documents-command-spec-2026-04-29.md)
-- [dashboard-migration-contract-2026-04-30.md](./dashboard-migration-contract-2026-04-30.md)
-
-### Dashboard migration contract
-
-- `dashboard implemented`
-- `dashboard parity partial by design`
-- `redesign-first, not strict Slint parity`
-
-Для dashboard у Tauri перенесено робочий operational contract, а strict parity зі Slint не є поточною ціллю.
+- Public command exists only when `frontend/src/lib/api.ts` calls it or a documented product path is being added in the same change.
+- DTO names and casing match between Rust serde `camelCase` and TypeScript types.
+- Store mutation refreshes only the slices it owns or explicitly coordinates.
+- Theme changes persist through `settings_save_preferences` and re-sync shell state.
+- Tests cover both frontend contract and backend vertical slice when behavior changes.

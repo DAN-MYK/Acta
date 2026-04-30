@@ -1,5 +1,7 @@
 # Next Sprint Plan
 
+> **Archived/pre-cutover:** це Slint-era плановий snapshot. Після `2026-04-30` live UI, test safety net і design-system рішення ведуться через Tauri/Svelte docs; посилання на `ui/*.slint`, `src/ui/*` і `tests/ui_events.rs` тут не є поточним contract.
+
 Оновлено: `2026-04-27`
 Горизонт: `1-2 тижні`
 Статус: `historical plan snapshot`

@@ -1,5 +1,7 @@
 # Payments Tauri API Implementation Plan
 
+> **Pre-cutover source note:** план використовує `src/ui/payments.rs` як історичне джерело логіки. Поточний live contract для payments дивись у `src/tauri_api/payments.rs`, `src-tauri/src/commands/payments.rs`, `frontend/src/lib/stores/payments.ts` і `frontend/src/lib/screens/PaymentsScreen.svelte`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace all 7 `Err(anyhow!("not implemented"))` stubs in `src/tauri_api/payments.rs` with real implementations backed by `db::payments`, `db::counterparties`, and `import::bank_csv`.

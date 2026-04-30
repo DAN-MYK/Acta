@@ -13,7 +13,7 @@
 
 ## Коли читати Vault
 Перед роботою звіряйся з Obsidian Vault через MCP `obsidian-Codex-mcp`, якщо задача стосується:
-- UI -> `Technologies/Slint UI.md`
+- UI -> `Technologies/Svelte UI.md`
 - PDF -> `Technologies/PDF Generation.md`
 - BAS -> `Integrations/BAS Integration.md`
 - Банків -> `Integrations/Bank Integrations.md`
@@ -22,7 +22,7 @@
 
 ## Стек
 - Rust.
-- UI: Slint, без вебтехнологій.
+- UI: Tauri 2 + Svelte (frontend/) + TypeScript.
 - БД: PostgreSQL + sqlx, async, compile-time перевірка SQL.
 - PDF: Typst CLI або Rust-бібліотека; для читання PDF можна використовувати `lopdf`.
 - Файловий моніторинг: `notify`.
@@ -48,43 +48,42 @@
 - Міграції зберігай окремими файлами в `migrations/`.
 - Для SQL-запитів використовуй `sqlx::query_as!`.
 
-### Slint
-- UI-логіка тільки в `.slint`.
-- Бізнес-логіка тільки в Rust.
-- Дані передавай через `in` / `out` properties.
-- Події передавай через `callback`.
-- Використовуй `std-widgets`.
+### Svelte / Tauri
+- UI-логіка в `frontend/src/` (`.svelte`, `.ts`).
+- Бізнес-логіка тільки в Rust (`src/tauri_api/`).
+- Дані через Tauri commands (`invoke`) | події через Svelte stores.
+- Типи між Rust і TS: serde → JSON → TypeScript interfaces.
 
 ### Форматування коду — ОБОВ'ЯЗКОВО
 - Коментарі та документація **українською мовою**.
 
-### Архітектурні рішення (від 2026-04-22)
-- **Канонічний UI** — `ui/app.slint`. Компілюється через `build.rs`.
-- **Icon Bundle** — `ui/icons.slint`, імпортується як `{ Icons }`.
-- **Money Contract** — грошові суми передаються в Slint як `string` (pre-formatted у Rust). У `types.slint` коментар `MONEY CONTRACT RULE` документує правило: `float` тільки для `ChartBar.rev-h/exp-h` (normalized 0.0–1.0).
-- **Formatter** — `src/ui/helpers.rs` містить `format_money()`, `format_money_round()`, `format_money_ua()` замість старого `decimal_to_f32()`.
-- **AppCtx** — `src/app_ctx.rs`. Канонічний контейнер для `PgPool` + `active_company_id`. Передається `&Arc<AppCtx>` у wire_* функції.
-- **Main.rs** — ТІЛЬКИ bootstrap: ініціалізація, AppCtx, wire_*. Вся orchestration через `wire_navigation()`, `wire_stub_callbacks()`.
-- **No-op callbacks** — мовчазні `|| {}` замінені на `tracing::info!("TODO: ...")`.
-- **Internal state** — у `app.slint` використовується `private property <string>` для локального UI стану.
-- **Keyboard shortcuts** — `Ctrl+1..7` для навігації, `Ctrl+K` для Command Palette (див. `shell.slint`).
-- **Keyboard Navigation** — документація в `docs/a11y/keyboard-navigation.md`.
+### Архітектурні рішення (від 2026-04-30)
+- **Канонічний UI** — `src-tauri/` + `frontend/`. Slint runtime видалено.
+- **Money Contract** — грошові суми передаються як `string` (pre-formatted у Rust), ніколи f32/f64.
+- **Formatter** — `format_money()`, `format_money_round()`, `format_money_ua()` у shared backend.
+- **AppCtx** — `src/app_ctx.rs`. Канонічний контейнер для `PgPool` + `active_company_id`.
+- **Command surface** — `src-tauri/src/lib.rs` реєструє всі public invoke handlers.
+- **Keyboard shortcuts** — `Ctrl+1..7` для навігації, `Ctrl+K` для Command Palette (Svelte shell).
+- **Dashboard** — redesign-first Tauri screen; strict parity зі старим Slint dashboard не є ціллю.
 
 ## Робочий порядок
 1. Спочатку звір релевантний файл у Vault або коді.
 2. Далі внеси зміни в найменшу потрібну частину системи.
-3. Після змін перевір типи, SQL і Slint-логіку на відповідність правилам вище.
+3. Після змін перевір типи, SQL і TypeScript на відповідність правилам вище.
 4. Якщо змінюєш SQL-запити, онови `cargo sqlx prepare`.
 5. Якщо змінюєш міграції, перевір їх через `sqlx migrate run`.
 6. Якщо задача зачіпає поведінку, додай або онови тести.
 
 ## Команди
 ```bash
-cargo run
-sqlx migrate run
-cargo sqlx prepare
+cd src-tauri && cargo tauri dev        # запуск (dev режим)
+sqlx migrate run                       # міграції БД
+cargo sqlx prepare                     # offline SQL кеш (після зміни sqlx::query!)
 cargo run --bin migrate -- --input ./bas-export/
+cargo build --tests                    # повна компіляція lib + тести
 cargo test
+npm run check                          # TypeScript перевірка
+npm run test:frontend                  # Vitest store tests
 ```
 
 ## Доменні відповідності
@@ -103,16 +102,22 @@ cargo test
 ## Структура проєкту
 ```text
 acta/
-├── src/
-│   ├── main.rs
-│   ├── db/        ← CRUD функції
-│   ├── models/    ← Rust структури
-│   ├── pdf/       ← Typst генерація
-│   └── import/    ← Парсери BAS, банків
-├── ui/            ← канонічний Slint UI
-├── templates/     ← .typ шаблони Typst
-├── migrations/    ← sqlx міграції
-└── storage/       ← файли на диску
+├── src/               ← lib-крейт
+│   ├── db/            ← CRUD функції
+│   ├── models/        ← Rust структури
+│   ├── tauri_api/     ← команди для Tauri (invoke handlers)
+│   ├── pdf/           ← Typst генерація
+│   └── import/        ← Парсери BAS, банків
+├── src-tauri/         ← Tauri binary
+│   └── src/commands/  ← #[tauri::command] handlers
+├── frontend/          ← Svelte UI
+│   └── src/lib/
+│       ├── screens/   ← Svelte screens
+│       ├── stores/    ← Svelte stores
+│       └── api.ts     ← Tauri invoke layer
+├── templates/         ← .typ шаблони Typst
+├── migrations/        ← sqlx міграції
+└── storage/           ← файли на диску
 ```
 
 ## Перший запуск

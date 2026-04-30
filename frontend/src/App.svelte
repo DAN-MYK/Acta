@@ -145,7 +145,7 @@
       <div class="brand-mark">A</div>
       <div>
         <strong>Acta</strong>
-        <p>Tauri migration scaffold</p>
+        <p>Управлінський облік</p>
       </div>
     </div>
 

@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
@@ -8,7 +9,7 @@ const repoRoot = path.resolve(e2eDir, "..");
 const binaryName = process.platform === "win32" ? "acta-tauri.exe" : "acta-tauri";
 const applicationPath = path.resolve(repoRoot, "src-tauri", "target", "debug", binaryName);
 const tauriDriverName = process.platform === "win32" ? "tauri-driver.exe" : "tauri-driver";
-const tauriDriverPath = path.resolve(os.homedir(), ".cargo", "bin", tauriDriverName);
+const tauriDriverPath = resolveExecutable(tauriDriverName);
 
 let tauriDriver;
 let expectedShutdown = false;
@@ -48,6 +49,12 @@ export const config = {
     }
   },
   beforeSession: () => {
+    if (!tauriDriverPath) {
+      throw new Error(
+        "tauri-driver was not found. Install it with `cargo install tauri-driver --locked` before running e2e tests."
+      );
+    }
+
     tauriDriver = spawn(tauriDriverPath, [], {
       stdio: [null, process.stdout, process.stderr]
     });
@@ -84,3 +91,12 @@ process.on("SIGINT", () => cleanupAndExit("SIGINT"));
 process.on("SIGTERM", () => cleanupAndExit("SIGTERM"));
 process.on("SIGHUP", () => cleanupAndExit("SIGHUP"));
 process.on("SIGBREAK", () => cleanupAndExit("SIGBREAK"));
+
+function resolveExecutable(name) {
+  const candidates = [
+    path.resolve(os.homedir(), ".cargo", "bin", name),
+    ...(process.env.PATH ?? "").split(path.delimiter).map((entry) => path.resolve(entry, name))
+  ];
+
+  return candidates.find((candidate) => fs.existsSync(candidate));
+}

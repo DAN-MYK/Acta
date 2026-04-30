@@ -1,10 +1,21 @@
 # Planning
 
-Оновлено: `2026-04-27`
+Оновлено: `2026-04-30`
 
 Ця папка містить planning-нотатки й короткі звіти по спринтах у `Acta`.
 
-## Документи
+## Live post-cutover documents
+
+- [tauri-migration-audit-2026-04-29.md](/C:/Users/MykhailoDan/apps/Acta/docs/planning/tauri-migration-audit-2026-04-29.md) — актуальний post-cutover аудит Tauri runtime
+- [tauri-migration-roadmap-2026-04-29.md](/C:/Users/MykhailoDan/apps/Acta/docs/planning/tauri-migration-roadmap-2026-04-29.md) — roadmap/backlog для Tauri після cutover
+- [tauri-migration-contract-matrix-2026-04-29.md](/C:/Users/MykhailoDan/apps/Acta/docs/planning/tauri-migration-contract-matrix-2026-04-29.md) — live Tauri invoke/frontend contract matrix
+- [dashboard-migration-contract-2026-04-30.md](/C:/Users/MykhailoDan/apps/Acta/docs/planning/dashboard-migration-contract-2026-04-30.md) — рішення про redesign-first dashboard
+- [tauri-documents-command-spec-2026-04-29.md](/C:/Users/MykhailoDan/apps/Acta/docs/planning/tauri-documents-command-spec-2026-04-29.md) — documents command spec
+- [tauri-counterparties-command-spec-2026-04-29.md](/C:/Users/MykhailoDan/apps/Acta/docs/planning/tauri-counterparties-command-spec-2026-04-29.md) — counterparties command spec
+- [tauri-payments-command-spec-2026-04-29.md](/C:/Users/MykhailoDan/apps/Acta/docs/planning/tauri-payments-command-spec-2026-04-29.md) — payments command spec
+- [tauri-shell-navigation-spec-2026-04-29.md](/C:/Users/MykhailoDan/apps/Acta/docs/planning/tauri-shell-navigation-spec-2026-04-29.md) — shell/navigation spec
+
+## Archived/pre-cutover documents
 
 - [next-sprint-2026-04-24.md](/C:/Users/MykhailoDan/apps/Acta/docs/planning/next-sprint-2026-04-24.md) — детальний план спринту, сформований 2026-04-24
 - [next-sprint-checklist-2026-04-24.md](/C:/Users/MykhailoDan/apps/Acta/docs/planning/next-sprint-checklist-2026-04-24.md) — execution checklist для цього плану
@@ -16,6 +27,8 @@
 - [remediation-week-1-2026-04-27.md](/C:/Users/MykhailoDan/apps/Acta/docs/planning/remediation-week-1-2026-04-27.md) — покроковий backlog на перший тиждень рефакторингу
 - [remediation-week-2-2026-04-27.md](/C:/Users/MykhailoDan/apps/Acta/docs/planning/remediation-week-2-2026-04-27.md) — покроковий backlog на другий тиждень, сфокусований на documents flow
 - [document-chains-design-2026-04-27.md](/C:/Users/MykhailoDan/apps/Acta/docs/planning/document-chains-design-2026-04-27.md) — design-нотатка для реалізації document chains
+- [slint-final-cascade-removal-2026-04-30.md](/C:/Users/MykhailoDan/apps/Acta/docs/planning/slint-final-cascade-removal-2026-04-30.md) — archived execution note про видалення Slint cascade
+- [slint-safe-removal-checklist-2026-04-30.md](/C:/Users/MykhailoDan/apps/Acta/docs/planning/slint-safe-removal-checklist-2026-04-30.md) — archived checklist для Slint cutover cleanup
 
 ## Контекст
 
@@ -37,3 +50,5 @@
 - `remediation-callback-matrix-2026-04-27.md` — це швидка карта того, де callback already works, а де ще лишається борг
 - `remediation-week-1-2026-04-27.md` та `remediation-week-2-2026-04-27.md` — це покроковий execution-план для джунів і нових учасників
 - `document-chains-design-2026-04-27.md` — це технічна опора перед реалізацією chain flow, щоб не будувати його навмання
+- Усі Slint/remediation документи до cutover читати як pre-cutover historical context.
+- Нові UI/design-system рішення фіксувати в Svelte/Tauri docs, не в Slint token/component docs.
