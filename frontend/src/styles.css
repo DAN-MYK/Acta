@@ -907,6 +907,12 @@ body[data-theme="dark"] .editor-grid textarea {
   color: var(--danger);
 }
 
+.title-with-icon {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 @media (max-width: 980px) {
   .app-shell {
     grid-template-columns: 1fr;

@@ -1,0 +1,25 @@
+<svg width="256" height="64" viewBox="0 0 256 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="4" y="6" width="52" height="52" rx="18" fill="#315EE8"/>
+  <path
+    d="M17 42.5L29.75 18H31.95L44.8 42.5H38.65L35.9 37.05H25.85L23.1 42.5H17ZM28.2 32.25H33.55L30.9 26.9L28.2 32.25Z"
+    fill="#FFFDF8"
+  />
+  <path d="M24.4 46.5H40.8" stroke="#AFC5FF" stroke-width="3" stroke-linecap="round"/>
+  <path d="M25.8 21.7L20.2 32.25" stroke="#AFC5FF" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M35.8 21.7L41.4 32.25" stroke="#AFC5FF" stroke-width="2.2" stroke-linecap="round"/>
+  <text
+    x="74"
+    y="39"
+    fill="#18181B"
+    font-family="Geist, 'Segoe UI', sans-serif"
+    font-size="29"
+    font-weight="700"
+    letter-spacing="0.02em"
+  >
+    Acta
+  </text>
+  <path d="M76 48H150" stroke="#315EE8" stroke-width="3" stroke-linecap="round" opacity="0.18"/>
+  <path d="M164 24H204" stroke="#315EE8" stroke-width="4" stroke-linecap="round" opacity="0.22"/>
+  <path d="M164 34H216" stroke="#1EB16E" stroke-width="4" stroke-linecap="round" opacity="0.22"/>
+  <path d="M164 44H190" stroke="#C77A1C" stroke-width="4" stroke-linecap="round" opacity="0.22"/>
+</svg>

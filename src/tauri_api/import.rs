@@ -5,11 +5,11 @@ use serde::Serialize;
 use tokio::fs;
 
 use crate::app_ctx::AppCtx;
-use crate::import::bas_acts::parse_acts_xml_file;
-use crate::import::bas_contracts::parse_contracts_xml_file;
-use crate::import::bas_counterparties::parse_counterparties_xml_file;
-use crate::import::bas_invoices::parse_invoices_file;
-use crate::import::bas_payments::{apply_imported_payments, parse_payments_csv_file};
+use crate::import::bas_acts::{import_acts_from_xml, parse_acts_xml_file};
+use crate::import::bas_contracts::{import_contracts_from_xml, parse_contracts_xml_file};
+use crate::import::bas_counterparties::{import_counterparties_from_xml, parse_counterparties_xml_file};
+use crate::import::bas_invoices::{import_invoices_from_file, parse_invoices_file};
+use crate::import::bas_payments::{apply_imported_payments, import_payments_from_csv, parse_payments_csv_file};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -59,7 +59,19 @@ fn route_file(path: &Path) -> Option<FileType> {
     let name = path.file_stem()?.to_str()?.to_lowercase();
     match ext.as_str() {
         "csv" => Some(FileType::Payments),
-        "xml" | "xlsx" | "xls" => {
+        "xlsx" | "xls" => {
+            if name.contains("counterpart") || name.contains("контрагент") {
+                Some(FileType::Counterparties)
+            } else if name.contains("invoice")
+                || name.contains("рахунок")
+                || name.contains("накладна")
+            {
+                Some(FileType::Invoices)
+            } else {
+                None
+            }
+        }
+        "xml" => {
             if name.contains("counterpart") || name.contains("контрагент") {
                 Some(FileType::Counterparties)
             } else if name.contains("contract")
@@ -206,6 +218,87 @@ pub async fn import_bas_plan(ctx: &AppCtx) -> Result<ImportPlanDto> {
     Ok(ImportPlanDto { entities })
 }
 
+pub async fn import_bas_execute(ctx: &AppCtx) -> Result<ImportResultDto> {
+    let dir = bas_import_dir();
+    fs::create_dir_all(&dir).await?;
+    let files = collect_sorted_files(&dir).await?;
+
+    const ENTITY_TYPES: &[(&str, FileType)] = &[
+        ("counterparties", FileType::Counterparties),
+        ("contracts", FileType::Contracts),
+        ("acts", FileType::Acts),
+        ("invoices", FileType::Invoices),
+        ("payments", FileType::Payments),
+    ];
+
+    let mut entities = Vec::new();
+    for &(entity_type, file_type) in ENTITY_TYPES {
+        let matched = files.iter().find(|p| route_file(p) == Some(file_type));
+        let dto = match matched {
+            None => ImportEntityResultDto {
+                entity_type: entity_type.to_string(),
+                created: 0,
+                updated: 0,
+                skipped: 0,
+                conflicts: 0,
+                error: None,
+            },
+            Some(path) => {
+                let pool = ctx.pool();
+                let company_id = ctx.company_id();
+                let result = match file_type {
+                    FileType::Counterparties => {
+                        import_counterparties_from_xml(pool, company_id, path, false)
+                            .await
+                            .map(|r| (r.created, r.updated, r.skipped, r.conflicts))
+                    }
+                    FileType::Contracts => {
+                        import_contracts_from_xml(pool, company_id, path, false)
+                            .await
+                            .map(|r| (r.created, r.updated, r.skipped, r.conflicts))
+                    }
+                    FileType::Acts => {
+                        import_acts_from_xml(pool, company_id, path, false)
+                            .await
+                            .map(|r| (r.created, r.updated, r.skipped, r.conflicts))
+                    }
+                    FileType::Invoices => {
+                        import_invoices_from_file(pool, company_id, path, false)
+                            .await
+                            .map(|r| (r.created, r.updated, r.skipped, r.conflicts))
+                    }
+                    FileType::Payments => {
+                        import_payments_from_csv(pool, company_id, path, false)
+                            .await
+                            .map(|r| (r.created, r.updated, r.skipped, r.conflicts))
+                    }
+                };
+                match result {
+                    Ok((created, updated, skipped, conflicts)) => ImportEntityResultDto {
+                        entity_type: entity_type.to_string(),
+                        created,
+                        updated,
+                        skipped,
+                        conflicts,
+                        error: None,
+                    },
+                    Err(e) => ImportEntityResultDto {
+                        entity_type: entity_type.to_string(),
+                        created: 0,
+                        updated: 0,
+                        skipped: 0,
+                        conflicts: 0,
+                        error: Some(e.to_string()),
+                    },
+                }
+            }
+        };
+        entities.push(dto);
+    }
+
+    Ok(ImportResultDto { entities })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -238,5 +331,17 @@ mod tests {
     fn route_unrecognized_returns_none() {
         assert_eq!(route_file(Path::new("data.txt")), None);
         assert_eq!(route_file(Path::new("report.xml")), None);
+    }
+
+    #[test]
+    fn xlsx_acts_not_routed() {
+        let path = Path::new("acts_2024.xlsx");
+        assert_eq!(route_file(path), None);
+    }
+
+    #[test]
+    fn xlsx_contracts_not_routed() {
+        let path = Path::new("contracts_2024.xlsx");
+        assert_eq!(route_file(path), None);
     }
 }

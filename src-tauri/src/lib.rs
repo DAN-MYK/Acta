@@ -65,7 +65,9 @@ pub fn run() {
             commands::payments::payments_open_manual_template,
             commands::payments::payment_create_or_update,
             commands::payments::payment_reconcile,
-            commands::payments::payment_unreconcile
+            commands::payments::payment_unreconcile,
+            commands::import::import_bas_plan,
+            commands::import::import_bas_execute
         ])
         .run(tauri::generate_context!())
         .expect("не вдалося запустити Tauri runtime");
