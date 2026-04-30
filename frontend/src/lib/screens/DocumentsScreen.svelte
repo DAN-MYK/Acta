@@ -259,6 +259,15 @@
     </div>
 
     <div class="editor-items">
+      {#if $documents.editor.items.length > 0}
+        <div class="editor-item editor-item-head">
+          <span>Опис</span>
+          <span>Од.</span>
+          <span>Кількість</span>
+          <span>Ціна, грн</span>
+          <span></span>
+        </div>
+      {/if}
       {#each $documents.editor.items as item, index}
         <div class="editor-item">
           <input value={item.description} placeholder="Опис" on:input={(event) => onItemFieldChange(index, "description", event)} />

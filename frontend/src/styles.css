@@ -832,6 +832,15 @@ body[data-theme="dark"] .editor-item {
   background: var(--bg-subtle);
 }
 
+.editor-item-head {
+  background: transparent;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  padding-top: 0;
+  padding-bottom: 0;
+  pointer-events: none;
+}
+
 .create-strip input,
 .create-strip select,
 .editor-item input,
