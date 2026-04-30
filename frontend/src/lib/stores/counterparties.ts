@@ -1,0 +1,187 @@
+import { get, writable } from "svelte/store";
+import {
+  counterpartyArchive,
+  counterpartyCreateDocumentContext,
+  counterpartyGet,
+  counterpartyOpenEditor,
+  counterpartySave,
+  counterpartiesList
+} from "../api";
+import { documentsStore } from "./documents";
+import { navigationStore } from "./navigation";
+import type {
+  CounterpartyDetailScreenDto,
+  CounterpartyDraftFormDto,
+  CounterpartyEditorDto,
+  CounterpartiesScreenDto
+} from "../types";
+
+interface CounterpartiesState {
+  screen: CounterpartiesScreenDto | null;
+  detail: CounterpartyDetailScreenDto | null;
+  editor: CounterpartyEditorDto | null;
+  selectedId: string | null;
+  loading: boolean;
+  error: string | null;
+  message: string | null;
+  query: string;
+}
+
+const initialState: CounterpartiesState = {
+  screen: null,
+  detail: null,
+  editor: null,
+  selectedId: null,
+  loading: false,
+  error: null,
+  message: null,
+  query: ""
+};
+
+function createCounterpartiesStore() {
+  const { subscribe, update } = writable<CounterpartiesState>(initialState);
+
+  return {
+    subscribe,
+    async load(query = "") {
+      update((state) => ({ ...state, loading: true, error: null, query }));
+
+      try {
+        const screen = await counterpartiesList(query);
+        const selectedId =
+          get({ subscribe }).selectedId &&
+          screen.items.some((item) => item.id === get({ subscribe }).selectedId)
+            ? get({ subscribe }).selectedId
+            : screen.items[0]?.id ?? null;
+        const detail = selectedId ? await counterpartyGet(selectedId) : null;
+        update((state) => ({
+          ...state,
+          screen,
+          detail,
+          selectedId,
+          loading: false
+        }));
+      } catch (error) {
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      }
+    },
+    async open(counterpartyId: string) {
+      update((state) => ({ ...state, loading: true, error: null, message: null }));
+
+      try {
+        const detail = await counterpartyGet(counterpartyId);
+        update((state) => ({
+          ...state,
+          detail,
+          selectedId: counterpartyId,
+          loading: false
+        }));
+      } catch (error) {
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      }
+    },
+    async openEditor(counterpartyId?: string) {
+      update((state) => ({ ...state, loading: true, error: null, message: null }));
+
+      try {
+        const editor = await counterpartyOpenEditor(counterpartyId);
+        update((state) => ({ ...state, editor, loading: false }));
+      } catch (error) {
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      }
+    },
+    closeEditor() {
+      update((state) => ({ ...state, editor: null }));
+    },
+    updateFormField(field: keyof CounterpartyDraftFormDto, value: string) {
+      update((state) => ({
+        ...state,
+        editor: state.editor
+          ? {
+              ...state.editor,
+              form: {
+                ...state.editor.form,
+                [field]: value
+              }
+            }
+          : null
+      }));
+    },
+    async save() {
+      const snapshot = get({ subscribe });
+      if (!snapshot.editor) {
+        return;
+      }
+
+      update((state) => ({ ...state, loading: true, error: null, message: null }));
+
+      try {
+        const result = await counterpartySave(snapshot.editor.form);
+        update((state) => ({
+          ...state,
+          screen: {
+            items: result.updatedList
+          },
+          detail: result.updatedDetail,
+          selectedId: result.savedId,
+          editor: null,
+          loading: false,
+          message: result.message
+        }));
+      } catch (error) {
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      }
+    },
+    async archiveCurrent() {
+      const snapshot = get({ subscribe });
+      if (!snapshot.selectedId) {
+        return;
+      }
+
+      update((state) => ({ ...state, loading: true, error: null, message: null }));
+
+      try {
+        const result = await counterpartyArchive(snapshot.selectedId);
+        const screen = await counterpartiesList(snapshot.query);
+        const selectedId = screen.items[0]?.id ?? null;
+        const detail = selectedId ? await counterpartyGet(selectedId) : null;
+        update((state) => ({
+          ...state,
+          screen,
+          detail,
+          selectedId,
+          loading: false,
+          message: result.message
+        }));
+      } catch (error) {
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      }
+    },
+    async createDocument() {
+      const snapshot = get({ subscribe });
+      if (!snapshot.selectedId) {
+        return;
+      }
+
+      update((state) => ({ ...state, loading: true, error: null, message: null }));
+
+      try {
+        const context = await counterpartyCreateDocumentContext(snapshot.selectedId);
+        documentsStore.setDraftContext(context.counterpartyId, context.counterpartyName);
+        navigationStore.go("documents");
+        update((state) => ({
+          ...state,
+          loading: false,
+          message: "Контрагента передано у create flow документів"
+        }));
+      } catch (error) {
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      }
+    },
+    setEditor(editor: CounterpartyEditorDto) {
+      update((state) => ({ ...state, editor }));
+    }
+  };
+}
+
+export const counterpartiesStore = createCounterpartiesStore();
