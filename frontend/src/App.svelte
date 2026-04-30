@@ -96,11 +96,23 @@
   }
 
   async function onQuickThemeToggle() {
-    const darkMode = $theme === "light";
+    const previousMode = $theme;
+    const darkMode = previousMode === "light";
     theme.setMode(darkMode ? "dark" : "light");
     settings.updatePreference("darkMode", darkMode);
-    await settings.savePreferences();
-    await shell.load();
+
+    const saved = await settings.savePreferences();
+    if (saved) {
+      theme.setMode(saved.screen.preferences.darkMode ? "dark" : "light");
+    } else {
+      const settingsScreen = await settings.load();
+      theme.setMode(settingsScreen?.preferences.darkMode ? "dark" : previousMode);
+    }
+
+    const shellState = await shell.load();
+    if (shellState) {
+      theme.setMode(shellState.isDark ? "dark" : "light");
+    }
   }
 
   function handleKeydown(event: KeyboardEvent) {
@@ -147,7 +159,7 @@
     </nav>
 
     <div class="theme-switcher">
-      <button on:click={() => theme.toggle()}>
+      <button on:click={onQuickThemeToggle}>
         <AppIcon name="theme" surface={true} />
         <span>Тема: {$theme}</span>
       </button>

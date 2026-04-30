@@ -2,11 +2,13 @@
   import { dashboardStore } from "../stores/dashboard";
   import { documentsStore } from "../stores/documents";
   import { navigationStore } from "../stores/navigation";
+  import { paymentsStore } from "../stores/payments";
   import { tasksStore } from "../stores/tasks";
 
   const dashboard = dashboardStore;
   const documents = documentsStore;
   const navigation = navigationStore;
+  const payments = paymentsStore;
   const tasks = tasksStore;
 
   function openDashboardDocument(docId: string) {
@@ -17,6 +19,11 @@
   function openDashboardTask(taskId: string) {
     navigation.go("tasks");
     void tasks.openEditor(taskId);
+  }
+
+  function openDashboardPayment(paymentId: string) {
+    navigation.go("payments");
+    void payments.openById(paymentId);
   }
 </script>
 
@@ -78,6 +85,23 @@
           <strong>{doc.amountStr}</strong>
         </button>
       {/each}
+    </article>
+
+    <article class="dashboard-card">
+      <div class="card-title">
+        <h3>Найближчі платежі</h3>
+        <button on:click={() => navigation.go("payments")}>Відкрити</button>
+      </div>
+      {#if ($dashboard.screen?.upcomingPayments?.length ?? 0) === 0}
+        <p class="dashboard-list-empty">Очікуваних платежів поки немає.</p>
+      {:else}
+        {#each $dashboard.screen?.upcomingPayments ?? [] as payment}
+          <button class:overdue={payment.isOverdue} class="dashboard-list-row" on:click={() => openDashboardPayment(payment.id)}>
+            <span>{payment.contractor} · {payment.dateLabel}</span>
+            <strong>{payment.amountStr}</strong>
+          </button>
+        {/each}
+      {/if}
     </article>
 
     <article class="dashboard-card">

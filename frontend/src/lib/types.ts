@@ -143,10 +143,19 @@ export interface DashboardKpiDto {
   tone: "positive" | "warning" | "neutral" | "accent" | "danger" | string;
 }
 
+export interface DashboardUpcomingPaymentDto {
+  id: string;
+  dateLabel: string;
+  contractor: string;
+  amountStr: string;
+  isOverdue: boolean;
+}
+
 export interface DashboardScreenDto {
   kpis: DashboardKpiDto[];
   cashflowRows: BankReportRowDto[];
   recentDocuments: DocumentItemDto[];
+  upcomingPayments: DashboardUpcomingPaymentDto[];
   urgentTasks: TaskItemDto[];
 }
 
@@ -233,6 +242,7 @@ export interface CreateDocumentContextDto {
 export interface PaymentItemDto {
   id: string;
   date: string;
+  counterpartyId: string;
   counterparty: string;
   amountStr: string;
   direction: "in" | "out";

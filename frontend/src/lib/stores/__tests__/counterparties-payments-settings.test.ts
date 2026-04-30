@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import appSource from "../../../App.svelte?raw";
+import frontendApiSource from "../../api.ts?raw";
+import tauriDocumentsSource from "../../../../../src-tauri/src/commands/documents.rs?raw";
+import tauriLibSource from "../../../../../src-tauri/src/lib.rs?raw";
 import type {
   CounterpartyDetailScreenDto,
   CounterpartyEditorDto,
@@ -74,6 +78,7 @@ function makePayments(ids: string[]): PaymentsScreenDto {
     items: ids.map((id, index) => ({
       id,
       date: "2026-04-30",
+      counterpartyId: `cp-${index + 1}`,
       counterparty: `Контрагент ${index + 1}`,
       amountStr: `${index + 1} 000,00 грн`,
       direction: index % 2 === 0 ? "in" : "out",
@@ -270,6 +275,11 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     expect(snapshot(paymentsStore).list?.items).toHaveLength(2);
     expect(snapshot(paymentsStore).message).toBe("Платіж збережено");
 
+    const openedById = await paymentsStore.openById("pay-1");
+    expect(openedById).toBe(true);
+    expect(snapshot(paymentsStore).editor?.id).toBe("pay-1");
+    expect(snapshot(paymentsStore).editor?.counterpartyId).toBe("cp-1");
+
     await paymentsStore.reconcile("pay-2");
     expect(snapshot(paymentsStore).message).toBe("Платіж зведено");
 
@@ -397,5 +407,26 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
 
     await settingsStore.openLatestBackup();
     expect(snapshot(settingsStore).message).toContain("storage/backups/latest.zip");
+  });
+
+  it("keeps the sidebar theme toggle on the persisted settings flow", () => {
+    expect(appSource).toContain("async function onQuickThemeToggle()");
+    expect(appSource).toContain("settings.savePreferences()");
+    expect(appSource).toContain("shell.load()");
+    expect(appSource).toContain("shellState.isDark");
+    expect(appSource).toContain("on:click={onQuickThemeToggle}");
+    expect(appSource).not.toContain("on:click={() => theme.toggle()}");
+  });
+
+  it("keeps unused document commands out of the public Tauri invoke surface", () => {
+    for (const command of [
+      "document_prepare_new",
+      "documents_bulk_advance_status",
+      "documents_bulk_delete"
+    ]) {
+      expect(frontendApiSource).not.toContain(command);
+      expect(tauriLibSource).not.toContain(command);
+      expect(tauriDocumentsSource).not.toContain(`fn ${command}`);
+    }
   });
 });

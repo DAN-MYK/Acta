@@ -2,7 +2,7 @@ import { writable } from "svelte/store";
 import type { ScreenId } from "../types";
 
 function createNavigationStore() {
-  const { subscribe, set } = writable<ScreenId>("documents");
+  const { subscribe, set } = writable<ScreenId>("dashboard");
 
   return {
     subscribe,

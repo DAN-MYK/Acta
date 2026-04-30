@@ -134,7 +134,7 @@ function createPaymentsStore() {
           date: payment.date,
           amount: payment.amountStr,
           direction: payment.direction === "in" ? "income" : "expense",
-          counterpartyId: "",
+          counterpartyId: payment.counterpartyId,
           counterpartyName: payment.counterparty,
           bankName: payment.account,
           reference: "",
@@ -146,6 +146,32 @@ function createPaymentsStore() {
           message: null
         }));
       }
+    },
+
+    async openById(paymentId: string) {
+      let state = get({ subscribe });
+      if (!state.list) {
+        await loadPayments();
+        state = get({ subscribe });
+      }
+
+      let payment = state.list?.items.find((item) => item.id === paymentId);
+      if (!payment) {
+        await loadPayments();
+        state = get({ subscribe });
+        payment = state.list?.items.find((item) => item.id === paymentId);
+      }
+
+      if (!payment) {
+        update((current) => ({
+          ...current,
+          message: "Платіж не знайдено у поточному списку"
+        }));
+        return false;
+      }
+
+      this.openEditor(payment);
+      return true;
     },
 
     closeEditor() {

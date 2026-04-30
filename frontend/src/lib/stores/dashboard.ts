@@ -16,17 +16,25 @@ const initialState: DashboardState = {
 
 function createDashboardStore() {
   const { subscribe, update } = writable<DashboardState>(initialState);
+  let latestRequestId = 0;
 
   return {
     subscribe,
     async load() {
+      const requestId = ++latestRequestId;
       update((state) => ({ ...state, loading: true, error: null }));
 
       try {
         const screen = await dashboardLoad();
-        update((state) => ({ ...state, screen, loading: false }));
+        if (requestId === latestRequestId) {
+          update((state) => ({ ...state, screen, loading: false }));
+        }
+        return screen;
       } catch (error) {
-        update((state) => ({ ...state, loading: false, error: String(error) }));
+        if (requestId === latestRequestId) {
+          update((state) => ({ ...state, loading: false, error: String(error) }));
+        }
+        return null;
       }
     }
   };
