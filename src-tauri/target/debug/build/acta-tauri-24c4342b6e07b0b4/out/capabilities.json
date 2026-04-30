@@ -1,1 +1,0 @@
-{"default":{"identifier":"default","description":"Базова capability для головного Tauri вікна Acta.","local":true,"windows":["main"],"permissions":["core:default"]}}
