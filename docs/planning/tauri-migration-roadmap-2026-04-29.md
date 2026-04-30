@@ -112,6 +112,53 @@
 
 ## Етап 5. Перенос feature screens
 
+### Статус на 2026-04-30
+
+- `dashboard` більше не є placeholder у Tauri UI.
+- Пілотний екран працює через `dashboard_load` + `frontend/src/lib/stores/dashboard.ts` і тягне дані з Rust backend для KPI, cashflow, останніх актів, найближчих платежів і задач у фокусі.
+- Канонічний Slint baseline для parity-аудиту зараз лежить у `.worktrees/sprint-2026-04-24/ui/dashboard.slint` та `.worktrees/sprint-2026-04-24/src/ui/dashboard.rs`, а не в root `ui/`, як у старішій документації.
+- Dashboard parity зі Slint ще не досягнуто: Tauri покриває лише backend-backed operational slice, але ще не переносить Slint `inbox` mode, journal table, блок рахунків, dashboard-local task actions, YTD/delta/sparkline метрики та chart-first layout.
+- Наступні vertical slices залишаються: `documents`, `counterparties`, `payments`, `tasks`, `reports`, `settings`.
+
+### Dashboard parity note — аудит 2026-04-30
+
+Базові джерела для звірки:
+
+- Slint UI: `.worktrees/sprint-2026-04-24/ui/dashboard.slint`
+- Slint wiring/data prep: `.worktrees/sprint-2026-04-24/src/ui/dashboard.rs`
+- Tauri screen: `frontend/src/lib/screens/DashboardScreen.svelte`
+- Tauri store/API/backend: `frontend/src/lib/stores/dashboard.ts`, `frontend/src/lib/api.ts`, `src/tauri_api/dashboard.rs`, `src-tauri/src/commands/dashboard.rs`
+
+#### Що вже перенесено
+
+- Dashboard у Tauri завантажується окремою командою `dashboard_load`.
+- Дані йдуть з реального Rust backend, а не з frontend mock state.
+- На екрані вже є п'ять реальних секцій: KPI summary, cashflow, recent acts, upcoming payments і urgent tasks.
+- Доступний refresh поточного slice, переходи до `documents`, `payments`, `tasks`, а також drill-in у document/task flows.
+- Клік по recent act переводить на `documents` і викликає `documents.open(docId)`; клік по urgent task переводить на `tasks` і викликає `tasks.openEditor(taskId)`.
+
+#### Що перенесено частково
+
+- KPI перенесені як новий Tauri-набір, але це не 1:1 зі Slint KPI strip: у Slint були `дохід`, `витрати`, `чистий прибуток`, `заборгованість`, `прострочка`, delta-рядки та sparklines, а в Tauri зараз інший набір business counters без цих visual/data affordances.
+- Cashflow перенесено по даних, але не по UI-flow: Slint мав bar chart з легендою, YTD summary і empty-state навколо normalized bars; Tauri зараз показує read-only tabular/list presentation тих самих місячних агрегатів.
+- Tasks slice на dashboard перенесено як список urgent tasks, але не як interactive sidebar widget зі switch done/open і quick add прямо з dashboard.
+- Recent documents перенесено лише для актів; Slint journal показував ширший operational log із колонками `дата / id / операція / контрагент / дебет / кредит / статус`.
+- Upcoming payments присутні як backend-backed список, але тільки як read-only rows без row-level drill-in, reconcile або dashboard-specific quick action.
+
+#### Що свідомо опущено або відкладено
+
+- `Inbox`/`Вхідні` режим старого dashboard.
+- Sidebar блок `Рахунки` з total balance.
+- Dashboard-local task toggle і quick add.
+- Journal-level filters/buttons типу `Усі типи` / `Всі операції`.
+- Slint-specific visual parity: KPI strip, right sidebar, chart-first composition, sparkline usage.
+
+#### Що ще бракує для parity
+
+1. Або перенести `journal + inbox + accounts` як окремі Tauri sections, або формально зафіксувати їх як deliberate cut із новим product contract.
+2. Визначити долю dashboard-specific actions зі Slint: task toggle, new task, all tasks, all operations, inbox actions.
+3. Вирівняти data contract: або дотягнути Tauri до Slint метрик/YTD/delta, або явно зафіксувати dashboard як redesign з частковим reuse backend-агрегатів, а не як strict parity migration.
+
 ### Рекомендований порядок
 
 1. `dashboard`
@@ -257,3 +304,12 @@
 - [tauri-migration-audit-2026-04-29.md](./tauri-migration-audit-2026-04-29.md)
 - [tauri-migration-contract-matrix-2026-04-29.md](./tauri-migration-contract-matrix-2026-04-29.md)
 - [tauri-documents-command-spec-2026-04-29.md](./tauri-documents-command-spec-2026-04-29.md)
+- [dashboard-migration-contract-2026-04-30.md](./dashboard-migration-contract-2026-04-30.md)
+
+### Dashboard migration contract
+
+- `dashboard implemented`
+- `dashboard parity partial by design`
+- `redesign-first, not strict Slint parity`
+
+Dashboard: реалізовано у Tauri як redesign-first screen; strict parity зі Slint не є поточною ціллю.
