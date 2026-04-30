@@ -225,7 +225,7 @@
                       <div class="reports-table-row reports-table-wide" class:error={!!entity.error}>
                         <span>{entity.entityType}</span>
                         <span>{entity.fileName || "—"}</span>
-                        <span>{entity.parsed || "—"}</span>
+                        <span>{entity.fileName ? entity.parsed : "—"}</span>
                         <span>
                           {#if entity.error}
                             {entity.error}
@@ -242,7 +242,7 @@
                     <button
                       class="action-button compact"
                       on:click={() => importBas.execute()}
-                      disabled={$importBas.loading}
+                      disabled={$importBas.loading || $importBas.plan!.entities.every(e => !e.fileName || !!e.error)}
                     >
                       <AppIcon name="save" size={14} />
                       <span>{$importBas.loading ? "Виконання..." : "Виконати імпорт"}</span>
