@@ -27,7 +27,9 @@ import type {
   TaskEditorDto,
   TaskMutationResultDto,
   TaskSaveResultDto,
-  TasksScreenDto
+  TasksScreenDto,
+  ImportPlanDto,
+  ImportResultDto
 } from "./types";
 
 export function shellLoad(): Promise<ShellStateDto> {
@@ -280,3 +282,6 @@ export function paymentReconcile(paymentId: string): Promise<MutationResultDto> 
 export function paymentUnreconcile(paymentId: string): Promise<MutationResultDto> {
   return invoke("payment_unreconcile", { paymentId });
 }
+
+export const importBasPlan = () => invoke<ImportPlanDto>("import_bas_plan");
+export const importBasExecute = () => invoke<ImportResultDto>("import_bas_execute");

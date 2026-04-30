@@ -472,3 +472,29 @@ export interface SettingsActionResultDto {
   message: string;
   path: string;
 }
+
+export interface ImportEntityPlanDto {
+  entityType: string;
+  fileName: string;
+  parsed: number;
+  willCreate: number;
+  willSkip: number;
+  error: string | null;
+}
+
+export interface ImportPlanDto {
+  entities: ImportEntityPlanDto[];
+}
+
+export interface ImportEntityResultDto {
+  entityType: string;
+  created: number;
+  updated: number;
+  skipped: number;
+  conflicts: number;
+  error: string | null;
+}
+
+export interface ImportResultDto {
+  entities: ImportEntityResultDto[];
+}
