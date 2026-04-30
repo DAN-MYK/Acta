@@ -1,0 +1,114 @@
+/* Канонічні web-токени, перенесені з Slint AppTheme. */
+:root {
+  --font-sans: "Geist", "Segoe UI", sans-serif;
+  --font-serif: "Source Serif 4", Georgia, serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", monospace;
+
+  --font-xs: 10px;
+  --font-sm: 11px;
+  --font-body: 13px;
+  --font-md: 15px;
+  --font-lg: 20px;
+  --font-xl: 26px;
+  --font-2xl: 28px;
+  --font-3xl: 32px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-3xl: 24px;
+
+  --bg: #f4f1ea;
+  --bg-elevated: #fffdf8;
+  --bg-subtle: #ece6da;
+  --bg-hover: #e2dbcf;
+  --bg-sidebar: #e9e2d5;
+  --bg-stripe: #f8f4ec;
+  --bg-glass: rgba(255, 253, 248, 0.72);
+  --bg-overlay: rgba(6, 11, 14, 0.38);
+  --bg-field: rgba(255, 253, 248, 0.74);
+  --bg-card: rgba(255, 253, 248, 0.68);
+  --bg-card-strong: rgba(255, 253, 248, 0.86);
+
+  --border: #d8d0c1;
+  --border-strong: #c5bba7;
+  --border-hairline: rgba(58, 66, 74, 0.12);
+
+  --text: #18181b;
+  --text-muted: #57534e;
+  --text-faint: #78716c;
+  --text-on-accent: #fffdf8;
+
+  --accent: #315ee8;
+  --accent-hover: #2448ba;
+  --accent-soft: #e1e9ff;
+  --accent-text: #2748b8;
+
+  --success: #1eb16e;
+  --success-soft: #e4f5ec;
+  --warning: #c77a1c;
+  --warning-soft: #f7ecd9;
+  --danger: #c0433b;
+  --danger-soft: #f6e3e0;
+  --info: #4a6fa5;
+  --info-soft: #e6ebf2;
+
+  --surface-blur: blur(18px);
+  --floating-shadow: 0 18px 48px rgba(20, 35, 45, 0.08);
+  --page-bg:
+    radial-gradient(circle at top left, rgba(49, 94, 232, 0.12), transparent 28%),
+    linear-gradient(160deg, var(--bg) 0%, var(--bg-sidebar) 48%, #e5ecef 100%);
+}
+
+body[data-theme="dark"] {
+  --bg: #22262f;
+  --bg-elevated: #2c313b;
+  --bg-subtle: #363c47;
+  --bg-hover: #414754;
+  --bg-sidebar: #1b1f27;
+  --bg-stripe: #2b3039;
+  --bg-glass: rgba(16, 22, 27, 0.74);
+  --bg-overlay: rgba(6, 11, 14, 0.56);
+  --bg-field: rgba(44, 49, 59, 0.8);
+  --bg-card: rgba(16, 22, 27, 0.82);
+  --bg-card-strong: rgba(16, 22, 27, 0.86);
+
+  --border: #474f5c;
+  --border-strong: #60697a;
+  --border-hairline: rgba(255, 255, 255, 0.1);
+
+  --text: #f3f4f7;
+  --text-muted: #b8bdc8;
+  --text-faint: #8f95a3;
+  --text-on-accent: #fffdf8;
+
+  --accent: #8fabff;
+  --accent-hover: #abc0ff;
+  --accent-soft: #2f4063;
+  --accent-text: #afc5ff;
+
+  --success: #5de0a6;
+  --success-soft: #1f4633;
+  --warning: #efb267;
+  --warning-soft: #4a3b22;
+  --danger: #ef8880;
+  --danger-soft: #4a2c29;
+  --info: #9ab4e1;
+  --info-soft: #2a3a56;
+
+  --floating-shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
+  --page-bg:
+    radial-gradient(circle at top left, rgba(143, 171, 255, 0.18), transparent 24%),
+    linear-gradient(160deg, var(--bg) 0%, var(--bg-sidebar) 42%, #222c2d 100%);
+}
