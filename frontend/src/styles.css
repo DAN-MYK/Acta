@@ -763,7 +763,6 @@ body[data-theme="dark"] .card-title span {
 }
 
 .card-title,
-.cashflow-row,
 .dashboard-list-row {
   display: flex;
   justify-content: space-between;
@@ -777,31 +776,39 @@ body[data-theme="dark"] .card-title span {
 
 .cashflow-list {
   display: grid;
-  gap: 12px;
+  gap: 0;
   margin-top: 16px;
 }
 
 .cashflow-row {
-  padding: 12px 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(3, 110px);
+  gap: 0 16px;
+  align-items: center;
+  padding: 10px 0;
   border-top: 1px solid var(--border-hairline);
 }
 
-.cashflow-row span,
-.cashflow-bars {
-  display: block;
+.cashflow-row.cashflow-head {
+  border-top: 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  padding-bottom: 6px;
 }
 
-.cashflow-bars {
-  text-align: right;
-  font-size: 0.9rem;
-}
-
-.cashflow-bars .income {
+.cashflow-income {
   color: var(--success);
+  text-align: right;
 }
 
-.cashflow-bars .expense {
+.cashflow-expense {
   color: var(--warning);
+  text-align: right;
+}
+
+.cashflow-net {
+  font-weight: 600;
+  text-align: right;
 }
 
 .dashboard-list-row {

@@ -59,16 +59,18 @@
         <span>Останні 90 днів</span>
       </div>
       <div class="cashflow-list">
+        <div class="cashflow-row cashflow-head">
+          <span style="text-align:left">Місяць</span>
+          <span style="text-align:right">Нетто</span>
+          <span style="text-align:right">Надходження</span>
+          <span style="text-align:right">Витрати</span>
+        </div>
         {#each $dashboard.screen?.cashflowRows ?? [] as row}
           <div class="cashflow-row">
-            <div>
-              <strong>{row.label}</strong>
-              <span>{row.netStr}</span>
-            </div>
-            <div class="cashflow-bars">
-              <span class="income">{row.incomeStr}</span>
-              <span class="expense">{row.expenseStr}</span>
-            </div>
+            <strong>{row.label}</strong>
+            <span class="cashflow-net">{row.netStr}</span>
+            <span class="cashflow-income">{row.incomeStr}</span>
+            <span class="cashflow-expense">{row.expenseStr}</span>
           </div>
         {/each}
       </div>
