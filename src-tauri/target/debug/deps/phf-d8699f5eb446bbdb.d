@@ -1,0 +1,11 @@
+C:\Users\MykhailoDan\apps\Acta\src-tauri\target\debug\deps\phf-d8699f5eb446bbdb.d: C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\phf-0.10.1\src\lib.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\phf-0.10.1\src\map.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\phf-0.10.1\src\ordered_map.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\phf-0.10.1\src\ordered_set.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\phf-0.10.1\src\set.rs
+
+C:\Users\MykhailoDan\apps\Acta\src-tauri\target\debug\deps\libphf-d8699f5eb446bbdb.rlib: C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\phf-0.10.1\src\lib.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\phf-0.10.1\src\map.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\phf-0.10.1\src\ordered_map.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\phf-0.10.1\src\ordered_set.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\phf-0.10.1\src\set.rs
+
+C:\Users\MykhailoDan\apps\Acta\src-tauri\target\debug\deps\libphf-d8699f5eb446bbdb.rmeta: C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\phf-0.10.1\src\lib.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\phf-0.10.1\src\map.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\phf-0.10.1\src\ordered_map.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\phf-0.10.1\src\ordered_set.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\phf-0.10.1\src\set.rs
+
+C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\phf-0.10.1\src\lib.rs:
+C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\phf-0.10.1\src\map.rs:
+C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\phf-0.10.1\src\ordered_map.rs:
+C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\phf-0.10.1\src\ordered_set.rs:
+C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\phf-0.10.1\src\set.rs:

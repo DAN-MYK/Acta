@@ -1,0 +1,11 @@
+C:\Users\MykhailoDan\apps\Acta\src-tauri\target\debug\deps\v_frame-b960a0989fa8a1bd.d: C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\v_frame-0.3.9\src\lib.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\v_frame-0.3.9\src\frame.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\v_frame-0.3.9\src\math.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\v_frame-0.3.9\src\pixel.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\v_frame-0.3.9\src\plane.rs
+
+C:\Users\MykhailoDan\apps\Acta\src-tauri\target\debug\deps\libv_frame-b960a0989fa8a1bd.rlib: C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\v_frame-0.3.9\src\lib.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\v_frame-0.3.9\src\frame.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\v_frame-0.3.9\src\math.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\v_frame-0.3.9\src\pixel.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\v_frame-0.3.9\src\plane.rs
+
+C:\Users\MykhailoDan\apps\Acta\src-tauri\target\debug\deps\libv_frame-b960a0989fa8a1bd.rmeta: C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\v_frame-0.3.9\src\lib.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\v_frame-0.3.9\src\frame.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\v_frame-0.3.9\src\math.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\v_frame-0.3.9\src\pixel.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\v_frame-0.3.9\src\plane.rs
+
+C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\v_frame-0.3.9\src\lib.rs:
+C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\v_frame-0.3.9\src\frame.rs:
+C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\v_frame-0.3.9\src\math.rs:
+C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\v_frame-0.3.9\src\pixel.rs:
+C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\v_frame-0.3.9\src\plane.rs:

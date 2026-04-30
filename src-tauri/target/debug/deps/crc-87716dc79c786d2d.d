@@ -1,0 +1,12 @@
+C:\Users\MykhailoDan\apps\Acta\src-tauri\target\debug\deps\crc-87716dc79c786d2d.d: C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\crc-3.4.0\src\lib.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\crc-3.4.0\src\crc128.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\crc-3.4.0\src\crc16.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\crc-3.4.0\src\crc32.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\crc-3.4.0\src\crc64.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\crc-3.4.0\src\crc8.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\crc-3.4.0\src\table.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\crc-3.4.0\src\util.rs
+
+C:\Users\MykhailoDan\apps\Acta\src-tauri\target\debug\deps\libcrc-87716dc79c786d2d.rmeta: C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\crc-3.4.0\src\lib.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\crc-3.4.0\src\crc128.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\crc-3.4.0\src\crc16.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\crc-3.4.0\src\crc32.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\crc-3.4.0\src\crc64.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\crc-3.4.0\src\crc8.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\crc-3.4.0\src\table.rs C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\crc-3.4.0\src\util.rs
+
+C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\crc-3.4.0\src\lib.rs:
+C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\crc-3.4.0\src\crc128.rs:
+C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\crc-3.4.0\src\crc16.rs:
+C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\crc-3.4.0\src\crc32.rs:
+C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\crc-3.4.0\src\crc64.rs:
+C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\crc-3.4.0\src\crc8.rs:
+C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\crc-3.4.0\src\table.rs:
+C:\Users\MykhailoDan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\crc-3.4.0\src\util.rs:

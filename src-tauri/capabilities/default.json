@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Базова capability для головного Tauri вікна Acta.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}
