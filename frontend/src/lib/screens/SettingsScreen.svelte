@@ -3,10 +3,15 @@
   import { shellStore } from "../stores/shell";
   import { themeStore } from "../stores/theme";
   import type { SettingsCompanyDto, SettingsSection } from "../types";
+  import AppIcon from "../components/AppIcon.svelte";
+  import { importStore } from "../stores/import";
 
   const settings = settingsStore;
   const shell = shellStore;
   const theme = themeStore;
+
+  const importBas = importStore;
+  let showBasImport = false;
 
   const settingsSections: Array<[SettingsSection, string]> = [
     ["appearance", "Зовнішній вигляд"],
@@ -164,7 +169,7 @@
         </div>
       {:else if $settings.section === "integrations"}
         <div class="settings-card">
-          <h3>Інтеграції</h3>
+          <h3 class="title-with-icon"><AppIcon name="integrations" surface={true} size={18} /><span>Інтеграції</span></h3>
           <div class="linked-list">
             {#each $settings.screen?.integrations ?? [] as integration}
               <div class="settings-row">
@@ -174,13 +179,111 @@
                 </div>
                 <div class="settings-row-actions">
                   <span>{integration.enabled ? "Активно" : "Вимкнено"}</span>
-                  <button on:click={() => settings.configureIntegration(integration.tag)}>
-                    {integration.enabled ? "Налаштувати" : "Підключити"}
+                  <button class="action-button compact" on:click={() => settings.configureIntegration(integration.tag)}>
+                    <AppIcon name={integration.enabled ? "edit" : "add"} size={14} />
+                    <span>{integration.enabled ? "Налаштувати" : "Підключити"}</span>
                   </button>
+                  {#if integration.tag === "bas"}
+                    <button
+                      class="action-button compact"
+                      on:click={() => { showBasImport = !showBasImport; if (!showBasImport) importBas.reset(); }}
+                    >
+                      <AppIcon name="import" size={14} />
+                      <span>Імпортувати</span>
+                    </button>
+                  {/if}
                 </div>
               </div>
             {/each}
           </div>
+
+          {#if showBasImport}
+            <div class="settings-card" style="margin-top: 1rem;">
+              {#if $importBas.error}
+                <p class="error">{$importBas.error}</p>
+              {/if}
+
+              {#if $importBas.result === null}
+                <p>Помістіть файли BAS у <code>storage/import/bas/</code></p>
+                <div class="settings-actions-row" style="margin-top: 0.5rem;">
+                  <button
+                    class="action-button compact"
+                    on:click={() => importBas.plan()}
+                    disabled={$importBas.loading}
+                  >
+                    <AppIcon name="refresh" size={14} />
+                    <span>{$importBas.loading ? "Перевірка..." : "Перевірити файли"}</span>
+                  </button>
+                </div>
+
+                {#if $importBas.plan !== null}
+                  <div class="reports-table" style="margin-top: 1rem;">
+                    <div class="reports-table-row reports-table-head reports-table-wide">
+                      <span>Тип</span><span>Файл</span><span>Записів</span><span>Новий / Дублікат</span>
+                    </div>
+                    {#each $importBas.plan.entities as entity}
+                      <div class="reports-table-row reports-table-wide" class:error={!!entity.error}>
+                        <span>{entity.entityType}</span>
+                        <span>{entity.fileName || "—"}</span>
+                        <span>{entity.parsed || "—"}</span>
+                        <span>
+                          {#if entity.error}
+                            {entity.error}
+                          {:else if entity.entityType === "payments" && entity.fileName}
+                            {entity.willCreate} нових / {entity.willSkip} дублікатів
+                          {:else}
+                            —
+                          {/if}
+                        </span>
+                      </div>
+                    {/each}
+                  </div>
+                  <div class="settings-actions-row" style="margin-top: 0.5rem;">
+                    <button
+                      class="action-button compact"
+                      on:click={() => importBas.execute()}
+                      disabled={$importBas.loading}
+                    >
+                      <AppIcon name="save" size={14} />
+                      <span>{$importBas.loading ? "Виконання..." : "Виконати імпорт"}</span>
+                    </button>
+                    <button
+                      class="action-button compact"
+                      on:click={() => { showBasImport = false; importBas.reset(); }}
+                    >
+                      <span>Скасувати</span>
+                    </button>
+                  </div>
+                {/if}
+              {:else}
+                <div class="reports-table">
+                  <div class="reports-table-row reports-table-head reports-table-wide">
+                    <span>Тип</span><span>Створено</span><span>Оновлено</span><span>Пропущено</span><span>Конфлікти</span>
+                  </div>
+                  {#each $importBas.result.entities as entity}
+                    <div class="reports-table-row reports-table-wide" class:error={!!entity.error}>
+                      <span>{entity.entityType}</span>
+                      <span>{entity.created}</span>
+                      <span>{entity.updated}</span>
+                      <span>{entity.skipped}</span>
+                      <span>{entity.conflicts}</span>
+                    </div>
+                  {/each}
+                </div>
+                {#each $importBas.result.entities.filter((e) => e.error) as entity}
+                  <p class="error">{entity.entityType}: {entity.error}</p>
+                {/each}
+                <div class="settings-actions-row" style="margin-top: 0.5rem;">
+                  <button
+                    class="action-button compact"
+                    on:click={() => { showBasImport = false; importBas.reset(); }}
+                  >
+                    <span>Закрити</span>
+                  </button>
+                </div>
+              {/if}
+            </div>
+          {/if}
         </div>
       {:else if $settings.section === "team"}
         <div class="settings-card">
