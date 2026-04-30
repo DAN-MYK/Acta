@@ -1,4 +1,4 @@
-import { writable } from "svelte/store";
+import { get, writable } from "svelte/store";
 import {
   paymentsList,
   paymentsImportLatestCsv,
@@ -33,6 +33,21 @@ function createPaymentsStore() {
     message: null
   });
 
+  async function loadPayments() {
+    update((state) => ({ ...state, loading: true, error: null }));
+    try {
+      const list = await paymentsList();
+      update((state) => ({ ...state, list, loading: false }));
+    } catch (error) {
+      update((state) => ({ ...state, loading: false, error: String(error) }));
+    }
+  }
+
+  async function refreshAfterMutation(message: string) {
+    update((state) => ({ ...state, message }));
+    await loadPayments();
+  }
+
   const createBlankForm = (): PaymentDraftFormDto => ({
     id: "",
     date: "",
@@ -49,21 +64,14 @@ function createPaymentsStore() {
     subscribe,
 
     async load() {
-      update((state) => ({ ...state, loading: true, error: null }));
-      try {
-        const list = await paymentsList();
-        update((state) => ({ ...state, list, loading: false }));
-      } catch (error) {
-        update((state) => ({ ...state, loading: false, error: String(error) }));
-      }
+      await loadPayments();
     },
 
     async importCsv(): Promise<MutationResultDto> {
       try {
         const result = await paymentsImportLatestCsv();
         if (result.ok) {
-          update((state) => ({ ...state, message: result.message }));
-          await this.load();
+          await refreshAfterMutation(result.message);
         } else {
           update((state) => ({ ...state, message: result.message }));
         }
@@ -79,8 +87,7 @@ function createPaymentsStore() {
       try {
         const result = await paymentsSyncBank();
         if (result.ok) {
-          update((state) => ({ ...state, message: result.message }));
-          await this.load();
+          await refreshAfterMutation(result.message);
         } else {
           update((state) => ({ ...state, message: result.message }));
         }
@@ -96,36 +103,32 @@ function createPaymentsStore() {
       try {
         const result = await paymentReconcile(id);
         if (result.ok) {
-          update((state) => ({ ...state, message: result.message }));
+          await refreshAfterMutation(result.message);
         }
       } catch (error) {
         update((state) => ({ ...state, message: String(error) }));
       }
-      await this.load();
     },
 
     async unreconcile(id: string) {
       try {
         const result = await paymentUnreconcile(id);
         if (result.ok) {
-          update((state) => ({ ...state, message: result.message }));
+          await refreshAfterMutation(result.message);
         }
       } catch (error) {
         update((state) => ({ ...state, message: String(error) }));
       }
-      await this.load();
     },
 
     openEditor(payment?: PaymentItemDto) {
       if (!payment) {
-        // Create new payment with blank form
         update((state) => ({
           ...state,
           editor: createBlankForm(),
           message: null
         }));
       } else {
-        // Pre-fill form from existing payment
         const editor: PaymentDraftFormDto = {
           id: payment.id,
           date: payment.date,
@@ -169,32 +172,23 @@ function createPaymentsStore() {
     },
 
     async save() {
-      update((state) => {
-        if (!state.editor) return state;
-        return { ...state, loading: true, error: null };
-      });
+      const editor = get({ subscribe }).editor;
+      if (!editor) {
+        return { ok: false, message: "Немає відкритого платежу для збереження" };
+      }
+
+      update((state) => ({ ...state, loading: true, error: null }));
 
       try {
-        let editor: PaymentDraftFormDto | null = null;
-        update((state) => {
-          editor = state.editor;
-          return state;
-        });
-
-        if (!editor) {
-          throw new Error("No editor state");
-        }
-
         const result = await paymentCreateOrUpdate(editor);
 
         if (result.ok) {
           update((state) => ({
             ...state,
             message: result.message,
-            editor: null,
-            loading: false
+            editor: null
           }));
-          await this.load();
+          await loadPayments();
         } else {
           update((state) => ({
             ...state,

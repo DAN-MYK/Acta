@@ -260,6 +260,10 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     await paymentsStore.load();
     expect(snapshot(paymentsStore).list?.items).toHaveLength(1);
 
+    const emptySave = await paymentsStore.save();
+    expect(emptySave.ok).toBe(false);
+    expect(invokeMock.mock.calls.filter(([command]) => command === "payment_create_or_update")).toHaveLength(0);
+
     paymentsStore.openEditor();
     paymentsStore.updateFormField("amount", "1000.00");
     await paymentsStore.save();
@@ -279,6 +283,8 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     const syncResult = await paymentsStore.syncBank();
     expect(syncResult.ok).toBe(true);
     expect(snapshot(paymentsStore).message).toBe("Банк синхронізовано");
+
+    expect(invokeMock.mock.calls.filter(([command]) => command === "payments_list")).toHaveLength(6);
 
     const templateResult = await paymentsStore.openManualTemplate();
     expect(templateResult.path).toContain("manual-template.csv");
