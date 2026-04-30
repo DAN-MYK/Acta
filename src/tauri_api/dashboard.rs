@@ -1,8 +1,10 @@
 use anyhow::Result;
+use chrono::{Datelike, Local, NaiveDate};
 use serde::{Deserialize, Serialize};
 
 use crate::app_ctx::AppCtx;
 use crate::db;
+use crate::models::payment::PaymentDirection;
 
 use super::documents::{self, DocumentItemDto, DocumentsListRequest};
 use super::payments;
@@ -59,6 +61,28 @@ fn format_money_ua(value: rust_decimal::Decimal) -> String {
     format!("{sign}{grouped},{frac} грн")
 }
 
+fn format_short_date_label(value: &str) -> String {
+    let month_abbr = |month: u32| match month {
+        1 => "січ",
+        2 => "лют",
+        3 => "бер",
+        4 => "кві",
+        5 => "тра",
+        6 => "чер",
+        7 => "лип",
+        8 => "сер",
+        9 => "вер",
+        10 => "жов",
+        11 => "лис",
+        12 => "гру",
+        _ => "???",
+    };
+
+    NaiveDate::parse_from_str(value, "%d.%m.%Y")
+        .map(|date| format!("{:02} {}", date.day(), month_abbr(date.month())))
+        .unwrap_or_else(|_| value.to_string())
+}
+
 pub async fn dashboard_load(ctx: &AppCtx) -> Result<DashboardScreenDto> {
     let reports_request = ReportsLoadRequest {
         tab: Some("bank".to_string()),
@@ -68,13 +92,26 @@ pub async fn dashboard_load(ctx: &AppCtx) -> Result<DashboardScreenDto> {
         query: None,
     };
 
-    let (reports, documents, payments, upcoming_payments, tasks) = tokio::try_join!(
+    let (reports, documents, payments, payment_rows, tasks) = tokio::try_join!(
         reports::reports_load(ctx, reports_request),
         documents::documents_list(ctx, DocumentsListRequest::default()),
         payments::payments_list(ctx),
-        db::dashboard::upcoming_payments(ctx.pool(), ctx.company_id(), 5),
+        db::payments::list(ctx.pool(), ctx.company_id(), Some(PaymentDirection::Income)),
         tasks::tasks_list(ctx, TasksListRequest::default()),
     )?;
+
+    let today = Local::now().date_naive();
+    let mut upcoming_payments = payment_rows
+        .into_iter()
+        .filter(|payment| !payment.is_reconciled)
+        .filter_map(|payment| {
+            NaiveDate::parse_from_str(&payment.date, "%d.%m.%Y")
+                .ok()
+                .map(|date| (date, payment))
+        })
+        .collect::<Vec<_>>();
+
+    upcoming_payments.sort_by_key(|(date, _)| (*date > today, *date));
 
     let kpis = vec![
         DashboardKpiDto {
@@ -124,12 +161,15 @@ pub async fn dashboard_load(ctx: &AppCtx) -> Result<DashboardScreenDto> {
         recent_documents: documents.items.into_iter().take(6).collect(),
         upcoming_payments: upcoming_payments
             .into_iter()
-            .map(|payment| DashboardUpcomingPaymentDto {
-                id: payment.id,
-                date_label: payment.date_label,
-                contractor: payment.contractor,
+            .take(5)
+            .map(|(date, payment)| DashboardUpcomingPaymentDto {
+                id: payment.id.to_string(),
+                date_label: format_short_date_label(&payment.date),
+                contractor: payment
+                    .counterparty_name
+                    .unwrap_or_else(|| "Без контрагента".to_string()),
                 amount_str: format_money_ua(payment.amount),
-                is_overdue: payment.is_overdue,
+                is_overdue: date <= today,
             })
             .collect(),
         urgent_tasks: tasks.items.into_iter().take(5).collect(),
