@@ -87,8 +87,8 @@
         <p>Картка платежу</p>
       </div>
       <div class="editor-actions">
-        <button on:click={() => payments.save()}>Зберегти</button>
-        <button on:click={() => payments.closeEditor()}>Закрити</button>
+        <button class="btn-primary" on:click={() => payments.save()}>Зберегти</button>
+        <button class="btn-ghost" on:click={() => payments.closeEditor()}>Закрити</button>
       </div>
     </div>
 

@@ -194,11 +194,11 @@
         <p>{$documents.editor.form.counterpartyName}</p>
       </div>
       <div class="editor-actions">
-        <button on:click={() => documents.addItem()}>Додати позицію</button>
-        <button on:click={() => documents.save()}>Зберегти</button>
-        <button on:click={() => documents.advanceStatus()}>Наступний статус</button>
-        <button class="ghost-danger" on:click={onDeleteCurrent}>Видалити</button>
-        <button on:click={() => documents.closeEditor()}>Закрити</button>
+        <button class="btn-ghost" on:click={() => documents.addItem()}>Додати позицію</button>
+        <button class="btn-primary" on:click={() => documents.save()}>Зберегти</button>
+        <button class="btn-ghost" on:click={() => documents.advanceStatus()}>Наступний статус</button>
+        <button class="btn-danger" on:click={onDeleteCurrent}>Видалити</button>
+        <button class="btn-ghost" on:click={() => documents.closeEditor()}>Закрити</button>
       </div>
     </div>
 

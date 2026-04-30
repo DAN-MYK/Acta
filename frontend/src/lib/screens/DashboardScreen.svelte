@@ -33,7 +33,7 @@
       <h2>Дашборд</h2>
       <p>Операційна картина по активній компанії</p>
     </div>
-    <button on:click={() => dashboard.load()} disabled={$dashboard.loading}>
+    <button class="btn-ghost" on:click={() => dashboard.load()} disabled={$dashboard.loading}>
       {$dashboard.loading ? "Оновлення..." : "Оновити"}
     </button>
   </div>
