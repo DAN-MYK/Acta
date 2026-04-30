@@ -1,4 +1,5 @@
 pub mod counterparties;
+pub mod dashboard;
 pub mod documents;
 pub mod payments;
 pub mod reports;

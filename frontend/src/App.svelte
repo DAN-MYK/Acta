@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { counterpartiesStore } from "./lib/stores/counterparties";
+  import { dashboardStore } from "./lib/stores/dashboard";
   import { documentsStore } from "./lib/stores/documents";
   import { navigationStore } from "./lib/stores/navigation";
   import { paletteStore } from "./lib/stores/palette";
@@ -28,6 +29,7 @@
   const shell = shellStore;
   const palette = paletteStore;
   const theme = themeStore;
+  const dashboard = dashboardStore;
   const documents = documentsStore;
   const counterparties = counterpartiesStore;
   const tasks = tasksStore;
@@ -79,7 +81,14 @@
     if (settingsScreen) {
       theme.setMode(settingsScreen.preferences.darkMode ? "dark" : "light");
     }
-    await Promise.all([documents.load(), counterparties.load(), tasks.load(), reports.load(), payments.load()]);
+    await Promise.all([
+      dashboard.load(),
+      documents.load(),
+      counterparties.load(),
+      tasks.load(),
+      reports.load(),
+      payments.load()
+    ]);
   });
 
   $: if ($palette.open) {
@@ -126,7 +135,14 @@
     if (settingsScreen) {
       theme.setMode(settingsScreen.preferences.darkMode ? "dark" : "light");
     }
-    await Promise.all([documents.load(), counterparties.load(), tasks.load(), reports.load(), payments.load()]);
+    await Promise.all([
+      dashboard.load(),
+      documents.load(),
+      counterparties.load(),
+      tasks.load(),
+      reports.load(),
+      payments.load()
+    ]);
   }
 
   async function onQuickThemeToggle() {
@@ -139,6 +155,16 @@
 
   function onCreateDraft() {
     void documents.create(createCounterpartyId, createKind);
+  }
+
+  function openDashboardDocument(docId: string) {
+    navigation.go("documents");
+    void documents.open(docId);
+  }
+
+  function openDashboardTask(taskId: string) {
+    navigation.go("tasks");
+    void tasks.openEditor(taskId);
   }
 
   function onEditorNumberChange(event: Event) {
@@ -342,7 +368,82 @@
       </div>
     </header>
 
-    {#if currentScreen === "documents"}
+    {#if currentScreen === "dashboard"}
+      <section class="panel dashboard-panel">
+        <div class="panel-header">
+          <div>
+            <h2>Дашборд</h2>
+            <p>Операційна картина по активній компанії</p>
+          </div>
+          <button on:click={() => dashboard.load()} disabled={$dashboard.loading}>
+            {$dashboard.loading ? "Оновлення..." : "Оновити"}
+          </button>
+        </div>
+
+        {#if $dashboard.error}
+          <p class="error">{$dashboard.error}</p>
+        {/if}
+
+        <div class="dashboard-kpis">
+          {#each $dashboard.screen?.kpis ?? [] as kpi}
+            <article class:positive={kpi.tone === "positive"} class:warning={kpi.tone === "warning"} class:danger={kpi.tone === "danger"} class="dashboard-kpi-card">
+              <span>{kpi.label}</span>
+              <strong>{kpi.value}</strong>
+              <small>{kpi.detail}</small>
+            </article>
+          {/each}
+        </div>
+
+        <div class="dashboard-grid">
+          <article class="dashboard-card wide">
+            <div class="card-title">
+              <h3>Грошовий потік</h3>
+              <span>Останні 90 днів</span>
+            </div>
+            <div class="cashflow-list">
+              {#each $dashboard.screen?.cashflowRows ?? [] as row}
+                <div class="cashflow-row">
+                  <div>
+                    <strong>{row.label}</strong>
+                    <span>{row.netStr}</span>
+                  </div>
+                  <div class="cashflow-bars">
+                    <span class="income">{row.incomeStr}</span>
+                    <span class="expense">{row.expenseStr}</span>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          </article>
+
+          <article class="dashboard-card">
+            <div class="card-title">
+              <h3>Останні документи</h3>
+              <button on:click={() => navigation.go("documents")}>Відкрити</button>
+            </div>
+            {#each $dashboard.screen?.recentDocuments ?? [] as doc}
+              <button class="dashboard-list-row" on:click={() => openDashboardDocument(doc.id)}>
+                <span>{doc.number} · {doc.counterparty}</span>
+                <strong>{doc.amountStr}</strong>
+              </button>
+            {/each}
+          </article>
+
+          <article class="dashboard-card">
+            <div class="card-title">
+              <h3>Завдання у фокусі</h3>
+              <button on:click={() => navigation.go("tasks")}>Відкрити</button>
+            </div>
+            {#each $dashboard.screen?.urgentTasks ?? [] as task}
+              <button class="dashboard-list-row" on:click={() => openDashboardTask(task.id)}>
+                <span>{task.title}</span>
+                <strong>{task.dueDate || task.priorityLabel}</strong>
+              </button>
+            {/each}
+          </article>
+        </div>
+      </section>
+    {:else if currentScreen === "documents"}
       <section class="panel">
         <div class="panel-header">
           <div>

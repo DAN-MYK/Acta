@@ -65,6 +65,16 @@ async fn tauri_vertical_slice_shell_and_documents_smoke() -> Result<()> {
         "палітра має повертати хоча б базові navigation entries"
     );
 
+    let dashboard = acta::tauri_api::dashboard::dashboard_load(&ctx).await?;
+    assert!(
+        !dashboard.kpis.is_empty(),
+        "дашборд має повертати KPI для Tauri shell"
+    );
+    assert!(
+        dashboard.kpis.iter().any(|kpi| kpi.label == "Документи"),
+        "дашборд має включати документний KPI"
+    );
+
     let list = acta::tauri_api::documents::documents_list(
         &ctx,
         acta::tauri_api::documents::DocumentsListRequest::default(),

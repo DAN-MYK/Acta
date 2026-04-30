@@ -5,6 +5,7 @@ import type {
   CounterpartiesScreenDto,
   CounterpartySaveResultDto,
   CreateDocumentContextDto,
+  DashboardScreenDto,
   DocumentsListDto,
   DocumentChainDto,
   DocumentEditorDto,
@@ -54,6 +55,10 @@ export function shellPaletteActivate(
     payload,
     selectedCounterpartyId
   });
+}
+
+export function dashboardLoad(): Promise<DashboardScreenDto> {
+  return invoke("dashboard_load");
 }
 
 export function documentsList(query = "", tab?: string): Promise<DocumentsListDto> {

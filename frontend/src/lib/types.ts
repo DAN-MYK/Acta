@@ -136,6 +136,20 @@ export interface SaveDocumentResponse {
   message: string;
 }
 
+export interface DashboardKpiDto {
+  label: string;
+  value: string;
+  detail: string;
+  tone: "positive" | "warning" | "neutral" | "accent" | "danger" | string;
+}
+
+export interface DashboardScreenDto {
+  kpis: DashboardKpiDto[];
+  cashflowRows: BankReportRowDto[];
+  recentDocuments: DocumentItemDto[];
+  urgentTasks: TaskItemDto[];
+}
+
 export interface OpenTemplateResultDto {
   ok: boolean;
   path: string;

@@ -10,10 +10,57 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  SQLX_OFFLINE: true
 
 jobs:
-  rust:
-    name: Rust checks and vertical slice
+  frontend:
+    name: Frontend typecheck, build and stores
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Typecheck Svelte and TypeScript
+        run: npm run check
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Run frontend store tests
+        run: npm run test:frontend
+
+  rust-backend:
+    name: Rust backend checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Cargo check
+        run: cargo check -j 1
+
+      - name: Run backend unit tests
+        run: cargo test -j 1 --lib --test unit_business_logic
+
+  db-integration:
+    name: DB integration and Tauri vertical slice
     runs-on: ubuntu-latest
 
     services:
@@ -32,7 +79,6 @@ jobs:
           --health-retries 5
 
     env:
-      SQLX_OFFLINE: true
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/acta_test
       TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/acta_test
 
@@ -58,21 +104,18 @@ jobs:
             sleep 2
           done
 
-      - name: Cargo check
-        run: cargo check
-
-      - name: Cargo build tests
-        run: cargo build --tests
-
       - name: Seed demo database
-        run: cargo run --bin reseed
+        run: cargo run -j 1 --bin reseed
 
-      - name: Run Tauri vertical slice test
-        run: cargo test --test tauri_vertical_slice
+      - name: Run DB integration tests
+        run: cargo test -j 1 --test db_integration
 
-  frontend:
-    name: Frontend build and tests
-    runs-on: ubuntu-latest
+      - name: Run Tauri vertical slice tests
+        run: cargo test -j 1 --test tauri_vertical_slice
+
+  tauri-smoke:
+    name: Tauri compile smoke
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout
@@ -84,11 +127,36 @@ jobs:
           node-version: 20
           cache: npm
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            src-tauri -> src-tauri/target
+
+      - name: Install Tauri Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            wget
+
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build frontend
+      - name: Build frontend assets
         run: npm run build
 
-      - name: Run frontend tests
-        run: npm run test:frontend
+      - name: Check Tauri crate
+        run: cargo check -j 1 --manifest-path src-tauri/Cargo.toml

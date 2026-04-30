@@ -27,6 +27,7 @@ pub fn run() {
             commands::shell::shell_set_active_company,
             commands::shell::shell_palette_search,
             commands::shell::shell_palette_activate,
+            commands::dashboard::dashboard_load,
             commands::counterparties::counterparties_list,
             commands::counterparties::counterparty_get,
             commands::counterparties::counterparty_open_editor,
