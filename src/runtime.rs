@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use sqlx::PgPool;
-use tokio::runtime::Runtime;
+use tokio::runtime::{Handle, Runtime};
+use tokio::task::JoinHandle;
 use uuid::Uuid;
 
 use crate::app_ctx::AppCtx;
@@ -63,7 +64,42 @@ pub fn init_app_ctx_blocking(rt: &Runtime) -> Result<Arc<AppCtx>> {
 }
 
 /// Запускає фонові сервіси застосунку.
-pub fn spawn_background_tasks(ctx: &Arc<AppCtx>) {
+pub fn spawn_background_tasks(ctx: &Arc<AppCtx>, handle: &Handle) -> JoinHandle<()> {
     let pool = Arc::new(ctx.pool().clone());
-    tokio::spawn(crate::notifications::reminder_loop(pool));
+    handle.spawn(crate::notifications::reminder_loop(pool))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use sqlx::postgres::PgPoolOptions;
+    use uuid::Uuid;
+
+    use super::spawn_background_tasks;
+    use crate::app_ctx::AppCtx;
+
+    fn fake_ctx() -> Arc<AppCtx> {
+        let pool = PgPoolOptions::new()
+            .connect_lazy("postgres://test:test@127.0.0.1:54321/nonexistent")
+            .expect("connect_lazy не повинен відкривати з'єднання одразу");
+
+        Arc::new(AppCtx::new(pool, Uuid::nil()))
+    }
+
+    #[test]
+    fn spawn_background_tasks_uses_explicit_runtime_handle() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime повинен створитися для тесту");
+        let ctx = {
+            let _guard = rt.enter();
+            fake_ctx()
+        };
+
+        let handle = spawn_background_tasks(&ctx, rt.handle());
+
+        handle.abort();
+    }
 }

@@ -44,6 +44,7 @@ pub struct CounterpartyItemDto {
 pub struct PaymentItemDto {
     pub id: String,
     pub date: String,
+    pub counterparty_id: String,
     pub counterparty: String,
     pub amount_str: String,
     pub direction: String,
@@ -322,6 +323,7 @@ pub async fn payments_list(ctx: &AppCtx) -> Result<PaymentsScreenDto> {
         .map(|r| PaymentItemDto {
             id: r.id.to_string(),
             date: r.date.clone(),
+            counterparty_id: r.counterparty_id.map(|id| id.to_string()).unwrap_or_default(),
             counterparty: r.counterparty_name.as_deref().unwrap_or("").to_string(),
             amount_str: format_decimal_ua(r.amount),
             direction: direction_to_str(&r.direction).to_string(),

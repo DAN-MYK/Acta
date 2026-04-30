@@ -303,6 +303,7 @@ fn payment_to_item(row: &crate::models::payment::PaymentListRow) -> PaymentItemD
     PaymentItemDto {
         id: row.id.to_string(),
         date: row.date.clone(),
+        counterparty_id: row.counterparty_id.map(|id| id.to_string()).unwrap_or_default(),
         counterparty: row.counterparty_name.clone().unwrap_or_default(),
         amount_str: format_money_ua(row.amount),
         direction: match row.direction {

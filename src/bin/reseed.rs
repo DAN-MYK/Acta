@@ -1,6 +1,7 @@
 use anyhow::Result;
 use sqlx::postgres::PgPoolOptions;
 
+#[cfg(test)]
 const DEMO_COMPANY_EMAIL_SQL_FILTER: &str = "email LIKE 'company%@example.test'";
 
 const CLEANUP_SQL: &str = r#"

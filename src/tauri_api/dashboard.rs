@@ -2,6 +2,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::app_ctx::AppCtx;
+use crate::db;
 
 use super::documents::{self, DocumentItemDto, DocumentsListRequest};
 use super::payments;
@@ -23,7 +24,39 @@ pub struct DashboardScreenDto {
     pub kpis: Vec<DashboardKpiDto>,
     pub cashflow_rows: Vec<BankReportRowDto>,
     pub recent_documents: Vec<DocumentItemDto>,
+    pub upcoming_payments: Vec<DashboardUpcomingPaymentDto>,
     pub urgent_tasks: Vec<TaskItemDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DashboardUpcomingPaymentDto {
+    pub id: String,
+    pub date_label: String,
+    pub contractor: String,
+    pub amount_str: String,
+    pub is_overdue: bool,
+}
+
+fn format_money_ua(value: rust_decimal::Decimal) -> String {
+    let normalized = format!("{:.2}", value.round_dp(2)).replace('.', ",");
+    let (sign, digits) = normalized
+        .strip_prefix('-')
+        .map_or(("", normalized.as_str()), |rest| ("-", rest));
+    let (whole, frac) = digits.split_once(',').unwrap_or((digits, "00"));
+    let grouped = whole
+        .chars()
+        .rev()
+        .collect::<Vec<_>>()
+        .chunks(3)
+        .map(|chunk| chunk.iter().collect::<String>())
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .rev()
+        .collect::<String>();
+
+    format!("{sign}{grouped},{frac} грн")
 }
 
 pub async fn dashboard_load(ctx: &AppCtx) -> Result<DashboardScreenDto> {
@@ -35,10 +68,11 @@ pub async fn dashboard_load(ctx: &AppCtx) -> Result<DashboardScreenDto> {
         query: None,
     };
 
-    let (reports, documents, payments, tasks) = tokio::try_join!(
+    let (reports, documents, payments, upcoming_payments, tasks) = tokio::try_join!(
         reports::reports_load(ctx, reports_request),
         documents::documents_list(ctx, DocumentsListRequest::default()),
         payments::payments_list(ctx),
+        db::dashboard::upcoming_payments(ctx.pool(), ctx.company_id(), 5),
         tasks::tasks_list(ctx, TasksListRequest::default()),
     )?;
 
@@ -88,6 +122,16 @@ pub async fn dashboard_load(ctx: &AppCtx) -> Result<DashboardScreenDto> {
         kpis,
         cashflow_rows: reports.bank_rows.into_iter().take(6).collect(),
         recent_documents: documents.items.into_iter().take(6).collect(),
+        upcoming_payments: upcoming_payments
+            .into_iter()
+            .map(|payment| DashboardUpcomingPaymentDto {
+                id: payment.id,
+                date_label: payment.date_label,
+                contractor: payment.contractor,
+                amount_str: format_money_ua(payment.amount),
+                is_overdue: payment.is_overdue,
+            })
+            .collect(),
         urgent_tasks: tasks.items.into_iter().take(5).collect(),
     })
 }

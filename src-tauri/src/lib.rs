@@ -18,7 +18,8 @@ pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
             let ctx = tauri::async_runtime::block_on(runtime::init_app_ctx())?;
-            runtime::spawn_background_tasks(&ctx);
+            let runtime_handle = tauri::async_runtime::handle();
+            let _ = runtime::spawn_background_tasks(&ctx, runtime_handle.inner());
             app.manage(TauriState { ctx });
             Ok(())
         })
@@ -50,13 +51,10 @@ pub fn run() {
             commands::settings::settings_backup_open_latest,
             commands::documents::documents_list,
             commands::documents::document_open,
-            commands::documents::document_prepare_new,
             commands::documents::document_create_draft,
             commands::documents::document_save,
             commands::documents::document_advance_status,
             commands::documents::document_delete,
-            commands::documents::documents_bulk_advance_status,
-            commands::documents::documents_bulk_delete,
             commands::documents::document_chain_get,
             commands::documents::document_chain_create_draft,
             commands::payments::payments_list,

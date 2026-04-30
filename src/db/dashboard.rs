@@ -184,15 +184,16 @@ pub async fn acts_status_distribution(pool: &PgPool, company_id: Uuid) -> Result
         .collect())
 }
 
-/// Найближчі очікувані платежі (акти з expected_payment_date IS NOT NULL, статус ≠ paid/draft).
+/// Найближчі незвірені платежі для dashboard drill-in.
 ///
-/// Прострочені (expected_payment_date <= сьогодні) йдуть першими.
+/// Прострочені (date <= сьогодні) йдуть першими.
 pub async fn upcoming_payments(
     pool: &PgPool,
     company_id: Uuid,
     limit: i64,
 ) -> Result<Vec<UpcomingPayment>> {
     struct Row {
+        id: String,
         date_day: i32,
         date_month: i32,
         contractor: String,
@@ -204,6 +205,7 @@ pub async fn upcoming_payments(
         fn from_row(r: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
             use sqlx::Row as _;
             Ok(Self {
+                id: r.try_get("id")?,
                 date_day: r.try_get("date_day")?,
                 date_month: r.try_get("date_month")?,
                 contractor: r.try_get("contractor")?,
@@ -216,19 +218,20 @@ pub async fn upcoming_payments(
     let rows = sqlx::query_as::<_, Row>(
         r#"
         SELECT
-            EXTRACT(DAY   FROM a.expected_payment_date)::int AS date_day,
-            EXTRACT(MONTH FROM a.expected_payment_date)::int AS date_month,
-            c.name                                           AS contractor,
-            a.total_amount                                   AS amount,
-            a.expected_payment_date <= CURRENT_DATE          AS is_overdue
-        FROM acts a
-        JOIN counterparties c ON c.id = a.counterparty_id
-        WHERE a.company_id = $1
-          AND a.expected_payment_date IS NOT NULL
-          AND a.status IN ('issued', 'signed')
+            p.id::text                           AS id,
+            EXTRACT(DAY   FROM p.date)::int      AS date_day,
+            EXTRACT(MONTH FROM p.date)::int      AS date_month,
+            COALESCE(c.name, 'Без контрагента') AS contractor,
+            p.amount                             AS amount,
+            p.date <= CURRENT_DATE               AS is_overdue
+        FROM payments p
+        LEFT JOIN counterparties c ON c.id = p.counterparty_id
+        WHERE p.company_id = $1
+          AND p.is_reconciled = FALSE
         ORDER BY
-            a.expected_payment_date <= CURRENT_DATE DESC,
-            a.expected_payment_date ASC
+            p.date <= CURRENT_DATE DESC,
+            p.date ASC,
+            p.created_at ASC
         LIMIT $2
         "#,
     )
@@ -258,6 +261,7 @@ pub async fn upcoming_payments(
     Ok(rows
         .into_iter()
         .map(|r| UpcomingPayment {
+            id: r.id,
             date_label: format!("{:02} {}", r.date_day, month_abbr(r.date_month)),
             contractor: r.contractor,
             amount: r.amount,
