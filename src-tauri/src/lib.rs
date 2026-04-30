@@ -50,13 +50,10 @@ pub fn run() {
             commands::settings::settings_backup_open_latest,
             commands::documents::documents_list,
             commands::documents::document_open,
-            commands::documents::document_prepare_new,
             commands::documents::document_create_draft,
             commands::documents::document_save,
             commands::documents::document_advance_status,
             commands::documents::document_delete,
-            commands::documents::documents_bulk_advance_status,
-            commands::documents::documents_bulk_delete,
             commands::documents::document_chain_get,
             commands::documents::document_chain_create_draft,
             commands::payments::payments_list,
@@ -65,7 +62,9 @@ pub fn run() {
             commands::payments::payments_open_manual_template,
             commands::payments::payment_create_or_update,
             commands::payments::payment_reconcile,
-            commands::payments::payment_unreconcile
+            commands::payments::payment_unreconcile,
+            commands::import::import_bas_plan,
+            commands::import::import_bas_execute
         ])
         .run(tauri::generate_context!())
         .expect("не вдалося запустити Tauri runtime");
