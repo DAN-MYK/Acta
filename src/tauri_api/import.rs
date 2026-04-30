@@ -90,7 +90,7 @@ fn bas_import_dir() -> PathBuf {
     PathBuf::from("storage/import/bas")
 }
 
-async fn collect_sorted_files(dir: &PathBuf) -> Result<Vec<PathBuf>> {
+async fn collect_sorted_files(dir: &Path) -> Result<Vec<PathBuf>> {
     let mut paths = Vec::new();
     let mut entries = fs::read_dir(dir).await?;
     while let Some(entry) = entries.next_entry().await? {
