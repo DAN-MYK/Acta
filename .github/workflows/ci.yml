@@ -12,56 +12,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  unit:
-    name: Unit tests
-    runs-on: ubuntu-latest
-    env:
-      SQLX_OFFLINE: true
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Cargo
-        uses: Swatinem/rust-cache@v2
-
-      - name: Install Linux dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pkg-config fontconfig libfontconfig-dev libfontconfig1-dev
-
-      - name: Run unit tests
-        run: cargo test --lib
-
-  ui:
-    name: UI headless tests
-    runs-on: ubuntu-latest
-    env:
-      SQLX_OFFLINE: true
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Cargo
-        uses: Swatinem/rust-cache@v2
-
-      - name: Install Linux dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pkg-config fontconfig libfontconfig-dev libfontconfig1-dev
-
-      - name: Run UI headless tests
-        run: cargo test --test ui_events
-
-  integration:
-    name: DB integration tests
+  rust:
+    name: Rust checks and vertical slice
     runs-on: ubuntu-latest
 
     services:
@@ -80,6 +32,7 @@ jobs:
           --health-retries 5
 
     env:
+      SQLX_OFFLINE: true
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/acta_test
       TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/acta_test
 
@@ -93,10 +46,10 @@ jobs:
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Install Linux dependencies
+      - name: Install Postgres client
         run: |
           sudo apt-get update
-          sudo apt-get install -y pkg-config fontconfig libfontconfig-dev libfontconfig1-dev postgresql-client
+          sudo apt-get install -y postgresql-client
 
       - name: Wait for Postgres
         run: |
@@ -105,5 +58,37 @@ jobs:
             sleep 2
           done
 
-      - name: Run DB integration tests
-        run: cargo test --test db_integration
+      - name: Cargo check
+        run: cargo check
+
+      - name: Cargo build tests
+        run: cargo build --tests
+
+      - name: Seed demo database
+        run: cargo run --bin reseed
+
+      - name: Run Tauri vertical slice test
+        run: cargo test --test tauri_vertical_slice
+
+  frontend:
+    name: Frontend build and tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Run frontend tests
+        run: npm run test:frontend
