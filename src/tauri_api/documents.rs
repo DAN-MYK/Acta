@@ -9,14 +9,20 @@ use uuid::Uuid;
 
 use crate::app_ctx::AppCtx;
 use crate::db;
-use crate::models::act::{ActItem, ActStatus, NewAct, NewActItem, UpdateAct};
+use crate::models::act::{Act, ActItem, ActStatus, NewAct, NewActItem, UpdateAct};
 use crate::models::invoice::{
-    InvoiceItem, InvoiceStatus, NewInvoice, NewInvoiceItem, UpdateInvoice,
+    Invoice, InvoiceItem, InvoiceStatus, NewInvoice, NewInvoiceItem, UpdateInvoice,
 };
 use crate::models::waybill::{
     NewWaybill, NewWaybillItem, UpdateWaybill, WaybillItem, WaybillStatus,
 };
+use crate::models::company::Company;
+use crate::models::counterparty::Counterparty;
 use crate::models::DocumentDirection;
+use crate::pdf::generator::{
+    amount_to_words, ensure_invoice_output_dir, ensure_output_dir, generate_act_pdf,
+    generate_invoice_pdf, PdfActData, PdfActItem, PdfCompany, PdfInvoiceData, PdfInvoiceItem,
+};
 
 const CHAIN_PARENT_PREFIX: &str = "[chain-parent:";
 const CHAIN_PARENT_SUFFIX: &str = "]";
@@ -361,6 +367,26 @@ fn normalize_chain_kind(kind: &str) -> Option<&'static str> {
         "invoice" | "inv" => Some("invoice"),
         "waybill" | "wbl" => Some("waybill"),
         _ => None,
+    }
+}
+
+fn to_pdf_company(c: &Company) -> PdfCompany {
+    PdfCompany {
+        name: c.name.clone(),
+        edrpou: c.edrpou.clone().unwrap_or_default(),
+        iban: c.iban.clone().unwrap_or_default(),
+        address: c.actual_address.clone()
+            .or_else(|| c.legal_address.clone())
+            .unwrap_or_default(),
+    }
+}
+
+fn counterparty_to_pdf_company(cp: &Counterparty) -> PdfCompany {
+    PdfCompany {
+        name: cp.name.clone(),
+        edrpou: cp.edrpou.clone().or_else(|| cp.ipn.clone()).unwrap_or_default(),
+        iban: cp.iban.clone().unwrap_or_default(),
+        address: cp.address.clone().unwrap_or_default(),
     }
 }
 
@@ -1483,4 +1509,61 @@ pub async fn documents_bulk_advance_status_live(
     };
 
     Ok(result)
+}
+
+#[cfg(test)]
+mod pdf_tests {
+    use super::*;
+    use chrono::Utc;
+
+    fn sample_company() -> crate::models::company::Company {
+        crate::models::company::Company {
+            id: uuid::Uuid::nil(),
+            name: "ФОП Тестовий".into(),
+            short_name: None,
+            edrpou: Some("1234567890".into()),
+            ipn: None,
+            iban: Some("UA123456789012345678901234567".into()),
+            legal_address: Some("вул. Юридична, 1".into()),
+            actual_address: Some("вул. Фактична, 2".into()),
+            phone: None,
+            email: None,
+            director_name: None,
+            accountant_name: None,
+            tax_system: None,
+            is_vat_payer: false,
+            logo_path: None,
+            notes: None,
+            is_archived: false,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    #[test]
+    fn to_pdf_company_prefers_actual_address() {
+        let company = sample_company();
+        let pdf = to_pdf_company(&company);
+        assert_eq!(pdf.name, "ФОП Тестовий");
+        assert_eq!(pdf.edrpou, "1234567890");
+        assert_eq!(pdf.iban, "UA123456789012345678901234567");
+        assert_eq!(pdf.address, "вул. Фактична, 2");
+    }
+
+    #[test]
+    fn to_pdf_company_falls_back_to_legal_address() {
+        let mut company = sample_company();
+        company.actual_address = None;
+        let pdf = to_pdf_company(&company);
+        assert_eq!(pdf.address, "вул. Юридична, 1");
+    }
+
+    #[test]
+    fn to_pdf_company_empty_when_no_address() {
+        let mut company = sample_company();
+        company.actual_address = None;
+        company.legal_address = None;
+        let pdf = to_pdf_company(&company);
+        assert_eq!(pdf.address, "");
+    }
 }
