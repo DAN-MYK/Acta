@@ -75,7 +75,8 @@ fn pdf_amount_to_words_handles_teens_and_feminine_forms() {
 
 #[test]
 fn pdf_output_dir_sanitizes_unsafe_characters() {
-    let path = ensure_output_dir("АКТ\\2026:001").unwrap();
+    let base = std::env::temp_dir();
+    let path = ensure_output_dir(&base, "АКТ\\2026:001").unwrap();
     let name = path.file_name().unwrap().to_str().unwrap();
 
     assert!(!name.contains('\\'));
@@ -84,7 +85,8 @@ fn pdf_output_dir_sanitizes_unsafe_characters() {
 
 #[test]
 fn pdf_invoice_output_dir_uses_misc_for_non_standard_number() {
-    let path = ensure_invoice_output_dir("INVOICE").unwrap();
+    let base = std::env::temp_dir();
+    let path = ensure_invoice_output_dir(&base, "INVOICE").unwrap();
     assert!(path.to_str().unwrap().contains("misc"));
 }
 

@@ -477,8 +477,8 @@ pub async fn generate_document_pdf(ctx: &AppCtx, doc_id: String) -> Result<Mutat
                 counterparty_res?.ok_or_else(|| anyhow!("Контрагента не знайдено"))?;
 
             let data = build_act_pdf_data(&act, &items, &company, &counterparty);
-            let path = ensure_output_dir(&act.number)?;
-            generate_act_pdf(&data, &path)?;
+            let path = ensure_output_dir(ctx.storage_dir(), &act.number)?;
+            generate_act_pdf(&data, &ctx.template_dir().join("act.typ"), &path)?;
             path
         }
         DocumentRef::Invoice(id) => {
@@ -495,8 +495,8 @@ pub async fn generate_document_pdf(ctx: &AppCtx, doc_id: String) -> Result<Mutat
                 counterparty_res?.ok_or_else(|| anyhow!("Контрагента не знайдено"))?;
 
             let data = build_invoice_pdf_data(&invoice, &items, &company, &counterparty);
-            let path = ensure_invoice_output_dir(&invoice.number)?;
-            generate_invoice_pdf(&data, &path)?;
+            let path = ensure_invoice_output_dir(ctx.storage_dir(), &invoice.number)?;
+            generate_invoice_pdf(&data, &ctx.template_dir().join("invoice.typ"), &path)?;
             path
         }
         DocumentRef::Waybill(_) => {

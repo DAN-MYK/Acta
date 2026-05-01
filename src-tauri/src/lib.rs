@@ -1,5 +1,6 @@
 pub mod commands;
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use acta::app_ctx::AppCtx;
@@ -17,7 +18,22 @@ pub fn run() {
 
     tauri::Builder::default()
         .setup(|app| {
-            let ctx = tauri::async_runtime::block_on(runtime::init_app_ctx())?;
+            let template_dir = app
+                .path()
+                .resource_dir()
+                .map(|p| p.join("templates"))
+                .unwrap_or_else(|_| PathBuf::from("templates"));
+
+            let storage_dir = app
+                .path()
+                .app_local_data_dir()
+                .map(|p| p.join("documents"))
+                .unwrap_or_else(|_| PathBuf::from("storage/documents"));
+
+            let ctx = tauri::async_runtime::block_on(runtime::init_app_ctx_with_paths(
+                template_dir,
+                storage_dir,
+            ))?;
             let runtime_handle = tauri::async_runtime::handle();
             let _ = runtime::spawn_background_tasks(&ctx, runtime_handle.inner());
             app.manage(TauriState { ctx });

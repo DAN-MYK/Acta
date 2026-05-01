@@ -64,7 +64,11 @@ pub struct PdfActData {
 /// 1. Серіалізує `data` у JSON рядок.
 /// 2. Викликає `typst compile templates/act.typ <output_path> --input data=<json>`.
 /// 3. Перевіряє успішність команди через `ensure!`.
-pub fn generate_act_pdf(data: &PdfActData, output_path: &Path) -> Result<()> {
+pub fn generate_act_pdf(
+    data: &PdfActData,
+    template_path: &Path,
+    output_path: &Path,
+) -> Result<()> {
     let json = serde_json::to_string(data).context("Серіалізація PdfActData у JSON")?;
 
     let input_arg = format!("data={json}");
@@ -72,7 +76,9 @@ pub fn generate_act_pdf(data: &PdfActData, output_path: &Path) -> Result<()> {
     let output = std::process::Command::new("typst")
         .args([
             "compile",
-            "templates/act.typ",
+            template_path
+                .to_str()
+                .context("Невалідний шлях до шаблону act.typ")?,
             output_path
                 .to_str()
                 .context("Невалідний шлях до output PDF")?,
@@ -96,7 +102,7 @@ pub fn generate_act_pdf(data: &PdfActData, output_path: &Path) -> Result<()> {
 ///
 /// `act_number` очищується від символу `/` щоб уникнути небажаних підкаталогів.
 /// Приклад: "АКТ-2026-001" → `storage/documents/acts/2026/АКТ-2026-001.pdf`
-pub fn ensure_output_dir(act_number: &str) -> Result<PathBuf> {
+pub fn ensure_output_dir(storage_dir: &Path, act_number: &str) -> Result<PathBuf> {
     // Рік витягуємо з другого сегменту номеру (АКТ-2026-001 → "2026").
     // Якщо формат несподіваний — кладемо в "misc".
     let year = act_number
@@ -105,7 +111,7 @@ pub fn ensure_output_dir(act_number: &str) -> Result<PathBuf> {
         .filter(|s| s.len() == 4 && s.chars().all(|c| c.is_ascii_digit()))
         .unwrap_or("misc");
 
-    let dir = PathBuf::from("storage/documents/acts").join(year);
+    let dir = storage_dir.join("acts").join(year);
     std::fs::create_dir_all(&dir)
         .with_context(|| format!("Не вдалось створити директорію {}", dir.display()))?;
 
@@ -320,14 +326,20 @@ pub struct PdfInvoiceData {
 ///
 /// Шаблон: `templates/invoice.typ`.
 /// Алгоритм аналогічний `generate_act_pdf`.
-pub fn generate_invoice_pdf(data: &PdfInvoiceData, output_path: &Path) -> Result<()> {
+pub fn generate_invoice_pdf(
+    data: &PdfInvoiceData,
+    template_path: &Path,
+    output_path: &Path,
+) -> Result<()> {
     let json = serde_json::to_string(data).context("Серіалізація PdfInvoiceData у JSON")?;
     let input_arg = format!("data={json}");
 
     let output = std::process::Command::new("typst")
         .args([
             "compile",
-            "templates/invoice.typ",
+            template_path
+                .to_str()
+                .context("Невалідний шлях до шаблону invoice.typ")?,
             output_path
                 .to_str()
                 .context("Невалідний шлях до output PDF")?,
@@ -349,14 +361,14 @@ pub fn generate_invoice_pdf(data: &PdfInvoiceData, output_path: &Path) -> Result
 /// Створює `storage/documents/invoices/{рік}/` і повертає шлях до файлу.
 ///
 /// Приклад: "РАХ-2026-001" → `storage/documents/invoices/2026/РАХ-2026-001.pdf`
-pub fn ensure_invoice_output_dir(invoice_number: &str) -> Result<PathBuf> {
+pub fn ensure_invoice_output_dir(storage_dir: &Path, invoice_number: &str) -> Result<PathBuf> {
     let year = invoice_number
         .split('-')
         .nth(1)
         .filter(|s| s.len() == 4 && s.chars().all(|c| c.is_ascii_digit()))
         .unwrap_or("misc");
 
-    let dir = PathBuf::from("storage/documents/invoices").join(year);
+    let dir = storage_dir.join("invoices").join(year);
     std::fs::create_dir_all(&dir)
         .with_context(|| format!("Не вдалось створити директорію {}", dir.display()))?;
 
@@ -485,7 +497,8 @@ mod tests {
 
     #[test]
     fn ensure_output_dir_extracts_year_from_number() {
-        let path = ensure_output_dir("АКТ-2026-001").unwrap();
+        let base = std::env::temp_dir();
+        let path = ensure_output_dir(&base, "АКТ-2026-001").unwrap();
         assert!(path.to_str().unwrap().contains("2026"));
         assert!(path.to_str().unwrap().ends_with(".pdf"));
     }
@@ -493,20 +506,23 @@ mod tests {
     #[test]
     fn ensure_output_dir_uses_misc_for_non_standard_number() {
         // Нестандартний номер без четирицифрового року → директорія "misc"
-        let path = ensure_output_dir("NONSTANDARD").unwrap();
+        let base = std::env::temp_dir();
+        let path = ensure_output_dir(&base, "NONSTANDARD").unwrap();
         assert!(path.to_str().unwrap().contains("misc"));
     }
 
     #[test]
     fn ensure_output_dir_sanitizes_slashes_in_number() {
-        let path = ensure_output_dir("АКТ/2026-001").unwrap();
+        let base = std::env::temp_dir();
+        let path = ensure_output_dir(&base, "АКТ/2026-001").unwrap();
         let name = path.file_name().unwrap().to_str().unwrap();
         assert!(!name.contains('/'), "ім'я файлу не повинне містити '/'");
     }
 
     #[test]
     fn ensure_invoice_output_dir_puts_in_invoices_subdir() {
-        let path = ensure_invoice_output_dir("РАХ-2026-001").unwrap();
+        let base = std::env::temp_dir();
+        let path = ensure_invoice_output_dir(&base, "РАХ-2026-001").unwrap();
         let s = path.to_str().unwrap();
         assert!(s.contains("invoices"));
         assert!(s.contains("2026"));
@@ -605,7 +621,7 @@ mod tests {
         let _guard = typst_lock().lock().unwrap();
 
         let out = std::env::temp_dir().join("acta_test_act_generate.pdf");
-        generate_act_pdf(&sample_act_data(), &out)
+        generate_act_pdf(&sample_act_data(), Path::new("templates/act.typ"), &out)
             .expect("generate_act_pdf має завершитись успішно");
 
         assert!(out.exists(), "PDF файл не створено");
@@ -628,7 +644,7 @@ mod tests {
         let _guard = typst_lock().lock().unwrap();
 
         let out = std::env::temp_dir().join("АКТ-2026-001.pdf");
-        generate_act_pdf(&sample_act_data(), &out).unwrap();
+        generate_act_pdf(&sample_act_data(), Path::new("templates/act.typ"), &out).unwrap();
         assert!(out.exists());
         let _ = std::fs::remove_file(&out);
     }
@@ -644,8 +660,12 @@ mod tests {
         let _guard = typst_lock().lock().unwrap();
 
         let out = std::env::temp_dir().join("acta_test_invoice_generate.pdf");
-        generate_invoice_pdf(&sample_invoice_data(), &out)
-            .expect("generate_invoice_pdf має завершитись успішно");
+        generate_invoice_pdf(
+            &sample_invoice_data(),
+            Path::new("templates/invoice.typ"),
+            &out,
+        )
+        .expect("generate_invoice_pdf має завершитись успішно");
 
         assert!(out.exists(), "PDF файл не створено");
         let size = std::fs::metadata(&out).unwrap().len();
@@ -672,7 +692,7 @@ mod tests {
         data.total_words = "одна тисяча двісті гривень 00 копійок".into();
 
         let out = std::env::temp_dir().join("acta_test_invoice_vat.pdf");
-        generate_invoice_pdf(&data, &out).unwrap();
+        generate_invoice_pdf(&data, Path::new("templates/invoice.typ"), &out).unwrap();
         assert!(out.exists());
         let _ = std::fs::remove_file(&out);
     }
@@ -681,15 +701,13 @@ mod tests {
 
     #[test]
     fn generate_act_pdf_returns_err_for_nonexistent_template_dir() {
-        // Якщо запускати з директорії де немає templates/ — typst поверне помилку
-        // Перевіряємо тільки якщо шаблон НЕ існує (щоб не конфліктувати з реальними тестами)
-        let templates_exist = std::path::Path::new("templates/act.typ").exists();
-        if templates_exist {
-            // Тест не застосовний — шаблони є, typst може спрацювати
-            return;
-        }
+        // Завжди передаємо неіснуючий шлях — typst поверне помилку незалежно від CWD
         let out = std::env::temp_dir().join("acta_test_err.pdf");
-        let result = generate_act_pdf(&sample_act_data(), &out);
+        let result = generate_act_pdf(
+            &sample_act_data(),
+            Path::new("__nonexistent__/act.typ"),
+            &out,
+        );
         assert!(result.is_err());
     }
 }
