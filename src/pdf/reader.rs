@@ -1,9 +1,19 @@
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
+use lopdf::Document;
 
-pub fn read_pdf_text(_path: &Path) -> Result<String> {
-    todo!()
+pub fn read_pdf_text(path: &Path) -> Result<String> {
+    let doc = Document::load(path)
+        .with_context(|| format!("Не вдалось відкрити PDF: {}", path.display()))?;
+
+    let page_numbers: Vec<u32> = doc.get_pages().keys().copied().collect();
+
+    let text = doc
+        .extract_text(&page_numbers)
+        .with_context(|| format!("Не вдалось витягти текст з PDF: {}", path.display()))?;
+
+    Ok(text)
 }
 
 pub fn replace_pdf_text(_path: &Path, _old_text: &str, _new_text: &str) -> Result<()> {
