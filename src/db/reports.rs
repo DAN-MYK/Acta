@@ -17,27 +17,6 @@ fn selected_counterparty_uuid(filter: &ResolvedReportsFilter) -> Option<uuid::Uu
         .and_then(|v| uuid::Uuid::parse_str(v).ok())
 }
 
-fn format_money_ua(value: Decimal) -> String {
-    let normalized = format!("{:.2}", value.round_dp(2)).replace('.', ",");
-    let (sign, digits) = normalized
-        .strip_prefix('-')
-        .map_or(("", normalized.as_str()), |rest| ("-", rest));
-    let (whole, frac) = digits.split_once(',').unwrap_or((digits, "00"));
-    let grouped = whole
-        .chars()
-        .rev()
-        .collect::<Vec<_>>()
-        .chunks(3)
-        .map(|chunk| chunk.iter().collect::<String>())
-        .collect::<Vec<_>>()
-        .join(" ")
-        .chars()
-        .rev()
-        .collect::<String>();
-
-    format!("{sign}{grouped},{frac} грн")
-}
-
 fn query_matches(haystacks: &[&str], query: &str) -> bool {
     if query.is_empty() {
         return true;
@@ -522,6 +501,7 @@ pub async fn load_top_counterparties_bank(
                 0u8
             } else {
                 ((primary_amount / max_primary * Decimal::from(100u8)).round_dp(0))
+                    .min(Decimal::from(100u8))
                     .to_u8()
                     .unwrap_or(100)
             };
@@ -530,7 +510,7 @@ pub async fn load_top_counterparties_bank(
                 counterparty_name: row.counterparty_name,
                 primary_amount,
                 secondary_label: "Чистий рух".to_string(),
-                secondary_value: format_money_ua(row.income - row.expense),
+                secondary_value: row.income - row.expense,
                 share_percent,
             }
         })
@@ -609,6 +589,7 @@ pub async fn load_top_counterparties_receivables(
                 0u8
             } else {
                 ((row.total / max_primary * Decimal::from(100u8)).round_dp(0))
+                    .min(Decimal::from(100u8))
                     .to_u8()
                     .unwrap_or(100)
             };
@@ -617,7 +598,7 @@ pub async fn load_top_counterparties_receivables(
                 counterparty_name: row.counterparty_name,
                 primary_amount: row.total,
                 secondary_label: "Дебіторська заборгованість".to_string(),
-                secondary_value: format_money_ua(row.total),
+                secondary_value: row.total,
                 share_percent,
             }
         })
@@ -687,6 +668,7 @@ pub async fn load_top_counterparties_payables(
                 0u8
             } else {
                 ((row.total / max_primary * Decimal::from(100u8)).round_dp(0))
+                    .min(Decimal::from(100u8))
                     .to_u8()
                     .unwrap_or(100)
             };
@@ -695,7 +677,7 @@ pub async fn load_top_counterparties_payables(
                 counterparty_name: row.counterparty_name,
                 primary_amount: row.total,
                 secondary_label: "Кредиторська заборгованість".to_string(),
-                secondary_value: format_money_ua(row.total),
+                secondary_value: row.total,
                 share_percent,
             }
         })
@@ -790,6 +772,7 @@ pub async fn load_top_counterparties_pnl(
                 0u8
             } else {
                 ((primary_amount / max_primary * Decimal::from(100u8)).round_dp(0))
+                    .min(Decimal::from(100u8))
                     .to_u8()
                     .unwrap_or(100)
             };
@@ -798,7 +781,7 @@ pub async fn load_top_counterparties_pnl(
                 counterparty_name: row.counterparty_name,
                 primary_amount,
                 secondary_label: "Чистий результат".to_string(),
-                secondary_value: format_money_ua(row.income - row.expense),
+                secondary_value: row.income - row.expense,
                 share_percent,
             }
         })

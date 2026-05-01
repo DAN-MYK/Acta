@@ -285,7 +285,7 @@ fn top_counterparties_to_dto(rows: Vec<TopCounterpartyRow>) -> Vec<TopCounterpar
             counterparty_name: row.counterparty_name,
             primary_amount_str: format_money_ua(row.primary_amount),
             secondary_label: row.secondary_label,
-            secondary_value: row.secondary_value,
+            secondary_value: format_money_ua(row.secondary_value),
             share_percent: row.share_percent,
         })
         .collect()
@@ -319,15 +319,30 @@ async fn build_reports_screen(
         _ => load_top_counterparties_bank(ctx, &filter).await?,
     };
 
-    let selected_counterparty = filter.selected_counterparty_id.as_ref().and_then(|id| {
-        top_counterparties
-            .iter()
-            .find(|r| &r.counterparty_id == id)
-            .map(|r| SelectedCounterpartyDto {
-                id: r.counterparty_id.clone(),
-                name: r.counterparty_name.clone(),
+    let selected_counterparty = if let Some(id) = filter.selected_counterparty_id.as_ref() {
+        // Primary: find in already-loaded top_counterparties (avoids extra round-trip)
+        if let Some(found) = top_counterparties.iter().find(|r| &r.counterparty_id == id) {
+            Some(SelectedCounterpartyDto {
+                id: found.counterparty_id.clone(),
+                name: found.counterparty_name.clone(),
             })
-    });
+        } else {
+            // Fallback: direct lookup when counterparty falls outside top-8
+            if let Ok(uuid) = uuid::Uuid::parse_str(id) {
+                sqlx::query_scalar::<_, String>(
+                    "SELECT name FROM counterparties WHERE id = $1"
+                )
+                .bind(uuid)
+                .fetch_optional(ctx.pool())
+                .await?
+                .map(|name| SelectedCounterpartyDto { id: id.clone(), name })
+            } else {
+                None
+            }
+        }
+    } else {
+        None
+    };
 
     let income = bank_rows
         .iter()

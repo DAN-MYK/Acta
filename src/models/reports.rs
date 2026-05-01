@@ -32,7 +32,7 @@ pub struct TopCounterpartyRow {
     pub counterparty_name: String,
     pub primary_amount: Decimal,
     pub secondary_label: String,
-    pub secondary_value: String,
+    pub secondary_value: Decimal,
     pub share_percent: u8,
 }
 
