@@ -1,6 +1,6 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -9,9 +9,8 @@ use uuid::Uuid;
 
 use crate::app_ctx::AppCtx;
 use crate::db;
-use crate::import::bank_csv::{
-    BankStatementParser, OschadbankCsvParser, ParsedBankRow, SenseBankCsvParser,
-    UkrgasbankCsvParser,
+use crate::import::bas_payments::{
+    bank_import_dir, import_payments_from_csv, newest_payments_csv_path,
 };
 use crate::models::payment::{NewPayment, PaymentDirection, UpdatePayment};
 
@@ -174,119 +173,10 @@ fn trimmed_option(value: &str) -> Option<String> {
     }
 }
 
-fn bank_import_dir() -> PathBuf {
-    PathBuf::from("storage/import/bank")
-}
-
-async fn newest_csv_path() -> Result<PathBuf> {
-    let dir = bank_import_dir();
-    fs::create_dir_all(&dir).await?;
-    let mut entries = fs::read_dir(&dir).await?;
-    let mut newest: Option<(std::time::SystemTime, PathBuf)> = None;
-    while let Some(entry) = entries.next_entry().await? {
-        let path = entry.path();
-        let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
-            continue;
-        };
-        if !ext.eq_ignore_ascii_case("csv") {
-            continue;
-        }
-        let modified = entry
-            .metadata()
-            .await
-            .and_then(|m| m.modified())
-            .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
-        match &newest {
-            Some((cur, _)) if modified <= *cur => {}
-            _ => newest = Some((modified, path)),
-        }
-    }
-    newest
-        .map(|(_, p)| p)
-        .ok_or_else(|| anyhow!("У `storage/import/bank/` не знайдено CSV для імпорту"))
-}
-
-fn parser_candidates(path: &Path) -> Vec<Box<dyn BankStatementParser>> {
-    let name = path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or_default()
-        .to_lowercase();
-    if name.contains("oschad") || name.contains("ощад") {
-        return vec![Box::new(OschadbankCsvParser)];
-    }
-    if name.contains("sense") {
-        return vec![Box::new(SenseBankCsvParser)];
-    }
-    if name.contains("ukrgas") || name.contains("укргаз") {
-        return vec![Box::new(UkrgasbankCsvParser)];
-    }
-    vec![
-        Box::new(UkrgasbankCsvParser),
-        Box::new(OschadbankCsvParser),
-        Box::new(SenseBankCsvParser),
-    ]
-}
-
-fn parse_bank_rows(path: &Path, csv_text: &str) -> Result<Vec<ParsedBankRow>> {
-    let mut last_error: Option<anyhow::Error> = None;
-    for parser in parser_candidates(path) {
-        match parser.parse(csv_text) {
-            Ok(rows) if !rows.is_empty() => return Ok(rows),
-            Ok(_) => last_error = Some(anyhow!("CSV не містить жодного рядка")),
-            Err(e) => last_error = Some(e),
-        }
-    }
-    Err(last_error.unwrap_or_else(|| anyhow!("Не вдалося розпізнати формат банківського CSV")))
-}
-
-async fn import_bank_rows(
-    pool: &sqlx::PgPool,
-    company_id: Uuid,
-    rows: Vec<ParsedBankRow>,
-) -> Result<usize> {
-    let mut imported = 0usize;
-    for row in rows {
-        let exists = db::payments::exists_imported_row(
-            pool,
-            company_id,
-            row.date,
-            row.amount,
-            row.direction.clone(),
-            row.bank_ref.as_deref(),
-            &row.description,
-        )
-        .await?;
-        if exists {
-            continue;
-        }
-        db::payments::create(
-            pool,
-            NewPayment {
-                company_id,
-                date: row.date,
-                amount: row.amount,
-                direction: row.direction,
-                counterparty_id: None,
-                bank_name: Some(row.bank_name),
-                bank_ref: row.bank_ref,
-                description: Some(row.description),
-            },
-        )
-        .await?;
-        imported += 1;
-    }
-    Ok(imported)
-}
-
 async fn run_bank_import(ctx: &AppCtx) -> Result<(usize, PathBuf)> {
-    let csv_path = newest_csv_path().await?;
-    let csv_text = fs::read_to_string(&csv_path)
-        .await
-        .with_context(|| format!("Не вдалося прочитати {}", csv_path.display()))?;
-    let rows = parse_bank_rows(&csv_path, &csv_text)?;
-    let imported = import_bank_rows(ctx.pool(), ctx.company_id(), rows).await?;
-    Ok((imported, csv_path))
+    let csv_path = newest_payments_csv_path().await?;
+    let report = import_payments_from_csv(ctx.pool(), ctx.company_id(), &csv_path, false).await?;
+    Ok((report.created, csv_path))
 }
 
 async fn ensure_manual_import_template() -> Result<PathBuf> {

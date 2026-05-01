@@ -13,6 +13,9 @@ pub struct ParsedBankRow {
     pub description: String,
     pub bank_ref: Option<String>,
     pub bank_name: String,
+    pub counterparty_name: Option<String>,
+    pub counterparty_iban: Option<String>,
+    pub currency: Option<String>,
 }
 
 pub trait BankStatementParser {
@@ -27,6 +30,9 @@ struct HeaderLayout {
     description_idx: Option<usize>,
     direction_idx: Option<usize>,
     reference_idx: Option<usize>,
+    counterparty_name_idx: Option<usize>,
+    counterparty_iban_idx: Option<usize>,
+    currency_idx: Option<usize>,
     debit_idx: Option<usize>,
     credit_idx: Option<usize>,
 }
@@ -61,7 +67,12 @@ fn parse_date(raw: &str) -> Result<NaiveDate> {
     let date_only = trimmed.split(['T', ' ']).next().unwrap_or(trimmed).trim();
 
     for format in [
-        "%d.%m.%Y", "%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d", "%Y%m%d", "%d-%m-%Y",
+        "%d.%m.%Y",
+        "%Y-%m-%d",
+        "%d/%m/%Y",
+        "%Y/%m/%d",
+        "%Y%m%d",
+        "%d-%m-%Y",
     ] {
         if let Ok(date) = NaiveDate::parse_from_str(date_only, format) {
             return Ok(date);
@@ -116,6 +127,21 @@ fn optional_text(record: &StringRecord, idx: Option<usize>) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
+}
+
+fn normalize_iban(value: &str) -> Option<String> {
+    let normalized = value
+        .trim()
+        .chars()
+        .filter(|ch| !ch.is_whitespace())
+        .collect::<String>()
+        .to_uppercase();
+
+    if normalized.is_empty() {
+        None
+    } else {
+        Some(normalized)
+    }
 }
 
 fn find_header_index(headers: &StringRecord, aliases: &[&str]) -> Option<usize> {
@@ -180,6 +206,37 @@ fn header_layout(headers: &StringRecord) -> HeaderLayout {
                 "номердокумента",
                 "кодоперації",
             ],
+        ),
+        counterparty_name_idx: find_header_index(
+            headers,
+            &[
+                "counterparty",
+                "counterpartyname",
+                "name",
+                "receiver",
+                "sender",
+                "company",
+                "контрагент",
+                "назваконтрагента",
+                "отримувач",
+                "платник",
+            ],
+        ),
+        counterparty_iban_idx: find_header_index(
+            headers,
+            &[
+                "iban",
+                "counterpartyiban",
+                "recipientiban",
+                "senderiban",
+                "ібан",
+                "ибан",
+                "контрагентібан",
+            ],
+        ),
+        currency_idx: find_header_index(
+            headers,
+            &["currency", "curr", "currencycode", "валюта", "кодвалюти"],
         ),
         debit_idx: find_header_index(headers, &["debit", "debet", "видаток", "списання"]),
         credit_idx: find_header_index(headers, &["credit", "kredit", "надходження", "зарахування"]),
@@ -283,6 +340,9 @@ fn parse_record(
         description: text_or_empty(record, layout.description_idx),
         bank_ref: optional_text(record, layout.reference_idx),
         bank_name: bank_name.to_string(),
+        counterparty_name: optional_text(record, layout.counterparty_name_idx),
+        counterparty_iban: field_at(record, layout.counterparty_iban_idx).and_then(normalize_iban),
+        currency: optional_text(record, layout.currency_idx),
     })
 }
 
@@ -394,6 +454,7 @@ mod tests {
         assert_eq!(rows[0].direction, PaymentDirection::Income);
         assert_eq!(rows[0].bank_ref.as_deref(), Some("REF-001"));
         assert_eq!(rows[0].bank_name, "Укргазбанк");
+        assert_eq!(rows[0].counterparty_iban, None);
     }
 
     #[test]

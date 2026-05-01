@@ -1,12 +1,17 @@
 use std::sync::Arc;
 
-use acta::import::bank_csv::{BankStatementParser, OschadbankCsvParser, SenseBankCsvParser};
+use acta::import::bank_csv::{
+    BankStatementParser, OschadbankCsvParser, SenseBankCsvParser, UkrgasbankCsvParser,
+};
 use acta::models::payment::PaymentDirection;
+use chrono::NaiveDate;
 use acta::notifications::reminder_loop;
 use acta::pdf::generator::{amount_to_words, ensure_invoice_output_dir, ensure_output_dir};
+use acta::services::payment_matching::{choose_best_match, MatchCandidate, PaymentMatchInput};
 use rust_decimal_macros::dec;
 use sqlx::postgres::PgPoolOptions;
 use tokio::time::Duration;
+use uuid::Uuid;
 
 fn fake_pool() -> sqlx::PgPool {
     PgPoolOptions::new()
@@ -54,6 +59,73 @@ fn bank_csv_case_insensitive_headers_work_for_other_parser() {
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].direction, PaymentDirection::Income);
     assert_eq!(rows[0].amount, dec!(250.00));
+}
+
+#[test]
+fn bank_csv_row_exposes_matching_fields() {
+    let csv = "Дата операції;Сума;Призначення платежу;IBAN;Референс\n\
+               01.05.2026;12500,00;Оплата акту №42;UA123456789012345678901234567;REF-42\n";
+    let rows = UkrgasbankCsvParser
+        .parse(csv)
+        .expect("CSV має парситися");
+
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].description, "Оплата акту №42");
+    assert_eq!(rows[0].bank_ref.as_deref(), Some("REF-42"));
+    assert_eq!(
+        rows[0].counterparty_iban.as_deref(),
+        Some("UA123456789012345678901234567")
+    );
+}
+
+#[test]
+fn bank_csv_normalizes_counterparty_iban() {
+    let csv = "Дата операції;Сума;Призначення платежу;IBAN;Референс\n\
+               01.05.2026;12500,00;Оплата акту №42; ua12 3456 7890 1234 5678 9012 34567 ;REF-42\n";
+    let rows = UkrgasbankCsvParser
+        .parse(csv)
+        .expect("CSV має парситися");
+
+    assert_eq!(
+        rows[0].counterparty_iban.as_deref(),
+        Some("UA123456789012345678901234567")
+    );
+}
+
+#[test]
+fn payment_matching_prefers_exact_amount_and_iban() {
+    let preferred_id = Uuid::new_v4();
+    let other_id = Uuid::new_v4();
+    let payment = PaymentMatchInput {
+        amount: dec!(12500.00),
+        direction: PaymentDirection::Income,
+        date: NaiveDate::from_ymd_opt(2026, 5, 1).expect("валідна дата"),
+        counterparty_iban: Some("UA123".to_string()),
+        description: "Оплата акту №42".to_string(),
+        bank_ref: None,
+    };
+
+    let candidates = vec![
+        MatchCandidate::act(
+            preferred_id,
+            dec!(12500.00),
+            Some("UA123".to_string()),
+            "Акт №42",
+            Some(NaiveDate::from_ymd_opt(2026, 5, 1).expect("валідна дата")),
+        ),
+        MatchCandidate::act(
+            other_id,
+            dec!(12500.00),
+            Some("UA999".to_string()),
+            "Інший акт",
+            Some(NaiveDate::from_ymd_opt(2026, 5, 1).expect("валідна дата")),
+        ),
+    ];
+
+    let result = choose_best_match(&payment, &candidates);
+
+    assert_eq!(result.best_match_id(), Some(preferred_id));
+    assert!(result.is_exact());
 }
 
 #[test]
