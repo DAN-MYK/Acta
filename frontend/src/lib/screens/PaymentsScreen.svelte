@@ -1,11 +1,8 @@
 <script lang="ts">
-  import SkeletonCard from "../components/SkeletonCard.svelte";
-  import SkeletonRow from "../components/SkeletonRow.svelte";
   import { paymentsStore } from "../stores/payments";
   import type { PaymentDraftFormDto, PaymentMatchCandidateDto } from "../types";
 
   const payments = paymentsStore;
-  let importButton: HTMLButtonElement | null = null;
 
   function onPaymentFieldChange(field: keyof PaymentDraftFormDto, event: Event) {
     const input = event.currentTarget as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
@@ -20,10 +17,6 @@
   function onSplitAllocationInput(documentId: string, event: Event) {
     const input = event.currentTarget as HTMLInputElement;
     payments.updateSplitAllocationAmount(documentId, input.value);
-  }
-
-  function focusImportButton() {
-    importButton?.focus();
   }
 
   function getPaymentStateLabel(matchedDoc: string): string {
@@ -48,10 +41,6 @@
       return "Кілька кандидатів на звірку";
     }
 
-    if (preview.decisionKind === "split") {
-      return "Рекомендований розподіл платежу";
-    }
-
     return "Автоматична звірка не знайшла точного документа";
   }
 
@@ -67,10 +56,6 @@
 
     if (preview.decisionKind === "ambiguous") {
       return "Оберіть найкращий варіант у списку, або відкрийте ручний пошук, якщо потрібен інший документ.";
-    }
-
-    if (preview.decisionKind === "split") {
-      return "Система підготувала рекомендований розподіл платежу між кількома документами. Перевірте кандидатів і, за потреби, скоригуйте суми в чернетці нижче.";
     }
 
     return "Для цього платежу поки немає точного збігу. Перевірте реквізити або відкрийте ручний пошук документа.";
@@ -202,10 +187,6 @@
   $: manualPickerCanConfirm = Boolean(
     $payments.manualPicker?.selectedCandidateId && ($payments.manualPicker?.candidates.length ?? 0) > 0
   );
-  $: manualPickerDisabledReason =
-    !$payments.manualPicker || $payments.manualPicker.candidates.length > 0
-      ? ""
-      : "Спершу знайдіть хоча б одного кандидата, щоб підтвердити документ.";
   $: flowTitle = getFlowTitle();
   $: flowDescription = getFlowDescription();
 </script>
@@ -235,7 +216,7 @@
           <p>CSV-імпорт лишається головним входом у сценарій, а допоміжні дії не відволікають від нього.</p>
         </div>
         <div class="payment-action-buttons">
-          <button bind:this={importButton} class="btn-primary" on:click={() => payments.importCsv()} disabled={busyImport}>
+          <button class="btn-primary" on:click={() => payments.importCsv()} disabled={busyImport}>
             {busyImport ? "Імпортуємо виписку..." : "Імпортувати виписку"}
           </button>
           <button class="btn-ghost" on:click={() => payments.syncBank()} disabled={busyImport || busySync}>
@@ -279,27 +260,23 @@
     </div>
   </div>
 
-  <div class="task-kpis" data-testid="payments-kpis">
-    {#if $payments.initialLoading}
-      <SkeletonCard count={4} />
-    {:else}
-      <div class="task-kpi-card">
-        <strong>{$payments.list?.kpi.incomingStr ?? "0,00"}</strong>
-        <span>{$payments.list?.kpi.incomingSub ?? "надходження"}</span>
-      </div>
-      <div class="task-kpi-card">
-        <strong>{$payments.list?.kpi.outgoingStr ?? "0,00"}</strong>
-        <span>{$payments.list?.kpi.outgoingSub ?? "витрати"}</span>
-      </div>
-      <div class="task-kpi-card">
-        <strong>{$payments.list?.kpi.netStr ?? "0,00"}</strong>
-        <span>Баланс</span>
-      </div>
-      <div class="task-kpi-card task-kpi-card-alert">
-        <strong>{$payments.list?.kpi.unmatchedCount ?? 0}</strong>
-        <span>Не зведено</span>
-      </div>
-    {/if}
+  <div class="task-kpis">
+    <div class="task-kpi-card">
+      <strong>{$payments.list?.kpi.incomingStr ?? "0,00"}</strong>
+      <span>{$payments.list?.kpi.incomingSub ?? "надходження"}</span>
+    </div>
+    <div class="task-kpi-card">
+      <strong>{$payments.list?.kpi.outgoingStr ?? "0,00"}</strong>
+      <span>{$payments.list?.kpi.outgoingSub ?? "витрати"}</span>
+    </div>
+    <div class="task-kpi-card">
+      <strong>{$payments.list?.kpi.netStr ?? "0,00"}</strong>
+      <span>Баланс</span>
+    </div>
+    <div class="task-kpi-card task-kpi-card-alert">
+      <strong>{$payments.list?.kpi.unmatchedCount ?? 0}</strong>
+      <span>Не зведено</span>
+    </div>
   </div>
 
   {#if flowTitle}
@@ -398,31 +375,6 @@
             </div>
           {/each}
         </div>
-      {:else if $payments.matchPreview.decisionKind === "split"}
-        <div class="documents-list">
-          {#each $payments.matchPreview.candidates as candidate}
-            <div class="doc-row payment-row payment-row-matched">
-              <div class="task-row-main">
-                <div>
-                  <strong>{candidate.title}</strong>
-                  <p>{getDocumentKindLabel(candidate.documentKind)} вЂў {candidate.openAmountStr}</p>
-                  <p>{getCandidateHint(candidate)}</p>
-                </div>
-                <div class="task-row-meta">
-                  <span class="task-pill">Рекомендація для розподілу</span>
-                </div>
-              </div>
-            </div>
-          {/each}
-        </div>
-        <div class="editor-actions">
-          <button class="btn-secondary" on:click={openManualPickerForCurrentPreview} disabled={$payments.loading}>
-            Інший документ
-          </button>
-          <div class="empty-state-actions">
-            <button class="btn-primary" type="button" on:click={focusImportButton}>Р†РјРїРѕСЂС‚СѓРІР°С‚Рё РІРёРїРёСЃРєСѓ</button>
-          </div>
-        </div>
       {:else}
         <div class="editor-items-empty">
           <strong>Автоматична звірка не знайшла точного документа</strong>
@@ -457,7 +409,6 @@
               <button
                 class="btn-primary"
                 on:click={() => payments.confirmManualPickerCandidate()}
-                aria-describedby={!manualPickerCanConfirm && manualPickerDisabledReason ? "payments-manual-picker-hint" : undefined}
                 disabled={$payments.loading || !manualPickerCanConfirm}
             >
               Підтвердити вибраний документ
@@ -466,10 +417,6 @@
               Закрити пошук
             </button>
           </div>
-
-          {#if !manualPickerCanConfirm && manualPickerDisabledReason}
-            <p id="payments-manual-picker-hint">{manualPickerDisabledReason}</p>
-          {/if}
 
           {#if $payments.manualPicker.candidates.length === 0}
             <p>За цим запитом кандидатів поки немає.</p>
@@ -565,11 +512,8 @@
         <span class="payment-group-count">{unmatchedPayments.length}</span>
       </div>
 
-      {#if $payments.initialLoading}
-        <SkeletonRow count={3} />
-      {:else if unmatchedPayments.length === 0}
+      {#if unmatchedPayments.length === 0}
         <div class="editor-items-empty">
-          <span class="empty-state-eyebrow">Додайте перший рух</span>
           <strong>Ще немає жодного платежу</strong>
           <p>Імпортуйте виписку або створіть ручний платіж, щоб почати звірку руху грошей.</p>
         </div>
@@ -584,7 +528,7 @@
                 </div>
                 <div class="task-row-meta">
                   <span class="task-pill">{item.direction === "in" ? "Надходження" : "Витрата"}</span>
-                  <span class="money-value" data-negative={item.amountStr.trim().startsWith("-")}>{item.amountStr}</span>
+                  <span>{item.amountStr}</span>
                   <span class="payment-state payment-state-unmatched">{getPaymentStateLabel(item.matchedDoc)}</span>
                 </div>
               </button>
@@ -612,9 +556,7 @@
         <span class="payment-group-count">{matchedPayments.length}</span>
       </div>
 
-      {#if $payments.initialLoading}
-        <SkeletonRow count={3} />
-      {:else if matchedPayments.length === 0}
+      {#if matchedPayments.length === 0}
         <div class="editor-items-empty">
           <strong>Ще немає зведених платежів</strong>
           <p>Проведіть першу звірку в лівому блоці, щоб тут з'явився готовий результат.</p>
@@ -630,7 +572,7 @@
                 </div>
                 <div class="task-row-meta">
                   <span class="task-pill">{item.direction === "in" ? "Надходження" : "Витрата"}</span>
-                  <span class="money-value" data-negative={item.amountStr.trim().startsWith("-")}>{item.amountStr}</span>
+                  <span>{item.amountStr}</span>
                   <span class="payment-state payment-state-matched">{getPaymentStateLabel(item.matchedDoc)}</span>
                 </div>
               </button>
