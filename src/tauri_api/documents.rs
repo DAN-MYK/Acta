@@ -1477,7 +1477,7 @@ pub async fn documents_bulk_advance_status_live(
             Some(DocumentRef::Waybill(id)) => db::waybills::advance_status(ctx.pool(), id)
                 .await
                 .map(|value| value.map(|_| ())),
-            None => Err(anyhow!("РќРµРєРѕСЂРµРєС‚РЅРёР№ С–РґРµРЅС‚РёС„С–РєР°С‚РѕСЂ РґРѕРєСѓРјРµРЅС‚Р°: {doc_id}")),
+            None => Err(anyhow!("Некоректний ідентифікатор документа: {doc_id}")),
         };
 
         match advance_result {
@@ -1486,7 +1486,7 @@ pub async fn documents_bulk_advance_status_live(
                 result.failed += 1;
                 result
                     .errors
-                    .push(format!("{doc_id}: РґРѕРєСѓРјРµРЅС‚ РЅРµ Р·РЅР°Р№РґРµРЅРѕ"));
+                    .push(format!("{doc_id}: документ не знайдено"));
             }
             Err(error) => {
                 result.failed += 1;
@@ -1497,13 +1497,13 @@ pub async fn documents_bulk_advance_status_live(
 
     result.message = match (result.succeeded, result.failed) {
         (0, failed) if failed > 0 => {
-            format!("РќРµ РІРґР°Р»РѕСЃСЏ РѕРЅРѕРІРёС‚Рё СЃС‚Р°С‚СѓСЃ Р¶РѕРґРЅРѕРіРѕ РґРѕРєСѓРјРµРЅС‚Р° ({failed} РїРѕРјРёР»РѕРє)")
+            format!("Не вдалося оновити статус жодного документа ({failed} помилок)")
         }
         (succeeded, 0) => {
-            format!("РћРЅРѕРІР»РµРЅРѕ СЃС‚Р°С‚СѓСЃ РґР»СЏ {succeeded} {}", document_word_form(succeeded))
+            format!("Оновлено статус для {succeeded} {}", document_word_form(succeeded))
         }
         (succeeded, failed) => format!(
-            "РћРЅРѕРІР»РµРЅРѕ СЃС‚Р°С‚СѓСЃ РґР»СЏ {succeeded} {}, {failed} РїРѕРјРёР»РѕРє",
+            "Оновлено статус для {succeeded} {}, {failed} помилок",
             document_word_form(succeeded)
         ),
     };
