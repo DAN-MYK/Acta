@@ -1,6 +1,6 @@
 <script lang="ts">
   import { reportsStore } from "../stores/reports";
-  import type { ReportsScope, ReportsTab } from "../types";
+  import type { PayableRowDto, ReceivableRowDto, ReportsScope, ReportsTab } from "../types";
 
   const reports = reportsStore;
 
@@ -42,6 +42,67 @@
     }
     return "Швидко оцініть рух грошей, дебіторку та кредиторку в одному місці.";
   }
+
+  function overdueReceivables(rows: ReceivableRowDto[]): ReceivableRowDto[] {
+    return rows.filter((row) => row.overdueDays > 0);
+  }
+
+  function overduePayables(rows: PayableRowDto[]): PayableRowDto[] {
+    return rows.filter((row) => row.overdueDays > 0);
+  }
+
+  function getFocusTitle(tab: ReportsTab | undefined): string {
+    if (tab === "receivables") {
+      return "Потрібно сьогодні";
+    }
+    if (tab === "payables") {
+      return "Найближчі виплати";
+    }
+    return "У фокусі зараз";
+  }
+
+  function getFocusDescription(tab: ReportsTab | undefined): string {
+    if (tab === "receivables") {
+      return "Зосередьтеся на прострочених надходженнях і найближчих очікуваних оплатах.";
+    }
+    if (tab === "payables") {
+      return "Платежі, які не можна загубити між іншими операційними задачами.";
+    }
+    return "Коротка управлінська витяжка, щоб побачити ризики до занурення в таблицю.";
+  }
+
+  function getFocusValue(tab: ReportsTab | undefined): string {
+    if (tab === "receivables") {
+      return `${overdueReceivables($reports.screen?.receivablesRows ?? []).length}`;
+    }
+    if (tab === "payables") {
+      return `${overduePayables($reports.screen?.payablesRows ?? []).length}`;
+    }
+    return $reports.screen?.summary.closingBalanceStr ?? "0,00 грн";
+  }
+
+  function getFocusMeta(tab: ReportsTab | undefined): string {
+    if (tab === "receivables") {
+      const first = overdueReceivables($reports.screen?.receivablesRows ?? [])[0];
+      return first ? `${first.docNumber} · ${first.counterparty}` : "Прострочених надходжень немає";
+    }
+    if (tab === "payables") {
+      const first = overduePayables($reports.screen?.payablesRows ?? [])[0];
+      return first ? `${first.counterparty} · ${first.dueDate}` : "Прострочених виплат немає";
+    }
+    const first = $reports.screen?.bankRows?.[0];
+    return first ? `${first.label} · ${first.netStr}` : "Дані по cashflow з'являться після вибору періоду";
+  }
+
+  function hasActiveRows(tab: ReportsTab | undefined): boolean {
+    if (tab === "receivables") {
+      return ($reports.screen?.receivablesRows?.length ?? 0) > 0;
+    }
+    if (tab === "payables") {
+      return ($reports.screen?.payablesRows?.length ?? 0) > 0;
+    }
+    return ($reports.screen?.bankRows?.length ?? 0) > 0;
+  }
 </script>
 
 <section class="panel">
@@ -67,6 +128,21 @@
         <p>{getReportHint($reports.screen?.filter.tab)}</p>
       </div>
       <span class="doc-kind-badge">Звіт за сценарієм</span>
+    </div>
+  </div>
+
+  <div class="reports-focus-grid">
+    <div class="reports-focus-card">
+      <span class="reports-focus-label">{getFocusTitle($reports.screen?.filter.tab)}</span>
+      <strong>{getFocusValue($reports.screen?.filter.tab)}</strong>
+      <p>{getFocusDescription($reports.screen?.filter.tab)}</p>
+      <small>{getFocusMeta($reports.screen?.filter.tab)}</small>
+    </div>
+    <div class="reports-focus-card reports-focus-card-muted">
+      <span class="reports-focus-label">Період аналізу</span>
+      <strong>{$reports.screen?.filter.dateFrom ?? "—"} → {$reports.screen?.filter.dateTo ?? "—"}</strong>
+      <p>Змініть період або scope, якщо потрібно порівняти компанії чи уточнити касовий сценарій.</p>
+      <small>{$reports.screen?.filter.scope === "all" ? "Усі компанії" : "Активна компанія"}</small>
     </div>
   </div>
 
@@ -143,8 +219,13 @@
     <p class="error">{$reports.error}</p>
   {/if}
 
-  {#if $reports.screen?.filter.tab === "bank"}
-    <div class="reports-table">
+  {#if !hasActiveRows($reports.screen?.filter.tab)}
+    <div class="empty-state-card reports-empty-state">
+      <strong>На цей період немає записів</strong>
+      <p>Змініть період, scope або сценарій звіту, щоб знайти дані для аналізу.</p>
+    </div>
+  {:else if $reports.screen?.filter.tab === "bank"}
+    <div class="reports-table reports-table-card">
       <div class="reports-table-row reports-table-head">
         <span>Група</span>
         <span>Надходження</span>
@@ -161,7 +242,7 @@
       {/each}
     </div>
   {:else if $reports.screen?.filter.tab === "receivables"}
-    <div class="reports-table">
+    <div class="reports-table reports-table-card">
       <div class="reports-table-row reports-table-head reports-table-wide">
         <span>Документ</span>
         <span>Дата</span>
@@ -184,7 +265,7 @@
       {/each}
     </div>
   {:else}
-    <div class="reports-table">
+    <div class="reports-table reports-table-card">
       <div class="reports-table-row reports-table-head reports-table-wide">
         <span>Назва</span>
         <span>Компанія</span>

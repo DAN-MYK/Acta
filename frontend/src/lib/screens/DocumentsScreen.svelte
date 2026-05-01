@@ -3,7 +3,7 @@
   import type { AppIconName } from "../icons";
   import { documentsStore } from "../stores/documents";
   import { counterpartiesStore } from "../stores/counterparties";
-  import type { DocumentKind } from "../types";
+  import type { DocumentKind, DocumentItemDto } from "../types";
 
   const documents = documentsStore;
   const counterparties = counterpartiesStore;
@@ -21,6 +21,12 @@
     invoice: "invoice",
     act: "act",
     waybill: "waybill"
+  };
+
+  const documentKindActionLabels: Record<DocumentKind, string> = {
+    invoice: "Рахунок",
+    act: "Акт",
+    waybill: "Накладну"
   };
 
   const itemTotalFormatter = new Intl.NumberFormat("uk-UA", {
@@ -195,6 +201,19 @@
       .format(normalizedQuantity * normalizedPrice)
       .replace(/\u00A0/g, " ")} грн`;
   }
+
+  function draftCount(items: DocumentItemDto[]): number {
+    return items.filter((item) => item.status === "draft").length;
+  }
+
+  function issuedCount(items: DocumentItemDto[]): number {
+    return items.filter((item) => item.status !== "draft").length;
+  }
+
+  function nextAttentionLabel(items: DocumentItemDto[]): string {
+    const draft = items.find((item) => item.status === "draft");
+    return draft ? `${draft.number} · ${draft.counterparty}` : "Усі документи вже просунуті по сценарію";
+  }
 </script>
 
 <section class="panel">
@@ -247,6 +266,21 @@
     <p class="create-strip-hint">{getCreateHint(createCounterpartyId, createKind)}</p>
   </div>
 
+  <div class="documents-focus-grid">
+    <div class="documents-focus-card">
+      <span class="reports-focus-label">Що потребує уваги</span>
+      <strong>{draftCount($documents.list?.items ?? [])}</strong>
+      <p>Чернетки, які ще не пройшли далі по сценарію й можуть затримати оплату або відвантаження.</p>
+      <small>{nextAttentionLabel($documents.list?.items ?? [])}</small>
+    </div>
+    <div class="documents-focus-card documents-focus-card-muted">
+      <span class="reports-focus-label">В роботі</span>
+      <strong>{issuedCount($documents.list?.items ?? [])}</strong>
+      <p>Документи, які вже виставлені або рухаються далі по ланцюжку.</p>
+      <small>Виберіть рядок, щоб одразу перейти до редактора та наступної дії.</small>
+    </div>
+  </div>
+
   <div class="bulk-actions">
     <label class="bulk-select-all">
       <input
@@ -260,19 +294,11 @@
       <span>Вибрати все</span>
     </label>
 
-    <button
-      class="btn-secondary"
-      disabled={$documents.selectedIds.length === 0}
-      on:click={onBulkAdvanceStatus}
-    >
+    <button class="btn-secondary" disabled={$documents.selectedIds.length === 0} on:click={onBulkAdvanceStatus}>
       Оновити статус вибраних
     </button>
 
-    <button
-      class="btn-danger"
-      disabled={$documents.selectedIds.length === 0}
-      on:click={onBulkDelete}
-    >
+    <button class="btn-danger" disabled={$documents.selectedIds.length === 0} on:click={onBulkDelete}>
       Видалити вибрані
     </button>
   </div>
@@ -285,34 +311,45 @@
     <p class="error">{$documents.error}</p>
   {/if}
 
-  <div class="documents-list">
-    {#each $documents.list?.items ?? [] as item}
-      <button class="doc-row" on:click={() => documents.open(item.id)}>
-        <label class="doc-row-checkbox" aria-label={`Вибрати ${item.number}`}>
-          <input
-            type="checkbox"
-            checked={$documents.selectedIds.includes(item.id)}
-            on:click|stopPropagation={() => onToggleSelection(item.id)}
-          />
-        </label>
-        <div>
-          <strong class="doc-row-title">
-            <AppIcon name={getDocumentKindIcon(item.kind)} surface={true} size={16} />
-            <span>{item.number}</span>
-          </strong>
-          <p>{item.counterparty}</p>
-        </div>
-        <div>
-          <span class="doc-kind-badge">
-            <AppIcon name={getDocumentKindIcon(item.kind)} size={14} />
-            <span>{getDocumentKindLabel(item.kind)}</span>
-          </span>
-          <span>{item.amountStr}</span>
-          <span>{item.statusLabel}</span>
-        </div>
-      </button>
-    {/each}
-  </div>
+  {#if ($documents.list?.items.length ?? 0) === 0}
+    <div class="empty-state-card">
+      <strong>Поки що документів немає</strong>
+      <p>Створіть першу чернетку, щоб запустити сценарій рахунку, акту або накладної.</p>
+    </div>
+  {:else}
+    <div class="documents-list">
+      {#each $documents.list?.items ?? [] as item}
+        <button class="doc-row doc-row-rich" on:click={() => documents.open(item.id)}>
+          <label class="doc-row-checkbox" aria-label={`Вибрати ${item.number}`}>
+            <input
+              type="checkbox"
+              checked={$documents.selectedIds.includes(item.id)}
+              on:click|stopPropagation={() => onToggleSelection(item.id)}
+            />
+          </label>
+
+          <div class="doc-row-body">
+            <div>
+              <strong class="doc-row-title">
+                <AppIcon name={getDocumentKindIcon(item.kind)} surface={true} size={16} />
+                <span>{item.number}</span>
+              </strong>
+              <p>{item.counterparty}</p>
+            </div>
+            <div class="doc-row-meta">
+              <span>{item.date}</span>
+              <span>{item.amountStr}</span>
+              <span class="doc-kind-badge">
+                <AppIcon name={getDocumentKindIcon(item.kind)} size={14} />
+                <span>{getDocumentKindLabel(item.kind)}</span>
+              </span>
+              <span class="doc-status-chip">{item.statusLabel}</span>
+            </div>
+          </div>
+        </button>
+      {/each}
+    </div>
+  {/if}
 </section>
 
 {#if $documents.editor}
@@ -326,7 +363,7 @@
         <button class="btn-ghost" on:click={() => documents.addItem()}>Додати позицію</button>
         <button class="btn-primary" on:click={() => documents.save()}>Зберегти</button>
         <button class="btn-secondary" on:click={() => documents.advanceStatus()}>Наступний статус</button>
-        {#if ['act', 'invoice'].includes($documents.editor.form.kind)}
+        {#if ["act", "invoice"].includes($documents.editor.form.kind)}
           <button class="btn-secondary" on:click={() => documents.generatePdf()}>PDF</button>
         {/if}
         <button class="btn-danger" on:click={onDeleteCurrent}>Видалити</button>
@@ -372,7 +409,7 @@
         {#each getChainTargets($documents.editor.form.kind) as targetKind}
           <button class="btn-secondary chain-action-button" on:click={() => onCreateChainDraft(targetKind)}>
             <AppIcon name={documentKindIcons[targetKind]} size={16} />
-            <span>Створити {documentKindLabels[targetKind]}</span>
+            <span>Створити {documentKindActionLabels[targetKind]}</span>
           </button>
         {/each}
       </div>
@@ -440,11 +477,7 @@
                 </label>
                 <label class="editor-item-field">
                   <span>Од.</span>
-                  <input
-                    value={item.unit}
-                    placeholder="Од."
-                    on:input={(event) => onItemFieldChange(index, "unit", event)}
-                  />
+                  <input value={item.unit} placeholder="Од." on:input={(event) => onItemFieldChange(index, "unit", event)} />
                 </label>
                 <label class="editor-item-field">
                   <span>Кількість</span>

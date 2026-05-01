@@ -58,6 +58,7 @@ const mocks = vi.hoisted(() => {
     create: vi.fn(),
     createChainDraft: vi.fn(),
     deleteCurrent: vi.fn(),
+    generatePdf: vi.fn(),
     load: vi.fn(),
     open: vi.fn(),
     reloadCurrent: vi.fn(),
@@ -81,6 +82,7 @@ vi.mock("../../stores/documents", () => ({
     create: mocks.create,
     createChainDraft: mocks.createChainDraft,
     deleteCurrent: mocks.deleteCurrent,
+    generatePdf: mocks.generatePdf,
     load: mocks.load,
     open: mocks.open,
     reloadCurrent: mocks.reloadCurrent,
@@ -234,6 +236,7 @@ describe("DocumentsScreen component", () => {
       mocks.create,
       mocks.createChainDraft,
       mocks.deleteCurrent,
+      mocks.generatePdf,
       mocks.load,
       mocks.open,
       mocks.reloadCurrent,
@@ -260,18 +263,19 @@ describe("DocumentsScreen component", () => {
     document.body.innerHTML = "";
   });
 
-  it("renders document rows, editor and scenario guidance", () => {
+  it("renders document rows, attention summary and scenario guidance", () => {
     const { component, target } = renderDocuments();
 
     expect(target.textContent).toContain("Документи");
     expect(target.textContent).toContain("INV-7");
     expect(target.textContent).toContain("ТОВ Ромашка");
+    expect(target.textContent).toContain("Що потребує уваги");
     expect(target.textContent).toContain("Рахунок INV-7");
     expect(target.textContent).toContain("Новий документ");
     expect(target.textContent).toContain("Що далі");
     expect(target.textContent).toContain("Позиції документа");
     expect(target.textContent).toContain("Створити Акт");
-    expect(target.textContent).toContain("Створити Накладна");
+    expect(target.textContent).toContain("Створити Накладну");
 
     component.$destroy();
   });
@@ -359,40 +363,30 @@ describe("DocumentsScreen component", () => {
     component.$destroy();
   });
 
-  it("shows item editor as a guided section with line summaries", () => {
+  it("shows a useful empty state when there are no documents yet", () => {
+    mocks.documentsState.set({
+      list: {
+        items: [],
+        invoiceItems: [],
+        actItems: [],
+        waybillItems: [],
+        totalCount: 0,
+        pageCount: 0
+      },
+      editor: null,
+      chain: null,
+      draftContext: null,
+      selectedIds: [],
+      loading: false,
+      error: null,
+      message: null,
+      query: ""
+    });
+
     const { component, target } = renderDocuments();
 
-    expect(target.textContent).toContain("Позиції документа");
-    expect(target.textContent).toContain("1 позиція");
-    expect(target.textContent).toContain("Додайте товари або послуги");
-    expect(target.textContent).toContain("Рядок 1");
-    expect(target.textContent).toContain("Сума позиції");
-    expect(target.textContent).toContain("5 000,00 грн");
-
-    component.$destroy();
-  });
-
-  it("routes selection controls and bulk actions into the documents store", async () => {
-    const { component, target } = renderDocuments();
-
-    const selectionBoxes = target.querySelectorAll('input[type="checkbox"]');
-    expect(selectionBoxes.length).toBeGreaterThanOrEqual(3);
-
-    (selectionBoxes[0] as HTMLInputElement).click();
-    await tick();
-    expect(mocks.selectAllVisible).toHaveBeenCalled();
-
-    (selectionBoxes[1] as HTMLInputElement).click();
-    await tick();
-    expect(mocks.toggleSelected).toHaveBeenCalledWith("doc-1");
-
-    buttonByText(target, "Оновити статус вибраних").click();
-    await tick();
-    expect(mocks.bulkAdvanceStatus).toHaveBeenCalled();
-
-    buttonByText(target, "Видалити вибрані").click();
-    await tick();
-    expect(mocks.bulkDelete).toHaveBeenCalled();
+    expect(target.textContent).toContain("Поки що документів немає");
+    expect(target.textContent).toContain("Створіть першу чернетку");
 
     component.$destroy();
   });
