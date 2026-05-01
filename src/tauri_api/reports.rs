@@ -299,58 +299,11 @@ fn sum_payables(rows: &[PayableRow]) -> Decimal {
     rows.iter().fold(Decimal::ZERO, |acc, row| acc + row.amount)
 }
 
-async fn load_selected_counterparty(
-    ctx: &AppCtx,
-    counterparty_id: &str,
-) -> Result<Option<SelectedCounterpartyDto>> {
-    struct Row {
-        id: String,
-        name: String,
-    }
-
-    impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Row {
-        fn from_row(row: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
-            use sqlx::Row as _;
-
-            Ok(Self {
-                id: row.try_get("id")?,
-                name: row.try_get("name")?,
-            })
-        }
-    }
-
-    let Some(row) = sqlx::query_as::<_, Row>(
-        r#"
-        SELECT id::text AS id, name
-        FROM counterparties
-        WHERE id::text = $1
-        LIMIT 1
-        "#,
-    )
-    .bind(counterparty_id)
-    .fetch_optional(ctx.pool())
-    .await?
-    else {
-        return Ok(None);
-    };
-
-    Ok(Some(SelectedCounterpartyDto {
-        id: row.id,
-        name: row.name,
-    }))
-}
-
 async fn build_reports_screen(
     ctx: &AppCtx,
     filter: ResolvedReportsFilter,
     filter_dto: ReportsFilterDto,
 ) -> Result<ReportsScreenDto> {
-    let selected_counterparty = if let Some(id) = filter.selected_counterparty_id.as_deref() {
-        load_selected_counterparty(ctx, id).await?
-    } else {
-        None
-    };
-
     let (opening_balance, bank_rows, pnl_rows, receivables_rows, payables_rows) = tokio::try_join!(
         compute_opening_balance(ctx, &filter),
         load_bank_rows(ctx, &filter),
@@ -365,6 +318,16 @@ async fn build_reports_screen(
         "pnl" => load_top_counterparties_pnl(ctx, &filter).await?,
         _ => load_top_counterparties_bank(ctx, &filter).await?,
     };
+
+    let selected_counterparty = filter.selected_counterparty_id.as_ref().and_then(|id| {
+        top_counterparties
+            .iter()
+            .find(|r| &r.counterparty_id == id)
+            .map(|r| SelectedCounterpartyDto {
+                id: r.counterparty_id.clone(),
+                name: r.counterparty_name.clone(),
+            })
+    });
 
     let income = bank_rows
         .iter()
