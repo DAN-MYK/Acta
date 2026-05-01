@@ -1180,3 +1180,9 @@ git commit -m "test: verify all changes compile and tests pass"
 - Document chains prefill counterparty, date, amount, and items
 - Bulk operations refresh UI only if at least one succeeds
 - All database operations are awaited and errors handled
+
+---
+
+## Статус реалізації
+
+✅ **Повністю реалізовано** — 2026-04-27

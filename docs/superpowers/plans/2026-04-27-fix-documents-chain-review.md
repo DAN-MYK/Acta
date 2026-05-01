@@ -358,3 +358,9 @@ git commit -m "test: add unit tests for chain pure functions (split/compose note
 - [x] Important #6 (string comparison) — не потребує змін: `normalize_chain_kind` гарантує lowercase на обох сторонах; додаткова explicit нормалізація на `step.doc_type` ускладнила б код без реальної вигоди поки нема enum
 - [x] Important #7 (unit tests) — Task 6
 - [x] Minor #8 (pub visibility) — Task 5
+
+---
+
+## Статус реалізації
+
+✅ **Повністю реалізовано** — 2026-04-27
