@@ -326,6 +326,9 @@
         <button class="btn-ghost" on:click={() => documents.addItem()}>Додати позицію</button>
         <button class="btn-primary" on:click={() => documents.save()}>Зберегти</button>
         <button class="btn-secondary" on:click={() => documents.advanceStatus()}>Наступний статус</button>
+        {#if ['act', 'invoice'].includes($documents.editor.form.kind)}
+          <button class="btn-secondary" on:click={() => documents.generatePdf()}>PDF</button>
+        {/if}
         <button class="btn-danger" on:click={onDeleteCurrent}>Видалити</button>
         <button class="btn-ghost" on:click={() => documents.closeEditor()}>Закрити</button>
       </div>

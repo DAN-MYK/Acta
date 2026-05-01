@@ -5,6 +5,7 @@ import {
   documentChainGet,
   documentCreateDraft,
   documentDelete,
+  documentGeneratePdf,
   documentOpen,
   documentSave,
   documentsBulkAdvanceStatus,
@@ -297,6 +298,19 @@ function createDocumentsStore() {
           loading: false,
           message: response.message
         }));
+      } catch (error) {
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      }
+    },
+    async generatePdf() {
+      const snapshot = get({ subscribe });
+      const docId = snapshot.editor?.form.id;
+      if (!docId) return;
+
+      update((state) => ({ ...state, loading: true, error: null, message: null }));
+      try {
+        const response = await documentGeneratePdf(docId);
+        update((state) => ({ ...state, loading: false, message: response.message }));
       } catch (error) {
         update((state) => ({ ...state, loading: false, error: String(error) }));
       }

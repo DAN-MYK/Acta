@@ -302,5 +302,9 @@ export function paymentUnreconcile(paymentId: string): Promise<MutationResultDto
   return appInvoke("payment_unreconcile", { paymentId });
 }
 
+export function documentGeneratePdf(docId: string): Promise<MutationResultDto> {
+  return appInvoke("document_generate_pdf", { docId });
+}
+
 export const importBasPlan = () => appInvoke<ImportPlanDto>("import_bas_plan");
 export const importBasExecute = () => appInvoke<ImportResultDto>("import_bas_execute");
