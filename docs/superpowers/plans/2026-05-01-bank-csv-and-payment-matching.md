@@ -97,7 +97,7 @@
 ## Наступна таска
 
 ### Task 9. Amount-aware split preview + hardening
-Статус: `next`
+Статус: `in_progress`
 
 Ціль:
 - навчити matcher повертати recommendation для partial/split cases, де один exact candidate не закриває весь платіж;
@@ -108,3 +108,8 @@
 - UI підказки для рекомендованого розподілу суми;
 - додаткові frontend component tests;
 - ширші backend/integration перевірки для split matching.
+
+Поточний прогрес:
+- matcher уже повертає `decisionKind = split`, якщо сильного exact-match немає, але є релевантна комбінація документів, що покриває суму платежу;
+- payments store уже автозаповнює `splitDraft` із preview-рекомендації без старту з manual picker;
+- додано backend unit tests і frontend store regression на split preview flow.
