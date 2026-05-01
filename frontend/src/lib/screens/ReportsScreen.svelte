@@ -24,6 +24,9 @@
   }
 
   function getReportHeadline(tab: ReportsTab | undefined): string {
+    if (tab === "pnl") {
+      return "Фінрезультат за період";
+    }
     if (tab === "receivables") {
       return "Дебіторка під контролем";
     }
@@ -34,6 +37,9 @@
   }
 
   function getReportHint(tab: ReportsTab | undefined): string {
+    if (tab === "pnl") {
+      return "Подивіться, які категорії формують дохід, витрати та чистий результат за вибраний період.";
+    }
     if (tab === "receivables") {
       return "Знайдіть прострочені надходження та документи, які потребують уваги першими.";
     }
@@ -52,6 +58,9 @@
   }
 
   function getFocusTitle(tab: ReportsTab | undefined): string {
+    if (tab === "pnl") {
+      return "У фокусі результат";
+    }
     if (tab === "receivables") {
       return "Потрібно сьогодні";
     }
@@ -62,6 +71,9 @@
   }
 
   function getFocusDescription(tab: ReportsTab | undefined): string {
+    if (tab === "pnl") {
+      return "Короткий управлінський зріз, щоб побачити чистий результат без переходу в Excel.";
+    }
     if (tab === "receivables") {
       return "Зосередьтеся на прострочених надходженнях і найближчих очікуваних оплатах.";
     }
@@ -72,6 +84,9 @@
   }
 
   function getFocusValue(tab: ReportsTab | undefined): string {
+    if (tab === "pnl") {
+      return $reports.screen?.summary.pnlNetResultStr ?? "0,00 грн";
+    }
     if (tab === "receivables") {
       return `${overdueReceivables($reports.screen?.receivablesRows ?? []).length}`;
     }
@@ -82,6 +97,10 @@
   }
 
   function getFocusMeta(tab: ReportsTab | undefined): string {
+    if (tab === "pnl") {
+      const first = $reports.screen?.pnlRows?.[0];
+      return first ? `${first.label} · ${first.netStr}` : "Категорії з'являться після вибору періоду";
+    }
     if (tab === "receivables") {
       const first = overdueReceivables($reports.screen?.receivablesRows ?? [])[0];
       return first ? `${first.docNumber} · ${first.counterparty}` : "Прострочених надходжень немає";
@@ -95,6 +114,9 @@
   }
 
   function hasActiveRows(tab: ReportsTab | undefined): boolean {
+    if (tab === "pnl") {
+      return ($reports.screen?.pnlRows?.length ?? 0) > 0;
+    }
     if (tab === "receivables") {
       return ($reports.screen?.receivablesRows?.length ?? 0) > 0;
     }
@@ -112,6 +134,8 @@
       <p>{getReportHeadline($reports.screen?.filter.tab)}</p>
     </div>
     <div class="panel-actions">
+      <button class="btn-primary" on:click={() => reports.exportExcelAndOpen()}>Відкрити Excel</button>
+      <button class="btn-secondary" on:click={() => reports.exportExcel()}>Експортувати Excel</button>
       <input
         placeholder="Пошук по поточному звіту"
         value={$reports.screen?.filter.query ?? ""}
@@ -141,7 +165,7 @@
     <div class="reports-focus-card reports-focus-card-muted">
       <span class="reports-focus-label">Період аналізу</span>
       <strong>{$reports.screen?.filter.dateFrom ?? "—"} → {$reports.screen?.filter.dateTo ?? "—"}</strong>
-      <p>Змініть період або scope, якщо потрібно порівняти компанії чи уточнити касовий сценарій.</p>
+      <p>Змініть період або scope, якщо потрібно порівняти компанії чи уточнити сценарій звіту.</p>
       <small>{$reports.screen?.filter.scope === "all" ? "Усі компанії" : "Активна компанія"}</small>
     </div>
   </div>
@@ -150,6 +174,9 @@
     <div class="task-tabs">
       <button class:active={$reports.screen?.filter.tab === "bank"} on:click={() => onReportsTabChange("bank")}>
         Рух грошей
+      </button>
+      <button class:active={$reports.screen?.filter.tab === "pnl"} on:click={() => onReportsTabChange("pnl")}>
+        P&amp;L
       </button>
       <button
         class:active={$reports.screen?.filter.tab === "receivables"}
@@ -193,22 +220,41 @@
   </div>
 
   <div class="reports-kpis">
-    <div class="task-kpi-card">
-      <strong>{$reports.screen?.summary.openingBalanceStr ?? "0,00 грн"}</strong>
-      <span>{$reports.screen?.filter.tab === "bank" ? "Залишок на початок" : "База звіту"}</span>
-    </div>
-    <div class="task-kpi-card">
-      <strong>{$reports.screen?.summary.incomeStr ?? "0,00 грн"}</strong>
-      <span>{$reports.screen?.filter.tab === "payables" ? "Очікувані надходження" : "Надходження"}</span>
-    </div>
-    <div class="task-kpi-card">
-      <strong>{$reports.screen?.summary.receivablesTotalStr ?? "0,00 грн"}</strong>
-      <span>{$reports.screen?.filter.tab === "receivables" ? "До отримання" : "Дебіторка"}</span>
-    </div>
-    <div class="task-kpi-card">
-      <strong>{$reports.screen?.summary.payablesTotalStr ?? "0,00 грн"}</strong>
-      <span>{$reports.screen?.filter.tab === "payables" ? "До оплати" : "Кредиторка"}</span>
-    </div>
+    {#if $reports.screen?.filter.tab === "pnl"}
+      <div class="task-kpi-card">
+        <strong>{$reports.screen?.summary.pnlIncomeStr ?? "0,00 грн"}</strong>
+        <span>Дохід</span>
+      </div>
+      <div class="task-kpi-card">
+        <strong>{$reports.screen?.summary.pnlExpenseStr ?? "0,00 грн"}</strong>
+        <span>Витрати</span>
+      </div>
+      <div class="task-kpi-card">
+        <strong>{$reports.screen?.summary.pnlNetResultStr ?? "0,00 грн"}</strong>
+        <span>Фінрезультат за період</span>
+      </div>
+      <div class="task-kpi-card">
+        <strong>{$reports.screen?.pnlRows?.length ?? 0}</strong>
+        <span>Категорій у звіті</span>
+      </div>
+    {:else}
+      <div class="task-kpi-card">
+        <strong>{$reports.screen?.summary.openingBalanceStr ?? "0,00 грн"}</strong>
+        <span>{$reports.screen?.filter.tab === "bank" ? "Залишок на початок" : "База звіту"}</span>
+      </div>
+      <div class="task-kpi-card">
+        <strong>{$reports.screen?.summary.incomeStr ?? "0,00 грн"}</strong>
+        <span>{$reports.screen?.filter.tab === "payables" ? "Очікувані надходження" : "Надходження"}</span>
+      </div>
+      <div class="task-kpi-card">
+        <strong>{$reports.screen?.summary.receivablesTotalStr ?? "0,00 грн"}</strong>
+        <span>{$reports.screen?.filter.tab === "receivables" ? "До отримання" : "Дебіторка"}</span>
+      </div>
+      <div class="task-kpi-card">
+        <strong>{$reports.screen?.summary.payablesTotalStr ?? "0,00 грн"}</strong>
+        <span>{$reports.screen?.filter.tab === "payables" ? "До оплати" : "Кредиторка"}</span>
+      </div>
+    {/if}
   </div>
 
   {#if $reports.message}
@@ -233,6 +279,23 @@
         <span>Чистий рух</span>
       </div>
       {#each $reports.screen?.bankRows ?? [] as row}
+        <div class="reports-table-row">
+          <span>{row.label}</span>
+          <span>{row.incomeStr}</span>
+          <span>{row.expenseStr}</span>
+          <span>{row.netStr}</span>
+        </div>
+      {/each}
+    </div>
+  {:else if $reports.screen?.filter.tab === "pnl"}
+    <div class="reports-table reports-table-card" data-testid="reports-table-card">
+      <div class="reports-table-row reports-table-head">
+        <span>Категорія</span>
+        <span>Дохід</span>
+        <span>Витрати</span>
+        <span>Результат</span>
+      </div>
+      {#each $reports.screen?.pnlRows ?? [] as row}
         <div class="reports-table-row">
           <span>{row.label}</span>
           <span>{row.incomeStr}</span>

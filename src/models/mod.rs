@@ -8,6 +8,7 @@ pub mod dashboard;
 pub mod document_template;
 pub mod invoice;
 pub mod payment;
+pub mod reports;
 pub mod shared;
 pub mod task;
 pub mod waybill;
@@ -32,6 +33,11 @@ pub use invoice::{
     Invoice, InvoiceItem, InvoiceListRow, InvoiceStatus, NewInvoice, NewInvoiceItem, UpdateInvoice,
 };
 #[allow(unused_imports)]
+pub use reports::{
+    BankAggregateRow, PayableRow, PnlCategoryRow, ReceivableRow, ReportsScope,
+    ResolvedReportsFilter,
+};
+#[allow(unused_imports)]
 pub use shared::DocumentDirection;
 #[allow(unused_imports)]
 pub use task::{NewTask, Task, TaskPriority, TaskStatus};
@@ -43,8 +49,11 @@ pub use waybill::{
 #[cfg(test)]
 mod tests {
     use super::{
-        ActStatus, CategoryKind, DocumentDirection, NewCounterparty, TaskPriority, TaskStatus,
+        ActStatus, BankAggregateRow, CategoryKind, DocumentDirection, NewCounterparty,
+        ReportsScope, ResolvedReportsFilter, TaskPriority, TaskStatus,
     };
+    use chrono::NaiveDate;
+    use rust_decimal::Decimal;
 
     #[test]
     fn reexports_are_available_for_consumers() {
@@ -73,5 +82,26 @@ mod tests {
         assert_eq!(CategoryKind::Income.as_str(), "income");
         assert_eq!(CategoryKind::Expense.as_str(), "expense");
         assert_eq!(DocumentDirection::Outgoing.as_str(), "outgoing");
+    }
+
+    #[test]
+    fn reports_models_are_reexported() {
+        let filter = ResolvedReportsFilter {
+            scope: ReportsScope::Active,
+            date_from: NaiveDate::from_ymd_opt(2026, 5, 1).expect("valid date"),
+            date_to: NaiveDate::from_ymd_opt(2026, 5, 31).expect("valid date"),
+            query: "ромашка".to_string(),
+        };
+
+        let row = BankAggregateRow {
+            key: "ops".to_string(),
+            label: "Операційна діяльність".to_string(),
+            income: Decimal::new(100_00, 2),
+            expense: Decimal::new(40_00, 2),
+        };
+
+        assert!(matches!(filter.scope, ReportsScope::Active));
+        assert_eq!(filter.query, "ромашка");
+        assert_eq!(row.label, "Операційна діяльність");
     }
 }

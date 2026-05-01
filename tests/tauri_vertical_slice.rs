@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use chrono::Utc;
+use rust_decimal_macros::dec;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use uuid::Uuid;
@@ -620,6 +621,46 @@ async fn tauri_vertical_slice_payments_smoke() -> Result<()> {
         "kpi.unmatched_str має бути непорожнім"
     );
     let count_before = screen_before.items.len();
+    let suffix = Uuid::new_v4().simple().to_string();
+    let counterparty = acta::db::counterparties::create(
+        ctx.pool(),
+        ctx.company_id(),
+        &acta::models::NewCounterparty {
+            name: format!("Tauri Payment Counterparty {suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("tauri-payments-cp-{suffix}")),
+        },
+    )
+    .await?;
+    let act = acta::db::acts::create(
+        ctx.pool(),
+        ctx.company_id(),
+        &acta::models::NewAct {
+            number: format!("TAURI-PAYMENT-ACT-{suffix}"),
+            counterparty_id: counterparty.id,
+            contract_id: None,
+            category_id: None,
+            direction: acta::models::DocumentDirection::Outgoing,
+            date: Utc::now().date_naive(),
+            expected_payment_date: None,
+            status: acta::models::ActStatus::Issued,
+            notes: None,
+            bas_id: None,
+            items: vec![acta::models::NewActItem {
+                description: "Вертикальний slice".to_string(),
+                quantity: dec!(1.0000),
+                unit: "шт".to_string(),
+                unit_price: dec!(100.00),
+            }],
+        },
+    )
+    .await?;
 
     // 2. Створити тестовий платіж
     let today = Utc::now().format("%Y-%m-%d").to_string();
@@ -630,7 +671,7 @@ async fn tauri_vertical_slice_payments_smoke() -> Result<()> {
             date: today,
             amount: "100.00".to_string(),
             direction: "income".to_string(),
-            counterparty_id: String::new(),
+            counterparty_id: counterparty.id.to_string(),
             counterparty_name: String::new(),
             bank_name: String::new(),
             reference: String::new(),
@@ -672,23 +713,143 @@ async fn tauri_vertical_slice_payments_smoke() -> Result<()> {
 
     // Виконати решту кроків з гарантованим cleanup
     let payment_result: Result<()> = async {
+        let payment_uuid = Uuid::parse_str(&new_payment_id)?;
+
+        let malformed_amount_err = acta::tauri_api::payments::payment_reconcile(
+            &ctx,
+            acta::tauri_api::payments::PaymentReconcileRequest {
+                payment_id: new_payment_id.clone(),
+                document_kind: "act".to_string(),
+                document_id: act.id.to_string(),
+                amount: "abc".to_string(),
+            },
+        )
+        .await
+        .expect_err("malformed amount має відхилятися");
+        assert!(
+            malformed_amount_err
+                .to_string()
+                .contains("Невірна сума платежу"),
+            "payment_reconcile має повертати узгоджену помилку парсингу суми"
+        );
+
+        let zero_amount_err = acta::tauri_api::payments::payment_reconcile(
+            &ctx,
+            acta::tauri_api::payments::PaymentReconcileRequest {
+                payment_id: new_payment_id.clone(),
+                document_kind: "act".to_string(),
+                document_id: act.id.to_string(),
+                amount: "0".to_string(),
+            },
+        )
+        .await
+        .expect_err("нульова amount має відхилятися");
+        assert!(
+            zero_amount_err
+                .to_string()
+                .contains("Сума платежу має бути більшою за нуль"),
+            "payment_reconcile не має приймати нульові або від'ємні суми"
+        );
+
+        let link_exists_after_failed_requests = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM payment_acts WHERE payment_id = $1 AND act_id = $2)",
+        )
+        .bind(payment_uuid)
+        .bind(act.id)
+        .fetch_one(ctx.pool())
+        .await?;
+        assert!(
+            !link_exists_after_failed_requests,
+            "після невалідного payload reconcile не має створювати link"
+        );
+
         // 4. Позначити як зведений
-        let reconcile_result =
-            acta::tauri_api::payments::payment_reconcile(&ctx, new_payment_id.clone()).await?;
+        let reconcile_result = acta::tauri_api::payments::payment_reconcile(
+            &ctx,
+            acta::tauri_api::payments::PaymentReconcileRequest {
+                payment_id: new_payment_id.clone(),
+                document_kind: "act".to_string(),
+                document_id: act.id.to_string(),
+                amount: "100,00".to_string(),
+            },
+        )
+        .await?;
         assert!(
             reconcile_result.ok,
             "payment_reconcile має повернути ok=true"
         );
 
         // 5. Зняти позначку зведення
-        let unreconcile_result =
-            acta::tauri_api::payments::payment_unreconcile(&ctx, new_payment_id.clone()).await?;
+        let act_link_exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM payment_acts WHERE payment_id = $1 AND act_id = $2)",
+        )
+        .bind(payment_uuid)
+        .bind(act.id)
+        .fetch_one(ctx.pool())
+        .await?;
+        assert!(
+            act_link_exists,
+            "reconcile має зберігати link у payment_acts"
+        );
+
+        let act_link_amount = sqlx::query_scalar::<_, rust_decimal::Decimal>(
+            "SELECT amount FROM payment_acts WHERE payment_id = $1 AND act_id = $2",
+        )
+        .bind(payment_uuid)
+        .bind(act.id)
+        .fetch_one(ctx.pool())
+        .await?;
+        assert_eq!(
+            act_link_amount,
+            dec!(100.00),
+            "localized amount має парситися до канонічного Decimal"
+        );
+
+        let reconciled_payment =
+            acta::db::payments::get_by_id_scoped(ctx.pool(), ctx.company_id(), payment_uuid)
+                .await?
+                .ok_or_else(|| anyhow!("створений платіж має існувати після reconcile"))?;
+        assert!(
+            reconciled_payment.is_reconciled,
+            "is_reconciled має бути derived=true після створення link"
+        );
+
+        let unreconcile_result = acta::tauri_api::payments::payment_unreconcile(
+            &ctx,
+            acta::tauri_api::payments::PaymentUnreconcileRequest {
+                payment_id: new_payment_id.clone(),
+                document_kind: "act".to_string(),
+                document_id: act.id.to_string(),
+            },
+        )
+        .await?;
         assert!(
             unreconcile_result.ok,
             "payment_unreconcile має повернути ok=true"
         );
 
         // 6. Імпорт CSV — допустимі як Ok, так і Err (файл може бути відсутній)
+        let act_link_exists_after = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM payment_acts WHERE payment_id = $1 AND act_id = $2)",
+        )
+        .bind(payment_uuid)
+        .bind(act.id)
+        .fetch_one(ctx.pool())
+        .await?;
+        assert!(
+            !act_link_exists_after,
+            "unreconcile має видаляти link із payment_acts"
+        );
+
+        let unreconciled_payment =
+            acta::db::payments::get_by_id_scoped(ctx.pool(), ctx.company_id(), payment_uuid)
+                .await?
+                .ok_or_else(|| anyhow!("створений платіж має існувати після unreconcile"))?;
+        assert!(
+            !unreconciled_payment.is_reconciled,
+            "після видалення всіх links derived state має ставати false"
+        );
+
         let _ = acta::tauri_api::payments::payments_import_latest_csv(&ctx).await;
 
         Ok(())
@@ -699,8 +860,373 @@ async fn tauri_vertical_slice_payments_smoke() -> Result<()> {
     let payment_uuid = uuid::Uuid::parse_str(&new_payment_id)
         .map_err(|e| anyhow!("не вдалося розпарсити UUID платежу: {}", e))?;
     acta::db::payments::delete_scoped(ctx.pool(), ctx.company_id(), payment_uuid).await?;
+    let _ = acta::db::acts::delete(ctx.pool(), act.id).await;
+    let _ = sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(counterparty.id)
+        .execute(ctx.pool())
+        .await;
 
     payment_result?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn tauri_vertical_slice_payment_match_preview_and_apply_auto_exact() -> Result<()> {
+    let _guard = tauri_vertical_slice_lock().lock().await;
+    let _ = dotenvy::dotenv();
+    std::env::set_var("ACTA_CONFIG_DIR", "storage/test-config");
+
+    let pool = acta::runtime::connect_pool().await?;
+    let company_id = acta::runtime::get_first_company_id(&pool).await;
+    let ctx = Arc::new(acta::app_ctx::AppCtx::new(pool, company_id));
+
+    let suffix = Uuid::new_v4().simple().to_string();
+    let counterparty = acta::db::counterparties::create(
+        ctx.pool(),
+        ctx.company_id(),
+        &acta::models::NewCounterparty {
+            name: format!("Preview Exact Counterparty {suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: Some("UA123456789012345678901234567".to_string()),
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("preview-exact-cp-{suffix}")),
+        },
+    )
+    .await?;
+
+    let act_number = format!("AUTO-ACT-{suffix}");
+    let invoice_number = format!("AUTO-INV-{suffix}");
+    let payment_ref = format!("BANK-REF-{suffix}");
+    let today = Utc::now().date_naive();
+
+    let act = acta::db::acts::create(
+        ctx.pool(),
+        ctx.company_id(),
+        &acta::models::NewAct {
+            number: act_number.clone(),
+            counterparty_id: counterparty.id,
+            contract_id: None,
+            category_id: None,
+            direction: acta::models::DocumentDirection::Outgoing,
+            date: today,
+            expected_payment_date: Some(today),
+            status: acta::models::ActStatus::Issued,
+            notes: None,
+            bas_id: None,
+            items: vec![acta::models::NewActItem {
+                description: "Preview exact act".to_string(),
+                quantity: dec!(1.0000),
+                unit: "шт".to_string(),
+                unit_price: dec!(150.00),
+            }],
+        },
+    )
+    .await?;
+
+    let invoice = acta::db::invoices::create(
+        ctx.pool(),
+        ctx.company_id(),
+        &acta::models::NewInvoice {
+            number: invoice_number,
+            counterparty_id: counterparty.id,
+            contract_id: None,
+            category_id: None,
+            direction: acta::models::DocumentDirection::Outgoing,
+            date: today,
+            expected_payment_date: Some(today),
+            notes: None,
+            items: vec![acta::models::NewInvoiceItem {
+                position: 1,
+                description: "Preview exact invoice".to_string(),
+                quantity: dec!(1.0000),
+                unit: Some("шт".to_string()),
+                price: dec!(150.00),
+            }],
+            bas_id: None,
+        },
+    )
+    .await?;
+    acta::db::invoices::change_status(
+        ctx.pool(),
+        invoice.id,
+        acta::models::invoice::InvoiceStatus::Issued,
+    )
+    .await?
+    .ok_or_else(|| anyhow!("створена накладна має існувати для preview exact"))?;
+
+    acta::tauri_api::payments::payment_create_or_update(
+        &ctx,
+        acta::tauri_api::payments::PaymentCreateOrUpdateRequest {
+            id: String::new(),
+            date: today.format("%Y-%m-%d").to_string(),
+            amount: "150.00".to_string(),
+            direction: "income".to_string(),
+            counterparty_id: counterparty.id.to_string(),
+            counterparty_name: String::new(),
+            bank_name: String::new(),
+            reference: payment_ref.clone(),
+            description: format!("Оплата {act_number}"),
+        },
+    )
+    .await?;
+
+    let payment_id = sqlx::query_scalar::<_, Uuid>(
+        "SELECT id FROM payments WHERE company_id = $1 AND bank_ref = $2 ORDER BY created_at DESC LIMIT 1",
+    )
+    .bind(ctx.company_id())
+    .bind(&payment_ref)
+    .fetch_one(ctx.pool())
+    .await?;
+
+    let preview = acta::tauri_api::payments::payment_match_preview(
+        &ctx,
+        acta::tauri_api::payments::PaymentMatchPreviewRequest {
+            payment_id: payment_id.to_string(),
+        },
+    )
+    .await?;
+    assert_eq!(preview.payment_id, payment_id.to_string());
+    assert!(!preview.is_reconciled);
+    assert_eq!(preview.decision_kind, "exact");
+    assert!(
+        preview.candidates.len() >= 2,
+        "preview має повертати список кандидатів для review"
+    );
+    let top_candidate = preview
+        .candidates
+        .first()
+        .ok_or_else(|| anyhow!("для exact preview має бути хоча б один кандидат"))?;
+    assert_eq!(top_candidate.document_id, act.id.to_string());
+    assert_eq!(top_candidate.document_kind, "act");
+    assert!(top_candidate.same_iban);
+    assert!(top_candidate.text_hits >= 1);
+    let recommendation = preview
+        .auto_match
+        .ok_or_else(|| anyhow!("exact preview має повертати auto-match recommendation"))?;
+    assert_eq!(recommendation.document_id, act.id.to_string());
+    assert_eq!(recommendation.document_kind, "act");
+
+    let apply_result = acta::tauri_api::payments::payment_match_apply_auto(
+        &ctx,
+        acta::tauri_api::payments::PaymentMatchApplyAutoRequest {
+            payment_id: payment_id.to_string(),
+        },
+    )
+    .await?;
+    assert!(apply_result.ok, "apply-auto має завершуватися успішно для exact match");
+
+    let act_link_amount = sqlx::query_scalar::<_, rust_decimal::Decimal>(
+        "SELECT amount FROM payment_acts WHERE payment_id = $1 AND act_id = $2",
+    )
+    .bind(payment_id)
+    .bind(act.id)
+    .fetch_one(ctx.pool())
+    .await?;
+    assert_eq!(
+        act_link_amount,
+        dec!(150.00),
+        "auto-apply має звіряти платіж на повну суму exact кандидата"
+    );
+
+    let payment = acta::db::payments::get_by_id_scoped(ctx.pool(), ctx.company_id(), payment_id)
+        .await?
+        .ok_or_else(|| anyhow!("створений платіж має існувати після apply-auto"))?;
+    assert!(payment.is_reconciled);
+
+    acta::db::payments::delete_scoped(ctx.pool(), ctx.company_id(), payment_id).await?;
+    let _ = acta::db::invoices::delete(ctx.pool(), invoice.id).await;
+    let _ = acta::db::acts::delete(ctx.pool(), act.id).await;
+    let _ = sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(counterparty.id)
+        .execute(ctx.pool())
+        .await;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn tauri_vertical_slice_payment_match_preview_ambiguous_refuses_auto_apply() -> Result<()> {
+    let _guard = tauri_vertical_slice_lock().lock().await;
+    let _ = dotenvy::dotenv();
+    std::env::set_var("ACTA_CONFIG_DIR", "storage/test-config");
+
+    let pool = acta::runtime::connect_pool().await?;
+    let company_id = acta::runtime::get_first_company_id(&pool).await;
+    let ctx = Arc::new(acta::app_ctx::AppCtx::new(pool, company_id));
+
+    let suffix = Uuid::new_v4().simple().to_string();
+    let counterparty = acta::db::counterparties::create(
+        ctx.pool(),
+        ctx.company_id(),
+        &acta::models::NewCounterparty {
+            name: format!("Preview Ambiguous Counterparty {suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("preview-ambiguous-cp-{suffix}")),
+        },
+    )
+    .await?;
+
+    let today = Utc::now().date_naive();
+    let act = acta::db::acts::create(
+        ctx.pool(),
+        ctx.company_id(),
+        &acta::models::NewAct {
+            number: format!("AMB-ACT-{suffix}"),
+            counterparty_id: counterparty.id,
+            contract_id: None,
+            category_id: None,
+            direction: acta::models::DocumentDirection::Outgoing,
+            date: today,
+            expected_payment_date: Some(today),
+            status: acta::models::ActStatus::Issued,
+            notes: None,
+            bas_id: None,
+            items: vec![acta::models::NewActItem {
+                description: "Ambiguous act".to_string(),
+                quantity: dec!(1.0000),
+                unit: "шт".to_string(),
+                unit_price: dec!(210.00),
+            }],
+        },
+    )
+    .await?;
+    let invoice = acta::db::invoices::create(
+        ctx.pool(),
+        ctx.company_id(),
+        &acta::models::NewInvoice {
+            number: format!("AMB-INV-{suffix}"),
+            counterparty_id: counterparty.id,
+            contract_id: None,
+            category_id: None,
+            direction: acta::models::DocumentDirection::Outgoing,
+            date: today,
+            expected_payment_date: Some(today),
+            notes: None,
+            items: vec![acta::models::NewInvoiceItem {
+                position: 1,
+                description: "Ambiguous invoice".to_string(),
+                quantity: dec!(1.0000),
+                unit: Some("шт".to_string()),
+                price: dec!(210.00),
+            }],
+            bas_id: None,
+        },
+    )
+    .await?;
+    acta::db::invoices::change_status(
+        ctx.pool(),
+        invoice.id,
+        acta::models::invoice::InvoiceStatus::Issued,
+    )
+    .await?
+    .ok_or_else(|| anyhow!("створена накладна має існувати для preview ambiguous"))?;
+
+    let payment_ref = format!("AMB-PAYMENT-{suffix}");
+    acta::tauri_api::payments::payment_create_or_update(
+        &ctx,
+        acta::tauri_api::payments::PaymentCreateOrUpdateRequest {
+            id: String::new(),
+            date: today.format("%Y-%m-%d").to_string(),
+            amount: "210.00".to_string(),
+            direction: "income".to_string(),
+            counterparty_id: counterparty.id.to_string(),
+            counterparty_name: String::new(),
+            bank_name: String::new(),
+            reference: payment_ref.clone(),
+            description: "Оплата послуг".to_string(),
+        },
+    )
+    .await?;
+
+    let payment_id = sqlx::query_scalar::<_, Uuid>(
+        "SELECT id FROM payments WHERE company_id = $1 AND bank_ref = $2 ORDER BY created_at DESC LIMIT 1",
+    )
+    .bind(ctx.company_id())
+    .bind(&payment_ref)
+    .fetch_one(ctx.pool())
+    .await?;
+
+    let preview = acta::tauri_api::payments::payment_match_preview(
+        &ctx,
+        acta::tauri_api::payments::PaymentMatchPreviewRequest {
+            payment_id: payment_id.to_string(),
+        },
+    )
+    .await?;
+    assert_eq!(preview.decision_kind, "ambiguous");
+    assert!(
+        preview.candidates.len() >= 2,
+        "ambiguous preview має повертати всі рівноцінні або релевантні exact кандидати"
+    );
+    let act_id = act.id.to_string();
+    let invoice_id = invoice.id.to_string();
+    let candidate_ids = preview
+        .candidates
+        .iter()
+        .map(|candidate| candidate.document_id.as_str())
+        .collect::<Vec<_>>();
+    assert!(candidate_ids.contains(&act_id.as_str()));
+    assert!(candidate_ids.contains(&invoice_id.as_str()));
+    assert!(
+        preview.auto_match.is_none(),
+        "ambiguous preview не має пропонувати auto-match"
+    );
+
+    let apply_err = acta::tauri_api::payments::payment_match_apply_auto(
+        &ctx,
+        acta::tauri_api::payments::PaymentMatchApplyAutoRequest {
+            payment_id: payment_id.to_string(),
+        },
+    )
+    .await
+    .expect_err("ambiguous preview має блокувати auto-apply");
+    assert!(
+        apply_err
+            .to_string()
+            .contains("Автозіставлення неможливе"),
+        "для ambiguous apply-auto має повертати зрозумілу помилку"
+    );
+
+    let payment = acta::db::payments::get_by_id_scoped(ctx.pool(), ctx.company_id(), payment_id)
+        .await?
+        .ok_or_else(|| anyhow!("створений платіж має існувати після відмови auto-apply"))?;
+    assert!(
+        !payment.is_reconciled,
+        "ambiguous auto-apply не має змінювати reconcile state"
+    );
+
+    let has_act_link = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM payment_acts WHERE payment_id = $1)",
+    )
+    .bind(payment_id)
+    .fetch_one(ctx.pool())
+    .await?;
+    let has_invoice_link = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM payment_invoices WHERE payment_id = $1)",
+    )
+    .bind(payment_id)
+    .fetch_one(ctx.pool())
+    .await?;
+    assert!(!has_act_link && !has_invoice_link);
+
+    acta::db::payments::delete_scoped(ctx.pool(), ctx.company_id(), payment_id).await?;
+    let _ = acta::db::invoices::delete(ctx.pool(), invoice.id).await;
+    let _ = acta::db::acts::delete(ctx.pool(), act.id).await;
+    let _ = sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(counterparty.id)
+        .execute(ctx.pool())
+        .await;
 
     Ok(())
 }

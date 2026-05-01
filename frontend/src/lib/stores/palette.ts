@@ -32,6 +32,13 @@ function createPaletteStore() {
     };
   }
 
+  function buildOpenState() {
+    return {
+      ...buildClosedState(),
+      open: true
+    };
+  }
+
   function primeDefaultResults() {
     void search("");
   }
@@ -46,10 +53,7 @@ function createPaletteStore() {
 
       update((state) => {
         if (currentToken !== searchToken) {
-          return {
-            ...state,
-            loading: false
-          };
+          return state;
         }
 
         return {
@@ -61,10 +65,7 @@ function createPaletteStore() {
     } catch (error) {
       update((state) => {
         if (currentToken !== searchToken) {
-          return {
-            ...state,
-            loading: false
-          };
+          return state;
         }
 
         return {
@@ -80,10 +81,7 @@ function createPaletteStore() {
     subscribe,
     open() {
       searchToken += 1;
-      set({
-        ...buildClosedState(),
-        open: true
-      });
+      set(buildOpenState());
       primeDefaultResults();
     },
     toggle() {
@@ -96,10 +94,7 @@ function createPaletteStore() {
         }
 
         shouldPrime = true;
-        return {
-          ...buildClosedState(),
-          open: true
-        };
+        return buildOpenState();
       });
 
       if (shouldPrime) {

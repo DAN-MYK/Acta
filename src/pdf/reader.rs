@@ -51,11 +51,7 @@ mod tests {
 
     #[test]
     fn replace_pdf_text_returns_err_for_missing_file() {
-        let result = replace_pdf_text(
-            Path::new("__nonexistent__.pdf"),
-            "ЧЕРНЕТКА",
-            "ОПЛАЧЕНО",
-        );
+        let result = replace_pdf_text(Path::new("__nonexistent__.pdf"), "ЧЕРНЕТКА", "ОПЛАЧЕНО");
         assert!(result.is_err());
     }
 
@@ -121,7 +117,10 @@ mod tests {
         .expect("generate_act_pdf має завершитись успішно");
 
         let text = read_pdf_text(&out).expect("read_pdf_text має повернути Ok");
-        assert!(!text.is_empty(), "витягнутий текст не повинен бути порожнім");
+        assert!(
+            !text.is_empty(),
+            "витягнутий текст не повинен бути порожнім"
+        );
 
         let _ = std::fs::remove_file(&out);
     }

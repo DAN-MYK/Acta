@@ -46,7 +46,7 @@ function createSettingsStore() {
     setSection(section: SettingsSection) {
       update((state) => ({ ...state, section }));
     },
-    updatePreference(field: "darkMode" | "density", value: boolean | number) {
+    updatePreference(field: "darkMode", value: boolean) {
       update((state) => ({
         ...state,
         screen: state.screen
@@ -83,10 +83,7 @@ function createSettingsStore() {
       update((state) => ({ ...state, loading: true, error: null, message: null }));
 
       try {
-        const result = await settingsSavePreferences(
-          screen.preferences.darkMode,
-          screen.preferences.density
-        );
+        const result = await settingsSavePreferences(screen.preferences.darkMode);
         update((state) => ({
           ...state,
           screen: result.screen,

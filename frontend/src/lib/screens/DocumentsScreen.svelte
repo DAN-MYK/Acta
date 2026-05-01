@@ -3,13 +3,14 @@
   import type { AppIconName } from "../icons";
   import { documentsStore } from "../stores/documents";
   import { counterpartiesStore } from "../stores/counterparties";
-  import type { DocumentKind, DocumentItemDto } from "../types";
+  import type { DocumentDraftItemDto, DocumentKind, DocumentItemDto } from "../types";
 
   const documents = documentsStore;
   const counterparties = counterpartiesStore;
 
   let createCounterpartyId = "";
   let createKind: DocumentKind = "act";
+  let selectedCounterpartyName = "";
 
   const documentKindLabels: Record<DocumentKind, string> = {
     invoice: "Рахунок",
@@ -24,9 +25,9 @@
   };
 
   const documentKindActionLabels: Record<DocumentKind, string> = {
-    invoice: "Рахунок",
-    act: "Акт",
-    waybill: "Накладну"
+    invoice: "рахунок",
+    act: "акт",
+    waybill: "накладну"
   };
 
   const itemTotalFormatter = new Intl.NumberFormat("uk-UA", {
@@ -37,6 +38,11 @@
   $: if ($documents.draftContext?.counterpartyId) {
     createCounterpartyId = $documents.draftContext.counterpartyId;
   }
+
+  $: selectedCounterpartyName =
+    ($counterparties.screen?.items ?? []).find((cp) => cp.id === createCounterpartyId)?.name ??
+    $documents.draftContext?.counterpartyName ??
+    "";
 
   function onDocumentSearch(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
@@ -157,23 +163,33 @@
     return kind;
   }
 
+  function getCreateButtonLabel(kind: DocumentKind): string {
+    if (kind === "invoice") {
+      return "Створити рахунок";
+    }
+    if (kind === "waybill") {
+      return "Створити накладну";
+    }
+    return "Створити акт";
+  }
+
   function getCreateHint(counterpartyId: string, kind: DocumentKind): string {
     if (!counterpartyId) {
-      return "Спочатку оберіть контрагента, щоб ми відкрили чернетку в правильному контексті.";
+      return "Спочатку оберіть контрагента, щоб ми відкрили чернетку в правильному робочому контексті.";
     }
 
-    return `Чернетка типу "${documentKindLabels[kind]}" відкриється одразу з прив'язкою до вибраного контрагента.`;
+    return `Чернетка типу "${documentKindLabels[kind]}" відкриється одразу для ${selectedCounterpartyName || "вибраного контрагента"} з готовим сценарієм подальших кроків.`;
   }
 
   function getNextStepMessage(kind: string): string {
     if (kind === "invoice") {
-      return "На основі рахунку можна одразу підготувати акт або накладну.";
+      return "Після рахунку зазвичай готуємо акт або накладну, щоб сценарій не зупинився на виставленні.";
     }
     if (kind === "act") {
-      return "Після акту зазвичай лишається підготувати накладну або оновити статус документа.";
+      return "Після акта найчастіше залишилось або створити накладну, або перевести документ у наступний статус.";
     }
     if (kind === "waybill") {
-      return "Накладна вже закриває сценарій відвантаження, тож далі варто лише перевірити статус і зв'язки.";
+      return "Накладна зазвичай закриває операційний сценарій, тому далі достатньо лише перевірити статус і суму.";
     }
 
     return "Перевірте, який похідний документ потрібен далі, і створіть його звідси.";
@@ -197,9 +213,20 @@
       return "—";
     }
 
-    return `${itemTotalFormatter
-      .format(normalizedQuantity * normalizedPrice)
-      .replace(/\u00A0/g, " ")} грн`;
+    return `${itemTotalFormatter.format(normalizedQuantity * normalizedPrice).replace(/\u00A0/g, " ")} грн`;
+  }
+
+  function formatEditorDateValue(value: string): string {
+    if (!value) {
+      return "Оберіть дату через календар, щоб уникнути неоднозначного формату.";
+    }
+
+    const [year, month, day] = value.split("-");
+    if (!year || !month || !day) {
+      return "Оберіть дату через календар, щоб уникнути неоднозначного формату.";
+    }
+
+    return `${day}.${month}.${year}`;
   }
 
   function draftCount(items: DocumentItemDto[]): number {
@@ -214,6 +241,26 @@
     const draft = items.find((item) => item.status === "draft");
     return draft ? `${draft.number} · ${draft.counterparty}` : "Усі документи вже просунуті по сценарію";
   }
+
+  function totalDraftAmount(items: DocumentDraftItemDto[]): string {
+    const total = items.reduce((sum, item) => {
+      const quantity = Number.parseFloat(item.quantity.replace(",", "."));
+      const price = Number.parseFloat(item.price.replace(",", "."));
+
+      if (!Number.isFinite(quantity) || !Number.isFinite(price)) {
+        return sum;
+      }
+
+      return sum + quantity * price;
+    }, 0);
+
+    return `${itemTotalFormatter.format(total).replace(/\u00A0/g, " ")} грн`;
+  }
+
+  function getCurrentChainStatus() {
+    const steps = $documents.chain?.steps ?? [];
+    return steps.length > 0 ? steps[steps.length - 1].status : "Чернетка";
+  }
 </script>
 
 <section class="panel" data-testid="documents-screen">
@@ -222,14 +269,19 @@
       <h2>Документи</h2>
       <p>{$documents.list?.totalCount ?? 0} документів</p>
     </div>
-    <input placeholder="Пошук документів" on:input={onDocumentSearch} />
+    <input
+      placeholder="Пошук документів"
+      on:input={onDocumentSearch}
+      disabled={$documents.loading}
+      aria-busy={$documents.loading ? "true" : "false"}
+    />
   </div>
 
   <div class="create-strip-card" data-testid="documents-create-strip">
     <div class="create-strip-header">
       <div>
-        <strong>Новий документ</strong>
-        <p>1. Оберіть контрагента  2. Вкажіть тип документа  3. Створіть чернетку</p>
+        <strong>Створити документ по сценарію</strong>
+        <p>Оберіть контрагента, визначте тип документа й одразу відкрийте чернетку з правильним наступним кроком.</p>
       </div>
       <span class="doc-kind-badge">
         <AppIcon name={documentKindIcons[createKind]} size={14} />
@@ -237,10 +289,28 @@
       </span>
     </div>
 
+    <div class="create-strip-flow" aria-label="Сценарій створення документа">
+      <div class:complete={!!createCounterpartyId} class="create-strip-step">
+        <span>Крок 1</span>
+        <strong>Контрагент</strong>
+        <small>{selectedCounterpartyName || "Ще не обрано"}</small>
+      </div>
+      <div class="create-strip-step complete">
+        <span>Крок 2</span>
+        <strong>Тип документа</strong>
+        <small>{documentKindLabels[createKind]}</small>
+      </div>
+      <div class:complete={!!createCounterpartyId} class="create-strip-step">
+        <span>Крок 3</span>
+        <strong>Чернетка</strong>
+        <small>{createCounterpartyId ? "Можна відкривати редактор" : "Потрібен контрагент"}</small>
+      </div>
+    </div>
+
     <div class="create-strip">
       <label class="create-strip-field">
         <span>Контрагент</span>
-        <select bind:value={createCounterpartyId}>
+        <select bind:value={createCounterpartyId} disabled={$documents.loading}>
           <option value="">— Оберіть контрагента —</option>
           {#each $counterparties.screen?.items ?? [] as cp}
             <option value={cp.id}>{cp.name}</option>
@@ -250,16 +320,22 @@
 
       <label class="create-strip-field">
         <span>Тип документа</span>
-        <select bind:value={createKind}>
+        <select bind:value={createKind} disabled={$documents.loading}>
           <option value="act">Акт</option>
           <option value="invoice">Рахунок</option>
           <option value="waybill">Накладна</option>
         </select>
       </label>
 
-      <button class="btn-primary create-doc-button" disabled={!createCounterpartyId} on:click={onCreateDraft}>
+        <button
+          class="btn-primary create-doc-button"
+          data-testid="documents-create-button"
+          disabled={!createCounterpartyId || $documents.loading}
+          on:click={onCreateDraft}
+          aria-busy={$documents.loading ? "true" : "false"}
+      >
         <AppIcon name={documentKindIcons[createKind]} surface={true} />
-        <span>Створити чернетку</span>
+        <span>{getCreateButtonLabel(createKind)}</span>
       </button>
     </div>
 
@@ -294,11 +370,19 @@
       <span>Вибрати все</span>
     </label>
 
-    <button class="btn-secondary" disabled={$documents.selectedIds.length === 0} on:click={onBulkAdvanceStatus}>
+    <button
+      class="btn-secondary"
+      disabled={$documents.selectedIds.length === 0 || $documents.loading}
+      on:click={onBulkAdvanceStatus}
+    >
       Оновити статус вибраних
     </button>
 
-    <button class="btn-danger" disabled={$documents.selectedIds.length === 0} on:click={onBulkDelete}>
+    <button
+      class="btn-danger"
+      disabled={$documents.selectedIds.length === 0 || $documents.loading}
+      on:click={onBulkDelete}
+    >
       Видалити вибрані
     </button>
   </div>
@@ -314,12 +398,12 @@
   {#if ($documents.list?.items.length ?? 0) === 0}
     <div class="empty-state-card" data-testid="documents-empty-state">
       <strong>Поки що документів немає</strong>
-      <p>Створіть першу чернетку, щоб запустити сценарій рахунку, акту або накладної.</p>
+      <p>Почніть зі створення першого рахунку, акта або накладної, щоб запустити повний сценарій документа.</p>
     </div>
   {:else}
     <div class="documents-list" data-testid="documents-list">
       {#each $documents.list?.items ?? [] as item}
-        <button class="doc-row doc-row-rich" on:click={() => documents.open(item.id)}>
+        <button class="doc-row doc-row-rich" on:click={() => documents.open(item.id)} disabled={$documents.loading}>
           <label class="doc-row-checkbox" aria-label={`Вибрати ${item.number}`}>
             <input
               type="checkbox"
@@ -356,78 +440,129 @@
   <section class="editor-sheet">
     <div class="editor-header">
       <div>
+        <div class="editor-header-meta">
+          <span class="doc-kind-badge">
+            <AppIcon name={documentKindIcons[$documents.editor.form.kind as DocumentKind]} size={14} />
+            <span>{getDocumentKindLabel($documents.editor.form.kind)}</span>
+          </span>
+          <span class="doc-status-chip">{getCurrentChainStatus()}</span>
+        </div>
         <h3>{$documents.editor.form.title}</h3>
         <p>{$documents.editor.form.counterpartyName}</p>
       </div>
       <div class="editor-actions">
-        <button class="btn-ghost" on:click={() => documents.addItem()}>Додати позицію</button>
-        <button class="btn-primary" on:click={() => documents.save()}>Зберегти</button>
-        <button class="btn-secondary" on:click={() => documents.advanceStatus()}>Наступний статус</button>
+        <button
+          class="btn-primary"
+          on:click={() => documents.save()}
+          disabled={$documents.loading}
+          aria-busy={$documents.loading ? "true" : "false"}
+        >
+          Зберегти
+        </button>
+        <button class="btn-secondary" on:click={() => documents.advanceStatus()} disabled={$documents.loading}>
+          Наступний статус
+        </button>
         {#if ["act", "invoice"].includes($documents.editor.form.kind)}
-          <button class="btn-secondary" on:click={() => documents.generatePdf()}>PDF</button>
+          <button class="btn-ghost" on:click={() => documents.generatePdf()} disabled={$documents.loading}>
+            PDF
+          </button>
         {/if}
-        <button class="btn-danger" on:click={onDeleteCurrent}>Видалити</button>
-        <button class="btn-ghost" on:click={() => documents.closeEditor()}>Закрити</button>
+        <button class="btn-danger" on:click={onDeleteCurrent} disabled={$documents.loading}>
+          Видалити
+        </button>
+        <button class="btn-ghost" on:click={() => documents.closeEditor()} disabled={$documents.loading}>
+          Закрити
+        </button>
       </div>
     </div>
 
     <div class="editor-grid">
       <label>
         Номер
-        <input value={$documents.editor.form.number} on:input={onEditorNumberChange} />
+        <input value={$documents.editor.form.number} on:input={onEditorNumberChange} disabled={$documents.loading} />
       </label>
-      <label>
+      <label class="editor-date-field">
         Дата
-        <input type="date" value={$documents.editor.form.date} on:input={onEditorDateChange} />
+        <input
+          type="date"
+          value={$documents.editor.form.date}
+          on:input={onEditorDateChange}
+          disabled={$documents.loading}
+        />
+        <small class="field-note">Календар без ручного неоднозначного формату. Зараз: {formatEditorDateValue($documents.editor.form.date)}</small>
       </label>
       <label class="editor-grid-span">
         Примітки
-        <textarea rows="3" value={$documents.editor.form.notes} on:input={onEditorNotesChange}></textarea>
+        <textarea
+          rows="3"
+          value={$documents.editor.form.notes}
+          on:input={onEditorNotesChange}
+          disabled={$documents.loading}
+        ></textarea>
       </label>
     </div>
 
     <div class="chain-panel">
       <div class="chain-panel-header">
         <div>
-          <strong>Що далі</strong>
-          <p>Переходьте до наступного документа без пошуку по інших екранах.</p>
+          <strong>Статус і навігація по сценарію</strong>
+          <p>Тут видно, де ви зараз у ланцюжку документа і який наступний крок можна зробити без переходів по інших екранах.</p>
         </div>
-        <div class="chain-summary">
-          <div class="chain-summary-block">
-            <span>Поточний документ</span>
-            <strong>{getDocumentKindLabel($documents.editor.form.kind)}</strong>
-          </div>
-          <div class="chain-summary-block">
-            <span>Наступний крок</span>
-            <strong>{getNextStepMessage($documents.editor.form.kind)}</strong>
-          </div>
+        <div class="chain-actions">
+          <button class="btn-ghost" on:click={onReloadChain} disabled={$documents.loading}>Оновити</button>
+          {#each getChainTargets($documents.editor.form.kind) as targetKind}
+            <button
+              class="btn-secondary chain-action-button"
+              data-testid={`documents-chain-create-${targetKind}`}
+              on:click={() => onCreateChainDraft(targetKind)}
+              disabled={$documents.loading}
+            >
+              <AppIcon name={documentKindIcons[targetKind]} size={16} />
+              <span>Створити {documentKindActionLabels[targetKind]}</span>
+            </button>
+          {/each}
         </div>
       </div>
 
-      <div class="chain-actions">
-        <button class="btn-ghost" on:click={onReloadChain}>Оновити</button>
-        {#each getChainTargets($documents.editor.form.kind) as targetKind}
-          <button class="btn-secondary chain-action-button" on:click={() => onCreateChainDraft(targetKind)}>
-            <AppIcon name={documentKindIcons[targetKind]} size={16} />
-            <span>Створити {documentKindActionLabels[targetKind]}</span>
-          </button>
-        {/each}
+      <div class="chain-summary">
+        <div class="chain-summary-block">
+          <span>Поточний документ</span>
+          <strong>{getDocumentKindLabel($documents.editor.form.kind)}</strong>
+        </div>
+        <div class="chain-summary-block chain-summary-block-wide">
+          <span>Наступний крок</span>
+          <strong>{getNextStepMessage($documents.editor.form.kind)}</strong>
+        </div>
       </div>
 
       {#if $documents.chain}
-        <div class="chain-steps">
-          {#each $documents.chain.steps as step}
-            <div class:missing={!step.exists} class="chain-step">
-              <div>
-                <strong class="chain-doc-title">
-                  <AppIcon name={getDocumentKindIcon(step.docType)} surface={true} size={16} />
-                  <span>{getDocumentKindLabel(step.docType)}</span>
-                </strong>
-                <p>{step.docNumber}</p>
+        <div class="chain-flow" data-testid="documents-chain-flow">
+          {#each $documents.chain.steps as step, index}
+            <div class:missing={!step.exists} class="chain-step-card">
+              <span class="chain-step-index">Крок {index + 1}</span>
+              <strong class="chain-doc-title">
+                <AppIcon name={getDocumentKindIcon(step.docType)} surface={true} size={16} />
+                <span>{getDocumentKindLabel(step.docType)}</span>
+              </strong>
+              <p>{step.docNumber || "Ще не створено"}</p>
+              <div class="chain-step-meta">
+                <span>{step.amountStr || "Сума з’явиться після створення"}</span>
+                <span class="doc-status-chip">{step.status}</span>
               </div>
-              <div>
-                <span>{step.amountStr}</span>
-                <span>{step.status}</span>
+            </div>
+          {/each}
+
+          {#each getChainTargets($documents.editor.form.kind) as targetKind}
+            <div class="chain-step-card chain-step-card-target">
+              <span class="chain-step-index">Далі</span>
+              <strong class="chain-doc-title">
+                <AppIcon name={documentKindIcons[targetKind]} surface={true} size={16} />
+                <span>{getDocumentKindLabel(targetKind)}</span>
+              </strong>
+              <p>Ще не створено</p>
+              <div class="chain-step-meta">
+                <span>Підготуйте наступний документ прямо з цього блоку.</span>
+                <span class="doc-status-chip">Очікує дії</span>
               </div>
             </div>
           {/each}
@@ -439,24 +574,33 @@
       <div class="editor-items-header">
         <div>
           <strong>Позиції документа</strong>
-          <p>Додайте товари або послуги, щоб документ одразу мав зрозумілу суму й склад.</p>
+          <p>Додавайте товари або послуги так, щоб сума й склад документа читалися з першого погляду.</p>
         </div>
-        <span class="editor-items-count">{getItemsCountLabel($documents.editor.items.length)}</span>
+        <div class="editor-items-summary">
+          <span class="editor-items-count">{getItemsCountLabel($documents.editor.items.length)}</span>
+          <strong>{totalDraftAmount($documents.editor.items)}</strong>
+          <button class="btn-secondary" on:click={() => documents.addItem()} disabled={$documents.loading}>
+            Додати позицію
+          </button>
+        </div>
       </div>
 
       <div class="editor-items">
         {#if $documents.editor.items.length === 0}
-          <div class="editor-items-empty">
+          <div class="editor-items-empty" data-testid="documents-items-empty">
             <strong>Поки що без позицій</strong>
-            <p>Додайте перший рядок, щоб заповнити номенклатуру, кількість та ціну в одному місці.</p>
-            <button class="btn-secondary" on:click={() => documents.addItem()}>Додати першу позицію</button>
+            <p>Додайте першу позицію, щоб менеджер одразу бачив номенклатуру, кількість, ціну й підсумок документа.</p>
+            <button class="btn-primary" on:click={() => documents.addItem()} disabled={$documents.loading}>
+              Додати першу позицію
+            </button>
           </div>
         {:else}
           <div class="editor-item editor-item-head">
             <span>Опис</span>
             <span>Од.</span>
-            <span>Кількість</span>
-            <span>Ціна, грн</span>
+            <span class="editor-item-cell-numeric">Кількість</span>
+            <span class="editor-item-cell-numeric">Ціна, грн</span>
+            <span class="editor-item-cell-numeric">Сума</span>
             <span></span>
           </div>
           {#each $documents.editor.items as item, index}
@@ -471,31 +615,49 @@
                   <span>Опис</span>
                   <input
                     value={item.description}
-                    placeholder="Опис"
+                    placeholder="Опишіть товар або послугу"
                     on:input={(event) => onItemFieldChange(index, "description", event)}
+                    disabled={$documents.loading}
                   />
                 </label>
                 <label class="editor-item-field">
                   <span>Од.</span>
-                  <input value={item.unit} placeholder="Од." on:input={(event) => onItemFieldChange(index, "unit", event)} />
+                  <input
+                    value={item.unit}
+                    placeholder="шт / год / посл."
+                    on:input={(event) => onItemFieldChange(index, "unit", event)}
+                    disabled={$documents.loading}
+                  />
                 </label>
-                <label class="editor-item-field">
+                <label class="editor-item-field editor-item-field-numeric">
                   <span>Кількість</span>
                   <input
                     value={item.quantity}
-                    placeholder="Кількість"
+                    placeholder="0"
+                    inputmode="decimal"
                     on:input={(event) => onItemFieldChange(index, "quantity", event)}
+                    disabled={$documents.loading}
                   />
                 </label>
-                <label class="editor-item-field">
+                <label class="editor-item-field editor-item-field-numeric">
                   <span>Ціна, грн</span>
                   <input
                     value={item.price}
-                    placeholder="Ціна"
+                    placeholder="0,00"
+                    inputmode="decimal"
                     on:input={(event) => onItemFieldChange(index, "price", event)}
+                    disabled={$documents.loading}
                   />
                 </label>
-                <button class="btn-danger editor-item-remove" on:click={() => documents.removeItem(index)}>
+                <div class="editor-item-total" aria-label={`Сума рядка ${index + 1}`}>
+                  <span>Сума</span>
+                  <strong>{formatItemTotal(item.quantity, item.price)}</strong>
+                </div>
+                <button
+                  class="btn-danger editor-item-remove"
+                  on:click={() => documents.removeItem(index)}
+                  disabled={$documents.loading}
+                >
                   Видалити позицію
                 </button>
               </div>

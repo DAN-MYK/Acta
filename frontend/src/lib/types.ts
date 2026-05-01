@@ -291,6 +291,60 @@ export interface PaymentDraftFormDto {
   description: string;
 }
 
+export interface PaymentReconcileRequest {
+  paymentId: string;
+  documentKind: "act" | "invoice";
+  documentId: string;
+  amount: string;
+}
+
+export interface PaymentUnreconcileRequest {
+  paymentId: string;
+  documentKind: "act" | "invoice";
+  documentId: string;
+}
+
+export interface PaymentUnreconcileAllRequest {
+  paymentId: string;
+}
+
+export type PaymentMatchDecisionKind = "exact" | "ambiguous" | "none";
+
+export interface PaymentMatchPreviewRequest {
+  paymentId: string;
+}
+
+export interface PaymentMatchApplyAutoRequest {
+  paymentId: string;
+}
+
+export interface PaymentMatchCandidateDto {
+  documentId: string;
+  documentKind: "act" | "invoice";
+  title: string;
+  openAmountStr: string;
+  totalScore: number;
+  sameIban: boolean;
+  referenceHit: boolean;
+  textHits: number;
+  daysDistance: number;
+}
+
+export interface PaymentAutoMatchDto {
+  documentId: string;
+  documentKind: "act" | "invoice";
+  title: string;
+  amountStr: string;
+}
+
+export interface PaymentMatchPreviewDto {
+  paymentId: string;
+  isReconciled: boolean;
+  decisionKind: PaymentMatchDecisionKind;
+  candidates: PaymentMatchCandidateDto[];
+  autoMatch: PaymentAutoMatchDto | null;
+}
+
 export type TaskStatus = "open" | "in_progress" | "done" | "cancelled";
 export type TaskPriority = "low" | "normal" | "high" | "critical";
 
@@ -350,7 +404,7 @@ export interface TaskMutationResultDto {
   message: string;
 }
 
-export type ReportsTab = "bank" | "receivables" | "payables";
+export type ReportsTab = "bank" | "pnl" | "receivables" | "payables";
 export type ReportsScope = "active" | "all";
 export type SettingsSection =
   | "appearance"
@@ -375,6 +429,9 @@ export interface ReportsSummaryDto {
   closingBalanceStr: string;
   receivablesTotalStr: string;
   payablesTotalStr: string;
+  pnlIncomeStr?: string;
+  pnlExpenseStr?: string;
+  pnlNetResultStr?: string;
 }
 
 export interface BankReportRowDto {
@@ -413,6 +470,7 @@ export interface ReportsScreenDto {
   filter: ReportsFilterDto;
   summary: ReportsSummaryDto;
   bankRows: BankReportRowDto[];
+  pnlRows?: BankReportRowDto[];
   receivablesRows: ReceivableRowDto[];
   payablesRows: PayableRowDto[];
 }
@@ -459,7 +517,6 @@ export interface SettingsNumberingRowDto {
 
 export interface SettingsPreferencesDto {
   darkMode: boolean;
-  density: number;
 }
 
 export interface SettingsBackupDto {

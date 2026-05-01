@@ -12,6 +12,7 @@ use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::models::payment::PaymentDirection;
 use crate::models::{
     invoice::{
         Invoice, InvoiceItem, InvoiceListRow, InvoiceStatus, NewInvoice, NewInvoiceItem,
@@ -19,7 +20,6 @@ use crate::models::{
     },
     DocumentDirection,
 };
-use crate::models::payment::PaymentDirection;
 use crate::services::payment_matching::MatchCandidate;
 
 /// Згенерувати наступний номер рахунку у форматі "РАХ-РРРР-NNN".
@@ -207,6 +207,8 @@ pub async fn list_open_invoice_candidates(
     struct Row {
         id: Uuid,
         title: String,
+        reference_text: String,
+        match_text: String,
         open_amount: Decimal,
         counterparty_iban: Option<String>,
         match_date: Option<chrono::NaiveDate>,
@@ -222,6 +224,8 @@ pub async fn list_open_invoice_candidates(
         SELECT
             i.id,
             trim(concat_ws(' ', i.number, cp.name))               AS title,
+            i.number                                              AS reference_text,
+            trim(concat_ws(' ', i.number, cp.name))               AS match_text,
             i.total_amount - COALESCE(SUM(pi.amount), 0::numeric) AS open_amount,
             cp.iban                                               AS counterparty_iban,
             COALESCE(i.expected_payment_date, i.date)             AS match_date
@@ -249,6 +253,8 @@ pub async fn list_open_invoice_candidates(
                 row.open_amount,
                 row.counterparty_iban,
                 row.title,
+                row.reference_text,
+                row.match_text,
                 row.match_date,
             )
         })

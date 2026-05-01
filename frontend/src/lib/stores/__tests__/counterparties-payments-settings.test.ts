@@ -130,8 +130,7 @@ function makeSettingsScreen(): SettingsScreenDto {
       }
     ],
     preferences: {
-      darkMode: false,
-      density: 1
+      darkMode: false
     },
     backup: {
       label: "Остання копія",
@@ -215,12 +214,12 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     });
   });
 
-  it("covers payments load, editor, save, reconcile, import/sync and template flow", async () => {
+  it("covers payments load, editor, save, preview reconcile, import/sync and template flow", async () => {
     const { paymentsStore } = await loadStores();
 
     let list = makePayments(["pay-1"]);
 
-    invokeMock.mockImplementation(async (command) => {
+    invokeMock.mockImplementation(async (command, payload) => {
       switch (command) {
         case "payments_list":
           return list;
@@ -230,12 +229,38 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
             ok: true,
             message: "Платіж збережено"
           };
-        case "payment_reconcile":
+        case "payment_match_preview":
+          expect(payload).toEqual({ request: { paymentId: "pay-2" } });
+          return {
+            paymentId: "pay-2",
+            isReconciled: false,
+            decisionKind: "exact",
+            candidates: [
+              {
+                documentId: "act-1",
+                documentKind: "act",
+                title: "Акт ACT-001",
+                openAmountStr: "1 000,00 грн",
+                totalScore: 0.98,
+                sameIban: true,
+                referenceHit: true,
+                textHits: 2,
+                daysDistance: 0
+              }
+            ],
+            autoMatch: {
+              documentId: "act-1",
+              documentKind: "act",
+              title: "Акт ACT-001",
+              amountStr: "1 000,00 грн"
+            }
+          };
+        case "payment_match_apply_auto":
           return {
             ok: true,
-            message: "Платіж зведено"
+            message: "Автозіставлення платежу застосовано"
           };
-        case "payment_unreconcile":
+        case "payment_unreconcile_all":
           return {
             ok: true,
             message: "Зведення скасовано"
@@ -281,7 +306,12 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     expect(snapshot(paymentsStore).editor?.counterpartyId).toBe("cp-1");
 
     await paymentsStore.reconcile("pay-2");
-    expect(snapshot(paymentsStore).message).toBe("Платіж зведено");
+    expect(snapshot(paymentsStore).matchPreview?.decisionKind).toBe("exact");
+    expect(snapshot(paymentsStore).matchPreview?.autoMatch?.title).toBe("Акт ACT-001");
+
+    await paymentsStore.confirmPreviewAutoMatch();
+    expect(snapshot(paymentsStore).message).toBe("Автозіставлення платежу застосовано");
+    expect(snapshot(paymentsStore).matchPreview).toBeNull();
 
     await paymentsStore.unreconcile("pay-2");
     expect(snapshot(paymentsStore).message).toBe("Зведення скасовано");
@@ -300,6 +330,183 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     expect(templateResult.path).toContain("manual-template.csv");
   });
 
+  it("opens reconcile preview before apply and keeps manual choice on the frontend", async () => {
+    const { paymentsStore } = await loadStores();
+
+    let list = makePayments(["pay-1", "pay-2", "pay-3"]);
+
+    invokeMock.mockImplementation(async (command, payload) => {
+      switch (command) {
+        case "payments_list":
+          return list;
+        case "payment_match_preview": {
+          const paymentId = (payload as { request: { paymentId: string } }).request.paymentId;
+
+          if (paymentId === "pay-1") {
+            return {
+              paymentId,
+              isReconciled: false,
+              decisionKind: "exact",
+              candidates: [
+                {
+                  documentId: "act-1",
+                  documentKind: "act",
+                  title: "Акт ACT-001",
+                  openAmountStr: "1 000,00 грн",
+                  totalScore: 0.99,
+                  sameIban: true,
+                  referenceHit: true,
+                  textHits: 2,
+                  daysDistance: 0
+                }
+              ],
+              autoMatch: {
+                documentId: "act-1",
+                documentKind: "act",
+                title: "Акт ACT-001",
+                amountStr: "1 000,00 грн"
+              }
+            };
+          }
+
+          if (paymentId === "pay-2") {
+            return {
+              paymentId,
+              isReconciled: false,
+              decisionKind: "ambiguous",
+              candidates: [
+                {
+                  documentId: "inv-1",
+                  documentKind: "invoice",
+                  title: "Накладна INV-001",
+                  openAmountStr: "2 000,00 грн",
+                  totalScore: 0.83,
+                  sameIban: true,
+                  referenceHit: false,
+                  textHits: 1,
+                  daysDistance: 3
+                },
+                {
+                  documentId: "act-2",
+                  documentKind: "act",
+                  title: "Акт ACT-002",
+                  openAmountStr: "2 000,00 грн",
+                  totalScore: 0.74,
+                  sameIban: false,
+                  referenceHit: true,
+                  textHits: 2,
+                  daysDistance: 5
+                }
+              ],
+              autoMatch: null
+            };
+          }
+
+          return {
+            paymentId,
+            isReconciled: false,
+            decisionKind: "none",
+            candidates: [],
+            autoMatch: null
+          };
+        }
+        case "payment_match_apply_auto":
+          expect(payload).toEqual({ request: { paymentId: "pay-1" } });
+          list = {
+            ...list,
+            items: list.items.map((item) =>
+              item.id === "pay-1" ? { ...item, matchedDoc: "Акт ACT-001" } : item
+            )
+          };
+          return {
+            ok: true,
+            message: "Автозіставлення платежу застосовано"
+          };
+        default:
+          throw new Error(`unexpected command: ${command}`);
+      }
+    });
+
+    await paymentsStore.load();
+
+    await paymentsStore.reconcile("pay-1");
+    expect(snapshot(paymentsStore).matchPreview?.paymentId).toBe("pay-1");
+    expect(snapshot(paymentsStore).matchPreview?.decisionKind).toBe("exact");
+    expect(snapshot(paymentsStore).matchPreview?.autoMatch?.title).toBe("Акт ACT-001");
+    expect(invokeMock.mock.calls.filter(([command]) => command === "payment_match_apply_auto")).toHaveLength(0);
+
+    await paymentsStore.confirmPreviewAutoMatch();
+    expect(snapshot(paymentsStore).matchPreview).toBeNull();
+    expect(snapshot(paymentsStore).message).toBe("Автозіставлення платежу застосовано");
+
+    await paymentsStore.reconcile("pay-2");
+    expect(snapshot(paymentsStore).matchPreview?.decisionKind).toBe("ambiguous");
+    expect(snapshot(paymentsStore).selectedCandidateId).toBe("inv-1");
+    paymentsStore.selectPreviewCandidate("act-2");
+    expect(snapshot(paymentsStore).selectedCandidateId).toBe("act-2");
+    expect(snapshot(paymentsStore).message).toContain("Ручне підтвердження");
+    expect(invokeMock.mock.calls.filter(([command]) => command === "payment_reconcile")).toHaveLength(0);
+
+    await paymentsStore.reconcile("pay-3");
+    expect(snapshot(paymentsStore).matchPreview?.decisionKind).toBe("none");
+    expect(snapshot(paymentsStore).matchPreview?.candidates).toHaveLength(0);
+  });
+
+  it("clears stale preview when the next reconcile preview request fails", async () => {
+    const { paymentsStore } = await loadStores();
+
+    invokeMock.mockImplementation(async (command, payload) => {
+      switch (command) {
+        case "payments_list":
+          return makePayments(["pay-1", "pay-2"]);
+        case "payment_match_preview": {
+          const paymentId = (payload as { request: { paymentId: string } }).request.paymentId;
+
+          if (paymentId === "pay-1") {
+            return {
+              paymentId,
+              isReconciled: false,
+              decisionKind: "exact",
+              candidates: [
+                {
+                  documentId: "act-1",
+                  documentKind: "act",
+                  title: "Акт ACT-001",
+                  openAmountStr: "1 000,00 грн",
+                  totalScore: 0.99,
+                  sameIban: true,
+                  referenceHit: true,
+                  textHits: 2,
+                  daysDistance: 0
+                }
+              ],
+              autoMatch: {
+                documentId: "act-1",
+                documentKind: "act",
+                title: "Акт ACT-001",
+                amountStr: "1 000,00 грн"
+              }
+            };
+          }
+
+          throw new Error("preview failed");
+        }
+        default:
+          throw new Error(`unexpected command: ${command}`);
+      }
+    });
+
+    await paymentsStore.load();
+
+    await paymentsStore.reconcile("pay-1");
+    expect(snapshot(paymentsStore).matchPreview?.paymentId).toBe("pay-1");
+
+    await paymentsStore.reconcile("pay-2");
+    expect(snapshot(paymentsStore).matchPreview).toBeNull();
+    expect(snapshot(paymentsStore).selectedCandidateId).toBeNull();
+    expect(snapshot(paymentsStore).message).toContain("preview failed");
+  });
+
   it("covers settings load, preferences, company, integrations, team and backup flows", async () => {
     const { settingsStore } = await loadStores();
 
@@ -313,8 +520,7 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
           screen = {
             ...screen,
             preferences: {
-              darkMode: true,
-              density: 2
+              darkMode: true
             }
           };
           return {
@@ -385,11 +591,9 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     expect(snapshot(settingsStore).screen?.company.fullName).toBe("ТОВ Акт");
 
     settingsStore.updatePreference("darkMode", true);
-    settingsStore.updatePreference("density", 2);
     await settingsStore.savePreferences();
     expect(snapshot(settingsStore).screen?.preferences).toEqual({
-      darkMode: true,
-      density: 2
+      darkMode: true
     });
 
     settingsStore.updateCompanyField("fullName", "ТОВ Акт Плюс");
@@ -412,8 +616,8 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
   it("keeps the sidebar theme toggle on the persisted settings flow", () => {
     expect(appSource).toContain("async function onQuickThemeToggle()");
     expect(appSource).toContain("settings.savePreferences()");
-    expect(appSource).toContain("shell.load()");
-    expect(appSource).toContain("shellState.isDark");
+    expect(appSource).toContain("appShell.bootstrap()");
+    expect(appSource).toContain("appShell.syncThemeFromSettings");
     expect(appSource).toContain("on:click={onQuickThemeToggle}");
     expect(appSource).not.toContain("on:click={() => theme.toggle()}");
   });

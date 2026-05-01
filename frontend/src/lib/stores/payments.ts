@@ -5,14 +5,16 @@ import {
   paymentsSyncBank,
   paymentsOpenManualTemplate,
   paymentCreateOrUpdate,
-  paymentReconcile,
-  paymentUnreconcile
+  paymentMatchPreview,
+  paymentMatchApplyAuto,
+  paymentUnreconcileAll
 } from "../api";
 import type {
   MutationResultDto,
   OpenTemplateResultDto,
   PaymentDraftFormDto,
   PaymentItemDto,
+  PaymentMatchPreviewDto,
   PaymentsScreenDto
 } from "../types";
 
@@ -22,6 +24,8 @@ interface PaymentsStoreState {
   error: string | null;
   editor: PaymentDraftFormDto | null;
   message: string | null;
+  matchPreview: PaymentMatchPreviewDto | null;
+  selectedCandidateId: string | null;
 }
 
 function createPaymentsStore() {
@@ -30,7 +34,9 @@ function createPaymentsStore() {
     loading: false,
     error: null,
     editor: null,
-    message: null
+    message: null,
+    matchPreview: null,
+    selectedCandidateId: null
   });
 
   async function loadPayments() {
@@ -58,6 +64,12 @@ function createPaymentsStore() {
     bankName: "",
     reference: "",
     description: ""
+  });
+
+  const clearPreview = (state: PaymentsStoreState): PaymentsStoreState => ({
+    ...state,
+    matchPreview: null,
+    selectedCandidateId: null
   });
 
   return {
@@ -101,19 +113,84 @@ function createPaymentsStore() {
 
     async reconcile(id: string) {
       try {
-        const result = await paymentReconcile(id);
-        if (result.ok) {
-          await refreshAfterMutation(result.message);
+        const preview = await paymentMatchPreview({ paymentId: id });
+        const selectedCandidateId = preview.candidates[0]?.documentId ?? preview.autoMatch?.documentId ?? null;
+
+        let message = "Підберіть варіант звірки для платежу.";
+        if (preview.decisionKind === "exact") {
+          message = "Знайдено рекомендовану звірку. Перевірте та підтвердьте автозіставлення.";
+        } else if (preview.decisionKind === "ambiguous") {
+          message = "Знайдено кілька кандидатів. Цей платіж потребує уваги, а ручне підтвердження буде наступним кроком.";
+        } else if (preview.decisionKind === "none") {
+          message = "Точний кандидат не знайдено. Перевірте платіж або підготуйте ручне звіряння.";
         }
+
+        update((state) => ({
+          ...state,
+          error: null,
+          message,
+          matchPreview: preview,
+          selectedCandidateId
+        }));
       } catch (error) {
-        update((state) => ({ ...state, message: String(error) }));
+        update((state) => ({
+          ...clearPreview(state),
+          message: String(error)
+        }));
       }
+    },
+
+    async confirmPreviewAutoMatch(): Promise<MutationResultDto> {
+      const preview = get({ subscribe }).matchPreview;
+
+      if (!preview?.autoMatch) {
+        const message = "Немає рекомендованої звірки для автоматичного підтвердження.";
+        update((state) => ({ ...state, message }));
+        return { ok: false, message };
+      }
+
+      try {
+        const result = await paymentMatchApplyAuto({ paymentId: preview.paymentId });
+        if (result.ok) {
+          update((state) => clearPreview({ ...state, message: result.message }));
+          await loadPayments();
+        } else {
+          update((state) => ({ ...state, message: result.message }));
+        }
+        return result;
+      } catch (error) {
+        const message = String(error);
+        update((state) => ({ ...state, message }));
+        return { ok: false, message };
+      }
+    },
+
+    selectPreviewCandidate(documentId: string) {
+      update((state) => {
+        if (!state.matchPreview) {
+          return state;
+        }
+
+        return {
+          ...state,
+          selectedCandidateId: documentId,
+          message: "Кандидата вибрано. Ручне підтвердження буде наступним кроком."
+        };
+      });
+    },
+
+    closeMatchPreview() {
+      update((state) => ({
+        ...clearPreview(state),
+        message: null
+      }));
     },
 
     async unreconcile(id: string) {
       try {
-        const result = await paymentUnreconcile(id);
+        const result = await paymentUnreconcileAll({ paymentId: id });
         if (result.ok) {
+          update((state) => clearPreview(state));
           await refreshAfterMutation(result.message);
         }
       } catch (error) {
@@ -126,7 +203,9 @@ function createPaymentsStore() {
         update((state) => ({
           ...state,
           editor: createBlankForm(),
-          message: null
+          message: null,
+          matchPreview: state.matchPreview,
+          selectedCandidateId: state.selectedCandidateId
         }));
       } else {
         const editor: PaymentDraftFormDto = {
@@ -143,7 +222,9 @@ function createPaymentsStore() {
         update((state) => ({
           ...state,
           editor,
-          message: null
+          message: null,
+          matchPreview: state.matchPreview,
+          selectedCandidateId: state.selectedCandidateId
         }));
       }
     },

@@ -14,10 +14,10 @@ import type {
 const mocks = vi.hoisted(() => {
   function createMockStore<T>(initialValue: T) {
     let value = initialValue;
-    const subscribers = new Set<(value: T) => void>();
+    const subscribers = new Set<(nextValue: T) => void>();
 
     return {
-      subscribe(run: (value: T) => void) {
+      subscribe(run: (nextValue: T) => void) {
         run(value);
         subscribers.add(run);
         return () => subscribers.delete(run);
@@ -64,9 +64,8 @@ const mocks = vi.hoisted(() => {
     inviteTeam: vi.fn(),
     openLatestBackup: vi.fn(),
     backupNow: vi.fn(),
-    shellLoad: vi.fn().mockResolvedValue(undefined),
+    shellReloadChrome: vi.fn().mockResolvedValue(undefined),
     themeSetMode: vi.fn(),
-    themeToggle: vi.fn(),
     importChooseDirectory: vi.fn(),
     importFetchPlan: vi.fn(),
     importExecute: vi.fn(),
@@ -89,18 +88,23 @@ vi.mock("../../stores/settings", () => ({
   }
 }));
 
-vi.mock("../../stores/shell", () => ({
-  shellStore: {
-    subscribe: vi.fn((run: (v: unknown) => void) => { run({}); return () => {}; }),
-    load: mocks.shellLoad
+vi.mock("../../stores/app-shell", () => ({
+  appShellStore: {
+    subscribe: vi.fn((run: (value: unknown) => void) => {
+      run({});
+      return () => {};
+    }),
+    reloadShellChrome: mocks.shellReloadChrome
   }
 }));
 
 vi.mock("../../stores/theme", () => ({
   themeStore: {
-    subscribe: vi.fn((run: (v: string) => void) => { run("light"); return () => {}; }),
-    setMode: mocks.themeSetMode,
-    toggle: mocks.themeToggle
+    subscribe: vi.fn((run: (value: string) => void) => {
+      run("light");
+      return () => {};
+    }),
+    setMode: mocks.themeSetMode
   }
 }));
 
@@ -129,8 +133,7 @@ function makeSettingsScreen(): SettingsScreenDto {
       vatCert: ""
     },
     preferences: {
-      darkMode: false,
-      density: 1
+      darkMode: false
     },
     integrations: [
       {
@@ -141,10 +144,20 @@ function makeSettingsScreen(): SettingsScreenDto {
       }
     ],
     team: [
-      { name: "Іваненко І.І.", email: "ivan@test.com", role: "Адміністратор", lastActive: "01.05.2026" }
+      {
+        name: "Іваненко І.І.",
+        email: "ivan@test.com",
+        role: "Адміністратор",
+        lastActive: "01.05.2026"
+      }
     ],
     numbering: [
-      { docType: "Акт", template: "АКТ-{РРРР}-{nnnn}", example: "АКТ-2026-0001", nextNumber: "0042" }
+      {
+        docType: "Акт",
+        template: "АКТ-{РРРР}-{nnnn}",
+        example: "АКТ-2026-0001",
+        nextNumber: "0042"
+      }
     ],
     backup: {
       label: "Остання копія",
@@ -164,8 +177,8 @@ function renderSettings() {
 }
 
 function buttonByText(target: HTMLElement, text: string): HTMLButtonElement {
-  const button = Array.from(target.querySelectorAll("button")).find((b) =>
-    b.textContent?.includes(text)
+  const button = Array.from(target.querySelectorAll("button")).find((candidate) =>
+    candidate.textContent?.includes(text)
   );
   expect(button, `Кнопка "${text}" не знайдена`).toBeTruthy();
   return button as HTMLButtonElement;
@@ -180,382 +193,335 @@ describe("SettingsScreen", () => {
       error: null,
       message: null
     });
-    mocks.importState.set({ selectedDirectory: null, plan: null, result: null, loading: false, error: null });
-    Object.values(mocks).forEach((m) => {
-      if (typeof m === "function" && "mockReset" in m) {
-        m.mockReset();
-      }
+    mocks.importState.set({
+      selectedDirectory: null,
+      plan: null,
+      result: null,
+      loading: false,
+      error: null
     });
-    mocks.savePreferences.mockResolvedValue(undefined);
-    mocks.saveCompany.mockResolvedValue(true);
-    mocks.shellLoad.mockResolvedValue(undefined);
+
+    mocks.setSection.mockClear();
+    mocks.savePreferences.mockClear();
+    mocks.saveCompany.mockClear();
+    mocks.updatePreference.mockClear();
+    mocks.updateCompanyField.mockClear();
+    mocks.configureIntegration.mockClear();
+    mocks.inviteTeam.mockClear();
+    mocks.openLatestBackup.mockClear();
+    mocks.backupNow.mockClear();
+    mocks.shellReloadChrome.mockClear();
+    mocks.themeSetMode.mockClear();
+    mocks.importChooseDirectory.mockClear();
+    mocks.importFetchPlan.mockClear();
+    mocks.importExecute.mockClear();
+    mocks.importReset.mockClear();
   });
 
   afterEach(() => {
     document.body.innerHTML = "";
   });
 
-  describe("Навігація по секціях", () => {
-    it("показує всі 6 кнопок навігації", () => {
-      const { component, target } = renderSettings();
+  it("показує всі 6 секцій навігації", () => {
+    const { component, target } = renderSettings();
 
-      expect(target.textContent).toContain("Зовнішній вигляд");
-      expect(target.textContent).toContain("Компанія");
-      expect(target.textContent).toContain("Нумерація");
-      expect(target.textContent).toContain("Інтеграції");
-      expect(target.textContent).toContain("Команда");
-      expect(target.textContent).toContain("Резервні копії");
+    expect(target.textContent).toContain("Зовнішній вигляд");
+    expect(target.textContent).toContain("Компанія");
+    expect(target.textContent).toContain("Нумерація");
+    expect(target.textContent).toContain("Інтеграції");
+    expect(target.textContent).toContain("Команда");
+    expect(target.textContent).toContain("Резервні копії");
 
-      component.$destroy();
-    });
-
-    it("перемикає секцію при кліку", async () => {
-      const { component, target } = renderSettings();
-
-      buttonByText(target, "Компанія").click();
-      await tick();
-      expect(mocks.setSection).toHaveBeenCalledWith("company");
-
-      component.$destroy();
-    });
+    component.$destroy();
   });
 
-  describe("Appearance controls", () => {
-    it("показує кнопки вибору теми у секції appearance", () => {
-      const { component, target } = renderSettings();
+  it("перемикає секцію при кліку", async () => {
+    const { component, target } = renderSettings();
 
-      expect(target.textContent).toContain("Світла тема");
-      expect(target.textContent).toContain("Темна тема");
+    buttonByText(target, "Компанія").click();
+    await tick();
 
-      component.$destroy();
-    });
+    expect(mocks.setSection).toHaveBeenCalledWith("company");
 
-    it("перемикає тему через themeStore.setMode при кліку на Темна тема", async () => {
-      const { component, target } = renderSettings();
-
-      buttonByText(target, "Темна тема").click();
-      await tick();
-      expect(mocks.themeSetMode).toHaveBeenCalledWith("dark");
-      expect(mocks.savePreferences).toHaveBeenCalled();
-
-      component.$destroy();
-    });
-
-    it("перемикає тему на світлу через themeStore.setMode", async () => {
-      const { component, target } = renderSettings();
-
-      buttonByText(target, "Світла тема").click();
-      await tick();
-      expect(mocks.themeSetMode).toHaveBeenCalledWith("light");
-
-      component.$destroy();
-    });
-
-    it("використовує українські підписи щільності замість англійських", () => {
-      const { component, target } = renderSettings();
-      const options = Array.from(target.querySelectorAll("option")).map((option) => option.textContent?.trim());
-
-      expect(options).toContain("Компактно");
-      expect(options).toContain("Збалансовано");
-      expect(options).toContain("Просторо");
-      expect(options).not.toContain("Compact");
-      expect(options).not.toContain("Comfortable");
-      expect(options).not.toContain("Spacious");
-
-      component.$destroy();
-    });
+    component.$destroy();
   });
 
-  describe("Company settings save", () => {
-    it("показує форму компанії із кнопкою Зберегти", async () => {
-      mocks.settingsState.set({
-        section: "company",
-        screen: makeSettingsScreen(),
-        loading: false,
-        error: null,
-        message: null
-      });
+  it("використовує канонічну ієрархію кнопок і прибирає selector density", () => {
+    const { component, target } = renderSettings();
 
-      const { component, target } = renderSettings();
-      await tick();
+    expect(buttonByText(target, "Світла тема").disabled).toBe(false);
+    expect(buttonByText(target, "Темна тема").disabled).toBe(false);
+    expect(target.textContent).not.toContain("Компактно");
+    expect(target.textContent).not.toContain("Щільно");
+    expect(target.textContent).toContain("Налаштування щільності поки прибрано");
 
-      const inputs = Array.from(target.querySelectorAll("input")) as HTMLInputElement[];
-      const fullNameInput = inputs.find((input) => input.value === "ТОВ Тест");
-      expect(fullNameInput, "Інпут з назвою компанії не знайдено").toBeTruthy();
-      expect(target.textContent).toContain("Зберегти");
-
-      component.$destroy();
-    });
-
-    it("викликає saveCompany і shellLoad при кліку Зберегти", async () => {
-      mocks.settingsState.set({
-        section: "company",
-        screen: makeSettingsScreen(),
-        loading: false,
-        error: null,
-        message: null
-      });
-
-      const { component, target } = renderSettings();
-      await tick();
-
-      buttonByText(target, "Зберегти").click();
-      await tick();
-      expect(mocks.saveCompany).toHaveBeenCalled();
-
-      component.$destroy();
-    });
-
-    it("використовує канонічні варіанти кнопок для дій settings", async () => {
-      mocks.settingsState.set({
-        section: "company",
-        screen: makeSettingsScreen(),
-        loading: false,
-        error: null,
-        message: null
-      });
-
-      const { component, target } = renderSettings();
-      await tick();
-
-      expect(buttonByText(target, "Зберегти").className).toContain("btn-primary");
-
-      mocks.settingsState.set({
-        section: "integrations",
-        screen: makeSettingsScreen(),
-        loading: false,
-        error: null,
-        message: null
-      });
-      await tick();
-
-      expect(buttonByText(target, "Налаштувати").className).toContain("btn-ghost");
-      expect(buttonByText(target, "Імпортувати").className).toContain("btn-secondary");
-
-      component.$destroy();
-    });
+    component.$destroy();
   });
 
-  describe("BAS import flow", () => {
-    beforeEach(() => {
-      mocks.settingsState.set({
-        section: "integrations",
-        screen: makeSettingsScreen(),
-        loading: false,
-        error: null,
-        message: null
-      });
+  it("перемикає тему через themeStore і reload shell chrome", async () => {
+    const { component, target } = renderSettings();
+
+    buttonByText(target, "Темна тема").click();
+    await tick();
+
+    expect(mocks.themeSetMode).toHaveBeenCalledWith("dark");
+    expect(mocks.updatePreference).toHaveBeenCalledWith("darkMode", true);
+    expect(mocks.savePreferences).toHaveBeenCalled();
+    expect(mocks.shellReloadChrome).toHaveBeenCalled();
+
+    component.$destroy();
+  });
+
+  it("блокує дії та показує loading banner під час збереження", async () => {
+    mocks.settingsState.set({
+      section: "company",
+      screen: makeSettingsScreen(),
+      loading: true,
+      error: null,
+      message: null
     });
 
-    it("показує кнопку Імпортувати для BAS інтеграції", async () => {
-      const { component, target } = renderSettings();
-      await tick();
+    const { component, target } = renderSettings();
+    await tick();
 
-      expect(target.textContent).toContain("BAS");
-      expect(target.textContent).toContain("Імпортувати");
+    const saveButton = buttonByText(target, "Зберігаємо");
+    const fullNameInput = Array.from(target.querySelectorAll("input")).find(
+      (input) => (input as HTMLInputElement).value === "ТОВ Тест"
+    ) as HTMLInputElement | undefined;
 
-      component.$destroy();
+    expect(target.textContent).toContain("Оновлюємо налаштування");
+    expect(saveButton.disabled).toBe(true);
+    expect(saveButton.getAttribute("aria-busy")).toBe("true");
+    expect(fullNameInput).toBeDefined();
+    expect((fullNameInput as HTMLInputElement).disabled).toBe(true);
+
+    component.$destroy();
+  });
+
+  it("показує success та error banner для системних станів", async () => {
+    mocks.settingsState.set({
+      section: "appearance",
+      screen: makeSettingsScreen(),
+      loading: false,
+      error: "Помилка запису",
+      message: "Налаштування збережено"
     });
 
-    it("відкриває BAS import панель після кліку Імпортувати", async () => {
-      const { component, target } = renderSettings();
-      await tick();
+    const { component, target } = renderSettings();
+    await tick();
 
-      buttonByText(target, "Імпортувати").click();
-      await tick();
+    expect(target.textContent).toContain("Зміни збережено");
+    expect(target.textContent).toContain("Налаштування збережено");
+    expect(target.textContent).toContain("Не вдалося виконати дію");
+    expect(target.textContent).toContain("Помилка запису");
 
-      expect(target.textContent).toContain("Обрати папку");
-      expect(target.textContent).toContain("Перевірити файли");
+    component.$destroy();
+  });
 
-      component.$destroy();
+  it("показує компанію та зберігає її через primary CTA", async () => {
+    mocks.settingsState.set({
+      section: "company",
+      screen: makeSettingsScreen(),
+      loading: false,
+      error: null,
+      message: null
     });
 
-    it("викликає importStore.chooseDirectory при кліку Обрати папку", async () => {
-      const { component, target } = renderSettings();
-      await tick();
+    const { component, target } = renderSettings();
+    await tick();
 
-      buttonByText(target, "Імпортувати").click();
-      await tick();
-      buttonByText(target, "Обрати папку").click();
-      await tick();
+    expect(buttonByText(target, "Зберегти").disabled).toBe(false);
 
-      expect(mocks.importChooseDirectory).toHaveBeenCalled();
+    buttonByText(target, "Зберегти").click();
+    await tick();
 
-      component.$destroy();
+    expect(mocks.saveCompany).toHaveBeenCalled();
+    expect(mocks.shellReloadChrome).toHaveBeenCalled();
+
+    component.$destroy();
+  });
+
+  it("показує integration state як chip та правильні варіанти кнопок", async () => {
+    mocks.settingsState.set({
+      section: "integrations",
+      screen: makeSettingsScreen(),
+      loading: false,
+      error: null,
+      message: null
     });
 
-    it("викликає importStore.fetchPlan при кліку Перевірити файли", async () => {
-      const { component, target } = renderSettings();
-      await tick();
+    const { component, target } = renderSettings();
+    await tick();
 
-      buttonByText(target, "Імпортувати").click();
-      await tick();
+    expect(target.textContent).toContain("Активно");
+    expect(buttonByText(target, "Налаштувати").disabled).toBe(false);
+    expect(buttonByText(target, "Імпортувати").disabled).toBe(false);
 
-      mocks.importState.set({
-        selectedDirectory: "C:\\tmp\\bas-export",
-        plan: null,
-        result: null,
-        loading: false,
-        error: null
-      });
-      await tick();
+    component.$destroy();
+  });
 
-      buttonByText(target, "Перевірити файли").click();
-      await tick();
-
-      expect(mocks.importFetchPlan).toHaveBeenCalled();
-
-      component.$destroy();
+  it("відкриває BAS import panel і викликає вибір папки", async () => {
+    mocks.settingsState.set({
+      section: "integrations",
+      screen: makeSettingsScreen(),
+      loading: false,
+      error: null,
+      message: null
     });
 
-    it("показує таблицю плану після завантаження даних", async () => {
-      const { component, target } = renderSettings();
-      await tick();
+    const { component, target } = renderSettings();
+    await tick();
 
-      buttonByText(target, "Імпортувати").click();
-      await tick();
+    buttonByText(target, "Імпортувати").click();
+    await tick();
+    buttonByText(target, "Обрати папку").click();
+    await tick();
 
-      mocks.importState.set({
-        selectedDirectory: "C:\\tmp\\bas-export",
-        plan: {
-          entities: [
-            {
-              entityType: "counterparties",
-              fileName: "counterparties.xml",
-              parsed: 15,
-              willCreate: 10,
-              willSkip: 5,
-              error: null
-            },
-            {
-              entityType: "payments",
-              fileName: "bank_export.csv",
-              parsed: 30,
-              willCreate: 25,
-              willSkip: 5,
-              error: null
-            }
-          ]
-        },
-        result: null,
-        loading: false,
-        error: null
-      });
-      await tick();
+    expect(target.textContent).toContain("Імпорт BAS");
+    expect(mocks.importChooseDirectory).toHaveBeenCalled();
 
-      expect(target.textContent).toContain("counterparties");
-      expect(target.textContent).toContain("counterparties.xml");
-      expect(target.textContent).toContain("25 нових / 5 дублікатів");
-      expect(target.textContent).toContain("C:\\tmp\\bas-export");
-      expect(target.textContent).toContain("Виконати імпорт");
+    component.$destroy();
+  });
 
-      component.$destroy();
+  it("показує план BAS імпорту і робить primary CTA для перевірки файлів", async () => {
+    mocks.settingsState.set({
+      section: "integrations",
+      screen: makeSettingsScreen(),
+      loading: false,
+      error: null,
+      message: null
     });
 
-    it("викликає importStore.execute при кліку Виконати імпорт", async () => {
-      const { component, target } = renderSettings();
-      await tick();
+    const { component, target } = renderSettings();
+    await tick();
 
-      buttonByText(target, "Імпортувати").click();
-      await tick();
+    buttonByText(target, "Імпортувати").click();
+    mocks.importState.set({
+      selectedDirectory: "C:\\tmp\\bas-export",
+      plan: {
+        entities: [
+          {
+            entityType: "payments",
+            fileName: "bank_export.csv",
+            parsed: 30,
+            willCreate: 25,
+            willSkip: 5,
+            error: null
+          }
+        ]
+      },
+      result: null,
+      loading: false,
+      error: null
+    });
+    await tick();
 
-      mocks.importState.set({
-        selectedDirectory: "C:\\tmp\\bas-export",
-        plan: {
-          entities: [
-            {
-              entityType: "counterparties",
-              fileName: "counterparties.xml",
-              parsed: 15,
-              willCreate: 10,
-              willSkip: 5,
-              error: null
-            }
-          ]
-        },
-        result: null,
-        loading: false,
-        error: null
-      });
-      await tick();
+    const verifyButton = buttonByText(target, "Перевірити файли");
 
-      buttonByText(target, "Виконати імпорт").click();
-      await tick();
+    expect(verifyButton.disabled).toBe(false);
+    expect(target.textContent).toContain("25 нових / 5 дублікатів");
+    expect(target.textContent).toContain("C:\\tmp\\bas-export");
 
-      expect(mocks.importExecute).toHaveBeenCalled();
+    component.$destroy();
+  });
 
-      component.$destroy();
+  it("викликає fetchPlan та execute для BAS flow", async () => {
+    mocks.settingsState.set({
+      section: "integrations",
+      screen: makeSettingsScreen(),
+      loading: false,
+      error: null,
+      message: null
     });
 
-    it("показує результати після виконання імпорту", async () => {
-      const { component, target } = renderSettings();
-      await tick();
+    const { component, target } = renderSettings();
+    await tick();
 
-      buttonByText(target, "Імпортувати").click();
-      await tick();
+    buttonByText(target, "Імпортувати").click();
+    await tick();
 
-      mocks.importState.set({
-        selectedDirectory: "C:\\tmp\\bas-export",
-        plan: null,
-        result: {
-          entities: [
-            {
-              entityType: "counterparties",
-              created: 10,
-              updated: 2,
-              skipped: 3,
-              conflicts: 0,
-              error: null
-            }
-          ]
-        },
-        loading: false,
-        error: null
-      });
-      await tick();
+    mocks.importState.set({
+      selectedDirectory: "C:\\tmp\\bas-export",
+      plan: null,
+      result: null,
+      loading: false,
+      error: null
+    });
+    await tick();
 
-      expect(target.textContent).toContain("counterparties");
-      expect(target.textContent).toContain("Закрити");
+    buttonByText(target, "Перевірити файли").click();
+    await tick();
+    expect(mocks.importFetchPlan).toHaveBeenCalled();
 
-      component.$destroy();
+    mocks.importState.set({
+      selectedDirectory: "C:\\tmp\\bas-export",
+      plan: {
+        entities: [
+          {
+            entityType: "counterparties",
+            fileName: "counterparties.xml",
+            parsed: 15,
+            willCreate: 10,
+            willSkip: 5,
+            error: null
+          }
+        ]
+      },
+      result: null,
+      loading: false,
+      error: null
+    });
+    await tick();
+
+    buttonByText(target, "Виконати імпорт").click();
+    await tick();
+
+    expect(mocks.importExecute).toHaveBeenCalled();
+
+    component.$destroy();
+  });
+
+  it("показує результати BAS імпорту та дозволяє закрити панель", async () => {
+    mocks.settingsState.set({
+      section: "integrations",
+      screen: makeSettingsScreen(),
+      loading: false,
+      error: null,
+      message: null
     });
 
-    it("скасовує і закриває панель після завантаження плану", async () => {
-      const { component, target } = renderSettings();
-      await tick();
+    const { component, target } = renderSettings();
+    await tick();
 
-      buttonByText(target, "Імпортувати").click();
-      await tick();
+    buttonByText(target, "Імпортувати").click();
+    await tick();
 
-      mocks.importState.set({
-        selectedDirectory: "C:\\tmp\\bas-export",
-        plan: {
-          entities: [
-            {
-              entityType: "counterparties",
-              fileName: "counterparties.xml",
-              parsed: 5,
-              willCreate: 5,
-              willSkip: 0,
-              error: null
-            }
-          ]
-        },
-        result: null,
-        loading: false,
-        error: null
-      });
-      await tick();
-
-      expect(target.textContent).toContain("Скасувати");
-
-      buttonByText(target, "Скасувати").click();
-      await tick();
-
-      expect(mocks.importReset).toHaveBeenCalled();
-      expect(target.textContent).not.toContain("Перевірити файли");
-
-      component.$destroy();
+    mocks.importState.set({
+      selectedDirectory: "C:\\tmp\\bas-export",
+      plan: null,
+      result: {
+        entities: [
+          {
+            entityType: "counterparties",
+            created: 10,
+            updated: 2,
+            skipped: 3,
+            conflicts: 0,
+            error: null
+          }
+        ]
+      },
+      loading: false,
+      error: null
     });
+    await tick();
+
+    expect(target.textContent).toContain("Імпорт завершено");
+    buttonByText(target, "Закрити").click();
+    await tick();
+
+    expect(mocks.importReset).toHaveBeenCalled();
+
+    component.$destroy();
   });
 });

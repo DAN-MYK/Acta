@@ -478,7 +478,11 @@ pub async fn generate_document_pdf(ctx: &AppCtx, doc_id: String) -> Result<Mutat
 
             let data = build_act_pdf_data(&act, &items, &company, &counterparty);
             let path = ensure_output_dir(ctx.storage_dir(), &act.number)?;
-            generate_act_pdf(&data, &ctx.template_dir().join("act.typ"), &path)?;
+            let template = ctx.template_dir().join("act.typ");
+            let out = path.clone();
+            tokio::task::spawn_blocking(move || generate_act_pdf(&data, &template, &out))
+                .await
+                .context("PDF thread error")??;
             path
         }
         DocumentRef::Invoice(id) => {
@@ -496,7 +500,11 @@ pub async fn generate_document_pdf(ctx: &AppCtx, doc_id: String) -> Result<Mutat
 
             let data = build_invoice_pdf_data(&invoice, &items, &company, &counterparty);
             let path = ensure_invoice_output_dir(ctx.storage_dir(), &invoice.number)?;
-            generate_invoice_pdf(&data, &ctx.template_dir().join("invoice.typ"), &path)?;
+            let template = ctx.template_dir().join("invoice.typ");
+            let out = path.clone();
+            tokio::task::spawn_blocking(move || generate_invoice_pdf(&data, &template, &out))
+                .await
+                .context("PDF thread error")??;
             path
         }
         DocumentRef::Waybill(_) => {
@@ -504,7 +512,8 @@ pub async fn generate_document_pdf(ctx: &AppCtx, doc_id: String) -> Result<Mutat
         }
     };
 
-    if let Err(e) = open::that(&path) {
+    let open_path = path.clone();
+    if let Ok(Err(e)) = tokio::task::spawn_blocking(move || open::that(open_path)).await {
         tracing::warn!("Не вдалось відкрити PDF: {e}");
     }
 

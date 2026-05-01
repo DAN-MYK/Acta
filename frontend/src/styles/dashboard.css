@@ -140,3 +140,23 @@ body[data-theme="dark"] .dashboard-panel {
 .overdue .dashboard-list-row {
   color: var(--danger);
 }
+
+@media (max-width: 980px) {
+  .cashflow-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 12px 0;
+  }
+
+  .cashflow-row.cashflow-head {
+    display: none;
+  }
+
+  .cashflow-row strong,
+  .cashflow-row span,
+  .cashflow-net,
+  .cashflow-income,
+  .cashflow-expense {
+    text-align: left !important;
+  }
+}

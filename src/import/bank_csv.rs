@@ -67,12 +67,7 @@ fn parse_date(raw: &str) -> Result<NaiveDate> {
     let date_only = trimmed.split(['T', ' ']).next().unwrap_or(trimmed).trim();
 
     for format in [
-        "%d.%m.%Y",
-        "%Y-%m-%d",
-        "%d/%m/%Y",
-        "%Y/%m/%d",
-        "%Y%m%d",
-        "%d-%m-%Y",
+        "%d.%m.%Y", "%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d", "%Y%m%d", "%d-%m-%Y",
     ] {
         if let Ok(date) = NaiveDate::parse_from_str(date_only, format) {
             return Ok(date);

@@ -1,8 +1,7 @@
 use acta::tauri_api::documents::{
-    BulkDocumentRequest, BulkMutationResultDto,
-    CreateChainDraftRequest, CreateDocumentDraftRequest,
-    DocumentChainDto, DocumentEditorDto, DocumentsListDto, DocumentsListRequest,
-    MutationResultDto, SaveDocumentRequest, SaveDocumentResponse,
+    BulkDocumentRequest, BulkMutationResultDto, CreateChainDraftRequest,
+    CreateDocumentDraftRequest, DocumentChainDto, DocumentEditorDto, DocumentsListDto,
+    DocumentsListRequest, MutationResultDto, SaveDocumentRequest, SaveDocumentResponse,
 };
 use tauri::State;
 

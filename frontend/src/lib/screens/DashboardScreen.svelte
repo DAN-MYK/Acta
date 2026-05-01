@@ -27,7 +27,7 @@
   }
 </script>
 
-<section class="panel dashboard-panel">
+<section class="panel dashboard-panel" data-testid="dashboard-screen">
   <div class="panel-header">
     <div>
       <h2>Дашборд</h2>

@@ -4,8 +4,6 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
-use crate::models::payment::PaymentDirection;
-
 /// Тип документа, з яким може зіставлятися платіж.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MatchDocumentKind {
@@ -17,7 +15,6 @@ pub enum MatchDocumentKind {
 #[derive(Debug, Clone, PartialEq)]
 pub struct PaymentMatchInput {
     pub amount: Decimal,
-    pub direction: PaymentDirection,
     pub date: NaiveDate,
     pub counterparty_iban: Option<String>,
     pub description: String,
@@ -32,6 +29,8 @@ pub struct MatchCandidate {
     pub open_amount: Decimal,
     pub counterparty_iban: Option<String>,
     pub title: String,
+    pub reference_text: Option<String>,
+    pub match_text: Option<String>,
     pub match_date: Option<NaiveDate>,
 }
 
@@ -41,6 +40,8 @@ impl MatchCandidate {
         open_amount: Decimal,
         counterparty_iban: Option<String>,
         title: impl Into<String>,
+        reference_text: impl Into<String>,
+        match_text: impl Into<String>,
         match_date: Option<NaiveDate>,
     ) -> Self {
         Self {
@@ -49,6 +50,8 @@ impl MatchCandidate {
             open_amount,
             counterparty_iban,
             title: title.into(),
+            reference_text: optional_text(reference_text),
+            match_text: optional_text(match_text),
             match_date,
         }
     }
@@ -58,6 +61,8 @@ impl MatchCandidate {
         open_amount: Decimal,
         counterparty_iban: Option<String>,
         title: impl Into<String>,
+        reference_text: impl Into<String>,
+        match_text: impl Into<String>,
         match_date: Option<NaiveDate>,
     ) -> Self {
         Self {
@@ -66,6 +71,8 @@ impl MatchCandidate {
             open_amount,
             counterparty_iban,
             title: title.into(),
+            reference_text: optional_text(reference_text),
+            match_text: optional_text(match_text),
             match_date,
         }
     }
@@ -121,29 +128,23 @@ impl MatchDecision {
     pub fn best_match_id(&self) -> Option<Uuid> {
         match self {
             MatchDecision::Exact(scored) => Some(scored.candidate.document_id),
-            MatchDecision::Ambiguous(candidates) => {
-                candidates.first().map(|scored| scored.candidate.document_id)
-            }
+            MatchDecision::Ambiguous(_) => None,
             MatchDecision::None => None,
         }
     }
 }
 
-/// Вибрати найкращий кандидат із прозорим result model для preview/auto-match.
-pub fn choose_best_match(
+/// Повернути відсортований список exact-amount кандидатів з деталями скорингу.
+pub fn score_match_candidates(
     input: &PaymentMatchInput,
     candidates: &[MatchCandidate],
-) -> MatchDecision {
+) -> Vec<ScoredMatchCandidate> {
     let mut scored: Vec<_> = candidates
         .iter()
         .cloned()
         .map(|candidate| score_candidate(input, candidate))
         .filter(|candidate| candidate.score.exact_amount)
         .collect();
-
-    if scored.is_empty() {
-        return MatchDecision::None;
-    }
 
     scored.sort_by(|left, right| {
         right
@@ -154,6 +155,20 @@ pub fn choose_best_match(
             .then_with(|| left.candidate.title.cmp(&right.candidate.title))
             .then_with(|| left.candidate.document_id.cmp(&right.candidate.document_id))
     });
+
+    scored
+}
+
+/// Вибрати найкращий кандидат із прозорим result model для preview/auto-match.
+pub fn choose_best_match(
+    input: &PaymentMatchInput,
+    candidates: &[MatchCandidate],
+) -> MatchDecision {
+    let scored = score_match_candidates(input, candidates);
+
+    if scored.is_empty() {
+        return MatchDecision::None;
+    }
 
     let top_score = scored[0].score.total;
     let tied: Vec<_> = scored
@@ -182,17 +197,29 @@ fn score_candidate(input: &PaymentMatchInput, candidate: MatchCandidate) -> Scor
             _ => false,
         };
 
-    let normalized_title = normalize_text(&candidate.title);
     let reference_hit = exact_amount
         && input
             .bank_ref
             .as_deref()
             .map(normalize_text)
             .filter(|reference| !reference.is_empty())
-            .is_some_and(|reference| normalized_title.contains(&reference));
+            .zip(
+                candidate
+                    .reference_text
+                    .as_deref()
+                    .map(normalize_text)
+                    .filter(|text| !text.is_empty()),
+            )
+            .is_some_and(|(reference, candidate_reference)| {
+                candidate_reference.contains(&reference)
+            });
 
     let text_hits = if exact_amount {
-        intersecting_tokens(&input.description, &candidate.title).len()
+        intersecting_tokens(
+            &input.description,
+            candidate.match_text.as_deref().unwrap_or(""),
+        )
+        .len()
     } else {
         0
     };
@@ -203,8 +230,7 @@ fn score_candidate(input: &PaymentMatchInput, candidate: MatchCandidate) -> Scor
         .unwrap_or(365);
 
     let total = if exact_amount {
-        100
-            + if same_iban { 40 } else { 0 }
+        100 + if same_iban { 40 } else { 0 }
             + if reference_hit { 20 } else { 0 }
             + (text_hits.min(3) as i32 * 10)
             + (10 - days_distance.min(10) as i32)
@@ -253,11 +279,22 @@ fn normalize_text(value: &str) -> String {
 }
 
 fn normalize_optional_iban(value: Option<&str>) -> Option<String> {
-    value.map(|iban| {
-        iban.chars()
-            .filter(|ch| !ch.is_whitespace())
-            .flat_map(char::to_uppercase)
-            .collect::<String>()
-    })
-    .filter(|iban| !iban.is_empty())
+    value
+        .map(|iban| {
+            iban.chars()
+                .filter(|ch| !ch.is_whitespace())
+                .flat_map(char::to_uppercase)
+                .collect::<String>()
+        })
+        .filter(|iban| !iban.is_empty())
+}
+
+fn optional_text(value: impl Into<String>) -> Option<String> {
+    let value = value.into();
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
 }

@@ -12,8 +12,21 @@ export function snapshot<T>(store: { subscribe: (run: (value: T) => void) => () 
 }
 
 export async function loadStores() {
-  const [shellModule, dashboardModule, documentsModule, counterpartiesModule, paymentsModule, settingsModule, paletteModule, navigationModule] =
+  const [
+    appShellModule,
+    shellModule,
+    dashboardModule,
+    documentsModule,
+    counterpartiesModule,
+    paymentsModule,
+    settingsModule,
+    paletteModule,
+    navigationModule,
+    tasksModule,
+    reportsModule
+  ] =
     await Promise.all([
+      import("../app-shell"),
       import("../shell"),
       import("../dashboard"),
       import("../documents"),
@@ -21,15 +34,20 @@ export async function loadStores() {
       import("../payments"),
       import("../settings"),
       import("../palette"),
-      import("../navigation")
+      import("../navigation"),
+      import("../tasks"),
+      import("../reports")
     ]);
 
   return {
+    appShellStore: appShellModule.appShellStore,
     shellStore: shellModule.shellStore,
     dashboardStore: dashboardModule.dashboardStore,
     documentsStore: documentsModule.documentsStore,
     counterpartiesStore: counterpartiesModule.counterpartiesStore,
     paymentsStore: paymentsModule.paymentsStore,
+    tasksStore: tasksModule.tasksStore,
+    reportsStore: reportsModule.reportsStore,
     settingsStore: settingsModule.settingsStore,
     paletteStore: paletteModule.paletteStore,
     navigationStore: navigationModule.navigationStore

@@ -23,8 +23,8 @@ pub struct ActKpi {
 }
 
 use crate::models::act::{Act, ActItem, ActListRow, ActStatus, NewAct, NewActItem, UpdateAct};
-use crate::models::DocumentDirection;
 use crate::models::payment::PaymentDirection;
+use crate::models::DocumentDirection;
 use crate::services::payment_matching::MatchCandidate;
 
 fn count_index_for_status(status: &ActStatus) -> usize {
@@ -272,6 +272,8 @@ pub async fn list_open_act_candidates(
     struct Row {
         id: Uuid,
         title: String,
+        reference_text: String,
+        match_text: String,
         open_amount: Decimal,
         counterparty_iban: Option<String>,
         match_date: Option<chrono::NaiveDate>,
@@ -287,6 +289,8 @@ pub async fn list_open_act_candidates(
         SELECT
             a.id,
             trim(concat_ws(' ', a.number, cp.name))               AS title,
+            a.number                                              AS reference_text,
+            trim(concat_ws(' ', a.number, cp.name))               AS match_text,
             a.total_amount - COALESCE(SUM(pa.amount), 0::numeric) AS open_amount,
             cp.iban                                               AS counterparty_iban,
             COALESCE(a.expected_payment_date, a.date)             AS match_date
@@ -314,6 +318,8 @@ pub async fn list_open_act_candidates(
                 row.open_amount,
                 row.counterparty_iban,
                 row.title,
+                row.reference_text,
+                row.match_text,
                 row.match_date,
             )
         })

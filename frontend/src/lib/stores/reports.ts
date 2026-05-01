@@ -1,5 +1,5 @@
 import { get, writable } from "svelte/store";
-import { reportsExportCsv, reportsLoad } from "../api";
+import { reportsExportCsv, reportsExportExcel, reportsExportExcelAndOpen, reportsLoad } from "../api";
 import type { ReportsFilterDto, ReportsScreenDto } from "../types";
 
 interface ReportsState {
@@ -56,6 +56,36 @@ function createReportsStore() {
 
       try {
         const result = await reportsExportCsv(filter);
+        update((state) => ({
+          ...state,
+          loading: false,
+          message: `${result.message}: ${result.path}`
+        }));
+      } catch (error) {
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      }
+    },
+    async exportExcel() {
+      const filter = get({ subscribe }).screen?.filter ?? defaultFilter;
+      update((state) => ({ ...state, loading: true, error: null, message: null }));
+
+      try {
+        const result = await reportsExportExcel(filter);
+        update((state) => ({
+          ...state,
+          loading: false,
+          message: `${result.message}: ${result.path}`
+        }));
+      } catch (error) {
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      }
+    },
+    async exportExcelAndOpen() {
+      const filter = get({ subscribe }).screen?.filter ?? defaultFilter;
+      update((state) => ({ ...state, loading: true, error: null, message: null }));
+
+      try {
+        const result = await reportsExportExcelAndOpen(filter);
         update((state) => ({
           ...state,
           loading: false,

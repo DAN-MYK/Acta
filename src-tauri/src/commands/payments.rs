@@ -1,5 +1,8 @@
 use acta::tauri_api::payments::{
-    MutationResultDto, OpenTemplateResultDto, PaymentCreateOrUpdateRequest, PaymentsScreenDto,
+    MutationResultDto, OpenTemplateResultDto, PaymentCreateOrUpdateRequest,
+    PaymentMatchApplyAutoRequest, PaymentMatchPreviewDto, PaymentMatchPreviewRequest,
+    PaymentReconcileRequest, PaymentUnreconcileAllRequest, PaymentUnreconcileRequest,
+    PaymentsScreenDto,
 };
 use tauri::State;
 
@@ -24,9 +27,7 @@ pub async fn payments_import_latest_csv(
 }
 
 #[tauri::command]
-pub async fn payments_sync_bank(
-    state: State<'_, TauriState>,
-) -> CommandResult<MutationResultDto> {
+pub async fn payments_sync_bank(state: State<'_, TauriState>) -> CommandResult<MutationResultDto> {
     acta::tauri_api::payments::payments_sync_bank(&state.ctx)
         .await
         .map_err(|error| error.to_string())
@@ -54,9 +55,9 @@ pub async fn payment_create_or_update(
 #[tauri::command]
 pub async fn payment_reconcile(
     state: State<'_, TauriState>,
-    payment_id: String,
+    request: PaymentReconcileRequest,
 ) -> CommandResult<MutationResultDto> {
-    acta::tauri_api::payments::payment_reconcile(&state.ctx, payment_id)
+    acta::tauri_api::payments::payment_reconcile(&state.ctx, request)
         .await
         .map_err(|error| error.to_string())
 }
@@ -64,9 +65,39 @@ pub async fn payment_reconcile(
 #[tauri::command]
 pub async fn payment_unreconcile(
     state: State<'_, TauriState>,
-    payment_id: String,
+    request: PaymentUnreconcileRequest,
 ) -> CommandResult<MutationResultDto> {
-    acta::tauri_api::payments::payment_unreconcile(&state.ctx, payment_id)
+    acta::tauri_api::payments::payment_unreconcile(&state.ctx, request)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn payment_unreconcile_all(
+    state: State<'_, TauriState>,
+    request: PaymentUnreconcileAllRequest,
+) -> CommandResult<MutationResultDto> {
+    acta::tauri_api::payments::payment_unreconcile_all(&state.ctx, request)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn payment_match_preview(
+    state: State<'_, TauriState>,
+    request: PaymentMatchPreviewRequest,
+) -> CommandResult<PaymentMatchPreviewDto> {
+    acta::tauri_api::payments::payment_match_preview(&state.ctx, request)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn payment_match_apply_auto(
+    state: State<'_, TauriState>,
+    request: PaymentMatchApplyAutoRequest,
+) -> CommandResult<MutationResultDto> {
+    acta::tauri_api::payments::payment_match_apply_auto(&state.ctx, request)
         .await
         .map_err(|error| error.to_string())
 }

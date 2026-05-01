@@ -107,4 +107,67 @@ describe("palette store behavior", () => {
       error: null
     });
   });
+
+  it("reopens from a clean query and replaces previous results with fresh defaults", async () => {
+    const { paletteStore } = await loadStores();
+
+    invokeMock.mockImplementation(async (command, payload) => {
+      if (command !== "shell_palette_search") {
+        throw new Error(`unexpected command: ${command}`);
+      }
+
+      const query = (payload as { request: { query: string } }).request.query;
+      if (query === "") {
+        return {
+          items: [
+            {
+              kind: "navigate",
+              title: "Дашборд",
+              subtitle: "Повернутися на головний екран",
+              shortcut: "Ctrl+1",
+              payload: "screen:dashboard"
+            }
+          ]
+        };
+      }
+
+      return {
+        items: [
+          {
+            kind: "navigate",
+            title: "Документи",
+            subtitle: "Відкрити список документів",
+            shortcut: "Ctrl+2",
+            payload: "screen:documents"
+          }
+        ]
+      };
+    });
+
+    paletteStore.open();
+    await vi.waitFor(() => {
+      expect(snapshot(paletteStore).items[0]?.title).toBe("Дашборд");
+    });
+
+    await paletteStore.search("док");
+    expect(snapshot(paletteStore)).toMatchObject({
+      open: true,
+      query: "док"
+    });
+    expect(snapshot(paletteStore).items[0]?.title).toBe("Документи");
+
+    paletteStore.close();
+    paletteStore.open();
+
+    await vi.waitFor(() => {
+      expect(snapshot(paletteStore).items[0]?.title).toBe("Дашборд");
+    });
+
+    expect(snapshot(paletteStore)).toMatchObject({
+      open: true,
+      query: "",
+      loading: false,
+      error: null
+    });
+  });
 });
