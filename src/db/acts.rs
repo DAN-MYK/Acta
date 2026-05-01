@@ -24,6 +24,8 @@ pub struct ActKpi {
 
 use crate::models::act::{Act, ActItem, ActListRow, ActStatus, NewAct, NewActItem, UpdateAct};
 use crate::models::DocumentDirection;
+use crate::models::payment::PaymentDirection;
+use crate::services::payment_matching::MatchCandidate;
 
 fn count_index_for_status(status: &ActStatus) -> usize {
     match status {
@@ -258,6 +260,64 @@ pub async fn get_kpi(pool: &PgPool, company_id: Uuid) -> Result<ActKpi> {
         unpaid_total: row.get::<Decimal, _>("unpaid_total"),
         overdue_count: row.get::<i64, _>("overdue_count"),
     })
+}
+
+/// Повернути відкриті акти як кандидатів для автозіставлення платежу.
+pub async fn list_open_act_candidates(
+    pool: &PgPool,
+    company_id: Uuid,
+    direction: PaymentDirection,
+) -> Result<Vec<MatchCandidate>> {
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        id: Uuid,
+        title: String,
+        open_amount: Decimal,
+        counterparty_iban: Option<String>,
+        match_date: Option<chrono::NaiveDate>,
+    }
+
+    let document_direction = match direction {
+        PaymentDirection::Income => DocumentDirection::Outgoing,
+        PaymentDirection::Expense => DocumentDirection::Incoming,
+    };
+
+    let rows = sqlx::query_as::<_, Row>(
+        r#"
+        SELECT
+            a.id,
+            trim(concat_ws(' ', a.number, cp.name))               AS title,
+            a.total_amount - COALESCE(SUM(pa.amount), 0::numeric) AS open_amount,
+            cp.iban                                               AS counterparty_iban,
+            COALESCE(a.expected_payment_date, a.date)             AS match_date
+        FROM acts a
+        JOIN counterparties cp ON cp.id = a.counterparty_id
+        LEFT JOIN payment_acts pa ON pa.act_id = a.id
+        WHERE a.company_id = $1
+          AND a.direction = $2
+          AND a.status IN ('issued', 'signed')
+        GROUP BY a.id, a.number, cp.name, cp.iban, a.total_amount, a.expected_payment_date, a.date
+        HAVING a.total_amount - COALESCE(SUM(pa.amount), 0::numeric) > 0::numeric
+        ORDER BY COALESCE(a.expected_payment_date, a.date) ASC, a.number ASC
+        "#,
+    )
+    .bind(company_id)
+    .bind(document_direction)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            MatchCandidate::act(
+                row.id,
+                row.open_amount,
+                row.counterparty_iban,
+                row.title,
+                row.match_date,
+            )
+        })
+        .collect())
 }
 
 /// Отримати один акт разом з усіма його позиціями.
@@ -719,6 +779,7 @@ mod tests {
         let _ = list_filtered;
         let _ = count_by_status;
         let _ = get_kpi;
+        let _ = list_open_act_candidates;
         let _ = get_by_id;
         let _ = find_by_bas_id;
         let _ = find_import_candidate;

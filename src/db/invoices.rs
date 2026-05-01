@@ -19,6 +19,8 @@ use crate::models::{
     },
     DocumentDirection,
 };
+use crate::models::payment::PaymentDirection;
+use crate::services::payment_matching::MatchCandidate;
 
 /// Згенерувати наступний номер рахунку у форматі "РАХ-РРРР-NNN".
 ///
@@ -193,6 +195,64 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<(Invoice, Vec<I
 /// Завантажити накладну з позиціями для форми редагування.
 pub async fn get_for_edit(pool: &PgPool, id: Uuid) -> Result<Option<(Invoice, Vec<InvoiceItem>)>> {
     get_by_id(pool, id).await
+}
+
+/// Повернути відкриті накладні як кандидатів для автозіставлення платежу.
+pub async fn list_open_invoice_candidates(
+    pool: &PgPool,
+    company_id: Uuid,
+    direction: PaymentDirection,
+) -> Result<Vec<MatchCandidate>> {
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        id: Uuid,
+        title: String,
+        open_amount: Decimal,
+        counterparty_iban: Option<String>,
+        match_date: Option<chrono::NaiveDate>,
+    }
+
+    let document_direction = match direction {
+        PaymentDirection::Income => DocumentDirection::Outgoing,
+        PaymentDirection::Expense => DocumentDirection::Incoming,
+    };
+
+    let rows = sqlx::query_as::<_, Row>(
+        r#"
+        SELECT
+            i.id,
+            trim(concat_ws(' ', i.number, cp.name))               AS title,
+            i.total_amount - COALESCE(SUM(pi.amount), 0::numeric) AS open_amount,
+            cp.iban                                               AS counterparty_iban,
+            COALESCE(i.expected_payment_date, i.date)             AS match_date
+        FROM invoices i
+        JOIN counterparties cp ON cp.id = i.counterparty_id
+        LEFT JOIN payment_invoices pi ON pi.invoice_id = i.id
+        WHERE i.company_id = $1
+          AND i.direction = $2
+          AND i.status IN ('issued', 'signed')
+        GROUP BY i.id, i.number, cp.name, cp.iban, i.total_amount, i.expected_payment_date, i.date
+        HAVING i.total_amount - COALESCE(SUM(pi.amount), 0::numeric) > 0::numeric
+        ORDER BY COALESCE(i.expected_payment_date, i.date) ASC, i.number ASC
+        "#,
+    )
+    .bind(company_id)
+    .bind(document_direction)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            MatchCandidate::invoice(
+                row.id,
+                row.open_amount,
+                row.counterparty_iban,
+                row.title,
+                row.match_date,
+            )
+        })
+        .collect())
 }
 
 /// Знайти накладну за bas_id для ідемпотентного імпорту з BAS.
@@ -1008,6 +1068,7 @@ mod tests {
         let _ = list;
         let _ = list_filtered;
         let _ = get_by_id;
+        let _ = list_open_invoice_candidates;
         let _ = find_by_bas_id;
         let _ = find_import_candidate;
         let _ = list_import_candidates;

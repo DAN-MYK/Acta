@@ -129,6 +129,80 @@ fn payment_matching_prefers_exact_amount_and_iban() {
 }
 
 #[test]
+fn payment_matching_returns_ambiguous_when_top_scores_tie() {
+    let first_id = Uuid::new_v4();
+    let second_id = Uuid::new_v4();
+    let payment = PaymentMatchInput {
+        amount: dec!(8000.00),
+        direction: PaymentDirection::Income,
+        date: NaiveDate::from_ymd_opt(2026, 5, 3).expect("валідна дата"),
+        counterparty_iban: None,
+        description: "Оплата послуг".to_string(),
+        bank_ref: None,
+    };
+
+    let candidates = vec![
+        MatchCandidate::act(
+            first_id,
+            dec!(8000.00),
+            None,
+            "Акт на послуги",
+            Some(NaiveDate::from_ymd_opt(2026, 5, 3).expect("валідна дата")),
+        ),
+        MatchCandidate::invoice(
+            second_id,
+            dec!(8000.00),
+            None,
+            "Рахунок на послуги",
+            Some(NaiveDate::from_ymd_opt(2026, 5, 3).expect("валідна дата")),
+        ),
+    ];
+
+    let result = choose_best_match(&payment, &candidates);
+
+    match result {
+        acta::services::payment_matching::MatchDecision::Ambiguous(candidates) => {
+            assert_eq!(candidates.len(), 2);
+            let ids = candidates
+                .into_iter()
+                .map(|candidate| candidate.candidate.document_id)
+                .collect::<Vec<_>>();
+            assert!(ids.contains(&first_id));
+            assert!(ids.contains(&second_id));
+        }
+        other => panic!("очікували Ambiguous, отримали {other:?}"),
+    }
+}
+
+#[test]
+fn payment_matching_returns_none_without_exact_amount_candidate() {
+    let payment = PaymentMatchInput {
+        amount: dec!(5000.00),
+        direction: PaymentDirection::Income,
+        date: NaiveDate::from_ymd_opt(2026, 5, 4).expect("валідна дата"),
+        counterparty_iban: Some("UA123".to_string()),
+        description: "Оплата накладної".to_string(),
+        bank_ref: Some("REF-5000".to_string()),
+    };
+
+    let candidates = vec![MatchCandidate::invoice(
+        Uuid::new_v4(),
+        dec!(4999.99),
+        Some("UA123".to_string()),
+        "Накладна №5 REF-5000",
+        Some(NaiveDate::from_ymd_opt(2026, 5, 4).expect("валідна дата")),
+    )];
+
+    let result = choose_best_match(&payment, &candidates);
+
+    assert!(matches!(
+        result,
+        acta::services::payment_matching::MatchDecision::None
+    ));
+    assert_eq!(result.best_match_id(), None);
+}
+
+#[test]
 fn pdf_amount_to_words_handles_zero() {
     assert_eq!(amount_to_words(&dec!(0.00)), "нуль гривень 00 копійок");
 }

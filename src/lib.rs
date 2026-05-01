@@ -7,4 +7,5 @@ pub mod models;
 pub mod notifications;
 pub mod pdf;
 pub mod runtime;
+pub mod services;
 pub mod tauri_api;
