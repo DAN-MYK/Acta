@@ -1,5 +1,6 @@
 ﻿// PDF генерація через Typst CLI
 pub mod generator;
+pub mod reader;
 
 #[cfg(test)]
 mod tests {
