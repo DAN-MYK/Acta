@@ -82,6 +82,7 @@ impl MatchCandidate {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchScore {
     pub total: i32,
+    pub amount_fits: bool,
     pub exact_amount: bool,
     pub same_iban: bool,
     pub reference_hit: bool,
@@ -101,6 +102,7 @@ pub struct ScoredMatchCandidate {
 pub enum MatchKind {
     Exact,
     Ambiguous,
+    Split,
     None,
 }
 
@@ -109,6 +111,7 @@ pub enum MatchKind {
 pub enum MatchDecision {
     Exact(ScoredMatchCandidate),
     Ambiguous(Vec<ScoredMatchCandidate>),
+    Split(Vec<ScoredMatchCandidate>),
     None,
 }
 
@@ -117,6 +120,7 @@ impl MatchDecision {
         match self {
             MatchDecision::Exact(_) => MatchKind::Exact,
             MatchDecision::Ambiguous(_) => MatchKind::Ambiguous,
+            MatchDecision::Split(_) => MatchKind::Split,
             MatchDecision::None => MatchKind::None,
         }
     }
@@ -128,7 +132,7 @@ impl MatchDecision {
     pub fn best_match_id(&self) -> Option<Uuid> {
         match self {
             MatchDecision::Exact(scored) => Some(scored.candidate.document_id),
-            MatchDecision::Ambiguous(_) => None,
+            MatchDecision::Ambiguous(_) | MatchDecision::Split(_) => None,
             MatchDecision::None => None,
         }
     }
@@ -164,10 +168,15 @@ pub fn choose_best_match(
     input: &PaymentMatchInput,
     candidates: &[MatchCandidate],
 ) -> MatchDecision {
-    let scored = score_match_candidates(input, candidates);
+    let scored: Vec<_> = score_match_candidates(input, candidates)
+        .into_iter()
+        .filter(|candidate| candidate.score.total > 100)
+        .collect();
 
     if scored.is_empty() {
-        return MatchDecision::None;
+        return choose_split_match(input, candidates)
+            .map(MatchDecision::Split)
+            .unwrap_or(MatchDecision::None);
     }
 
     let top_score = scored[0].score.total;
@@ -186,9 +195,92 @@ pub fn choose_best_match(
     }
 }
 
+pub fn choose_split_match(
+    input: &PaymentMatchInput,
+    candidates: &[MatchCandidate],
+) -> Option<Vec<ScoredMatchCandidate>> {
+    let mut scored: Vec<_> = candidates
+        .iter()
+        .cloned()
+        .map(|candidate| score_candidate(input, candidate))
+        .filter(|candidate| {
+            candidate.score.amount_fits && !candidate.score.exact_amount && candidate.score.total > 0
+        })
+        .collect();
+
+    scored.sort_by(|left, right| {
+        right
+            .score
+            .total
+            .cmp(&left.score.total)
+            .then_with(|| left.score.days_distance.cmp(&right.score.days_distance))
+            .then_with(|| left.candidate.title.cmp(&right.candidate.title))
+            .then_with(|| left.candidate.document_id.cmp(&right.candidate.document_id))
+    });
+
+    let mut best: Option<(i32, usize, Vec<ScoredMatchCandidate>)> = None;
+    let pool: Vec<_> = scored.into_iter().take(6).collect();
+    let mut current = Vec::new();
+    choose_split_match_recursive(
+        &pool,
+        0,
+        input.amount,
+        0,
+        &mut current,
+        &mut best,
+    );
+
+    best.map(|(_, _, candidates)| candidates)
+}
+
+fn choose_split_match_recursive(
+    pool: &[ScoredMatchCandidate],
+    index: usize,
+    remaining: Decimal,
+    score_sum: i32,
+    current: &mut Vec<ScoredMatchCandidate>,
+    best: &mut Option<(i32, usize, Vec<ScoredMatchCandidate>)>,
+) {
+    if remaining.is_zero() {
+        if current.len() < 2 {
+            return;
+        }
+
+        let candidate = (score_sum, current.len(), current.clone());
+        match best {
+            Some((best_score, best_len, _))
+                if *best_score > candidate.0
+                    || (*best_score == candidate.0 && *best_len <= candidate.1) => {}
+            _ => *best = Some(candidate),
+        }
+        return;
+    }
+
+    if index >= pool.len() || remaining.is_sign_negative() {
+        return;
+    }
+
+    choose_split_match_recursive(pool, index + 1, remaining, score_sum, current, best);
+
+    let candidate = &pool[index];
+    if candidate.candidate.open_amount <= remaining {
+        current.push(candidate.clone());
+        choose_split_match_recursive(
+            pool,
+            index + 1,
+            remaining - candidate.candidate.open_amount,
+            score_sum + candidate.score.total,
+            current,
+            best,
+        );
+        current.pop();
+    }
+}
+
 fn score_candidate(input: &PaymentMatchInput, candidate: MatchCandidate) -> ScoredMatchCandidate {
+    let amount_fits = candidate.open_amount <= input.amount;
     let exact_amount = candidate.open_amount == input.amount;
-    let same_iban = exact_amount
+    let same_iban = amount_fits
         && match (
             normalize_optional_iban(input.counterparty_iban.as_deref()),
             normalize_optional_iban(candidate.counterparty_iban.as_deref()),
@@ -197,7 +289,7 @@ fn score_candidate(input: &PaymentMatchInput, candidate: MatchCandidate) -> Scor
             _ => false,
         };
 
-    let reference_hit = exact_amount
+    let reference_hit = amount_fits
         && input
             .bank_ref
             .as_deref()
@@ -214,7 +306,7 @@ fn score_candidate(input: &PaymentMatchInput, candidate: MatchCandidate) -> Scor
                 candidate_reference.contains(&reference)
             });
 
-    let text_hits = if exact_amount {
+    let text_hits = if amount_fits {
         intersecting_tokens(
             &input.description,
             candidate.match_text.as_deref().unwrap_or(""),
@@ -234,6 +326,11 @@ fn score_candidate(input: &PaymentMatchInput, candidate: MatchCandidate) -> Scor
             + if reference_hit { 20 } else { 0 }
             + (text_hits.min(3) as i32 * 10)
             + (10 - days_distance.min(10) as i32)
+    } else if amount_fits {
+        40 + if same_iban { 25 } else { 0 }
+            + if reference_hit { 15 } else { 0 }
+            + (text_hits.min(3) as i32 * 8)
+            + (8 - days_distance.min(8) as i32)
     } else {
         0
     };
@@ -242,6 +339,7 @@ fn score_candidate(input: &PaymentMatchInput, candidate: MatchCandidate) -> Scor
         candidate,
         score: MatchScore {
             total,
+            amount_fits,
             exact_amount,
             same_iban,
             reference_hit,
@@ -296,5 +394,71 @@ fn optional_text(value: impl Into<String>) -> Option<String> {
         None
     } else {
         Some(trimmed.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rust_decimal_macros::dec;
+
+    #[test]
+    fn choose_best_match_returns_split_recommendation_for_covering_candidates() {
+        let input = PaymentMatchInput {
+            amount: dec!(3000.00),
+            date: NaiveDate::from_ymd_opt(2026, 5, 2).expect("валідна дата"),
+            counterparty_iban: Some("UA123456789012345678901234567".to_string()),
+            description: "Оплата за акт ACT-009 і накладну INV-007".to_string(),
+            bank_ref: Some("PAY-77".to_string()),
+        };
+
+        let decision = choose_best_match(
+            &input,
+            &[
+                MatchCandidate::invoice(
+                    Uuid::new_v4(),
+                    dec!(1500.00),
+                    Some("UA123456789012345678901234567".to_string()),
+                    "Накладна INV-007",
+                    "PAY-77 INV-007",
+                    "Оплата накладної INV-007",
+                    Some(NaiveDate::from_ymd_opt(2026, 5, 1).expect("валідна дата")),
+                ),
+                MatchCandidate::act(
+                    Uuid::new_v4(),
+                    dec!(1500.00),
+                    Some("UA123456789012345678901234567".to_string()),
+                    "Акт ACT-009",
+                    "PAY-77 ACT-009",
+                    "Оплата акту ACT-009",
+                    Some(NaiveDate::from_ymd_opt(2026, 5, 3).expect("валідна дата")),
+                ),
+                MatchCandidate::invoice(
+                    Uuid::new_v4(),
+                    dec!(3000.00),
+                    None,
+                    "Нерелевантна накладна",
+                    "",
+                    "Інший документ",
+                    Some(NaiveDate::from_ymd_opt(2026, 4, 1).expect("валідна дата")),
+                ),
+            ],
+        );
+
+        match decision {
+            MatchDecision::Split(candidates) => {
+                assert_eq!(candidates.len(), 2);
+                assert_eq!(
+                    candidates
+                        .iter()
+                        .map(|candidate| candidate.candidate.open_amount)
+                        .sum::<Decimal>(),
+                    dec!(3000.00)
+                );
+                assert!(candidates.iter().all(|candidate| candidate.score.amount_fits));
+                assert!(candidates.iter().all(|candidate| !candidate.score.exact_amount));
+            }
+            other => panic!("очікували split-рекомендацію, отримали {other:?}"),
+        }
     }
 }

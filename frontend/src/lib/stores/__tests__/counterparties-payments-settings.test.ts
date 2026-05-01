@@ -196,6 +196,8 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     await counterpartiesStore.load();
     expect(snapshot(counterpartiesStore).selectedId).toBe("cp-1");
     expect(snapshot(counterpartiesStore).detail?.info.id).toBe("cp-1");
+    expect(snapshot(counterpartiesStore).initialLoading).toBe(false);
+    expect(snapshot(counterpartiesStore).loading).toBe(false);
 
     await counterpartiesStore.open("cp-2");
     expect(snapshot(counterpartiesStore).detail?.info.id).toBe("cp-2");
@@ -293,6 +295,8 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
 
     await paymentsStore.load();
     expect(snapshot(paymentsStore).list?.items).toHaveLength(1);
+    expect(snapshot(paymentsStore).initialLoading).toBe(false);
+    expect(snapshot(paymentsStore).loading).toBe(false);
 
     const emptySave = await paymentsStore.save();
     expect(emptySave.ok).toBe(false);
@@ -523,6 +527,63 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     expect(snapshot(paymentsStore).message).toContain("Виберіть кандидата");
     expect(snapshot(paymentsStore).matchPreview?.paymentId).toBe("pay-2");
     expect(invokeMock.mock.calls.filter(([command]) => command === "payment_reconcile")).toHaveLength(0);
+  });
+
+  it("prefills split draft from split preview candidates", async () => {
+    const { paymentsStore } = await loadStores();
+
+    invokeMock.mockImplementation(async (command, payload) => {
+      switch (command) {
+        case "payments_list":
+          return makePayments(["pay-1", "pay-2", "pay-3"]);
+        case "payment_match_preview":
+          expect(payload).toEqual({ request: { paymentId: "pay-3" } });
+          return {
+            paymentId: "pay-3",
+            isReconciled: false,
+            decisionKind: "split",
+            candidates: [
+              {
+                documentId: "inv-7",
+                documentKind: "invoice",
+                title: "Накладна INV-007",
+                openAmountStr: "1 500,00 грн",
+                totalScore: 88,
+                sameIban: true,
+                referenceHit: true,
+                textHits: 2,
+                daysDistance: 1
+              },
+              {
+                documentId: "act-9",
+                documentKind: "act",
+                title: "Акт ACT-009",
+                openAmountStr: "1 500,00 грн",
+                totalScore: 86,
+                sameIban: true,
+                referenceHit: true,
+                textHits: 2,
+                daysDistance: 0
+              }
+            ],
+            autoMatch: null
+          };
+        default:
+          throw new Error(`unexpected command: ${command}`);
+      }
+    });
+
+    await paymentsStore.load();
+    await paymentsStore.reconcile("pay-3");
+
+    expect(snapshot(paymentsStore).matchPreview?.decisionKind).toBe("split");
+    expect(snapshot(paymentsStore).splitDraft?.allocations).toHaveLength(2);
+    expect(snapshot(paymentsStore).splitDraft?.allocations.map((allocation) => allocation.documentId)).toEqual([
+      "inv-7",
+      "act-9"
+    ]);
+    expect(normalizeMoneyText(snapshot(paymentsStore).splitDraft?.remainingAmountStr)).toContain("0,00");
+    expect(snapshot(paymentsStore).manualPicker).toBeNull();
   });
 
   it("opens manual picker for no-match preview and confirms a searched document", async () => {

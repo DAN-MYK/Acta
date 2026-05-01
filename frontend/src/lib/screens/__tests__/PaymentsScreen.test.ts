@@ -88,6 +88,86 @@ const mocks = vi.hoisted(() => {
     updateManualMatchQuery: vi.fn(),
     updateSplitAllocationAmount: vi.fn()
   };
+  it("renders split-draft strings without mojibake", async () => {
+    setPaymentsState({
+      splitDraft: {
+        paymentId: "payment-1",
+        paymentAmountStr: "100,00 грн",
+        remainingAmountStr: "20,00 грн",
+        allocations: []
+      }
+    });
+
+    const { component, target } = renderPayments();
+    await tick();
+
+    const text = target.textContent ?? "";
+
+    expect(text).toContain("Чернетка розподілу");
+    expect(text).toContain("Сума платежу");
+    expect(text).toContain("Залишок");
+    expect(text).toContain("Додайте документи з manual picker");
+    expect(text).not.toContain("РІР‚Сћ");
+    expect(text).not.toContain("Р В§Р ВµРЎР‚Р Р…Р ВµРЎвЂљР С”Р В°");
+
+    component.$destroy();
+  });
+
+  it("renders split-allocation controls without mojibake", async () => {
+    setPaymentsState({
+      splitDraft: {
+        paymentId: "payment-1",
+        paymentAmountStr: "100,00 грн",
+        remainingAmountStr: "20,00 грн",
+        allocations: [
+          {
+            documentId: "invoice-1",
+            documentKind: "invoice",
+            title: "INV-001",
+            openAmountStr: "20,00 грн",
+            amount: "20,00"
+          }
+        ]
+      }
+    });
+
+    const { component, target } = renderPayments();
+    await tick();
+
+    const text = target.textContent ?? "";
+
+    expect(text).toContain("Залишок документа");
+    expect(text).toContain("Сума");
+    expect(text).toContain("Прибрати");
+    expect(text).toContain("Підтвердити розподіл");
+
+    component.$destroy();
+  });
+
+  it("renders manual-picker split button without mojibake", async () => {
+    setPaymentsState({
+      matchPreview: {
+        paymentId: "payment-1",
+        isReconciled: false,
+        decisionKind: "none",
+        candidates: [],
+        autoMatch: null
+      },
+      manualPicker: {
+        paymentId: "payment-1",
+        query: "",
+        candidates: [],
+        selectedCandidateId: null
+      }
+    });
+
+    const { component, target } = renderPayments();
+    await tick();
+
+    expect(target.textContent ?? "").toContain("Додати до розподілу");
+
+    component.$destroy();
+  });
 });
 
 vi.mock("../../stores/payments", () => ({

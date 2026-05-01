@@ -89,6 +89,7 @@ pub fn run() {
             commands::payments::payment_unreconcile_all,
             commands::payments::payment_match_preview,
             commands::payments::payment_match_apply_auto,
+            commands::payments::payment_match_manual_candidates,
             commands::import::import_bas_pick_directory,
             commands::import::import_bas_plan,
             commands::import::import_bas_execute

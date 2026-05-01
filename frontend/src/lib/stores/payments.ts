@@ -59,6 +59,7 @@ interface PaymentSplitDraftState {
 
 interface PaymentsStoreState {
   list: PaymentsScreenDto | null;
+  initialLoading: boolean;
   loading: boolean;
   error: string | null;
   editor: PaymentDraftFormDto | null;
@@ -70,6 +71,21 @@ interface PaymentsStoreState {
   activeAction: PaymentsActiveAction;
   activePaymentId: string | null;
 }
+
+const initialState: PaymentsStoreState = {
+  list: null,
+  initialLoading: true,
+  loading: false,
+  error: null,
+  editor: null,
+  message: null,
+  matchPreview: null,
+  selectedCandidateId: null,
+  manualPicker: null,
+  splitDraft: null,
+  activeAction: null,
+  activePaymentId: null
+};
 
 function parseMoneyValue(value: string): number {
   const normalized = value
@@ -90,25 +106,13 @@ function formatMoneyValue(value: number): string {
 }
 
 function createPaymentsStore() {
-  const { subscribe, update } = writable<PaymentsStoreState>({
-    list: null,
-    loading: false,
-    error: null,
-    editor: null,
-    message: null,
-    matchPreview: null,
-    selectedCandidateId: null,
-    manualPicker: null,
-    splitDraft: null,
-    activeAction: null,
-    activePaymentId: null
-  });
+  const { subscribe, update } = writable<PaymentsStoreState>(initialState);
 
   async function loadPayments() {
     update((state) => ({ ...state, loading: true, error: null }));
     try {
       const list = await paymentsList();
-      update((state) => ({ ...state, list, loading: false }));
+      update((state) => ({ ...state, list, initialLoading: false, loading: false }));
     } catch (error) {
       update((state) => ({ ...state, loading: false, error: String(error) }));
     }
@@ -232,6 +236,39 @@ function createPaymentsStore() {
     };
   };
 
+  const buildSplitDraftFromCandidates = (
+    state: PaymentsStoreState,
+    paymentId: string,
+    candidates: PaymentMatchCandidateDto[]
+  ): PaymentSplitDraftState => {
+    const draft = buildInitialSplitDraft(state, paymentId, candidates);
+    let remainingAmount = parseMoneyValue(draft.paymentAmountStr);
+
+    draft.allocations = candidates
+      .map((candidate) => {
+        const allocationAmount = Math.min(
+          Math.max(remainingAmount, 0),
+          parseMoneyValue(candidate.openAmountStr)
+        );
+        remainingAmount -= allocationAmount;
+
+        if (allocationAmount <= 0) {
+          return null;
+        }
+
+        return {
+          documentId: candidate.documentId,
+          documentKind: candidate.documentKind,
+          title: candidate.title,
+          openAmountStr: candidate.openAmountStr,
+          amount: formatMoneyValue(allocationAmount)
+        };
+      })
+      .filter((allocation): allocation is PaymentSplitAllocationDraft => allocation !== null);
+
+    return recalculateSplitDraft(draft);
+  };
+
   return {
     subscribe,
 
@@ -292,6 +329,11 @@ function createPaymentsStore() {
           message = "Точний кандидат не знайдено. Перевірте платіж або підготуйте ручне звіряння.";
         }
 
+        if (preview.decisionKind === "split") {
+          message =
+            "Знайдено рекомендований розподіл платежу між кількома документами. Перевірте алокації перед підтвердженням.";
+        }
+
         update((state) => ({
           ...state,
           loading: false,
@@ -300,7 +342,12 @@ function createPaymentsStore() {
           matchPreview: preview,
           selectedCandidateId,
           manualPicker: state.manualPicker?.paymentId === id ? state.manualPicker : null,
-          splitDraft: state.splitDraft?.paymentId === id ? state.splitDraft : null
+          splitDraft:
+            preview.decisionKind === "split"
+              ? buildSplitDraftFromCandidates(state, id, preview.candidates)
+              : state.splitDraft?.paymentId === id
+                ? state.splitDraft
+                : null
         }));
       } catch (error) {
         const message = String(error);

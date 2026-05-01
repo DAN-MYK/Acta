@@ -1,8 +1,8 @@
 use acta::tauri_api::payments::{
     MutationResultDto, OpenTemplateResultDto, PaymentCreateOrUpdateRequest,
-    PaymentMatchApplyAutoRequest, PaymentMatchPreviewDto, PaymentMatchPreviewRequest,
-    PaymentReconcileRequest, PaymentUnreconcileAllRequest, PaymentUnreconcileRequest,
-    PaymentsScreenDto,
+    PaymentManualMatchCandidatesDto, PaymentMatchApplyAutoRequest,
+    PaymentMatchManualCandidatesRequest, PaymentMatchPreviewDto, PaymentMatchPreviewRequest,
+    PaymentReconcileRequest, PaymentUnreconcileAllRequest, PaymentUnreconcileRequest, PaymentsScreenDto,
 };
 use tauri::State;
 
@@ -98,6 +98,16 @@ pub async fn payment_match_apply_auto(
     request: PaymentMatchApplyAutoRequest,
 ) -> CommandResult<MutationResultDto> {
     acta::tauri_api::payments::payment_match_apply_auto(&state.ctx, request)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn payment_match_manual_candidates(
+    state: State<'_, TauriState>,
+    request: PaymentMatchManualCandidatesRequest,
+) -> CommandResult<PaymentManualMatchCandidatesDto> {
+    acta::tauri_api::payments::payment_match_manual_candidates(&state.ctx, request)
         .await
         .map_err(|error| error.to_string())
 }
