@@ -1,0 +1,124 @@
+.tasks-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.tasks-main,
+.tasks-side-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.tasks-side-panel {
+  align-content: start;
+}
+
+.task-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.task-kpi-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: var(--radius-2xl);
+  background: var(--bg-card);
+}
+
+.task-focus-card,
+.task-today-panel {
+  padding: 16px 18px;
+  border-radius: var(--radius-2xl);
+  background: var(--bg-card);
+  border: 1px solid var(--border-hairline);
+}
+
+.task-focus-card {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 40%, transparent), transparent 65%),
+    var(--bg-card);
+}
+
+.task-focus-card p,
+.task-today-panel p {
+  margin: 6px 0 0;
+}
+
+.task-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.task-tabs button,
+.task-row button:last-child {
+  border: 0;
+  background: var(--bg-card);
+  border-radius: var(--radius-xl);
+  padding: 10px 14px;
+  cursor: pointer;
+}
+
+.task-tabs button.active {
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+
+.tasks-list {
+  display: grid;
+  gap: 10px;
+}
+
+.task-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.task-row-main {
+  border: 0;
+  background: var(--bg-card);
+  border-radius: var(--radius-2xl);
+  padding: 14px 16px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.task-row-main p {
+  margin: 6px 0 0;
+}
+
+.task-row-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+.task-row-status {
+  align-self: stretch;
+  min-width: 120px;
+}
+
+.task-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.task-pill {
+  display: inline-block;
+  color: var(--accent-text);
+  background: var(--accent-soft);
+  border-radius: var(--radius-md);
+  padding: 3px 8px;
+  font-size: var(--font-sm);
+}

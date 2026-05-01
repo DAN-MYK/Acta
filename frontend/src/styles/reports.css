@@ -1,0 +1,115 @@
+.reports-filters {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.reports-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.reports-filter-grid label {
+  display: grid;
+  gap: 8px;
+}
+
+.reports-filter-grid select,
+.reports-filter-grid input {
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-xl);
+  padding: 12px 14px;
+  background: var(--bg-field);
+}
+
+.reports-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.reports-focus-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.reports-focus-card {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border-radius: var(--radius-3xl);
+  border: 1px solid var(--border-hairline);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 36%, transparent), transparent 68%),
+    var(--bg-card);
+}
+
+.reports-focus-card-muted {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-subtle) 78%, transparent), transparent 72%),
+    var(--bg-card);
+}
+
+.reports-focus-label {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.reports-focus-card strong {
+  font-size: clamp(1.2rem, 2vw, 1.8rem);
+}
+
+.reports-focus-card p,
+.reports-focus-card small {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.reports-table {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.reports-table-card {
+  padding: 12px;
+  border-radius: var(--radius-3xl);
+  background: var(--bg-card);
+  border: 1px solid var(--border-hairline);
+}
+
+.reports-table-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-2xl);
+  background: var(--bg-card);
+}
+
+.reports-table-row.reports-table-wide {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.reports-table-row-overdue {
+  border-left: 3px solid color-mix(in srgb, var(--danger) 72%, transparent);
+  background: color-mix(in srgb, var(--danger-soft) 36%, var(--bg-card));
+}
+
+.reports-table-head {
+  background: var(--accent-soft);
+  font-weight: 700;
+}
+
+body[data-theme="dark"] .reports-table-head {
+  background: var(--accent-soft);
+}
+
+.reports-empty-state {
+  margin-top: 18px;
+}
