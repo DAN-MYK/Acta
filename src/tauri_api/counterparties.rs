@@ -146,7 +146,9 @@ fn format_date(date: NaiveDate) -> String {
     date.format("%d.%m.%Y").to_string()
 }
 
-fn counterparty_item_from_model(counterparty: &crate::models::counterparty::Counterparty) -> CounterpartyItemDto {
+fn counterparty_item_from_model(
+    counterparty: &crate::models::counterparty::Counterparty,
+) -> CounterpartyItemDto {
     CounterpartyItemDto {
         id: counterparty.id.to_string(),
         name: counterparty.name.clone(),
@@ -303,7 +305,10 @@ fn payment_to_item(row: &crate::models::payment::PaymentListRow) -> PaymentItemD
     PaymentItemDto {
         id: row.id.to_string(),
         date: row.date.clone(),
-        counterparty_id: row.counterparty_id.map(|id| id.to_string()).unwrap_or_default(),
+        counterparty_id: row
+            .counterparty_id
+            .map(|id| id.to_string())
+            .unwrap_or_default(),
         counterparty: row.counterparty_name.clone().unwrap_or_default(),
         amount_str: format_money_ua(row.amount),
         direction: match row.direction {
@@ -319,10 +324,7 @@ fn payment_to_item(row: &crate::models::payment::PaymentListRow) -> PaymentItemD
     }
 }
 
-async fn load_detail(
-    ctx: &AppCtx,
-    counterparty_id: Uuid,
-) -> Result<CounterpartyDetailScreenDto> {
+async fn load_detail(ctx: &AppCtx, counterparty_id: Uuid) -> Result<CounterpartyDetailScreenDto> {
     let company_id = ctx.company_id();
     let counterparty = db::counterparties::get_by_id(ctx.pool(), company_id, counterparty_id)
         .await?
@@ -425,13 +427,16 @@ pub async fn counterparty_save(
     request: CounterpartySaveRequest,
 ) -> Result<CounterpartySaveResultDto> {
     let saved_id = if let Some(counterparty_id) = optional_string(&request.form.id) {
-        let counterparty_id = Uuid::parse_str(&counterparty_id).with_context(|| {
-            format!("Некоректний ідентифікатор контрагента: {counterparty_id}")
-        })?;
-        db::counterparties::update(ctx.pool(), counterparty_id, &build_update_payload(&request.form)?)
-            .await?
-            .ok_or_else(|| anyhow!("Контрагента не знайдено"))?
-            .id
+        let counterparty_id = Uuid::parse_str(&counterparty_id)
+            .with_context(|| format!("Некоректний ідентифікатор контрагента: {counterparty_id}"))?;
+        db::counterparties::update(
+            ctx.pool(),
+            counterparty_id,
+            &build_update_payload(&request.form)?,
+        )
+        .await?
+        .ok_or_else(|| anyhow!("Контрагента не знайдено"))?
+        .id
     } else {
         db::counterparties::create(ctx.pool(), ctx.company_id(), &validate_form(&request.form)?)
             .await?

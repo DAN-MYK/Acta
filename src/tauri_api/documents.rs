@@ -10,14 +10,14 @@ use uuid::Uuid;
 use crate::app_ctx::AppCtx;
 use crate::db;
 use crate::models::act::{Act, ActItem, ActStatus, NewAct, NewActItem, UpdateAct};
+use crate::models::company::Company;
+use crate::models::counterparty::Counterparty;
 use crate::models::invoice::{
     Invoice, InvoiceItem, InvoiceStatus, NewInvoice, NewInvoiceItem, UpdateInvoice,
 };
 use crate::models::waybill::{
     NewWaybill, NewWaybillItem, UpdateWaybill, WaybillItem, WaybillStatus,
 };
-use crate::models::company::Company;
-use crate::models::counterparty::Counterparty;
 use crate::models::DocumentDirection;
 use crate::pdf::generator::{
     amount_to_words, ensure_invoice_output_dir, ensure_output_dir, generate_act_pdf,
@@ -375,7 +375,9 @@ fn to_pdf_company(c: &Company) -> PdfCompany {
         name: c.name.clone(),
         edrpou: c.edrpou.clone().unwrap_or_default(),
         iban: c.iban.clone().unwrap_or_default(),
-        address: c.actual_address.clone()
+        address: c
+            .actual_address
+            .clone()
             .or_else(|| c.legal_address.clone())
             .unwrap_or_default(),
     }
@@ -384,7 +386,11 @@ fn to_pdf_company(c: &Company) -> PdfCompany {
 fn counterparty_to_pdf_company(cp: &Counterparty) -> PdfCompany {
     PdfCompany {
         name: cp.name.clone(),
-        edrpou: cp.edrpou.clone().or_else(|| cp.ipn.clone()).unwrap_or_default(),
+        edrpou: cp
+            .edrpou
+            .clone()
+            .or_else(|| cp.ipn.clone())
+            .unwrap_or_default(),
         iban: cp.iban.clone().unwrap_or_default(),
         address: cp.address.clone().unwrap_or_default(),
     }
@@ -1619,7 +1625,10 @@ pub async fn documents_bulk_advance_status_live(
             format!("Не вдалося оновити статус жодного документа ({failed} помилок)")
         }
         (succeeded, 0) => {
-            format!("Оновлено статус для {succeeded} {}", document_word_form(succeeded))
+            format!(
+                "Оновлено статус для {succeeded} {}",
+                document_word_form(succeeded)
+            )
         }
         (succeeded, failed) => format!(
             "Оновлено статус для {succeeded} {}, {failed} помилок",
@@ -1759,7 +1768,7 @@ mod pdf_tests {
         assert_eq!(item.num, 1);
         assert_eq!(item.name, "Розробка ПЗ");
         assert_eq!(item.unit, "послуга");
-        assert_eq!(item.price, "45000.00");  // unit_price → price у PdfActItem
+        assert_eq!(item.price, "45000.00"); // unit_price → price у PdfActItem
         assert_eq!(item.amount, "45000.00");
     }
 
@@ -1818,8 +1827,8 @@ mod pdf_tests {
         assert_eq!(data.items.len(), 1);
 
         let item = &data.items[0];
-        assert_eq!(item.unit, "шт");   // Option<String> → String
-        assert_eq!(item.price, "500.00");  // InvoiceItem.price (not unit_price)
+        assert_eq!(item.unit, "шт"); // Option<String> → String
+        assert_eq!(item.price, "500.00"); // InvoiceItem.price (not unit_price)
         assert_eq!(item.amount, "1000.00");
     }
 
@@ -1827,9 +1836,10 @@ mod pdf_tests {
     fn build_invoice_pdf_data_handles_none_unit() {
         let invoice = sample_invoice();
         let mut items = sample_invoice_items();
-        items[0].unit = None;  // Option<String> = None
-        let data = build_invoice_pdf_data(&invoice, &items, &sample_company(), &sample_counterparty());
-        assert_eq!(data.items[0].unit, "");  // unwrap_or_default
+        items[0].unit = None; // Option<String> = None
+        let data =
+            build_invoice_pdf_data(&invoice, &items, &sample_company(), &sample_counterparty());
+        assert_eq!(data.items[0].unit, ""); // unwrap_or_default
     }
 
     #[test]

@@ -7,9 +7,13 @@ use tokio::fs;
 use crate::app_ctx::AppCtx;
 use crate::import::bas_acts::{import_acts_from_xml, parse_acts_xml_file};
 use crate::import::bas_contracts::{import_contracts_from_xml, parse_contracts_xml_file};
-use crate::import::bas_counterparties::{import_counterparties_from_xml, parse_counterparties_xml_file};
+use crate::import::bas_counterparties::{
+    import_counterparties_from_xml, parse_counterparties_xml_file,
+};
 use crate::import::bas_invoices::{import_invoices_from_file, parse_invoices_file};
-use crate::import::bas_payments::{apply_imported_payments, import_payments_from_csv, parse_payments_csv_file};
+use crate::import::bas_payments::{
+    apply_imported_payments, import_payments_from_csv, parse_payments_csv_file,
+};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -252,26 +256,18 @@ pub async fn import_bas_execute(ctx: &AppCtx) -> Result<ImportResultDto> {
                             .await
                             .map(|r| (r.created, r.updated, r.skipped, r.conflicts))
                     }
-                    FileType::Contracts => {
-                        import_contracts_from_xml(pool, company_id, path, false)
-                            .await
-                            .map(|r| (r.created, r.updated, r.skipped, r.conflicts))
-                    }
-                    FileType::Acts => {
-                        import_acts_from_xml(pool, company_id, path, false)
-                            .await
-                            .map(|r| (r.created, r.updated, r.skipped, r.conflicts))
-                    }
-                    FileType::Invoices => {
-                        import_invoices_from_file(pool, company_id, path, false)
-                            .await
-                            .map(|r| (r.created, r.updated, r.skipped, r.conflicts))
-                    }
-                    FileType::Payments => {
-                        import_payments_from_csv(pool, company_id, path, false)
-                            .await
-                            .map(|r| (r.created, r.updated, r.skipped, r.conflicts))
-                    }
+                    FileType::Contracts => import_contracts_from_xml(pool, company_id, path, false)
+                        .await
+                        .map(|r| (r.created, r.updated, r.skipped, r.conflicts)),
+                    FileType::Acts => import_acts_from_xml(pool, company_id, path, false)
+                        .await
+                        .map(|r| (r.created, r.updated, r.skipped, r.conflicts)),
+                    FileType::Invoices => import_invoices_from_file(pool, company_id, path, false)
+                        .await
+                        .map(|r| (r.created, r.updated, r.skipped, r.conflicts)),
+                    FileType::Payments => import_payments_from_csv(pool, company_id, path, false)
+                        .await
+                        .map(|r| (r.created, r.updated, r.skipped, r.conflicts)),
                 };
                 match result {
                     Ok((created, updated, skipped, conflicts)) => ImportEntityResultDto {
@@ -305,8 +301,14 @@ mod tests {
 
     #[test]
     fn route_csv_is_payments() {
-        assert_eq!(route_file(Path::new("bank_export.csv")), Some(FileType::Payments));
-        assert_eq!(route_file(Path::new("payments.csv")), Some(FileType::Payments));
+        assert_eq!(
+            route_file(Path::new("bank_export.csv")),
+            Some(FileType::Payments)
+        );
+        assert_eq!(
+            route_file(Path::new("payments.csv")),
+            Some(FileType::Payments)
+        );
     }
 
     #[test]
@@ -324,7 +326,10 @@ mod tests {
             Some(FileType::Contracts)
         );
         assert_eq!(route_file(Path::new("acts.xml")), Some(FileType::Acts));
-        assert_eq!(route_file(Path::new("invoices.xlsx")), Some(FileType::Invoices));
+        assert_eq!(
+            route_file(Path::new("invoices.xlsx")),
+            Some(FileType::Invoices)
+        );
     }
 
     #[test]

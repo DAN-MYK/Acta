@@ -619,7 +619,7 @@ git commit -m "feat(pdf): add document_generate_pdf Tauri command"
 
 ```ts
 export function documentGeneratePdf(docId: string): Promise<MutationResultDto> {
-  return invoke("document_generate_pdf", { docId });
+  return appInvoke("document_generate_pdf", { docId });
 }
 ```
 

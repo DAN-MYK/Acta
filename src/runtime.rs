@@ -50,7 +50,11 @@ pub async fn init_app_ctx() -> Result<Arc<AppCtx>> {
     run_migrations(&pool).await?;
     let config = AppConfig::load();
     let company_id = match config.last_company_id {
-        Some(company_id) if crate::db::companies::get_by_id(&pool, company_id).await?.is_some() => {
+        Some(company_id)
+            if crate::db::companies::get_by_id(&pool, company_id)
+                .await?
+                .is_some() =>
+        {
             company_id
         }
         _ => get_first_company_id(&pool).await,

@@ -302,7 +302,10 @@ async fn tauri_vertical_slice_shell_and_documents_smoke() -> Result<()> {
         )
         .await?;
         assert!(save_result.ok);
-        assert_eq!(save_result.updated_list.len(), initial_counterparty_count + 1);
+        assert_eq!(
+            save_result.updated_list.len(),
+            initial_counterparty_count + 1
+        );
 
         let saved_id = save_result.saved_id.clone();
         let edit_editor =
@@ -497,7 +500,10 @@ async fn tauri_vertical_slice_shell_and_documents_smoke() -> Result<()> {
         )
         .await?;
         assert!(saved_company.ok);
-        assert_eq!(saved_company.screen.company.full_name, updated_company.full_name);
+        assert_eq!(
+            saved_company.screen.company.full_name,
+            updated_company.full_name
+        );
 
         let configured_integration = acta::tauri_api::settings::settings_configure_integration(
             &ctx,
@@ -507,13 +513,11 @@ async fn tauri_vertical_slice_shell_and_documents_smoke() -> Result<()> {
         )
         .await?;
         assert!(configured_integration.ok);
-        assert!(
-            configured_integration
-                .screen
-                .integrations
-                .iter()
-                .any(|item| item.tag == "bas" && item.enabled)
-        );
+        assert!(configured_integration
+            .screen
+            .integrations
+            .iter()
+            .any(|item| item.tag == "bas" && item.enabled));
         assert!(integration_path.exists());
 
         let invited = acta::tauri_api::settings::settings_team_invite(&ctx).await?;
@@ -571,7 +575,10 @@ async fn tauri_vertical_slice_shell_and_documents_smoke() -> Result<()> {
     }
 
     if let Ok(result) = restore_preferences {
-        assert_eq!(result.screen.preferences.dark_mode, original_config.dark_mode);
+        assert_eq!(
+            result.screen.preferences.dark_mode,
+            original_config.dark_mode
+        );
     }
     if let Ok(result) = restore_company {
         assert_eq!(
@@ -599,10 +606,19 @@ async fn tauri_vertical_slice_payments_smoke() -> Result<()> {
     // 1. Завантажити список платежів і перевірити KPI
     let screen_before = acta::tauri_api::payments::payments_list(&ctx).await?;
     let kpi = &screen_before.kpi;
-    assert!(!kpi.incoming_str.is_empty(), "kpi.incoming_str має бути непорожнім");
-    assert!(!kpi.outgoing_str.is_empty(), "kpi.outgoing_str має бути непорожнім");
+    assert!(
+        !kpi.incoming_str.is_empty(),
+        "kpi.incoming_str має бути непорожнім"
+    );
+    assert!(
+        !kpi.outgoing_str.is_empty(),
+        "kpi.outgoing_str має бути непорожнім"
+    );
     assert!(!kpi.net_str.is_empty(), "kpi.net_str має бути непорожнім");
-    assert!(!kpi.unmatched_str.is_empty(), "kpi.unmatched_str має бути непорожнім");
+    assert!(
+        !kpi.unmatched_str.is_empty(),
+        "kpi.unmatched_str має бути непорожнім"
+    );
     let count_before = screen_before.items.len();
 
     // 2. Створити тестовий платіж
@@ -622,7 +638,10 @@ async fn tauri_vertical_slice_payments_smoke() -> Result<()> {
         },
     )
     .await?;
-    assert!(create_result.ok, "payment_create_or_update має повернути ok=true");
+    assert!(
+        create_result.ok,
+        "payment_create_or_update має повернути ok=true"
+    );
 
     // 3. Перезавантажити список і знайти створений платіж
     let screen_after = acta::tauri_api::payments::payments_list(&ctx).await?;
@@ -656,12 +675,18 @@ async fn tauri_vertical_slice_payments_smoke() -> Result<()> {
         // 4. Позначити як зведений
         let reconcile_result =
             acta::tauri_api::payments::payment_reconcile(&ctx, new_payment_id.clone()).await?;
-        assert!(reconcile_result.ok, "payment_reconcile має повернути ok=true");
+        assert!(
+            reconcile_result.ok,
+            "payment_reconcile має повернути ok=true"
+        );
 
         // 5. Зняти позначку зведення
         let unreconcile_result =
             acta::tauri_api::payments::payment_unreconcile(&ctx, new_payment_id.clone()).await?;
-        assert!(unreconcile_result.ok, "payment_unreconcile має повернути ok=true");
+        assert!(
+            unreconcile_result.ok,
+            "payment_unreconcile має повернути ok=true"
+        );
 
         // 6. Імпорт CSV — допустимі як Ok, так і Err (файл може бути відсутній)
         let _ = acta::tauri_api::payments::payments_import_latest_csv(&ctx).await;
