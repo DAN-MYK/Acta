@@ -214,7 +214,7 @@ async fn create_test_payment_schedule(
     sqlx::query(
         r#"INSERT INTO payment_schedule
            (id, company_id, counterparty_id, title, amount, direction, scheduled_date, is_completed, recurrence)
-           VALUES ($1, $2, $3, $4, $5, 'expense'::payment_direction, $6, FALSE, 'once')"#,
+           VALUES ($1, $2, $3, $4, $5, 'expense'::payment_direction, $6, FALSE, 'none')"#,
     )
     .bind(id)
     .bind(company_id)
@@ -5402,6 +5402,22 @@ async fn load_payables_rows_returns_expense_schedule_entries() -> Result<()> {
         &title, dec!(6000), today,
     ).await?;
 
+    // Виконаний запис — НЕ повинен з'явитись у кредиторці (is_completed = TRUE)
+    let completed_id = Uuid::new_v4();
+    sqlx::query(
+        r#"INSERT INTO payment_schedule
+           (id, company_id, counterparty_id, title, amount, direction, scheduled_date, is_completed, recurrence)
+           VALUES ($1, $2, $3, $4, $5, 'expense'::payment_direction, $6, TRUE, 'none')"#,
+    )
+    .bind(completed_id)
+    .bind(DEFAULT_COMPANY_ID)
+    .bind(Some(cp.id))
+    .bind(format!("Оренда ІТ {suffix} DONE"))
+    .bind(dec!(9999))
+    .bind(today)
+    .execute(&pool)
+    .await?;
+
     let ctx = AppCtx::new(pool.clone(), DEFAULT_COMPANY_ID);
     let filter = ResolvedReportsFilter {
         scope: ReportsScope::Active,
@@ -5412,11 +5428,12 @@ async fn load_payables_rows_returns_expense_schedule_entries() -> Result<()> {
 
     let rows = load_payables_rows(&ctx, &filter).await?;
 
-    assert_eq!(rows.len(), 1, "має бути один запис зі schedule");
+    assert_eq!(rows.len(), 1, "має бути один запис: виконаний excluded через is_completed=TRUE");
     assert_eq!(rows[0].amount, dec!(6000));
     assert!(rows[0].title.contains(&suffix));
+    assert_eq!(rows[0].overdue_days, 0, "scheduled_date=today → overdue_days=0");
 
-    sqlx::query("DELETE FROM payment_schedule WHERE id = $1").bind(ps_id).execute(&pool).await?;
+    sqlx::query("DELETE FROM payment_schedule WHERE id IN ($1, $2)").bind(ps_id).bind(completed_id).execute(&pool).await?;
     sqlx::query("DELETE FROM counterparties WHERE id = $1").bind(cp.id).execute(&pool).await?;
 
     Ok(())
