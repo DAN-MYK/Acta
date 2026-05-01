@@ -3644,6 +3644,159 @@ async fn payments_reconcile_rejects_cross_company_documents() -> Result<()> {
 }
 
 #[tokio::test]
+async fn payments_reconcile_supports_split_and_rejects_overallocation() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let suffix = unique_suffix();
+    let cp = db::counterparties::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewCounterparty {
+            name: format!("ІТ Split Контрагент {suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("it-split-cp-{suffix}")),
+        },
+    )
+    .await?;
+
+    let act = db::acts::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewAct {
+            number: format!("IT-SPLIT-ACT-{suffix}"),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: models::DocumentDirection::Outgoing,
+            date: Utc::now().date_naive(),
+            expected_payment_date: None,
+            status: models::ActStatus::Issued,
+            notes: None,
+            bas_id: None,
+            items: vec![models::NewActItem {
+                description: "Послуга".to_string(),
+                quantity: dec!(1.0000),
+                unit: "шт".to_string(),
+                unit_price: dec!(1500.00),
+            }],
+        },
+    )
+    .await?;
+
+    let invoice = db::invoices::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewInvoice {
+            number: format!("IT-SPLIT-INV-{suffix}"),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: models::DocumentDirection::Outgoing,
+            date: Utc::now().date_naive(),
+            expected_payment_date: None,
+            notes: None,
+            bas_id: None,
+            items: vec![models::NewInvoiceItem {
+                position: 1,
+                description: "Товар".to_string(),
+                unit: Some("шт".to_string()),
+                quantity: dec!(1.0000),
+                price: dec!(2000.00),
+            }],
+        },
+    )
+    .await?;
+
+    let payment = db::payments::create(
+        &pool,
+        models::payment::NewPayment {
+            company_id: DEFAULT_COMPANY_ID,
+            date: Utc::now().date_naive(),
+            amount: dec!(3000.00),
+            direction: models::payment::PaymentDirection::Income,
+            counterparty_id: Some(cp.id),
+            bank_name: Some("Тест Банк".to_string()),
+            bank_ref: Some(format!("SPLIT-{suffix}")),
+            description: Some("Розподіл платежу".to_string()),
+        },
+    )
+    .await?;
+
+    db::payments::reconcile_document_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        payment.id,
+        "act",
+        act.id,
+        dec!(1500.00),
+    )
+    .await?;
+
+    db::payments::reconcile_document_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        payment.id,
+        "invoice",
+        invoice.id,
+        dec!(1500.00),
+    )
+    .await?;
+
+    let payment_after_split = db::payments::get_by_id_scoped(&pool, DEFAULT_COMPANY_ID, payment.id)
+        .await?
+        .expect("payment exists after split reconcile");
+    assert!(payment_after_split.is_reconciled);
+
+    let over_payment_err = db::payments::reconcile_document_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        payment.id,
+        "invoice",
+        invoice.id,
+        dec!(2000.00),
+    )
+    .await
+    .expect_err("reconcile must reject allocation above remaining payment amount");
+    assert!(over_payment_err.to_string().contains("Сума звірки"));
+
+    let over_document_err = db::payments::reconcile_document_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        payment.id,
+        "act",
+        act.id,
+        dec!(1600.00),
+    )
+    .await
+    .expect_err("reconcile must reject allocation above document open amount");
+    assert!(over_document_err.to_string().contains("документа"));
+
+    db::payments::delete(&pool, payment.id).await?;
+    sqlx::query("DELETE FROM acts WHERE id = $1")
+        .bind(act.id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM invoices WHERE id = $1")
+        .bind(invoice.id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn payments_schedule_create_complete_and_list_upcoming_in_db() -> Result<()> {
     let Some(pool) = test_pool().await? else {
         return Ok(());

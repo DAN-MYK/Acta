@@ -2,6 +2,7 @@ import { get, writable } from "svelte/store";
 import {
   paymentCreateOrUpdate,
   paymentMatchApplyAuto,
+  paymentMatchManualCandidates,
   paymentMatchPreview,
   paymentReconcile,
   paymentsImportLatestCsv,
@@ -15,6 +16,8 @@ import type {
   OpenTemplateResultDto,
   PaymentDraftFormDto,
   PaymentItemDto,
+  PaymentManualMatchCandidatesDto,
+  PaymentMatchCandidateDto,
   PaymentMatchPreviewDto,
   PaymentsScreenDto
 } from "../types";
@@ -23,11 +26,36 @@ type PaymentsActiveAction =
   | "import"
   | "sync"
   | "reconcile"
+  | "manual-search"
   | "confirm-auto-match"
   | "confirm-candidate"
+  | "confirm-manual-picker"
+  | "confirm-split"
   | "unreconcile"
   | "save"
   | null;
+
+interface PaymentManualPickerState {
+  paymentId: string;
+  query: string;
+  candidates: PaymentMatchCandidateDto[];
+  selectedCandidateId: string | null;
+}
+
+interface PaymentSplitAllocationDraft {
+  documentId: string;
+  documentKind: PaymentMatchCandidateDto["documentKind"];
+  title: string;
+  openAmountStr: string;
+  amount: string;
+}
+
+interface PaymentSplitDraftState {
+  paymentId: string;
+  paymentAmountStr: string;
+  remainingAmountStr: string;
+  allocations: PaymentSplitAllocationDraft[];
+}
 
 interface PaymentsStoreState {
   list: PaymentsScreenDto | null;
@@ -37,8 +65,28 @@ interface PaymentsStoreState {
   message: string | null;
   matchPreview: PaymentMatchPreviewDto | null;
   selectedCandidateId: string | null;
+  manualPicker: PaymentManualPickerState | null;
+  splitDraft: PaymentSplitDraftState | null;
   activeAction: PaymentsActiveAction;
   activePaymentId: string | null;
+}
+
+function parseMoneyValue(value: string): number {
+  const normalized = value
+    .replace(/\u00a0/g, "")
+    .replace(/\s+/g, "")
+    .replace(/грн/gi, "")
+    .replace(",", ".")
+    .trim();
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatMoneyValue(value: number): string {
+  return new Intl.NumberFormat("uk-UA", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(Math.max(0, value));
 }
 
 function createPaymentsStore() {
@@ -50,6 +98,8 @@ function createPaymentsStore() {
     message: null,
     matchPreview: null,
     selectedCandidateId: null,
+    manualPicker: null,
+    splitDraft: null,
     activeAction: null,
     activePaymentId: null
   });
@@ -87,6 +137,16 @@ function createPaymentsStore() {
     selectedCandidateId: null
   });
 
+  const clearManualPicker = (state: PaymentsStoreState): PaymentsStoreState => ({
+    ...state,
+    manualPicker: null
+  });
+
+  const clearSplitDraft = (state: PaymentsStoreState): PaymentsStoreState => ({
+    ...state,
+    splitDraft: null
+  });
+
   const beginAction = (action: PaymentsActiveAction, paymentId?: string) => {
     update((state) => ({
       ...state,
@@ -115,6 +175,61 @@ function createPaymentsStore() {
     }
 
     return preview.candidates.find((candidate) => candidate.documentId === selectedCandidateId) ?? null;
+  };
+
+  const getSelectedManualPickerCandidate = (manualPicker: PaymentManualPickerState | null) => {
+    if (!manualPicker?.selectedCandidateId) {
+      return null;
+    }
+
+    return (
+      manualPicker.candidates.find((candidate) => candidate.documentId === manualPicker.selectedCandidateId) ?? null
+    );
+  };
+
+  const toManualPickerState = (
+    manualPicker: PaymentManualMatchCandidatesDto
+  ): PaymentManualPickerState => ({
+    paymentId: manualPicker.paymentId,
+    query: manualPicker.query,
+    candidates: manualPicker.candidates,
+    selectedCandidateId: manualPicker.candidates[0]?.documentId ?? null
+  });
+
+  const recalculateSplitDraft = (
+    splitDraft: PaymentSplitDraftState
+  ): PaymentSplitDraftState => {
+    const paymentAmount = parseMoneyValue(splitDraft.paymentAmountStr);
+    const allocatedAmount = splitDraft.allocations.reduce(
+      (sum, allocation) => sum + parseMoneyValue(allocation.amount),
+      0
+    );
+
+    return {
+      ...splitDraft,
+      remainingAmountStr: formatMoneyValue(paymentAmount - allocatedAmount)
+    };
+  };
+
+  const buildInitialSplitDraft = (
+    state: PaymentsStoreState,
+    paymentId: string,
+    candidates: PaymentMatchCandidateDto[] = []
+  ): PaymentSplitDraftState => {
+    const paymentAmountStr = state.list?.items.find((item) => item.id === paymentId)?.amountStr;
+    const fallbackAmount = candidates.reduce(
+      (sum, candidate) => sum + parseMoneyValue(candidate.openAmountStr),
+      0
+    );
+    const paymentAmount = parseMoneyValue(paymentAmountStr ?? "0");
+    const resolvedAmount = formatMoneyValue(paymentAmount > 0 ? paymentAmount : fallbackAmount);
+
+    return {
+      paymentId,
+      paymentAmountStr: resolvedAmount,
+      remainingAmountStr: resolvedAmount,
+      allocations: []
+    };
   };
 
   return {
@@ -183,12 +298,14 @@ function createPaymentsStore() {
           error: null,
           message,
           matchPreview: preview,
-          selectedCandidateId
+          selectedCandidateId,
+          manualPicker: state.manualPicker?.paymentId === id ? state.manualPicker : null,
+          splitDraft: state.splitDraft?.paymentId === id ? state.splitDraft : null
         }));
       } catch (error) {
         const message = String(error);
         update((state) => ({
-          ...clearPreview(state),
+          ...clearSplitDraft(clearManualPicker(clearPreview(state))),
           loading: false,
           error: message,
           message
@@ -215,7 +332,9 @@ function createPaymentsStore() {
       try {
         const result = await paymentMatchApplyAuto({ paymentId: preview.paymentId });
         if (result.ok) {
-          update((state) => clearPreview({ ...state, message: result.message }));
+          update((state) =>
+            clearSplitDraft(clearManualPicker(clearPreview({ ...state, message: result.message })))
+          );
           await loadPayments();
         } else {
           update((state) => ({ ...state, message: result.message, error: result.message }));
@@ -255,7 +374,9 @@ function createPaymentsStore() {
           amount: candidate.openAmountStr
         });
         if (result.ok) {
-          update((state) => clearPreview({ ...state, message: result.message }));
+          update((state) =>
+            clearSplitDraft(clearManualPicker(clearPreview({ ...state, message: result.message })))
+          );
           await loadPayments();
         } else {
           update((state) => ({ ...state, message: result.message, error: result.message }));
@@ -284,11 +405,326 @@ function createPaymentsStore() {
       });
     },
 
-    closeMatchPreview() {
+    async openManualMatchPicker(paymentId: string, query = ""): Promise<MutationResultDto> {
+      beginAction("manual-search", paymentId);
+      try {
+        const manualPicker = await paymentMatchManualCandidates({ paymentId, query });
+        update((state) => ({
+          ...state,
+          loading: false,
+          error: null,
+          message: manualPicker.candidates.length
+            ? "Оберіть документ зі списку або звузьте пошук."
+            : "За цим запитом кандидатів не знайдено.",
+          manualPicker: toManualPickerState(manualPicker),
+          splitDraft:
+            state.splitDraft?.paymentId === paymentId
+              ? state.splitDraft
+              : buildInitialSplitDraft(state, paymentId, manualPicker.candidates)
+        }));
+        return {
+          ok: true,
+          message: manualPicker.candidates.length
+            ? "Кандидатів для ручної звірки оновлено."
+            : "За цим запитом кандидатів не знайдено."
+        };
+      } catch (error) {
+        const message = String(error);
+        update((state) => ({
+          ...clearSplitDraft(clearManualPicker(state)),
+          loading: false,
+          error: message,
+          message
+        }));
+        return { ok: false, message };
+      } finally {
+        update((state) => ({
+          ...state,
+          activeAction: null,
+          activePaymentId: null
+        }));
+      }
+    },
+
+    updateManualMatchQuery(query: string) {
+      update((state) => {
+        if (!state.manualPicker) {
+          return state;
+        }
+
+        return {
+          ...state,
+          manualPicker: {
+            ...state.manualPicker,
+            query
+          }
+        };
+      });
+    },
+
+    async searchManualMatchCandidates(): Promise<MutationResultDto> {
+      const manualPicker = get({ subscribe }).manualPicker;
+      if (!manualPicker) {
+        const message = "Спершу відкрийте ручний пошук для цього платежу.";
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message };
+      }
+
+      return await this.openManualMatchPicker(manualPicker.paymentId, manualPicker.query);
+    },
+
+    selectManualPickerCandidate(documentId: string) {
+      update((state) => {
+        if (!state.manualPicker) {
+          return state;
+        }
+
+        return {
+          ...state,
+          manualPicker: {
+            ...state.manualPicker,
+            selectedCandidateId: documentId
+          },
+          message: "Вибрано документ для ручного звіряння."
+        };
+      });
+    },
+
+    async addSelectedManualPickerCandidateToSplit(): Promise<MutationResultDto> {
+      const { manualPicker, splitDraft } = get({ subscribe });
+      const candidate = getSelectedManualPickerCandidate(manualPicker);
+
+      if (!manualPicker || !splitDraft) {
+        const message = "Спершу відкрийте ручний picker для розподілу платежу.";
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message };
+      }
+
+      if (!candidate) {
+        const message = "Виберіть документ, який треба додати до розподілу.";
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message };
+      }
+
+      if (splitDraft.allocations.some((allocation) => allocation.documentId === candidate.documentId)) {
+        const message = "Цей документ уже додано до розподілу.";
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message };
+      }
+
+      const remainingAmount = parseMoneyValue(splitDraft.remainingAmountStr);
+      if (remainingAmount <= 0) {
+        const message = "Увесь платіж уже розподілено. За потреби змініть суми в чернетці.";
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message };
+      }
+
+      const allocationAmount = Math.min(remainingAmount, parseMoneyValue(candidate.openAmountStr));
+
+      update((state) => {
+        if (!state.splitDraft) {
+          return state;
+        }
+
+        return {
+          ...state,
+          splitDraft: recalculateSplitDraft({
+            ...state.splitDraft,
+            allocations: [
+              ...state.splitDraft.allocations,
+              {
+                documentId: candidate.documentId,
+                documentKind: candidate.documentKind,
+                title: candidate.title,
+                openAmountStr: candidate.openAmountStr,
+                amount: formatMoneyValue(allocationAmount)
+              }
+            ]
+          }),
+          message: "Документ додано до чернетки розподілу.",
+          error: null
+        };
+      });
+
+      return { ok: true, message: "Документ додано до розподілу" };
+    },
+
+    updateSplitAllocationAmount(documentId: string, amount: string) {
+      update((state) => {
+        if (!state.splitDraft) {
+          return state;
+        }
+
+        const current = state.splitDraft.allocations.find((allocation) => allocation.documentId === documentId);
+        if (!current) {
+          return state;
+        }
+
+        const nextAmount = parseMoneyValue(amount);
+        const documentOpenAmount = parseMoneyValue(current.openAmountStr);
+        const otherAllocationsTotal = state.splitDraft.allocations
+          .filter((allocation) => allocation.documentId !== documentId)
+          .reduce((sum, allocation) => sum + parseMoneyValue(allocation.amount), 0);
+        const paymentAmount = parseMoneyValue(state.splitDraft.paymentAmountStr);
+
+        if (nextAmount <= 0) {
+          return {
+            ...state,
+            message: "Сума розподілу має бути більшою за нуль.",
+            error: "Сума розподілу має бути більшою за нуль."
+          };
+        }
+
+        if (nextAmount > documentOpenAmount) {
+          return {
+            ...state,
+            message: "Сума розподілу не може перевищувати залишок документа.",
+            error: "Сума розподілу не може перевищувати залишок документа."
+          };
+        }
+
+        if (otherAllocationsTotal + nextAmount > paymentAmount) {
+          return {
+            ...state,
+            message: "Сума розподілу не може перевищувати залишок платежу.",
+            error: "Сума розподілу не може перевищувати залишок платежу."
+          };
+        }
+
+        return {
+          ...state,
+          splitDraft: recalculateSplitDraft({
+            ...state.splitDraft,
+            allocations: state.splitDraft.allocations.map((allocation) =>
+              allocation.documentId === documentId
+                ? { ...allocation, amount: amount.trim() || allocation.amount }
+                : allocation
+            )
+          }),
+          error: null
+        };
+      });
+    },
+
+    removeSplitAllocation(documentId: string) {
+      update((state) => {
+        if (!state.splitDraft) {
+          return state;
+        }
+
+        return {
+          ...state,
+          splitDraft: recalculateSplitDraft({
+            ...state.splitDraft,
+            allocations: state.splitDraft.allocations.filter(
+              (allocation) => allocation.documentId !== documentId
+            )
+          }),
+          message: "Документ прибрано з чернетки розподілу.",
+          error: null
+        };
+      });
+    },
+
+    closeManualMatchPicker() {
       update((state) => ({
-        ...clearPreview(state),
+        ...clearManualPicker(state),
         message: null
       }));
+    },
+
+    async confirmManualPickerCandidate(): Promise<MutationResultDto> {
+      const { manualPicker } = get({ subscribe });
+      const candidate = getSelectedManualPickerCandidate(manualPicker);
+
+      if (!manualPicker) {
+        const message = "Ручний picker ще не відкрито.";
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message };
+      }
+
+      if (!candidate) {
+        const message = "Виберіть документ для ручного звіряння.";
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message };
+      }
+
+      beginAction("confirm-manual-picker", manualPicker.paymentId);
+      try {
+        const result = await paymentReconcile({
+          paymentId: manualPicker.paymentId,
+          documentKind: candidate.documentKind,
+          documentId: candidate.documentId,
+          amount: candidate.openAmountStr
+        });
+        if (result.ok) {
+          update((state) =>
+            clearSplitDraft(clearManualPicker(clearPreview({ ...state, message: result.message })))
+          );
+          await loadPayments();
+        } else {
+          update((state) => ({ ...state, message: result.message, error: result.message }));
+        }
+        return result;
+      } catch (error) {
+        const message = String(error);
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message };
+      } finally {
+        finishAction();
+      }
+    },
+
+    async confirmSplitDraft(): Promise<MutationResultDto> {
+      const { splitDraft } = get({ subscribe });
+
+      if (!splitDraft) {
+        const message = "Немає чернетки розподілу для підтвердження.";
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message };
+      }
+
+      if (splitDraft.allocations.length === 0) {
+        const message = "Додайте хоча б один документ до розподілу.";
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message };
+      }
+
+      if (parseMoneyValue(splitDraft.remainingAmountStr) > 0) {
+        const message = "Розподіл ще не завершено. Закрийте залишок платежу або зменште суму.";
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message };
+      }
+
+      beginAction("confirm-split", splitDraft.paymentId);
+      try {
+        for (const allocation of splitDraft.allocations) {
+          const result = await paymentReconcile({
+            paymentId: splitDraft.paymentId,
+            documentKind: allocation.documentKind,
+            documentId: allocation.documentId,
+            amount: allocation.amount
+          });
+
+          if (!result.ok) {
+            update((state) => ({ ...state, message: result.message, error: result.message }));
+            return result;
+          }
+        }
+
+        const message = "Розподіл платежу підтверджено";
+        update((state) =>
+          clearSplitDraft(clearManualPicker(clearPreview({ ...state, message, error: null })))
+        );
+        await loadPayments();
+        return { ok: true, message };
+      } catch (error) {
+        const message = String(error);
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message };
+      } finally {
+        finishAction();
+      }
     },
 
     async unreconcile(id: string) {
@@ -296,7 +732,7 @@ function createPaymentsStore() {
       try {
         const result = await paymentUnreconcileAll({ paymentId: id });
         if (result.ok) {
-          update((state) => clearPreview(state));
+          update((state) => clearSplitDraft(clearManualPicker(clearPreview(state))));
           await refreshAfterMutation(result.message);
         } else {
           update((state) => ({ ...state, message: result.message, error: result.message }));
@@ -375,6 +811,13 @@ function createPaymentsStore() {
       }));
     },
 
+    closeMatchPreview() {
+      update((state) => ({
+        ...clearSplitDraft(clearPreview(state)),
+        message: null
+      }));
+    },
+
     updateFormField(field: keyof PaymentDraftFormDto, value: string) {
       update((state) => {
         if (!state.editor) {
@@ -400,7 +843,6 @@ function createPaymentsStore() {
       beginAction("save", editor.id || undefined);
       try {
         const result = await paymentCreateOrUpdate(editor);
-
         if (result.ok) {
           update((state) => ({
             ...state,
@@ -436,7 +878,7 @@ function createPaymentsStore() {
         return result;
       } catch (error) {
         const message = String(error);
-        update((state) => ({ ...state, message, error: message }));
+        update((state) => ({ ...state, message }));
         return { ok: false, path: "", message };
       }
     }

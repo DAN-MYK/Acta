@@ -10,7 +10,7 @@
 - preview автозіставлення платежів;
 - persisted reconcile/unreconcile через link-таблиці;
 - UI flow для exact / ambiguous / none;
-- стабільні тести для критичних сценаріїв.
+- stable tests для критичних payment-matching сценаріїв.
 
 ## Що вже виконано
 
@@ -57,30 +57,54 @@
 - додано regression test для `payment_reconcile -> throw`;
 - зафіксовано контракт: preview і selected candidate не губляться після невдалого manual confirm.
 
+### Task 7. Повний manual reconcile flow
+Статус: `completed`
+
+Зроблено:
+- додано окремий Tauri API для manual candidate search по відкритих актах і накладних;
+- payments store отримав `manualPicker` state, search/update/select/confirm actions і окремий loading flow;
+- `PaymentsScreen.svelte` тепер відкриває ручний picker із `none` та `ambiguous` preview сценаріїв;
+- frontend tests покривають manual picker search + confirm flow;
+- Tauri command surface скомпільовано з новою командою.
+
+### Task 8. Partial / split reconcile
+Статус: `completed`
+
+Зроблено:
+- persisted reconcile вже підтримує кілька link-записів на один платіж і валідовує over-allocation;
+- `payments` store отримав `splitDraft` state із залишком платежу, editable allocation amounts і confirm flow;
+- `PaymentsScreen.svelte` показує split draft, remaining amount і керує persisted confirm із кількох allocation-ів;
+- додано backend integration test на split/reject over-allocation;
+- додано frontend regression test на багатокроковий `confirmSplitDraft()`.
+
+Залишкові обмеження:
+- split preview ще не будує amount-aware recommendation автоматично, тож partial/split flow починається з manual picker;
+- persisted confirm виконується послідовними reconcile-викликами, без окремого batch command.
+
 ## Поточний стан
 
 Готово:
 - persisted reconcile backend flow;
 - preview/apply-auto API;
 - Svelte preview/manual confirm flow;
-- frontend regression coverage для success, error-result і exception path.
+- partial/split draft у store та UI;
+- backend і frontend regression coverage для критичних matching сценаріїв.
 
 Залишилось:
-- завершити наступний UI/backend етап для повноцінного ручного reconcile поза межами лише preview candidates;
-- далі перейти до інтеграційних та component-level перевірок.
+- додати amount-aware preview heuristics для partial/split recommendation;
+- розширити component-level та integration coverage для split UX і error handling.
 
 ## Наступна таска
 
-### Task 7. Повний manual reconcile flow
+### Task 9. Amount-aware split preview + hardening
 Статус: `next`
 
 Ціль:
-- дати користувачу не лише підтверджувати запропоновані candidates, а й вручну обирати документ з повнішого списку;
-- підтягнути окремий picker/search flow для актів і накладних;
-- підготувати основу для partial / split reconcile, якщо сума платежу не збігається 1:1.
+- навчити matcher повертати recommendation для partial/split cases, де один exact candidate не закриває весь платіж;
+- додати ширші component/integration checks на split UX і error handling.
 
 Очікуваний обсяг:
-- Tauri API для candidate search/manual picker;
-- store actions для відкриття picker і підтвердження manual link;
-- UI для вибору документа поза preview recommendation;
-- тести для manual picker flow.
+- amount-aware backend preview logic для partial/split;
+- UI підказки для рекомендованого розподілу суми;
+- додаткові frontend component tests;
+- ширші backend/integration перевірки для split matching.

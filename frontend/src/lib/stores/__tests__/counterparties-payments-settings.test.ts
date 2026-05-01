@@ -12,6 +12,10 @@ import type {
 } from "../../types";
 import { invokeMock, loadStores, snapshot } from "./helpers";
 
+function normalizeMoneyText(value: string | undefined): string {
+  return (value ?? "").replace(/\u00a0/g, " ");
+}
+
 function makeCounterparties(ids: string[]): CounterpartiesScreenDto {
   return {
     items: ids.map((id, index) => ({
@@ -519,6 +523,316 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     expect(snapshot(paymentsStore).message).toContain("Виберіть кандидата");
     expect(snapshot(paymentsStore).matchPreview?.paymentId).toBe("pay-2");
     expect(invokeMock.mock.calls.filter(([command]) => command === "payment_reconcile")).toHaveLength(0);
+  });
+
+  it("opens manual picker for no-match preview and confirms a searched document", async () => {
+    const { paymentsStore } = await loadStores();
+
+    let list = makePayments(["pay-1", "pay-2", "pay-3"]);
+
+    invokeMock.mockImplementation(async (command, payload) => {
+      switch (command) {
+        case "payments_list":
+          return list;
+        case "payment_match_preview":
+          expect(payload).toEqual({ request: { paymentId: "pay-3" } });
+          return {
+            paymentId: "pay-3",
+            isReconciled: false,
+            decisionKind: "none",
+            candidates: [],
+            autoMatch: null
+          };
+        case "payment_match_manual_candidates": {
+          const request = (payload as { request: { paymentId: string; query: string } }).request;
+          expect(request.paymentId).toBe("pay-3");
+
+          if (request.query === "ACT") {
+            return {
+              paymentId: "pay-3",
+              query: "ACT",
+              candidates: [
+                {
+                  documentId: "act-9",
+                  documentKind: "act",
+                  title: "Акт ACT-009",
+                  openAmountStr: "3 000,00 грн",
+                  totalScore: 40,
+                  sameIban: false,
+                  referenceHit: false,
+                  textHits: 1,
+                  daysDistance: 4
+                }
+              ]
+            };
+          }
+
+          return {
+            paymentId: "pay-3",
+            query: request.query,
+            candidates: [
+              {
+                documentId: "inv-7",
+                documentKind: "invoice",
+                title: "Накладна INV-007",
+                openAmountStr: "1 500,00 грн",
+                totalScore: 0,
+                sameIban: false,
+                referenceHit: false,
+                textHits: 0,
+                daysDistance: 365
+              },
+              {
+                documentId: "act-9",
+                documentKind: "act",
+                title: "Акт ACT-009",
+                openAmountStr: "3 000,00 грн",
+                totalScore: 40,
+                sameIban: false,
+                referenceHit: false,
+                textHits: 1,
+                daysDistance: 4
+              }
+            ]
+          };
+        }
+        case "payment_reconcile":
+          expect((payload as { request: { paymentId: string; documentId: string; documentKind: string } }).request).toMatchObject({
+            paymentId: "pay-3",
+            documentId: "act-9",
+            documentKind: "act"
+          });
+          list = {
+            ...list,
+            items: list.items.map((item) =>
+              item.id === "pay-3" ? { ...item, matchedDoc: "ACT-009" } : item
+            )
+          };
+          return {
+            ok: true,
+            message: "Ручну звірку підтверджено"
+          };
+        default:
+          throw new Error(`unexpected command: ${command}`);
+      }
+    });
+
+    await paymentsStore.load();
+    await paymentsStore.reconcile("pay-3");
+    expect(snapshot(paymentsStore).matchPreview?.decisionKind).toBe("none");
+
+    await paymentsStore.openManualMatchPicker("pay-3");
+    expect(snapshot(paymentsStore).manualPicker?.paymentId).toBe("pay-3");
+    expect(snapshot(paymentsStore).manualPicker?.candidates).toHaveLength(2);
+
+    paymentsStore.updateManualMatchQuery("ACT");
+    await paymentsStore.searchManualMatchCandidates();
+    expect(snapshot(paymentsStore).manualPicker?.query).toBe("ACT");
+    expect(snapshot(paymentsStore).manualPicker?.candidates).toHaveLength(1);
+    expect(snapshot(paymentsStore).manualPicker?.selectedCandidateId).toBe("act-9");
+
+    const result = await paymentsStore.confirmManualPickerCandidate();
+    expect(result.ok).toBe(true);
+    expect(snapshot(paymentsStore).manualPicker).toBeNull();
+    expect(snapshot(paymentsStore).matchPreview).toBeNull();
+    expect(snapshot(paymentsStore).message).toBe("Ручну звірку підтверджено");
+    expect(snapshot(paymentsStore).list?.items.find((item) => item.id === "pay-3")?.matchedDoc).toContain("ACT-009");
+    expect(invokeMock.mock.calls.filter(([command]) => command === "payment_match_manual_candidates")).toHaveLength(2);
+  });
+
+  it("builds a split draft from manual picker candidates", async () => {
+    const { paymentsStore } = await loadStores();
+
+    const list = makePayments(["pay-1", "pay-2", "pay-3"]);
+
+    invokeMock.mockImplementation(async (command, payload) => {
+      switch (command) {
+        case "payments_list":
+          return list;
+        case "payment_match_preview":
+          expect(payload).toEqual({ request: { paymentId: "pay-3" } });
+          return {
+            paymentId: "pay-3",
+            isReconciled: false,
+            decisionKind: "none",
+            candidates: [],
+            autoMatch: null
+          };
+        case "payment_match_manual_candidates":
+          return {
+            paymentId: "pay-3",
+            query: "",
+            candidates: [
+              {
+                documentId: "inv-7",
+                documentKind: "invoice",
+                title: "Накладна INV-007",
+                openAmountStr: "1 500,00 грн",
+                totalScore: 35,
+                sameIban: false,
+                referenceHit: false,
+                textHits: 0,
+                daysDistance: 6
+              },
+              {
+                documentId: "act-9",
+                documentKind: "act",
+                title: "Акт ACT-009",
+                openAmountStr: "3 000,00 грн",
+                totalScore: 40,
+                sameIban: false,
+                referenceHit: false,
+                textHits: 1,
+                daysDistance: 4
+              }
+            ]
+          };
+        default:
+          throw new Error(`unexpected command: ${command}`);
+      }
+    });
+
+    await paymentsStore.load();
+    await paymentsStore.reconcile("pay-3");
+    await paymentsStore.openManualMatchPicker("pay-3");
+
+    await paymentsStore.addSelectedManualPickerCandidateToSplit();
+    expect(snapshot(paymentsStore).splitDraft?.allocations).toHaveLength(1);
+    expect(normalizeMoneyText(snapshot(paymentsStore).splitDraft?.remainingAmountStr)).toContain("1 500,00");
+
+    paymentsStore.selectManualPickerCandidate("act-9");
+    await paymentsStore.addSelectedManualPickerCandidateToSplit();
+
+    expect(snapshot(paymentsStore).splitDraft?.allocations).toHaveLength(2);
+    expect(normalizeMoneyText(snapshot(paymentsStore).splitDraft?.remainingAmountStr)).toContain("0,00");
+
+    paymentsStore.updateSplitAllocationAmount("act-9", "1 500,00");
+    paymentsStore.updateSplitAllocationAmount("inv-7", "1 500,00");
+
+    expect(snapshot(paymentsStore).splitDraft?.allocations).toHaveLength(2);
+    expect(snapshot(paymentsStore).splitDraft?.remainingAmountStr).toContain("0,00");
+  });
+
+  it("persists a split draft across multiple reconcile calls", async () => {
+    const { paymentsStore } = await loadStores();
+
+    let list = makePayments(["pay-1", "pay-2", "pay-3"]);
+    const reconcileCalls: Array<{
+      paymentId: string;
+      documentId: string;
+      documentKind: string;
+      amount: string;
+    }> = [];
+
+    invokeMock.mockImplementation(async (command, payload) => {
+      switch (command) {
+        case "payments_list":
+          return list;
+        case "payment_match_preview":
+          expect(payload).toEqual({ request: { paymentId: "pay-3" } });
+          return {
+            paymentId: "pay-3",
+            isReconciled: false,
+            decisionKind: "none",
+            candidates: [],
+            autoMatch: null
+          };
+        case "payment_match_manual_candidates":
+          return {
+            paymentId: "pay-3",
+            query: "",
+            candidates: [
+              {
+                documentId: "inv-7",
+                documentKind: "invoice",
+                title: "Накладна INV-007",
+                openAmountStr: "1 500,00 грн",
+                totalScore: 35,
+                sameIban: false,
+                referenceHit: false,
+                textHits: 0,
+                daysDistance: 6
+              },
+              {
+                documentId: "act-9",
+                documentKind: "act",
+                title: "Акт ACT-009",
+                openAmountStr: "3 000,00 грн",
+                totalScore: 40,
+                sameIban: false,
+                referenceHit: false,
+                textHits: 1,
+                daysDistance: 4
+              }
+            ]
+          };
+        case "payment_reconcile": {
+          const request = {
+            ...(payload as {
+              request: { paymentId: string; documentId: string; documentKind: string; amount: string };
+            }).request
+          };
+          reconcileCalls.push(request);
+
+          const expected =
+            reconcileCalls.length === 1
+              ? {
+                  paymentId: "pay-3",
+                  documentId: "inv-7",
+                  documentKind: "invoice"
+                }
+              : {
+                  paymentId: "pay-3",
+                  documentId: "act-9",
+                  documentKind: "act"
+                };
+
+          expect(request).toMatchObject(expected);
+          expect(normalizeMoneyText(request.amount)).toContain("1 500,00");
+
+          list = {
+            ...list,
+            items: list.items.map((item) =>
+              item.id === "pay-3"
+                ? {
+                    ...item,
+                    matchedDoc:
+                      reconcileCalls.length === 1 ? "INV-007 (частково)" : "INV-007 + ACT-009"
+                  }
+                : item
+            )
+          };
+
+          return {
+            ok: true,
+            message: "ok"
+          };
+        }
+        default:
+          throw new Error(`unexpected command: ${command}`);
+      }
+    });
+
+    await paymentsStore.load();
+    await paymentsStore.reconcile("pay-3");
+    await paymentsStore.openManualMatchPicker("pay-3");
+
+    await paymentsStore.addSelectedManualPickerCandidateToSplit();
+    paymentsStore.selectManualPickerCandidate("act-9");
+    await paymentsStore.addSelectedManualPickerCandidateToSplit();
+
+    const result = await paymentsStore.confirmSplitDraft();
+
+    expect(result.ok).toBe(true);
+    expect(result.message).toBe("Розподіл платежу підтверджено");
+    expect(snapshot(paymentsStore).splitDraft).toBeNull();
+    expect(snapshot(paymentsStore).manualPicker).toBeNull();
+    expect(snapshot(paymentsStore).matchPreview).toBeNull();
+    expect(snapshot(paymentsStore).message).toBe("Розподіл платежу підтверджено");
+    expect(snapshot(paymentsStore).list?.items.find((item) => item.id === "pay-3")?.matchedDoc).toContain("ACT-009");
+    expect(reconcileCalls).toHaveLength(2);
+    expect(invokeMock.mock.calls.filter(([command]) => command === "payment_reconcile")).toHaveLength(2);
+    expect(invokeMock.mock.calls.filter(([command]) => command === "payments_list")).toHaveLength(2);
   });
 
   it("keeps ambiguous preview state when manual reconcile returns an error result", async () => {
