@@ -202,6 +202,31 @@ async fn create_test_invoice(
     Ok(id)
 }
 
+async fn create_test_payment_schedule(
+    pool: &PgPool,
+    company_id: Uuid,
+    counterparty_id: Option<Uuid>,
+    title: &str,
+    amount: Decimal,
+    scheduled_date: chrono::NaiveDate,
+) -> Result<Uuid> {
+    let id = Uuid::new_v4();
+    sqlx::query(
+        r#"INSERT INTO payment_schedule
+           (id, company_id, counterparty_id, title, amount, direction, scheduled_date, is_completed, recurrence)
+           VALUES ($1, $2, $3, $4, $5, 'expense'::payment_direction, $6, FALSE, 'once')"#,
+    )
+    .bind(id)
+    .bind(company_id)
+    .bind(counterparty_id)
+    .bind(title)
+    .bind(amount)
+    .bind(scheduled_date)
+    .execute(pool)
+    .await?;
+    Ok(id)
+}
+
 #[tokio::test]
 async fn bas_counterparty_preview_updates_existing_by_exact_name() -> Result<()> {
     let Some(pool) = test_pool().await? else {
@@ -5351,6 +5376,47 @@ async fn load_receivables_rows_calculates_overdue_days() -> Result<()> {
     assert!(rows[0].overdue_days >= 10, "прострочка має бути >= 10 днів");
 
     sqlx::query("DELETE FROM invoices WHERE id IN ($1, $2)").bind(inv_id).bind(paid_id).execute(&pool).await?;
+    sqlx::query("DELETE FROM counterparties WHERE id = $1").bind(cp.id).execute(&pool).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn load_payables_rows_returns_expense_schedule_entries() -> Result<()> {
+    use acta::app_ctx::AppCtx;
+    use acta::db::reports::load_payables_rows;
+    use acta::models::reports::{ReportsScope, ResolvedReportsFilter};
+
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+    let suffix = unique_suffix();
+    let today = chrono::Utc::now().date_naive();
+    let period_start = today - Duration::days(30);
+
+    let cp = create_test_counterparty(&pool, &suffix, &format!("ІТ Payable CP {suffix}"), None, None).await?;
+
+    let title = format!("Оренда ІТ {suffix}");
+    let ps_id = create_test_payment_schedule(
+        &pool, DEFAULT_COMPANY_ID, Some(cp.id),
+        &title, dec!(6000), today,
+    ).await?;
+
+    let ctx = AppCtx::new(pool.clone(), DEFAULT_COMPANY_ID);
+    let filter = ResolvedReportsFilter {
+        scope: ReportsScope::Active,
+        date_from: period_start,
+        date_to: today,
+        query: format!("Оренда ІТ {suffix}"),
+    };
+
+    let rows = load_payables_rows(&ctx, &filter).await?;
+
+    assert_eq!(rows.len(), 1, "має бути один запис зі schedule");
+    assert_eq!(rows[0].amount, dec!(6000));
+    assert!(rows[0].title.contains(&suffix));
+
+    sqlx::query("DELETE FROM payment_schedule WHERE id = $1").bind(ps_id).execute(&pool).await?;
     sqlx::query("DELETE FROM counterparties WHERE id = $1").bind(cp.id).execute(&pool).await?;
 
     Ok(())
