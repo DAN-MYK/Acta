@@ -5316,7 +5316,7 @@ async fn load_receivables_rows_calculates_overdue_days() -> Result<()> {
 
     let cp = create_test_counterparty(&pool, &suffix, &format!("ІТ Recv CP {suffix}"), None, None).await?;
 
-    // Issued invoice with overdue expected_payment_date
+    // Рахунок зі статусом issued та простроченою expected_payment_date
     let inv_id = create_test_invoice(
         &pool, DEFAULT_COMPANY_ID, cp.id,
         &format!("INV-{suffix}"),
@@ -5326,7 +5326,7 @@ async fn load_receivables_rows_calculates_overdue_days() -> Result<()> {
         period_start + Duration::days(1),
     ).await?;
 
-    // Paid invoice — must NOT appear in receivables
+    // Рахунок зі статусом paid → НЕ повинен з'явитись у дебіторці
     let paid_id = create_test_invoice(
         &pool, DEFAULT_COMPANY_ID, cp.id,
         &format!("INV-{suffix}-PAID"),
