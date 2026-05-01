@@ -1,0 +1,78 @@
+name: Tauri Release Gates
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/tauri-release-gates.yml"
+      - ".github/workflows/ci.yml"
+      - "src-tauri/**"
+      - "src/**"
+      - "frontend/**"
+      - "migrations/**"
+      - "templates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/Cargo.lock"
+      - "package.json"
+      - "package-lock.json"
+  workflow_dispatch:
+
+concurrency:
+  group: slow-gates-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_TERM_COLOR: always
+  SQLX_OFFLINE: true
+
+jobs:
+  windows-tauri-bundle:
+    name: Windows Tauri bundle gate
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            src-tauri -> src-tauri/target
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend assets
+        run: npm run build
+
+      - name: Build Windows installer bundle
+        run: npm run tauri build
+
+      - name: Upload Windows bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: acta-windows-bundles
+          path: src-tauri/target/release/bundle/**
+          if-no-files-found: error
