@@ -108,7 +108,7 @@ async fn create_test_category(
     let id = Uuid::new_v4();
     sqlx::query(
         r#"INSERT INTO categories (id, company_id, name, kind)
-           VALUES ($1, $2, $3, $4::category_kind)"#,
+           VALUES ($1, $2, $3, $4)"#,
     )
     .bind(id)
     .bind(company_id)
@@ -5077,26 +5077,51 @@ async fn load_pnl_rows_groups_by_category_and_excludes_draft() -> Result<()> {
     let today = chrono::Utc::now().date_naive();
     let period_start = today - Duration::days(30);
 
-    let cp = create_test_counterparty(&pool, &suffix, &format!("ІТ PNL CP {suffix}"), None, None).await?;
-    let cat_income_id = create_test_category(&pool, DEFAULT_COMPANY_ID, &format!("Послуги {suffix}"), "income").await?;
+    let cp = create_test_counterparty(&pool, &suffix, &format!("ІТ PNL CP {suffix}"), None, None)
+        .await?;
+    let cat_income_id = create_test_category(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &format!("Послуги {suffix}"),
+        "income",
+    )
+    .await?;
 
     let act_id = create_test_act(
-        &pool, DEFAULT_COMPANY_ID, cp.id,
+        &pool,
+        DEFAULT_COMPANY_ID,
+        cp.id,
         &format!("PNL-{suffix}-1"),
         dec!(10000),
         "issued",
         Some(cat_income_id),
         today,
-    ).await?;
+    )
+    .await?;
+
+    let act_id2 = create_test_act(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        cp.id,
+        &format!("PNL-{suffix}-2"),
+        dec!(5000),
+        "issued",
+        Some(cat_income_id),
+        today,
+    )
+    .await?;
 
     let draft_id = create_test_act(
-        &pool, DEFAULT_COMPANY_ID, cp.id,
+        &pool,
+        DEFAULT_COMPANY_ID,
+        cp.id,
         &format!("PNL-{suffix}-draft"),
         dec!(99999),
         "draft",
         Some(cat_income_id),
         today,
-    ).await?;
+    )
+    .await?;
 
     let ctx = AppCtx::new(pool.clone(), DEFAULT_COMPANY_ID);
     let filter = ResolvedReportsFilter {
@@ -5109,12 +5134,23 @@ async fn load_pnl_rows_groups_by_category_and_excludes_draft() -> Result<()> {
     let rows = load_pnl_rows(&ctx, &filter).await?;
 
     assert_eq!(rows.len(), 1, "має бути рівно 1 категорія після фільтра");
-    assert_eq!(rows[0].income, dec!(10000));
+    assert_eq!(rows[0].income, dec!(15000), "10000 + 5000 = агрегація по категорії");
     assert_eq!(rows[0].expense, dec!(0));
 
-    sqlx::query("DELETE FROM acts WHERE id IN ($1, $2)").bind(act_id).bind(draft_id).execute(&pool).await?;
-    sqlx::query("DELETE FROM categories WHERE id = $1").bind(cat_income_id).execute(&pool).await?;
-    sqlx::query("DELETE FROM counterparties WHERE id = $1").bind(cp.id).execute(&pool).await?;
+    sqlx::query("DELETE FROM acts WHERE id IN ($1, $2, $3)")
+        .bind(act_id)
+        .bind(act_id2)
+        .bind(draft_id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM categories WHERE id = $1")
+        .bind(cat_income_id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
 
     Ok(())
 }
