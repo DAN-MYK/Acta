@@ -449,6 +449,66 @@ fn build_invoice_pdf_data(
     }
 }
 
+pub async fn generate_document_pdf(ctx: &AppCtx, doc_id: String) -> Result<MutationResultDto> {
+    let doc_ref = parse_document_ref(&doc_id)
+        .ok_or_else(|| anyhow!("Некоректний ідентифікатор документу: {doc_id}"))?;
+
+    let pool = ctx.pool();
+    let company_id = ctx.company_id();
+
+    let path = match doc_ref {
+        DocumentRef::Act(id) => {
+            let (act, items) = db::acts::get_by_id(pool, id)
+                .await?
+                .ok_or_else(|| anyhow!("Акт не знайдено"))?;
+
+            let (company_res, counterparty_res) = tokio::join!(
+                db::companies::get_by_id(pool, company_id),
+                db::counterparties::get_by_id(pool, company_id, act.counterparty_id)
+            );
+            let company = company_res?.ok_or_else(|| anyhow!("Компанію не знайдено"))?;
+            let counterparty =
+                counterparty_res?.ok_or_else(|| anyhow!("Контрагента не знайдено"))?;
+
+            let data = build_act_pdf_data(&act, &items, &company, &counterparty);
+            let path = ensure_output_dir(&act.number)?;
+            generate_act_pdf(&data, &path)?;
+            path
+        }
+        DocumentRef::Invoice(id) => {
+            let (invoice, items) = db::invoices::get_by_id(pool, id)
+                .await?
+                .ok_or_else(|| anyhow!("Рахунок не знайдено"))?;
+
+            let (company_res, counterparty_res) = tokio::join!(
+                db::companies::get_by_id(pool, company_id),
+                db::counterparties::get_by_id(pool, company_id, invoice.counterparty_id)
+            );
+            let company = company_res?.ok_or_else(|| anyhow!("Компанію не знайдено"))?;
+            let counterparty =
+                counterparty_res?.ok_or_else(|| anyhow!("Контрагента не знайдено"))?;
+
+            let data = build_invoice_pdf_data(&invoice, &items, &company, &counterparty);
+            let path = ensure_invoice_output_dir(&invoice.number)?;
+            generate_invoice_pdf(&data, &path)?;
+            path
+        }
+        DocumentRef::Waybill(_) => {
+            anyhow::bail!("PDF для накладних не підтримується");
+        }
+    };
+
+    if let Err(e) = open::that(&path) {
+        tracing::warn!("Не вдалось відкрити PDF: {e}");
+    }
+
+    Ok(MutationResultDto {
+        ok: true,
+        document_id: doc_id,
+        message: format!("PDF збережено: {}", path.display()),
+    })
+}
+
 fn chain_kind_rank(kind: &str) -> Option<u8> {
     match normalize_chain_kind(kind) {
         Some("invoice") => Some(0),
@@ -1770,5 +1830,13 @@ mod pdf_tests {
         items[0].unit = None;  // Option<String> = None
         let data = build_invoice_pdf_data(&invoice, &items, &sample_company(), &sample_counterparty());
         assert_eq!(data.items[0].unit, "");  // unwrap_or_default
+    }
+
+    #[test]
+    fn generate_document_pdf_rejects_waybill_id() {
+        // parse_document_ref → DocumentRef::Waybill → bail!
+        let wbl_id = format!("wbl:{}", uuid::Uuid::nil());
+        let doc_ref = parse_document_ref(&wbl_id);
+        assert!(matches!(doc_ref, Some(DocumentRef::Waybill(_))));
     }
 }
