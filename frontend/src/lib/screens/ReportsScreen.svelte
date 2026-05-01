@@ -1,6 +1,18 @@
 <script lang="ts">
+  import SkeletonRow from "../components/SkeletonRow.svelte";
   import { reportsStore } from "../stores/reports";
-  import type { PayableRowDto, ReceivableRowDto, ReportsScope, ReportsTab } from "../types";
+  import type { PayableRowDto, ReceivableRowDto, ReportsScope, ReportsTab, TopCounterpartyRowDto } from "../types";
+
+  interface ReportKpiCard {
+    label: string;
+    value: string;
+    tone?: "default" | "accent" | "warning" | "danger";
+  }
+
+  const sortCollator = new Intl.Collator("uk", {
+    numeric: true,
+    sensitivity: "base"
+  });
 
   const reports = reportsStore;
 
@@ -25,28 +37,28 @@
 
   function getReportHeadline(tab: ReportsTab | undefined): string {
     if (tab === "pnl") {
-      return "Фінрезультат за період";
+      return "Дохід, витрати і результат";
     }
     if (tab === "receivables") {
-      return "Дебіторка під контролем";
+      return "Нам мають заплатити";
     }
     if (tab === "payables") {
-      return "Кредиторка без сюрпризів";
+      return "Ми маємо заплатити";
     }
-    return "Контроль грошей і боргів";
+    return "Гроші на рахунках і в русі";
   }
 
   function getReportHint(tab: ReportsTab | undefined): string {
     if (tab === "pnl") {
-      return "Подивіться, які категорії формують дохід, витрати та чистий результат за вибраний період.";
+      return "Показуємо, які категорії заробляють, де зростають витрати і який фінансовий результат ви отримали за період.";
     }
     if (tab === "receivables") {
-      return "Знайдіть прострочені надходження та документи, які потребують уваги першими.";
+      return "Швидко видно, хто вже затримує оплату, які документи потребують нагадування і де ризик касового розриву.";
     }
     if (tab === "payables") {
-      return "Перевіряйте, кому і коли потрібно платити, щоб не втрачати контроль над зобов'язаннями.";
+      return "Тут легко зрозуміти, кому платити першими, що вже прострочено і які регулярні виплати підходять.";
     }
-    return "Швидко оцініть рух грошей, дебіторку та кредиторку в одному місці.";
+    return "Огляд залишку, надходжень і виплат без переходу в окремі реєстри або Excel.";
   }
 
   function overdueReceivables(rows: ReceivableRowDto[]): ReceivableRowDto[] {
@@ -57,30 +69,122 @@
     return rows.filter((row) => row.overdueDays > 0);
   }
 
+  function compareStrings(left: string, right: string): number {
+    return sortCollator.compare(left || "", right || "");
+  }
+
+  function compareDates(left: string, right: string): number {
+    return compareStrings(left || "9999-12-31", right || "9999-12-31");
+  }
+
+  function parseMoneyValue(value: string): number {
+    const normalized = value.replace(/\s+/g, "").replace("грн", "").replace(",", ".").trim();
+    const parsed = Number.parseFloat(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function stableSortRows<T>(rows: T[], compare: (left: T, right: T) => number): T[] {
+    return rows
+      .map((row, index) => ({ row, index }))
+      .sort((left, right) => {
+        const result = compare(left.row, right.row);
+        return result !== 0 ? result : left.index - right.index;
+      })
+      .map(({ row }) => row);
+  }
+
+  function sortedReceivables(rows: ReceivableRowDto[]): ReceivableRowDto[] {
+    return stableSortRows(rows, (left, right) => {
+      if (left.overdueDays !== right.overdueDays) {
+        return right.overdueDays - left.overdueDays;
+      }
+
+      const dueDateOrder = compareDates(left.expectedDate, right.expectedDate);
+      if (dueDateOrder !== 0) {
+        return dueDateOrder;
+      }
+
+      const amountOrder = parseMoneyValue(right.amountStr) - parseMoneyValue(left.amountStr);
+      if (amountOrder !== 0) {
+        return amountOrder;
+      }
+
+      return compareStrings(left.docNumber, right.docNumber);
+    });
+  }
+
+  function sortedPayables(rows: PayableRowDto[]): PayableRowDto[] {
+    return stableSortRows(rows, (left, right) => {
+      if (left.overdueDays !== right.overdueDays) {
+        return right.overdueDays - left.overdueDays;
+      }
+
+      const dueDateOrder = compareDates(left.dueDate, right.dueDate);
+      if (dueDateOrder !== 0) {
+        return dueDateOrder;
+      }
+
+      const amountOrder = parseMoneyValue(right.amountStr) - parseMoneyValue(left.amountStr);
+      if (amountOrder !== 0) {
+        return amountOrder;
+      }
+
+      return compareStrings(left.title, right.title);
+    });
+  }
+
+  function daysUntil(dateValue: string): number | null {
+    if (!dateValue) {
+      return null;
+    }
+
+    const parsed = Date.parse(dateValue);
+    if (Number.isNaN(parsed)) {
+      return null;
+    }
+
+    return Math.ceil((parsed - Date.now()) / (24 * 60 * 60 * 1000));
+  }
+
+  function dueSoonReceivables(rows: ReceivableRowDto[]): number {
+    return rows.filter((row) => {
+      const days = daysUntil(row.expectedDate);
+      return days !== null && days >= 0 && days <= 7;
+    }).length;
+  }
+
+  function dueSoonPayables(rows: PayableRowDto[]): number {
+    return rows.filter((row) => {
+      const days = daysUntil(row.dueDate);
+      return days !== null && days >= 0 && days <= 7;
+    }).length;
+  }
+
+  function uniqueCounterpartiesCount(rows: Array<{ counterparty: string }>): number {
+    return new Set(rows.map((row) => row.counterparty || "—")).size;
+  }
+
   function getFocusTitle(tab: ReportsTab | undefined): string {
     if (tab === "pnl") {
-      return "У фокусі результат";
+      return "Фінансовий результат";
     }
-    if (tab === "receivables") {
-      return "Потрібно сьогодні";
+    if (tab === "receivables" || tab === "payables") {
+      return "Уваги сьогодні";
     }
-    if (tab === "payables") {
-      return "Найближчі виплати";
-    }
-    return "У фокусі зараз";
+    return "Ключовий фокус";
   }
 
   function getFocusDescription(tab: ReportsTab | undefined): string {
     if (tab === "pnl") {
-      return "Короткий управлінський зріз, щоб побачити чистий результат без переходу в Excel.";
+      return "Орієнтир для керівника: чи перекриває дохід витрати і яка категорія найбільше впливає на результат.";
     }
     if (tab === "receivables") {
-      return "Зосередьтеся на прострочених надходженнях і найближчих очікуваних оплатах.";
+      return "Починайте з прострочених оплат, а далі переходьте до документів, де строк наближається протягом тижня.";
     }
     if (tab === "payables") {
-      return "Платежі, які не можна загубити між іншими операційними задачами.";
+      return "Першими перевіряйте прострочені та найближчі виплати, щоб не втратити контроль над календарем платежів.";
     }
-    return "Коротка управлінська витяжка, щоб побачити ризики до занурення в таблицю.";
+    return "Звідси видно, як змінився залишок грошей і чи не з'явився ризик нестачі ліквідності.";
   }
 
   function getFocusValue(tab: ReportsTab | undefined): string {
@@ -99,18 +203,120 @@
   function getFocusMeta(tab: ReportsTab | undefined): string {
     if (tab === "pnl") {
       const first = $reports.screen?.pnlRows?.[0];
-      return first ? `${first.label} · ${first.netStr}` : "Категорії з'являться після вибору періоду";
+      return first ? `Найсильніше впливає: ${first.label} · ${first.netStr}` : "Категорії з'являться після вибору періоду.";
     }
     if (tab === "receivables") {
-      const first = overdueReceivables($reports.screen?.receivablesRows ?? [])[0];
-      return first ? `${first.docNumber} · ${first.counterparty}` : "Прострочених надходжень немає";
+      const first = overdueReceivables(sortedReceivables($reports.screen?.receivablesRows ?? []))[0];
+      return first
+        ? `Перший у списку: ${first.docNumber} · ${first.counterparty}`
+        : "Прострочених оплат зараз немає.";
     }
     if (tab === "payables") {
-      const first = overduePayables($reports.screen?.payablesRows ?? [])[0];
-      return first ? `${first.counterparty} · ${first.dueDate}` : "Прострочених виплат немає";
+      const first = overduePayables(sortedPayables($reports.screen?.payablesRows ?? []))[0];
+      return first ? `Перший ризик: ${first.counterparty || first.title} · ${first.dueDate}` : "Прострочених виплат зараз немає.";
     }
     const first = $reports.screen?.bankRows?.[0];
-    return first ? `${first.label} · ${first.netStr}` : "Дані по cashflow з'являться після вибору періоду";
+    return first ? `Найбільший рух: ${first.label} · ${first.netStr}` : "Дані з'являться після вибору періоду.";
+  }
+
+  function getKpiCards(tab: ReportsTab | undefined): ReportKpiCard[] {
+    if (tab === "pnl") {
+      return [
+        {
+          label: "Дохід за період",
+          value: $reports.screen?.summary.pnlIncomeStr ?? "0,00 грн",
+          tone: "accent"
+        },
+        {
+          label: "Витрати за період",
+          value: $reports.screen?.summary.pnlExpenseStr ?? "0,00 грн"
+        },
+        {
+          label: "Фінансовий результат за період",
+          value: $reports.screen?.summary.pnlNetResultStr ?? "0,00 грн",
+          tone: "warning"
+        },
+        {
+          label: "Категорій у звіті",
+          value: `${$reports.screen?.pnlRows?.length ?? 0}`
+        }
+      ];
+    }
+
+    if (tab === "receivables") {
+      const rows = sortedReceivables($reports.screen?.receivablesRows ?? []);
+      return [
+        {
+          label: "Очікуємо отримати",
+          value: $reports.screen?.summary.receivablesTotalStr ?? "0,00 грн",
+          tone: "accent"
+        },
+        {
+          label: "Прострочені оплати",
+          value: `${overdueReceivables(rows).length}`,
+          tone: overdueReceivables(rows).length > 0 ? "danger" : "default"
+        },
+        {
+          label: "Оплати цього тижня",
+          value: `${dueSoonReceivables(rows)}`,
+          tone: dueSoonReceivables(rows) > 0 ? "warning" : "default"
+        },
+        {
+          label: "Контрагентів у роботі",
+          value: `${uniqueCounterpartiesCount(rows)}`
+        }
+      ];
+    }
+
+    if (tab === "payables") {
+      const rows = sortedPayables($reports.screen?.payablesRows ?? []);
+      return [
+        {
+          label: "Заплановано до оплати",
+          value: $reports.screen?.summary.payablesTotalStr ?? "0,00 грн",
+          tone: "accent"
+        },
+        {
+          label: "Прострочені виплати",
+          value: `${overduePayables(rows).length}`,
+          tone: overduePayables(rows).length > 0 ? "danger" : "default"
+        },
+        {
+          label: "Виплати цього тижня",
+          value: `${dueSoonPayables(rows)}`,
+          tone: dueSoonPayables(rows) > 0 ? "warning" : "default"
+        },
+        {
+          label: "Регулярних платежів",
+          value: `${rows.filter((row) => row.recurrence && row.recurrence !== "—").length}`
+        }
+      ];
+    }
+
+    return [
+      {
+        label: "Залишок на початок",
+        value: $reports.screen?.summary.openingBalanceStr ?? "0,00 грн"
+      },
+      {
+        label: "Надходження за період",
+        value: $reports.screen?.summary.incomeStr ?? "0,00 грн",
+        tone: "accent"
+      },
+      {
+        label: "Виплати за період",
+        value: $reports.screen?.summary.expenseStr ?? "0,00 грн"
+      },
+      {
+        label: "Залишок на кінець",
+        value: $reports.screen?.summary.closingBalanceStr ?? "0,00 грн",
+        tone: "warning"
+      }
+    ];
+  }
+
+  function onToggleCounterparty(row: TopCounterpartyRowDto) {
+    void reports.toggleCounterparty(row.counterpartyId);
   }
 
   function hasActiveRows(tab: ReportsTab | undefined): boolean {
@@ -137,7 +343,7 @@
       <button class="btn-primary" on:click={() => reports.exportExcelAndOpen()}>Відкрити Excel</button>
       <button class="btn-secondary" on:click={() => reports.exportExcel()}>Експортувати Excel</button>
       <input
-        placeholder="Пошук по поточному звіту"
+        placeholder="Шукати документ, контрагента або категорію"
         value={$reports.screen?.filter.query ?? ""}
         on:input={onReportsSearch}
       />
@@ -148,60 +354,74 @@
   <div class="create-strip-card">
     <div class="create-strip-header">
       <div>
-        <strong>Що аналізуємо</strong>
+        <strong>Що перевіряємо</strong>
         <p>{getReportHint($reports.screen?.filter.tab)}</p>
       </div>
-      <span class="doc-kind-badge">Звіт за сценарієм</span>
+      <span class="doc-kind-badge">Сценарний звіт</span>
     </div>
   </div>
 
   <div class="reports-focus-grid">
-    <div class="reports-focus-card" data-testid="reports-focus-primary">
+    <div class="reports-focus-card reports-focus-card-primary" data-testid="reports-focus-primary">
       <span class="reports-focus-label">{getFocusTitle($reports.screen?.filter.tab)}</span>
       <strong>{getFocusValue($reports.screen?.filter.tab)}</strong>
       <p>{getFocusDescription($reports.screen?.filter.tab)}</p>
       <small>{getFocusMeta($reports.screen?.filter.tab)}</small>
     </div>
     <div class="reports-focus-card reports-focus-card-muted">
-      <span class="reports-focus-label">Період аналізу</span>
+      <span class="reports-focus-label">Параметри зрізу</span>
       <strong>{$reports.screen?.filter.dateFrom ?? "—"} → {$reports.screen?.filter.dateTo ?? "—"}</strong>
-      <p>Змініть період або scope, якщо потрібно порівняти компанії чи уточнити сценарій звіту.</p>
+      <p>Змініть період або коло компаній, якщо хочете переглянути інший сценарій або уточнити причину відхилень.</p>
       <small>{$reports.screen?.filter.scope === "all" ? "Усі компанії" : "Активна компанія"}</small>
     </div>
   </div>
 
   <div class="reports-filters">
-    <div class="task-tabs">
-      <button class:active={$reports.screen?.filter.tab === "bank"} on:click={() => onReportsTabChange("bank")}>
-        Рух грошей
+    <div class="task-tabs" role="tablist" aria-label="Режими звіту">
+      <button
+        class:active={$reports.screen?.filter.tab === "bank"}
+        role="tab"
+        aria-selected={$reports.screen?.filter.tab === "bank"}
+        on:click={() => onReportsTabChange("bank")}
+      >
+        Гроші на рахунках і в русі
       </button>
-      <button class:active={$reports.screen?.filter.tab === "pnl"} on:click={() => onReportsTabChange("pnl")}>
-        P&amp;L
+      <button
+        class:active={$reports.screen?.filter.tab === "pnl"}
+        role="tab"
+        aria-selected={$reports.screen?.filter.tab === "pnl"}
+        on:click={() => onReportsTabChange("pnl")}
+      >
+        Дохід, витрати і результат
       </button>
       <button
         class:active={$reports.screen?.filter.tab === "receivables"}
+        role="tab"
+        aria-selected={$reports.screen?.filter.tab === "receivables"}
         on:click={() => onReportsTabChange("receivables")}
       >
-        Нам мають
+        Нам мають заплатити
       </button>
       <button
         class:active={$reports.screen?.filter.tab === "payables"}
+        role="tab"
+        aria-selected={$reports.screen?.filter.tab === "payables"}
         on:click={() => onReportsTabChange("payables")}
       >
-        Ми винні
+        Ми маємо заплатити
       </button>
     </div>
 
     <div class="reports-filter-grid">
       <label>
-        Показувати
+        Що показати у звіті
         <select value={$reports.screen?.filter.scope ?? "active"} on:change={onReportsScopeChange}>
-          <option value="active">Активна компанія</option>
+          <option value="active">Лише активну компанію</option>
           <option value="all">Усі компанії</option>
         </select>
       </label>
       <label>
-        Дата від
+        Період від
         <input
           type="date"
           value={$reports.screen?.filter.dateFrom ?? ""}
@@ -209,7 +429,7 @@
         />
       </label>
       <label>
-        Дата до
+        Період до
         <input
           type="date"
           value={$reports.screen?.filter.dateTo ?? ""}
@@ -220,42 +440,32 @@
   </div>
 
   <div class="reports-kpis">
-    {#if $reports.screen?.filter.tab === "pnl"}
-      <div class="task-kpi-card">
-        <strong>{$reports.screen?.summary.pnlIncomeStr ?? "0,00 грн"}</strong>
-        <span>Дохід</span>
+    {#each getKpiCards($reports.screen?.filter.tab) as card}
+      <div class="task-kpi-card reports-kpi-card" data-tone={card.tone ?? "default"}>
+        <strong>{card.value}</strong>
+        <span>{card.label}</span>
       </div>
-      <div class="task-kpi-card">
-        <strong>{$reports.screen?.summary.pnlExpenseStr ?? "0,00 грн"}</strong>
-        <span>Витрати</span>
-      </div>
-      <div class="task-kpi-card">
-        <strong>{$reports.screen?.summary.pnlNetResultStr ?? "0,00 грн"}</strong>
-        <span>Фінрезультат за період</span>
-      </div>
-      <div class="task-kpi-card">
-        <strong>{$reports.screen?.pnlRows?.length ?? 0}</strong>
-        <span>Категорій у звіті</span>
-      </div>
-    {:else}
-      <div class="task-kpi-card">
-        <strong>{$reports.screen?.summary.openingBalanceStr ?? "0,00 грн"}</strong>
-        <span>{$reports.screen?.filter.tab === "bank" ? "Залишок на початок" : "База звіту"}</span>
-      </div>
-      <div class="task-kpi-card">
-        <strong>{$reports.screen?.summary.incomeStr ?? "0,00 грн"}</strong>
-        <span>{$reports.screen?.filter.tab === "payables" ? "Очікувані надходження" : "Надходження"}</span>
-      </div>
-      <div class="task-kpi-card">
-        <strong>{$reports.screen?.summary.receivablesTotalStr ?? "0,00 грн"}</strong>
-        <span>{$reports.screen?.filter.tab === "receivables" ? "До отримання" : "Дебіторка"}</span>
-      </div>
-      <div class="task-kpi-card">
-        <strong>{$reports.screen?.summary.payablesTotalStr ?? "0,00 грн"}</strong>
-        <span>{$reports.screen?.filter.tab === "payables" ? "До оплати" : "Кредиторка"}</span>
-      </div>
-    {/if}
+    {/each}
   </div>
+
+  {#if ($reports.screen?.topCounterparties?.length ?? 0) > 0}
+    <div class="reports-top-counterparties" data-testid="reports-top-counterparties">
+      {#each $reports.screen?.topCounterparties ?? [] as row}
+        <button
+          class="reports-top-counterparty-row"
+          class:active={$reports.screen?.filter.selectedCounterpartyId === row.counterpartyId}
+          data-testid="top-counterparty-{row.counterpartyId}"
+          on:click={() => onToggleCounterparty(row)}
+          type="button"
+        >
+          <span class="reports-top-cp-name">{row.counterpartyName}</span>
+          <span class="reports-top-cp-amount">{row.primaryAmountStr}</span>
+          <span class="reports-top-cp-share">{row.sharePercent}%</span>
+          <span class="reports-top-cp-secondary">{row.secondaryLabel}: {row.secondaryValue}</span>
+        </button>
+      {/each}
+    </div>
+  {/if}
 
   {#if $reports.message}
     <p class="message">{$reports.message}</p>
@@ -265,90 +475,120 @@
     <p class="error">{$reports.error}</p>
   {/if}
 
-  {#if !hasActiveRows($reports.screen?.filter.tab)}
+  {#if $reports.initialLoading}
+    <div class="reports-table-card" data-testid="reports-table-card">
+      <SkeletonRow count={6} />
+    </div>
+  {:else if !hasActiveRows($reports.screen?.filter.tab)}
     <div class="empty-state-card reports-empty-state" data-testid="reports-empty-state">
       <strong>На цей період немає записів</strong>
-      <p>Змініть період, scope або сценарій звіту, щоб знайти дані для аналізу.</p>
+      <p>Змініть період, коло компаній або сценарій звіту, щоб знайти дані для аналізу.</p>
     </div>
   {:else if $reports.screen?.filter.tab === "bank"}
-    <div class="reports-table reports-table-card" data-testid="reports-table-card">
-      <div class="reports-table-row reports-table-head">
-        <span>Група</span>
-        <span>Надходження</span>
-        <span>Витрати</span>
-        <span>Чистий рух</span>
-      </div>
-      {#each $reports.screen?.bankRows ?? [] as row}
-        <div class="reports-table-row">
-          <span>{row.label}</span>
-          <span>{row.incomeStr}</span>
-          <span>{row.expenseStr}</span>
-          <span>{row.netStr}</span>
+    <div class="reports-table-card" data-testid="reports-table-card">
+      <div class="reports-table-scroll">
+        <div class="reports-table">
+          <div class="reports-table-row reports-table-row-head reports-table-row-bank">
+            <span class="reports-cell-title">Група руху</span>
+            <span class="reports-cell-money">Надходження</span>
+            <span class="reports-cell-money">Виплати</span>
+            <span class="reports-cell-money">Чистий рух</span>
+          </div>
+          {#each $reports.screen?.bankRows ?? [] as row}
+            <div class="reports-table-row reports-table-row-bank">
+              <span class="reports-cell-title">{row.label}</span>
+              <span class="reports-cell-money">{row.incomeStr}</span>
+              <span class="reports-cell-money">{row.expenseStr}</span>
+              <span class="reports-cell-money">{row.netStr}</span>
+            </div>
+          {/each}
         </div>
-      {/each}
+      </div>
     </div>
   {:else if $reports.screen?.filter.tab === "pnl"}
-    <div class="reports-table reports-table-card" data-testid="reports-table-card">
-      <div class="reports-table-row reports-table-head">
-        <span>Категорія</span>
-        <span>Дохід</span>
-        <span>Витрати</span>
-        <span>Результат</span>
-      </div>
-      {#each $reports.screen?.pnlRows ?? [] as row}
-        <div class="reports-table-row">
-          <span>{row.label}</span>
-          <span>{row.incomeStr}</span>
-          <span>{row.expenseStr}</span>
-          <span>{row.netStr}</span>
+    <div class="reports-table-card" data-testid="reports-table-card">
+      <div class="reports-table-scroll">
+        <div class="reports-table">
+          <div class="reports-table-row reports-table-row-head reports-table-row-bank">
+            <span class="reports-cell-title">Категорія</span>
+            <span class="reports-cell-money">Дохід</span>
+            <span class="reports-cell-money">Витрати</span>
+            <span class="reports-cell-money">Результат</span>
+          </div>
+          {#each $reports.screen?.pnlRows ?? [] as row}
+            <div class="reports-table-row reports-table-row-bank">
+              <span class="reports-cell-title">{row.label}</span>
+              <span class="reports-cell-money">{row.incomeStr}</span>
+              <span class="reports-cell-money">{row.expenseStr}</span>
+              <span class="reports-cell-money">{row.netStr}</span>
+            </div>
+          {/each}
         </div>
-      {/each}
+      </div>
     </div>
   {:else if $reports.screen?.filter.tab === "receivables"}
-    <div class="reports-table reports-table-card" data-testid="reports-table-card">
-      <div class="reports-table-row reports-table-head reports-table-wide">
-        <span>Документ</span>
-        <span>Дата</span>
-        <span>Компанія</span>
-        <span>Контрагент</span>
-        <span>Сума</span>
-        <span>Очікувана дата</span>
-        <span>Прострочка</span>
-      </div>
-      {#each $reports.screen?.receivablesRows ?? [] as row}
-        <div class="reports-table-row reports-table-wide" class:reports-table-row-overdue={row.overdueDays > 0}>
-          <span>{row.docNumber}</span>
-          <span>{row.docDate}</span>
-          <span>{row.companyName}</span>
-          <span>{row.counterparty}</span>
-          <span>{row.amountStr}</span>
-          <span>{row.expectedDate || "—"}</span>
-          <span>{row.overdueDays > 0 ? `Прострочено ${row.overdueDays} дн.` : "Без прострочки"}</span>
+    <div class="reports-table-card" data-testid="reports-table-card">
+      <div class="reports-table-scroll">
+        <div class="reports-table">
+          <div class="reports-table-row reports-table-row-head reports-table-row-receivables">
+            <span class="reports-cell-title">Документ</span>
+            <span class="reports-cell-date">Дата документа</span>
+            <span class="reports-cell-company">Компанія</span>
+            <span class="reports-cell-company">Контрагент</span>
+            <span class="reports-cell-money">Сума до отримання</span>
+            <span class="reports-cell-date">Очікувана оплата</span>
+            <span class="reports-cell-status">Статус строку</span>
+          </div>
+          {#each sortedReceivables($reports.screen?.receivablesRows ?? []) as row}
+            <div
+              class="reports-table-row reports-table-row-receivables"
+              class:reports-table-row-overdue={row.overdueDays > 0}
+            >
+              <span class="reports-cell-title">{row.docNumber}</span>
+              <span class="reports-cell-date">{row.docDate}</span>
+              <span class="reports-cell-company">{row.companyName}</span>
+              <span class="reports-cell-company">{row.counterparty}</span>
+              <span class="reports-cell-money">{row.amountStr}</span>
+              <span class="reports-cell-date">{row.expectedDate || "—"}</span>
+              <span class="reports-cell-status">
+                {row.overdueDays > 0 ? `Прострочено ${row.overdueDays} дн.` : "Без прострочки"}
+              </span>
+            </div>
+          {/each}
         </div>
-      {/each}
+      </div>
     </div>
   {:else}
-    <div class="reports-table reports-table-card" data-testid="reports-table-card">
-      <div class="reports-table-row reports-table-head reports-table-wide">
-        <span>Назва</span>
-        <span>Компанія</span>
-        <span>Контрагент</span>
-        <span>Сума</span>
-        <span>Дата</span>
-        <span>Прострочка</span>
-        <span>Повтор</span>
-      </div>
-      {#each $reports.screen?.payablesRows ?? [] as row}
-        <div class="reports-table-row reports-table-wide" class:reports-table-row-overdue={row.overdueDays > 0}>
-          <span>{row.title}</span>
-          <span>{row.companyName}</span>
-          <span>{row.counterparty || "—"}</span>
-          <span>{row.amountStr}</span>
-          <span>{row.dueDate}</span>
-          <span>{row.overdueDays > 0 ? `Прострочено ${row.overdueDays} дн.` : "Без прострочки"}</span>
-          <span>{row.recurrence}</span>
+    <div class="reports-table-card" data-testid="reports-table-card">
+      <div class="reports-table-scroll">
+        <div class="reports-table">
+          <div class="reports-table-row reports-table-row-head reports-table-row-payables">
+            <span class="reports-cell-title">Платіж</span>
+            <span class="reports-cell-company">Компанія</span>
+            <span class="reports-cell-company">Контрагент</span>
+            <span class="reports-cell-money">Сума до оплати</span>
+            <span class="reports-cell-date">Крайній строк</span>
+            <span class="reports-cell-status">Статус строку</span>
+            <span class="reports-cell-title">Повторюваність</span>
+          </div>
+          {#each sortedPayables($reports.screen?.payablesRows ?? []) as row}
+            <div
+              class="reports-table-row reports-table-row-payables"
+              class:reports-table-row-overdue={row.overdueDays > 0}
+            >
+              <span class="reports-cell-title">{row.title}</span>
+              <span class="reports-cell-company">{row.companyName}</span>
+              <span class="reports-cell-company">{row.counterparty || "—"}</span>
+              <span class="reports-cell-money">{row.amountStr}</span>
+              <span class="reports-cell-date">{row.dueDate}</span>
+              <span class="reports-cell-status">
+                {row.overdueDays > 0 ? `Прострочено ${row.overdueDays} дн.` : "Без прострочки"}
+              </span>
+              <span class="reports-cell-title">{row.recurrence}</span>
+            </div>
+          {/each}
         </div>
-      {/each}
+      </div>
     </div>
   {/if}
 </section>
