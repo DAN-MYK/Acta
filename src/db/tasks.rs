@@ -11,7 +11,7 @@ fn normalized_parent_refs(task: &NewTask) -> (Option<Uuid>, Option<Uuid>) {
     }
 }
 
-pub async fn list_open(pool: &PgPool, company_id: Uuid) -> Result<Vec<Task>> {
+pub async fn list_open(pool: &PgPool, company_id: Uuid, query: &str) -> Result<Vec<Task>> {
     let rows = sqlx::query_as::<_, Task>(
         r#"
         SELECT id, title, description,
@@ -22,6 +22,7 @@ pub async fn list_open(pool: &PgPool, company_id: Uuid) -> Result<Vec<Task>> {
         FROM tasks
         WHERE company_id = $1
           AND status IN ('open', 'in_progress')
+          AND ($2 = '' OR title ILIKE '%' || $2 || '%')
         ORDER BY
             CASE priority
                 WHEN 'critical' THEN 1
@@ -34,13 +35,14 @@ pub async fn list_open(pool: &PgPool, company_id: Uuid) -> Result<Vec<Task>> {
         "#,
     )
     .bind(company_id)
+    .bind(query)
     .fetch_all(pool)
     .await?;
 
     Ok(rows)
 }
 
-pub async fn list_all(pool: &PgPool, company_id: Uuid) -> Result<Vec<Task>> {
+pub async fn list_all(pool: &PgPool, company_id: Uuid, query: &str) -> Result<Vec<Task>> {
     let rows = sqlx::query_as::<_, Task>(
         r#"
         SELECT id, title, description,
@@ -50,6 +52,7 @@ pub async fn list_all(pool: &PgPool, company_id: Uuid) -> Result<Vec<Task>> {
                created_at, updated_at
         FROM tasks
         WHERE company_id = $1
+          AND ($2 = '' OR title ILIKE '%' || $2 || '%')
         ORDER BY
             CASE status
                 WHEN 'open' THEN 1
@@ -69,8 +72,32 @@ pub async fn list_all(pool: &PgPool, company_id: Uuid) -> Result<Vec<Task>> {
         "#,
     )
     .bind(company_id)
+    .bind(query)
     .fetch_all(pool)
     .await?;
+    Ok(rows)
+}
+
+pub async fn list_due_today(pool: &PgPool, company_id: Uuid) -> Result<Vec<Task>> {
+    let rows = sqlx::query_as::<_, Task>(
+        r#"
+        SELECT id, title, description,
+               status, priority,
+               due_date, reminder_at,
+               counterparty_id, act_id,
+               created_at, updated_at
+        FROM tasks
+        WHERE company_id = $1
+          AND due_date IS NOT NULL
+          AND DATE(due_date AT TIME ZONE 'UTC') = CURRENT_DATE
+          AND status IN ('open', 'in_progress')
+        ORDER BY due_date ASC NULLS LAST, created_at ASC
+        "#,
+    )
+    .bind(company_id)
+    .fetch_all(pool)
+    .await?;
+
     Ok(rows)
 }
 
@@ -266,6 +293,8 @@ mod tests {
     #[test]
     fn db_tasks_public_api_is_exposed() {
         let _ = list_open;
+        let _ = list_all;
+        let _ = list_due_today;
         let _ = get_by_id;
         let _ = list_by_act;
         let _ = create;

@@ -1297,7 +1297,7 @@ async fn tasks_create_update_and_delete_in_db() -> Result<()> {
     let created = db::tasks::create(&pool, DEFAULT_COMPANY_ID, &new_task).await?;
     assert_eq!(created.status, models::TaskStatus::Open);
 
-    let open_tasks = db::tasks::list_open(&pool, DEFAULT_COMPANY_ID).await?;
+    let open_tasks = db::tasks::list_open(&pool, DEFAULT_COMPANY_ID, "").await?;
     assert!(open_tasks.iter().any(|t| t.id == created.id));
 
     let due = db::tasks::due_reminders(&pool).await?;
@@ -1586,7 +1586,7 @@ async fn tasks_due_reminders_and_list_open_filter_correctly() -> Result<()> {
         .await?
         .expect("done task updated");
 
-    let open_tasks = db::tasks::list_open(&pool, DEFAULT_COMPANY_ID).await?;
+    let open_tasks = db::tasks::list_open(&pool, DEFAULT_COMPANY_ID, "").await?;
     let urgent_pos = open_tasks
         .iter()
         .position(|t| t.id == urgent.id)
@@ -1602,6 +1602,19 @@ async fn tasks_due_reminders_and_list_open_filter_correctly() -> Result<()> {
     assert!(due.iter().any(|t| t.id == urgent.id));
     assert!(!due.iter().any(|t| t.id == later.id));
     assert!(!due.iter().any(|t| t.id == done.id));
+
+    let filtered_open = db::tasks::list_open(&pool, DEFAULT_COMPANY_ID, "Термінова").await?;
+    assert_eq!(filtered_open.len(), 1);
+    assert_eq!(filtered_open[0].id, urgent.id);
+
+    let all_filtered = db::tasks::list_all(&pool, DEFAULT_COMPANY_ID, "Пізніша").await?;
+    assert_eq!(all_filtered.len(), 1);
+    assert_eq!(all_filtered[0].id, later.id);
+
+    let due_today = db::tasks::list_due_today(&pool, DEFAULT_COMPANY_ID).await?;
+    assert!(due_today.iter().any(|t| t.id == urgent.id));
+    assert!(!due_today.iter().any(|t| t.id == later.id));
+    assert!(!due_today.iter().any(|t| t.id == done.id));
 
     for id in [urgent.id, later.id, done.id] {
         sqlx::query("DELETE FROM tasks WHERE id = $1")
@@ -1670,11 +1683,11 @@ async fn tasks_list_queries_are_scoped_to_company() -> Result<()> {
     )
     .await?;
 
-    let default_open = db::tasks::list_open(&pool, DEFAULT_COMPANY_ID).await?;
+    let default_open = db::tasks::list_open(&pool, DEFAULT_COMPANY_ID, "").await?;
     assert!(default_open.iter().any(|task| task.id == task_default.id));
     assert!(!default_open.iter().any(|task| task.id == task_other.id));
 
-    let other_all = db::tasks::list_all(&pool, other_company.id).await?;
+    let other_all = db::tasks::list_all(&pool, other_company.id, "").await?;
     assert!(other_all.iter().any(|task| task.id == task_other.id));
     assert!(!other_all.iter().any(|task| task.id == task_default.id));
 
