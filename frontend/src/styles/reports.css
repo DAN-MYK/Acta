@@ -52,7 +52,7 @@
 }
 
 .reports-kpi-card[data-tone="warning"]::after {
-  background: color-mix(in srgb, var(--warning, #c77d00) 72%, transparent);
+  background: color-mix(in srgb, var(--warning, #c77a1c) 72%, transparent);
 }
 
 .reports-kpi-card[data-tone="danger"]::after {
@@ -162,7 +162,7 @@
   color: var(--text-primary);
   font-size: var(--font-sm);
   font-weight: 700;
-  box-shadow: 0 10px 24px color-mix(in srgb, var(--shadow-color, #09101d) 12%, transparent);
+  box-shadow: 0 10px 24px rgba(20, 35, 45, 0.08);
 }
 
 body[data-theme="dark"] .reports-table-row-head {

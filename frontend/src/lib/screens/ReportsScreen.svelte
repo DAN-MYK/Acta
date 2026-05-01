@@ -15,6 +15,7 @@
   });
 
   const reports = reportsStore;
+  let dateFromInput: HTMLInputElement | null = null;
 
   function onReportsSearch(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
@@ -33,6 +34,10 @@
   function onReportsDateChange(field: "dateFrom" | "dateTo", event: Event) {
     const input = event.currentTarget as HTMLInputElement;
     void reports.load({ [field]: input.value });
+  }
+
+  function focusReportsDateRange() {
+    dateFromInput?.focus();
   }
 
   function getReportHeadline(tab: ReportsTab | undefined): string {
@@ -404,6 +409,7 @@
         class:active={$reports.screen?.filter.tab === "bank"}
         role="tab"
         aria-selected={$reports.screen?.filter.tab === "bank"}
+        tabindex={$reports.screen?.filter.tab === "bank" ? 0 : -1}
         on:click={() => onReportsTabChange("bank")}
       >
         Гроші на рахунках і в русі
@@ -412,6 +418,7 @@
         class:active={$reports.screen?.filter.tab === "pnl"}
         role="tab"
         aria-selected={$reports.screen?.filter.tab === "pnl"}
+        tabindex={$reports.screen?.filter.tab === "pnl" ? 0 : -1}
         on:click={() => onReportsTabChange("pnl")}
       >
         Дохід, витрати і результат
@@ -420,6 +427,7 @@
         class:active={$reports.screen?.filter.tab === "receivables"}
         role="tab"
         aria-selected={$reports.screen?.filter.tab === "receivables"}
+        tabindex={$reports.screen?.filter.tab === "receivables" ? 0 : -1}
         on:click={() => onReportsTabChange("receivables")}
       >
         Нам мають заплатити
@@ -428,6 +436,7 @@
         class:active={$reports.screen?.filter.tab === "payables"}
         role="tab"
         aria-selected={$reports.screen?.filter.tab === "payables"}
+        tabindex={$reports.screen?.filter.tab === "payables" ? 0 : -1}
         on:click={() => onReportsTabChange("payables")}
       >
         Ми маємо заплатити
@@ -445,6 +454,7 @@
       <label>
         Період від
         <input
+          bind:this={dateFromInput}
           type="date"
           value={$reports.screen?.filter.dateFrom ?? ""}
           on:input={(event) => onReportsDateChange("dateFrom", event)}
@@ -505,7 +515,14 @@
           <span class="reports-top-cp-amount">{row.primaryAmountStr}</span>
           <span class="reports-top-cp-share">{row.sharePercent}%</span>
           <span class="reports-top-cp-secondary">{row.secondaryLabel}: {row.secondaryValue}</span>
-          <div class="reports-top-counterparty-bar"><span style="width: {row.sharePercent}%"></span></div>
+          <div
+            class="reports-top-counterparty-bar"
+            role="progressbar"
+            aria-valuenow={row.sharePercent}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label="Частка {row.sharePercent}%"
+          ><span style="width: {row.sharePercent}%"></span></div>
         </button>
       {/each}
     {/if}
@@ -527,8 +544,19 @@
     </div>
   {:else if !hasActiveRows($reports.screen?.filter.tab)}
     <div class="empty-state-card reports-empty-state" data-testid="reports-empty-state">
+      <span class="empty-state-eyebrow">Уточніть зріз</span>
       <strong>На цей період немає записів</strong>
       <p>Змініть період, коло компаній або сценарій звіту, щоб знайти дані для аналізу.</p>
+      <div class="empty-state-actions">
+        <button
+          class="btn-secondary"
+          type="button"
+          data-testid="reports-empty-primary-action"
+          on:click={focusReportsDateRange}
+        >
+          Р—РјС–РЅРёС‚Рё РїРµСЂС–РѕРґ
+        </button>
+      </div>
     </div>
   {:else if $reports.screen?.filter.tab === "bank"}
     <div class="reports-table-card" data-testid="reports-table-card">
