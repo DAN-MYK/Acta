@@ -22,7 +22,11 @@ pub async fn list_open(pool: &PgPool, company_id: Uuid, query: &str) -> Result<V
         FROM tasks
         WHERE company_id = $1
           AND status IN ('open', 'in_progress')
-          AND ($2 = '' OR title ILIKE '%' || $2 || '%')
+          AND (
+              $2 = ''
+              OR title ILIKE '%' || $2 || '%'
+              OR COALESCE(description, '') ILIKE '%' || $2 || '%'
+          )
         ORDER BY
             CASE priority
                 WHEN 'critical' THEN 1
@@ -52,7 +56,11 @@ pub async fn list_all(pool: &PgPool, company_id: Uuid, query: &str) -> Result<Ve
                created_at, updated_at
         FROM tasks
         WHERE company_id = $1
-          AND ($2 = '' OR title ILIKE '%' || $2 || '%')
+          AND (
+              $2 = ''
+              OR title ILIKE '%' || $2 || '%'
+              OR COALESCE(description, '') ILIKE '%' || $2 || '%'
+          )
         ORDER BY
             CASE status
                 WHEN 'open' THEN 1

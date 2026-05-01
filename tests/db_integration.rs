@@ -1389,7 +1389,7 @@ async fn tasks_update_and_get_by_id_in_db() -> Result<()> {
         Uuid::new_v4(),
         &models::NewTask {
             title: "Missing".to_string(),
-            description: None,
+            description: Some("Містить ключове-слово для пошуку".to_string()),
             priority: models::TaskPriority::Low,
             due_date: None,
             reminder_at: None,
@@ -1606,6 +1606,10 @@ async fn tasks_due_reminders_and_list_open_filter_correctly() -> Result<()> {
     let filtered_open = db::tasks::list_open(&pool, DEFAULT_COMPANY_ID, "Термінова").await?;
     assert_eq!(filtered_open.len(), 1);
     assert_eq!(filtered_open[0].id, urgent.id);
+
+    let description_filtered = db::tasks::list_open(&pool, DEFAULT_COMPANY_ID, "ключове-слово").await?;
+    assert_eq!(description_filtered.len(), 1);
+    assert_eq!(description_filtered[0].id, urgent.id);
 
     let all_filtered = db::tasks::list_all(&pool, DEFAULT_COMPANY_ID, "Пізніша").await?;
     assert_eq!(all_filtered.len(), 1);
