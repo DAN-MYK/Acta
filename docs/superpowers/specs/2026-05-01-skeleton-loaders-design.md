@@ -30,7 +30,7 @@ Add shimmer-style skeleton loaders to all data-heavy screens in Acta to eliminat
 }
 ```
 
-Added to `frontend/src/styles/tokens.css` so both components share it.
+Added to `frontend/src/lib/styles/tokens.css` so both components share it.
 
 ## Components
 
@@ -58,82 +58,103 @@ Renders N placeholder KPI cards in a 2-column grid. Each card: label line + larg
 let count: number = 4;
 ```
 
-Covers Dashboard (4 KPI cards) and Documents/Reports focus cards (2 cards).
+Covers Dashboard (4 KPI cards) and Documents focus cards (2 cards).
 
 ## Store Changes
 
-Each store gains a `loading: boolean` field, initialised to `true`.
+### `initialLoading` vs `loading`
+
+Stores already use `loading: boolean` for all async operations — save, open, reconcile, export. Reusing that flag for skeleton display would cause skeleton flashes on every user action.
+
+Solution: add a separate `initialLoading: boolean` field that is `true` only until the first successful data fetch completes. It starts `true` and is set to `false` once — it never resets to `true` again.
 
 ```ts
 type DocumentsState = {
+  initialLoading: boolean;  // ← new: true until first fetch, then permanently false
+  loading: boolean;         // existing: save/open/reconcile/export operations
   items: DocumentItemDto[];
-  loading: boolean;   // ← new, starts true
   // ...rest unchanged
+};
+
+// Initial state
+const initial: DocumentsState = {
+  initialLoading: true,
+  loading: false,
+  // ...
 };
 ```
 
-Pattern for all load functions:
+Pattern in the load function:
 
 ```ts
 async function load() {
   store.update(s => ({ ...s, loading: true }));
   const items = await invoke('list_documents');
-  store.update(s => ({ ...s, items, loading: false }));
+  store.update(s => ({
+    ...s,
+    items,
+    loading: false,
+    initialLoading: false,   // set once, never reset
+  }));
 }
 ```
 
-Starting `loading: true` means the skeleton appears immediately on screen mount — no empty flash before the first fetch.
-
-## Screen Integration
-
-Each screen wraps its main content in an `{#if loading}` branch:
+Screen template uses `initialLoading`, not `loading`:
 
 ```svelte
-{#if $documents.loading}
+{#if $documents.initialLoading}
   <SkeletonCard count={2} />
   <SkeletonRow count={5} />
 {:else}
-  <!-- existing content -->
+  <!-- existing content; $documents.loading still drives button/spinner states -->
 {/if}
 ```
 
+## Screen Integration
+
+Skeleton replaces only the data-driven areas. Persistent chrome — action bars, filter strips, tab navigation — stays visible so users can interact while data loads.
+
 ### Screen Matrix
 
-| Screen | SkeletonCard | SkeletonRow | count |
-|---|---|---|---|
-| DocumentsScreen | ✓ (focus cards) | ✓ | Card: 2, Row: 5 |
-| PaymentsScreen | ✗ | ✓ | Row: 6 |
-| CounterpartiesScreen | ✗ | ✓ | Row: 6 |
-| TasksScreen | ✗ | ✓ compact | Row: 5 |
-| DashboardScreen | ✓ | ✗ | Card: 4 |
-| ReportsScreen | ✓ | ✓ | Card: 2, Row: 6 |
+| Screen | Stays visible (chrome) | Gets skeleton |
+|---|---|---|
+| **DocumentsScreen** | panel-header, search, create strip | focus cards (2), document list (5 rows) |
+| **PaymentsScreen** | panel-header, create-strip-card (import/sync/manual buttons), KPI row | payment list rows (6) when list exists |
+| **CounterpartiesScreen** | panel-header, search | counterparty list (6 rows) |
+| **TasksScreen** | panel-header, filter tabs | task list (5 rows, compact variant) |
+| **DashboardScreen** | panel-header (with refresh button) | KPI cards (4), cashflow table rows (4), recent docs (3), upcoming payments (3) |
+| **ReportsScreen** | panel-header, tab bar, filter controls | data table rows (6) |
+
+Payments note: `create-strip-card` contains the primary action buttons (Import CSV, Sync bank, Manual entry) — these are always interactive and must never be hidden behind a skeleton.
+
+Dashboard note: `$dashboard.screen` is null until load completes. Each `{#each ... ?? []}` renders nothing now. Skeleton wraps each `{#each}` section individually, not the whole panel, so the panel-header and card titles stay visible.
 
 ## File Changes
 
 ```
 frontend/src/lib/components/
-  SkeletonRow.svelte          ← new
-  SkeletonCard.svelte         ← new
+  SkeletonRow.svelte              ← new
+  SkeletonCard.svelte             ← new
 
-frontend/src/styles/tokens.css
+frontend/src/lib/styles/tokens.css
   + @keyframes shimmer
   + .sk base class
 
 frontend/src/lib/stores/
-  documents.ts                ← add loading: boolean
-  payments.ts                 ← add loading: boolean
-  counterparties.ts           ← add loading: boolean
-  dashboard.ts                ← add loading: boolean
-  tasks.ts                    ← add loading: boolean
-  reports.ts                  ← add loading: boolean
+  documents.ts        ← add initialLoading: boolean
+  payments.ts         ← add initialLoading: boolean
+  counterparties.ts   ← add initialLoading: boolean
+  dashboard.ts        ← add initialLoading: boolean
+  tasks.ts            ← add initialLoading: boolean
+  reports.ts          ← add initialLoading: boolean
 
 frontend/src/lib/screens/
   DocumentsScreen.svelte      ← integrate skeleton
-  PaymentsScreen.svelte       ← integrate skeleton
+  PaymentsScreen.svelte       ← integrate skeleton (list only)
   CounterpartiesScreen.svelte ← integrate skeleton
-  TasksScreen.svelte          ← integrate skeleton
-  DashboardScreen.svelte      ← integrate skeleton
-  ReportsScreen.svelte        ← integrate skeleton
+  TasksScreen.svelte          ← integrate skeleton (compact)
+  DashboardScreen.svelte      ← integrate skeleton (per-section)
+  ReportsScreen.svelte        ← integrate skeleton (table only)
 ```
 
 ## Tests
@@ -147,9 +168,10 @@ frontend/src/lib/screens/
 // SkeletonCard.test.ts
 // - renders correct number of cards via count prop
 
-// DocumentsScreen.test.ts (existing)
-// - when loading=true: SkeletonRow and SkeletonCard are visible, list is not
-// - when loading=false: list is visible, skeletons are not
+// DocumentsScreen.test.ts (extend existing)
+// - when initialLoading=true: SkeletonRow and SkeletonCard are visible, list is not
+// - when initialLoading=false: list is visible, skeletons are not
+// - when loading=true (save op): skeleton is NOT shown, existing content stays
 ```
 
 ## Out of Scope
