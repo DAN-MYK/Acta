@@ -396,3 +396,11 @@ git commit -m "docs: add Slint final cascade removal script"
 **Placeholder scan:** Немає TBD або TODO.
 
 **Type consistency:** `AppWindow` згадується тільки в контексті видалення, не в новому коді.
+
+---
+
+## Статус реалізації
+
+✅ **Повністю реалізовано** — 2026-04-30
+
+Slint бінарний крейт і всі залежності видалені.

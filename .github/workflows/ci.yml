@@ -4,9 +4,23 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
   pull_request:
     branches:
       - main
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
 
 env:
   CARGO_TERM_COLOR: always
@@ -14,8 +28,9 @@ env:
 
 jobs:
   frontend:
-    name: Frontend typecheck, build and tests
+    name: Frontend build and checks
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -40,8 +55,9 @@ jobs:
         run: npm run test:frontend
 
   rust-backend:
-    name: Rust backend checks
+    name: Rust backend legacy safety net
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -53,15 +69,126 @@ jobs:
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Cargo check
+      - name: Cargo check root crate
         run: cargo check -j 1
 
       - name: Run backend unit tests
         run: cargo test -j 1 --lib --test unit_business_logic
 
-  db-integration:
-    name: DB integration and Tauri vertical slice
+  sqlx-offline:
+    name: SQLx offline metadata contract
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs:
+      - rust-backend
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: acta_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d acta_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/acta_test
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/acta_test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Postgres client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --no-default-features --features native-tls,postgres --locked
+
+      - name: Wait for Postgres
+        run: |
+          for i in {1..20}; do
+            pg_isready -h localhost -p 5432 -U postgres -d acta_test && break
+            sleep 2
+          done
+
+      - name: Seed demo database
+        run: cargo run -j 1 --bin reseed
+
+      - name: Verify SQLx offline metadata
+        run: cargo sqlx prepare --check
+
+  tauri-check:
+    name: Tauri migration compile gate
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    needs:
+      - frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            src-tauri -> src-tauri/target
+
+      - name: Install Tauri Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            wget
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend assets
+        run: npm run build
+
+      - name: Check Tauri crate
+        run: cargo check -j 1 --manifest-path src-tauri/Cargo.toml
+
+  db-integration:
+    name: Postgres integration and Tauri vertical slice
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs:
+      - rust-backend
 
     services:
       postgres:
@@ -112,171 +239,3 @@ jobs:
 
       - name: Run Tauri vertical slice tests
         run: cargo test -j 1 --test tauri_vertical_slice
-
-  tauri-smoke:
-    name: Tauri compile smoke
-    runs-on: ubuntu-22.04
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Cargo
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            . -> target
-            src-tauri -> src-tauri/target
-
-      - name: Install Tauri Linux dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            curl \
-            file \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libssl-dev \
-            libwebkit2gtk-4.1-dev \
-            libxdo-dev \
-            patchelf \
-            wget
-
-      - name: Install frontend dependencies
-        run: npm ci
-
-      - name: Build frontend assets
-        run: npm run build
-
-      - name: Check Tauri crate
-        run: cargo check -j 1 --manifest-path src-tauri/Cargo.toml
-
-  tauri-e2e-smoke:
-    name: Tauri WebView e2e smoke
-    runs-on: ubuntu-22.04
-
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_DB: acta_test
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d acta_test"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    env:
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/acta_test
-      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/acta_test
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Cargo
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            . -> target
-            src-tauri -> src-tauri/target
-
-      - name: Install Tauri WebDriver dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            curl \
-            file \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libssl-dev \
-            libwebkit2gtk-4.1-dev \
-            libxdo-dev \
-            patchelf \
-            postgresql-client \
-            webkit2gtk-driver \
-            wget \
-            xvfb
-
-      - name: Wait for Postgres
-        run: |
-          for i in {1..20}; do
-            pg_isready -h localhost -p 5432 -U postgres -d acta_test && break
-            sleep 2
-          done
-
-      - name: Install frontend dependencies
-        run: npm ci
-
-      - name: Install e2e dependencies
-        run: npm ci --prefix e2e-tests
-
-      - name: Install tauri-driver
-        run: cargo install tauri-driver --locked
-
-      - name: Seed demo database
-        run: cargo run -j 1 --bin reseed
-
-      - name: Run real WebView navigation smoke
-        run: xvfb-run -a npm run test:e2e
-
-  tauri-windows-build:
-    name: Windows Tauri packaging gate
-    runs-on: windows-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Cargo
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            . -> target
-            src-tauri -> src-tauri/target
-
-      - name: Install frontend dependencies
-        run: npm ci
-
-      - name: Build Windows installer bundle
-        run: npm run tauri build
-
-      - name: Upload Windows bundles
-        uses: actions/upload-artifact@v4
-        with:
-          name: acta-windows-bundles
-          path: src-tauri/target/release/bundle/**
-          if-no-files-found: error

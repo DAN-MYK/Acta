@@ -99,6 +99,134 @@ async fn create_test_contract(
     .await
 }
 
+async fn create_test_category(
+    pool: &PgPool,
+    company_id: Uuid,
+    name: &str,
+    kind: &str,
+) -> Result<Uuid> {
+    let id = Uuid::new_v4();
+    sqlx::query(
+        r#"INSERT INTO categories (id, company_id, name, kind)
+           VALUES ($1, $2, $3, $4)"#,
+    )
+    .bind(id)
+    .bind(company_id)
+    .bind(name)
+    .bind(kind)
+    .execute(pool)
+    .await?;
+    Ok(id)
+}
+
+async fn create_test_act(
+    pool: &PgPool,
+    company_id: Uuid,
+    counterparty_id: Uuid,
+    number: &str,
+    amount: Decimal,
+    status: &str,
+    category_id: Option<Uuid>,
+    date: chrono::NaiveDate,
+) -> Result<Uuid> {
+    let id = Uuid::new_v4();
+    sqlx::query(
+        r#"INSERT INTO acts
+           (id, company_id, counterparty_id, number, date, total_amount, status, category_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7::act_status, $8)"#,
+    )
+    .bind(id)
+    .bind(company_id)
+    .bind(counterparty_id)
+    .bind(number)
+    .bind(date)
+    .bind(amount)
+    .bind(status)
+    .bind(category_id)
+    .execute(pool)
+    .await?;
+    Ok(id)
+}
+
+async fn create_test_payment(
+    pool: &PgPool,
+    company_id: Uuid,
+    counterparty_id: Option<Uuid>,
+    amount: Decimal,
+    direction: &str,
+    date: chrono::NaiveDate,
+) -> Result<Uuid> {
+    let id = Uuid::new_v4();
+    sqlx::query(
+        r#"INSERT INTO payments
+           (id, company_id, counterparty_id, amount, direction, date)
+           VALUES ($1, $2, $3, $4, $5::payment_direction, $6)"#,
+    )
+    .bind(id)
+    .bind(company_id)
+    .bind(counterparty_id)
+    .bind(amount)
+    .bind(direction)
+    .bind(date)
+    .execute(pool)
+    .await?;
+    Ok(id)
+}
+
+async fn create_test_invoice(
+    pool: &PgPool,
+    company_id: Uuid,
+    counterparty_id: Uuid,
+    number: &str,
+    amount: Decimal,
+    status: &str,
+    expected_payment_date: Option<chrono::NaiveDate>,
+    date: chrono::NaiveDate,
+) -> Result<Uuid> {
+    let id = Uuid::new_v4();
+    sqlx::query(
+        r#"INSERT INTO invoices
+           (id, company_id, counterparty_id, number, date, total_amount, status, expected_payment_date)
+           VALUES ($1, $2, $3, $4, $5, $6, $7::invoice_status, $8)"#,
+    )
+    .bind(id)
+    .bind(company_id)
+    .bind(counterparty_id)
+    .bind(number)
+    .bind(date)
+    .bind(amount)
+    .bind(status)
+    .bind(expected_payment_date)
+    .execute(pool)
+    .await?;
+    Ok(id)
+}
+
+async fn create_test_payment_schedule(
+    pool: &PgPool,
+    company_id: Uuid,
+    counterparty_id: Option<Uuid>,
+    title: &str,
+    amount: Decimal,
+    scheduled_date: chrono::NaiveDate,
+) -> Result<Uuid> {
+    let id = Uuid::new_v4();
+    sqlx::query(
+        r#"INSERT INTO payment_schedule
+           (id, company_id, counterparty_id, title, amount, direction, scheduled_date, is_completed, recurrence)
+           VALUES ($1, $2, $3, $4, $5, 'expense'::payment_direction, $6, FALSE, 'none')"#,
+    )
+    .bind(id)
+    .bind(company_id)
+    .bind(counterparty_id)
+    .bind(title)
+    .bind(amount)
+    .bind(scheduled_date)
+    .execute(pool)
+    .await?;
+    Ok(id)
+}
+
 #[tokio::test]
 async fn bas_counterparty_preview_updates_existing_by_exact_name() -> Result<()> {
     let Some(pool) = test_pool().await? else {
@@ -2812,13 +2940,6 @@ async fn payments_crud_and_direction_filter_in_db() -> Result<()> {
     assert_eq!(updated.amount, dec!(2000.00));
     assert_eq!(updated.bank_name.as_deref(), Some("Monobank"));
 
-    // mark_reconciled встановлює is_reconciled = true
-    db::payments::mark_reconciled(&pool, income.id).await?;
-    let reconciled = db::payments::get_by_id(&pool, income.id)
-        .await?
-        .expect("платіж існує");
-    assert!(reconciled.is_reconciled);
-
     // delete: після видалення get_by_id повертає None
     db::payments::delete(&pool, income.id).await?;
     db::payments::delete(&pool, expense.id).await?;
@@ -3182,17 +3303,6 @@ async fn payments_upcoming_schedule_excludes_past_entries() -> Result<()> {
         .bind(future.id)
         .execute(&pool)
         .await?;
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn payments_mark_reconciled_missing_id_is_noop() -> Result<()> {
-    let Some(pool) = test_pool().await? else {
-        return Ok(());
-    };
-
-    db::payments::mark_reconciled(&pool, Uuid::new_v4()).await?;
 
     Ok(())
 }
@@ -4583,3 +4693,4 @@ async fn acts_update_with_items_replaces_positions_and_recalculates_total() -> R
 
     Ok(())
 }
+

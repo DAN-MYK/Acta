@@ -767,3 +767,9 @@ These are intentional gaps — not bugs, but known limitations to address later:
 - [x] Tauri commands layer unchanged
 - [x] Frontend types.ts unchanged
 - [x] Frontend api.ts unchanged
+
+---
+
+## Статус реалізації
+
+✅ **Повністю реалізовано** — 2026-04-29

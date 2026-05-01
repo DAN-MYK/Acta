@@ -1638,3 +1638,9 @@ wc -l frontend/src/App.svelte
 git add frontend/src/App.svelte
 git commit -m "refactor(frontend): extract screens into frontend/src/screens/, slim App.svelte to shell"
 ```
+
+---
+
+## Статус реалізації
+
+✅ **Повністю реалізовано** — 2026-04-30
