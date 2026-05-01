@@ -3,7 +3,8 @@ use std::path::PathBuf;
 use crate::app_ctx::AppCtx;
 use crate::db::reports::{
     compute_opening_balance, load_bank_rows, load_payables_rows, load_pnl_rows,
-    load_receivables_rows,
+    load_receivables_rows, load_top_counterparties_bank, load_top_counterparties_payables,
+    load_top_counterparties_pnl, load_top_counterparties_receivables,
 };
 use crate::models::reports::{
     BankAggregateRow, PayableRow, ReceivableRow, ReportsScope, ResolvedReportsFilter,
@@ -129,6 +130,7 @@ pub struct ReportsExportRequest {
     pub date_from: String,
     pub date_to: String,
     pub query: String,
+    pub selected_counterparty_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -297,11 +299,58 @@ fn sum_payables(rows: &[PayableRow]) -> Decimal {
     rows.iter().fold(Decimal::ZERO, |acc, row| acc + row.amount)
 }
 
+async fn load_selected_counterparty(
+    ctx: &AppCtx,
+    counterparty_id: &str,
+) -> Result<Option<SelectedCounterpartyDto>> {
+    struct Row {
+        id: String,
+        name: String,
+    }
+
+    impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Row {
+        fn from_row(row: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
+            use sqlx::Row as _;
+
+            Ok(Self {
+                id: row.try_get("id")?,
+                name: row.try_get("name")?,
+            })
+        }
+    }
+
+    let Some(row) = sqlx::query_as::<_, Row>(
+        r#"
+        SELECT id::text AS id, name
+        FROM counterparties
+        WHERE id::text = $1
+        LIMIT 1
+        "#,
+    )
+    .bind(counterparty_id)
+    .fetch_optional(ctx.pool())
+    .await?
+    else {
+        return Ok(None);
+    };
+
+    Ok(Some(SelectedCounterpartyDto {
+        id: row.id,
+        name: row.name,
+    }))
+}
+
 async fn build_reports_screen(
     ctx: &AppCtx,
     filter: ResolvedReportsFilter,
     filter_dto: ReportsFilterDto,
 ) -> Result<ReportsScreenDto> {
+    let selected_counterparty = if let Some(id) = filter.selected_counterparty_id.as_deref() {
+        load_selected_counterparty(ctx, id).await?
+    } else {
+        None
+    };
+
     let (opening_balance, bank_rows, pnl_rows, receivables_rows, payables_rows) = tokio::try_join!(
         compute_opening_balance(ctx, &filter),
         load_bank_rows(ctx, &filter),
@@ -309,6 +358,13 @@ async fn build_reports_screen(
         load_receivables_rows(ctx, &filter),
         load_payables_rows(ctx, &filter),
     )?;
+
+    let top_counterparties = match filter_dto.tab.as_str() {
+        "receivables" => load_top_counterparties_receivables(ctx, &filter).await?,
+        "payables" => load_top_counterparties_payables(ctx, &filter).await?,
+        "pnl" => load_top_counterparties_pnl(ctx, &filter).await?,
+        _ => load_top_counterparties_bank(ctx, &filter).await?,
+    };
 
     let income = bank_rows
         .iter()
@@ -329,8 +385,8 @@ async fn build_reports_screen(
 
     Ok(ReportsScreenDto {
         filter: filter_dto,
-        selected_counterparty: None,
-        top_counterparties: top_counterparties_to_dto(Vec::new()),
+        selected_counterparty,
+        top_counterparties: top_counterparties_to_dto(top_counterparties),
         summary: ReportsSummaryDto {
             opening_balance_str: format_money_ua(opening_balance),
             income_str: format_money_ua(income),
@@ -436,6 +492,7 @@ pub async fn reports_export_csv(
             date_from: Some(request.date_from),
             date_to: Some(request.date_to),
             query: Some(request.query),
+            selected_counterparty_id: request.selected_counterparty_id,
         },
     )
     .await?;
@@ -463,6 +520,7 @@ pub async fn reports_export_excel(
             date_from: Some(request.date_from),
             date_to: Some(request.date_to),
             query: Some(request.query),
+            selected_counterparty_id: request.selected_counterparty_id,
         },
     )
     .await?;

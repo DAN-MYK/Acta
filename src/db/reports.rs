@@ -1,12 +1,42 @@
 use anyhow::Result;
 use chrono::NaiveDate;
+use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 
 use crate::app_ctx::AppCtx;
 use crate::models::payment::PaymentDirection;
 use crate::models::reports::{
     BankAggregateRow, PayableRow, ReceivableRow, ReportsScope, ResolvedReportsFilter,
+    TopCounterpartyRow,
 };
+
+fn selected_counterparty_uuid(filter: &ResolvedReportsFilter) -> Option<uuid::Uuid> {
+    filter
+        .selected_counterparty_id
+        .as_deref()
+        .and_then(|v| uuid::Uuid::parse_str(v).ok())
+}
+
+fn format_money_ua(value: Decimal) -> String {
+    let normalized = format!("{:.2}", value.round_dp(2)).replace('.', ",");
+    let (sign, digits) = normalized
+        .strip_prefix('-')
+        .map_or(("", normalized.as_str()), |rest| ("-", rest));
+    let (whole, frac) = digits.split_once(',').unwrap_or((digits, "00"));
+    let grouped = whole
+        .chars()
+        .rev()
+        .collect::<Vec<_>>()
+        .chunks(3)
+        .map(|chunk| chunk.iter().collect::<String>())
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .rev()
+        .collect::<String>();
+
+    format!("{sign}{grouped},{frac} грн")
+}
 
 fn query_matches(haystacks: &[&str], query: &str) -> bool {
     if query.is_empty() {
@@ -48,6 +78,8 @@ pub async fn load_bank_rows(
         ReportsScope::All => None,
     };
 
+    let selected_cp_id = selected_counterparty_uuid(filter);
+
     let rows = if matches!(filter.scope, ReportsScope::All) {
         sqlx::query_as::<_, Row>(
             r#"
@@ -60,12 +92,14 @@ pub async fn load_bank_rows(
             LEFT JOIN payments p
                 ON p.company_id = c.id
                AND p.date BETWEEN $1 AND $2
+               AND ($3::uuid IS NULL OR p.counterparty_id = $3::uuid)
             GROUP BY c.id, c.name
             ORDER BY c.name
             "#,
         )
         .bind(filter.date_from)
         .bind(filter.date_to)
+        .bind(selected_cp_id)
         .fetch_all(ctx.pool())
         .await?
     } else {
@@ -80,6 +114,7 @@ pub async fn load_bank_rows(
             LEFT JOIN counterparties cp ON cp.id = p.counterparty_id
             WHERE p.company_id = $1
               AND p.date BETWEEN $2 AND $3
+              AND ($4::uuid IS NULL OR p.counterparty_id = $4::uuid)
             GROUP BY cp.id, cp.name, p.bank_name
             ORDER BY label
             "#,
@@ -87,6 +122,7 @@ pub async fn load_bank_rows(
         .bind(company_id.ok_or_else(|| anyhow::anyhow!("active scope потребує активної компанії"))?)
         .bind(filter.date_from)
         .bind(filter.date_to)
+        .bind(selected_cp_id)
         .fetch_all(ctx.pool())
         .await?
     };
@@ -132,6 +168,8 @@ pub async fn load_pnl_rows(
         ReportsScope::All => None,
     };
 
+    let selected_cp_id = selected_counterparty_uuid(filter);
+
     let rows = sqlx::query_as::<_, Row>(
         r#"
         WITH docs AS (
@@ -145,6 +183,7 @@ pub async fn load_pnl_rows(
             WHERE ($1::uuid IS NULL OR a.company_id = $1::uuid)
               AND a.date BETWEEN $2 AND $3
               AND a.status != 'draft'
+              AND ($4::uuid IS NULL OR a.counterparty_id = $4::uuid)
 
             UNION ALL
 
@@ -158,6 +197,7 @@ pub async fn load_pnl_rows(
             WHERE ($1::uuid IS NULL OR i.company_id = $1::uuid)
               AND i.date BETWEEN $2 AND $3
               AND i.status != 'draft'
+              AND ($4::uuid IS NULL OR i.counterparty_id = $4::uuid)
         )
         SELECT
             key,
@@ -172,6 +212,7 @@ pub async fn load_pnl_rows(
     .bind(company_id)
     .bind(filter.date_from)
     .bind(filter.date_to)
+    .bind(selected_cp_id)
     .fetch_all(ctx.pool())
     .await?;
 
@@ -228,6 +269,8 @@ pub async fn load_receivables_rows(
         ReportsScope::All => None,
     };
 
+    let selected_cp_id = selected_counterparty_uuid(filter);
+
     let rows = sqlx::query_as::<_, Row>(
         r#"
         SELECT
@@ -251,6 +294,7 @@ pub async fn load_receivables_rows(
         WHERE ($1::uuid IS NULL OR a.company_id = $1::uuid)
           AND a.date BETWEEN $3 AND $4
           AND a.status NOT IN ('paid', 'draft')
+          AND ($5::uuid IS NULL OR a.counterparty_id = $5::uuid)
 
         UNION ALL
 
@@ -275,6 +319,7 @@ pub async fn load_receivables_rows(
         WHERE ($1::uuid IS NULL OR i.company_id = $1::uuid)
           AND i.date BETWEEN $3 AND $4
           AND i.status NOT IN ('paid', 'draft')
+          AND ($5::uuid IS NULL OR i.counterparty_id = $5::uuid)
 
         ORDER BY overdue_days DESC, doc_date ASC
         "#,
@@ -283,6 +328,7 @@ pub async fn load_receivables_rows(
     .bind(filter.date_to)
     .bind(filter.date_from)
     .bind(filter.date_to)
+    .bind(selected_cp_id)
     .fetch_all(ctx.pool())
     .await?;
 
@@ -351,6 +397,8 @@ pub async fn load_payables_rows(
         ReportsScope::All => None,
     };
 
+    let selected_cp_id = selected_counterparty_uuid(filter);
+
     let rows = sqlx::query_as::<_, Row>(
         r#"
         SELECT
@@ -369,6 +417,7 @@ pub async fn load_payables_rows(
           AND ps.direction = $3
           AND ps.is_completed = FALSE
           AND ps.scheduled_date BETWEEN $4 AND $5
+          AND ($6::uuid IS NULL OR ps.counterparty_id = $6::uuid)
         ORDER BY ps.scheduled_date ASC
         "#,
     )
@@ -377,6 +426,7 @@ pub async fn load_payables_rows(
     .bind(PaymentDirection::Expense)
     .bind(filter.date_from)
     .bind(filter.date_to)
+    .bind(selected_cp_id)
     .fetch_all(ctx.pool())
     .await?;
 
@@ -401,6 +451,356 @@ pub async fn load_payables_rows(
             due_date: row.due_date,
             overdue_days: row.overdue_days,
             recurrence: row.recurrence,
+        })
+        .collect())
+}
+
+pub async fn load_top_counterparties_bank(
+    ctx: &AppCtx,
+    filter: &ResolvedReportsFilter,
+) -> Result<Vec<TopCounterpartyRow>> {
+    struct Row {
+        counterparty_id: String,
+        counterparty_name: String,
+        income: Decimal,
+        expense: Decimal,
+    }
+
+    impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Row {
+        fn from_row(row: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
+            use sqlx::Row as _;
+
+            Ok(Self {
+                counterparty_id: row.try_get("counterparty_id")?,
+                counterparty_name: row.try_get("counterparty_name")?,
+                income: row.try_get("income")?,
+                expense: row.try_get("expense")?,
+            })
+        }
+    }
+
+    let company_id = match filter.scope {
+        ReportsScope::Active => Some(ctx.company_id()),
+        ReportsScope::All => None,
+    };
+
+    let rows = sqlx::query_as::<_, Row>(
+        r#"
+        SELECT
+            cp.id::text AS counterparty_id,
+            cp.name AS counterparty_name,
+            COALESCE(SUM(CASE WHEN p.direction = 'income' THEN p.amount ELSE 0 END), 0) AS income,
+            COALESCE(SUM(CASE WHEN p.direction = 'expense' THEN p.amount ELSE 0 END), 0) AS expense
+        FROM payments p
+        JOIN counterparties cp ON cp.id = p.counterparty_id
+        WHERE ($1::uuid IS NULL OR p.company_id = $1::uuid)
+          AND p.date BETWEEN $2 AND $3
+        GROUP BY cp.id, cp.name
+        ORDER BY (COALESCE(SUM(CASE WHEN p.direction = 'income' THEN p.amount ELSE 0 END), 0)
+                + COALESCE(SUM(CASE WHEN p.direction = 'expense' THEN p.amount ELSE 0 END), 0)) DESC,
+                 cp.name ASC
+        LIMIT 8
+        "#,
+    )
+    .bind(company_id)
+    .bind(filter.date_from)
+    .bind(filter.date_to)
+    .fetch_all(ctx.pool())
+    .await?;
+
+    let max_primary = rows
+        .iter()
+        .map(|r| r.income + r.expense)
+        .max()
+        .unwrap_or(Decimal::ZERO);
+
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            let primary_amount = row.income + row.expense;
+            let share_percent = if max_primary.is_zero() {
+                0u8
+            } else {
+                ((primary_amount / max_primary * Decimal::from(100u8)).round_dp(0))
+                    .to_u8()
+                    .unwrap_or(100)
+            };
+            TopCounterpartyRow {
+                counterparty_id: row.counterparty_id,
+                counterparty_name: row.counterparty_name,
+                primary_amount,
+                secondary_label: "Чистий рух".to_string(),
+                secondary_value: format_money_ua(row.income - row.expense),
+                share_percent,
+            }
+        })
+        .collect())
+}
+
+pub async fn load_top_counterparties_receivables(
+    ctx: &AppCtx,
+    filter: &ResolvedReportsFilter,
+) -> Result<Vec<TopCounterpartyRow>> {
+    struct Row {
+        counterparty_id: String,
+        counterparty_name: String,
+        total: Decimal,
+    }
+
+    impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Row {
+        fn from_row(row: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
+            use sqlx::Row as _;
+
+            Ok(Self {
+                counterparty_id: row.try_get("counterparty_id")?,
+                counterparty_name: row.try_get("counterparty_name")?,
+                total: row.try_get("total")?,
+            })
+        }
+    }
+
+    let company_id = match filter.scope {
+        ReportsScope::Active => Some(ctx.company_id()),
+        ReportsScope::All => None,
+    };
+
+    let rows = sqlx::query_as::<_, Row>(
+        r#"
+        WITH docs AS (
+            SELECT a.counterparty_id, a.total_amount AS amount
+            FROM acts a
+            WHERE ($1::uuid IS NULL OR a.company_id = $1::uuid)
+              AND a.date BETWEEN $2 AND $3
+              AND a.status NOT IN ('paid', 'draft')
+            UNION ALL
+            SELECT i.counterparty_id, i.total_amount AS amount
+            FROM invoices i
+            WHERE ($1::uuid IS NULL OR i.company_id = $1::uuid)
+              AND i.date BETWEEN $2 AND $3
+              AND i.status NOT IN ('paid', 'draft')
+        )
+        SELECT
+            cp.id::text AS counterparty_id,
+            cp.name AS counterparty_name,
+            COALESCE(SUM(d.amount), 0) AS total
+        FROM docs d
+        JOIN counterparties cp ON cp.id = d.counterparty_id
+        GROUP BY cp.id, cp.name
+        ORDER BY total DESC, cp.name ASC
+        LIMIT 8
+        "#,
+    )
+    .bind(company_id)
+    .bind(filter.date_from)
+    .bind(filter.date_to)
+    .fetch_all(ctx.pool())
+    .await?;
+
+    let max_primary = rows
+        .iter()
+        .map(|r| r.total)
+        .max()
+        .unwrap_or(Decimal::ZERO);
+
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            let share_percent = if max_primary.is_zero() {
+                0u8
+            } else {
+                ((row.total / max_primary * Decimal::from(100u8)).round_dp(0))
+                    .to_u8()
+                    .unwrap_or(100)
+            };
+            TopCounterpartyRow {
+                counterparty_id: row.counterparty_id,
+                counterparty_name: row.counterparty_name,
+                primary_amount: row.total,
+                secondary_label: "Дебіторська заборгованість".to_string(),
+                secondary_value: format_money_ua(row.total),
+                share_percent,
+            }
+        })
+        .collect())
+}
+
+pub async fn load_top_counterparties_payables(
+    ctx: &AppCtx,
+    filter: &ResolvedReportsFilter,
+) -> Result<Vec<TopCounterpartyRow>> {
+    struct Row {
+        counterparty_id: String,
+        counterparty_name: String,
+        total: Decimal,
+    }
+
+    impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Row {
+        fn from_row(row: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
+            use sqlx::Row as _;
+
+            Ok(Self {
+                counterparty_id: row.try_get("counterparty_id")?,
+                counterparty_name: row.try_get("counterparty_name")?,
+                total: row.try_get("total")?,
+            })
+        }
+    }
+
+    let company_id = match filter.scope {
+        ReportsScope::Active => Some(ctx.company_id()),
+        ReportsScope::All => None,
+    };
+
+    let rows = sqlx::query_as::<_, Row>(
+        r#"
+        SELECT
+            cp.id::text AS counterparty_id,
+            cp.name AS counterparty_name,
+            COALESCE(SUM(ps.amount), 0) AS total
+        FROM payment_schedule ps
+        JOIN counterparties cp ON cp.id = ps.counterparty_id
+        WHERE ($1::uuid IS NULL OR ps.company_id = $1::uuid)
+          AND ps.direction = 'expense'
+          AND ps.is_completed = FALSE
+          AND ps.scheduled_date BETWEEN $2 AND $3
+        GROUP BY cp.id, cp.name
+        ORDER BY total DESC, cp.name ASC
+        LIMIT 8
+        "#,
+    )
+    .bind(company_id)
+    .bind(filter.date_from)
+    .bind(filter.date_to)
+    .fetch_all(ctx.pool())
+    .await?;
+
+    let max_primary = rows
+        .iter()
+        .map(|r| r.total)
+        .max()
+        .unwrap_or(Decimal::ZERO);
+
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            let share_percent = if max_primary.is_zero() {
+                0u8
+            } else {
+                ((row.total / max_primary * Decimal::from(100u8)).round_dp(0))
+                    .to_u8()
+                    .unwrap_or(100)
+            };
+            TopCounterpartyRow {
+                counterparty_id: row.counterparty_id,
+                counterparty_name: row.counterparty_name,
+                primary_amount: row.total,
+                secondary_label: "Кредиторська заборгованість".to_string(),
+                secondary_value: format_money_ua(row.total),
+                share_percent,
+            }
+        })
+        .collect())
+}
+
+pub async fn load_top_counterparties_pnl(
+    ctx: &AppCtx,
+    filter: &ResolvedReportsFilter,
+) -> Result<Vec<TopCounterpartyRow>> {
+    struct Row {
+        counterparty_id: String,
+        counterparty_name: String,
+        income: Decimal,
+        expense: Decimal,
+    }
+
+    impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Row {
+        fn from_row(row: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
+            use sqlx::Row as _;
+
+            Ok(Self {
+                counterparty_id: row.try_get("counterparty_id")?,
+                counterparty_name: row.try_get("counterparty_name")?,
+                income: row.try_get("income")?,
+                expense: row.try_get("expense")?,
+            })
+        }
+    }
+
+    let company_id = match filter.scope {
+        ReportsScope::Active => Some(ctx.company_id()),
+        ReportsScope::All => None,
+    };
+
+    let rows = sqlx::query_as::<_, Row>(
+        r#"
+        WITH docs AS (
+            SELECT
+                a.counterparty_id,
+                COALESCE(cat.kind::text, 'income') AS category_kind,
+                a.total_amount AS amount
+            FROM acts a
+            LEFT JOIN categories cat ON cat.id = a.category_id
+            WHERE ($1::uuid IS NULL OR a.company_id = $1::uuid)
+              AND a.date BETWEEN $2 AND $3
+              AND a.status != 'draft'
+
+            UNION ALL
+
+            SELECT
+                i.counterparty_id,
+                COALESCE(cat.kind::text, 'income') AS category_kind,
+                i.total_amount AS amount
+            FROM invoices i
+            LEFT JOIN categories cat ON cat.id = i.category_id
+            WHERE ($1::uuid IS NULL OR i.company_id = $1::uuid)
+              AND i.date BETWEEN $2 AND $3
+              AND i.status != 'draft'
+        )
+        SELECT
+            cp.id::text AS counterparty_id,
+            cp.name AS counterparty_name,
+            COALESCE(SUM(CASE WHEN d.category_kind = 'expense' THEN 0 ELSE d.amount END), 0) AS income,
+            COALESCE(SUM(CASE WHEN d.category_kind = 'expense' THEN d.amount ELSE 0 END), 0) AS expense
+        FROM docs d
+        JOIN counterparties cp ON cp.id = d.counterparty_id
+        GROUP BY cp.id, cp.name
+        ORDER BY (COALESCE(SUM(CASE WHEN d.category_kind = 'expense' THEN 0 ELSE d.amount END), 0)
+                + COALESCE(SUM(CASE WHEN d.category_kind = 'expense' THEN d.amount ELSE 0 END), 0)) DESC,
+                 cp.name ASC
+        LIMIT 8
+        "#,
+    )
+    .bind(company_id)
+    .bind(filter.date_from)
+    .bind(filter.date_to)
+    .fetch_all(ctx.pool())
+    .await?;
+
+    let max_primary = rows
+        .iter()
+        .map(|r| r.income + r.expense)
+        .max()
+        .unwrap_or(Decimal::ZERO);
+
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            let primary_amount = row.income + row.expense;
+            let share_percent = if max_primary.is_zero() {
+                0u8
+            } else {
+                ((primary_amount / max_primary * Decimal::from(100u8)).round_dp(0))
+                    .to_u8()
+                    .unwrap_or(100)
+            };
+            TopCounterpartyRow {
+                counterparty_id: row.counterparty_id,
+                counterparty_name: row.counterparty_name,
+                primary_amount,
+                secondary_label: "Чистий результат".to_string(),
+                secondary_value: format_money_ua(row.income - row.expense),
+                share_percent,
+            }
         })
         .collect())
 }

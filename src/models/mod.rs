@@ -91,6 +91,7 @@ mod tests {
             date_from: NaiveDate::from_ymd_opt(2026, 5, 1).expect("valid date"),
             date_to: NaiveDate::from_ymd_opt(2026, 5, 31).expect("valid date"),
             query: "ромашка".to_string(),
+            selected_counterparty_id: None,
         };
 
         let row = BankAggregateRow {

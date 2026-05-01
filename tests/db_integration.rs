@@ -5361,6 +5361,7 @@ async fn load_pnl_rows_groups_by_category_and_excludes_draft() -> Result<()> {
         date_from: period_start,
         date_to: today,
         query: format!("Послуги {suffix}"),
+        selected_counterparty_id: None,
     };
 
     let rows = load_pnl_rows(&ctx, &filter).await?;
@@ -5416,6 +5417,7 @@ async fn compute_opening_balance_sums_payments_before_period() -> Result<()> {
         date_from: period_start,
         date_to: today,
         query: String::new(),
+        selected_counterparty_id: None,
     };
 
     let balance_before = compute_opening_balance(&ctx, &filter).await?;
@@ -5462,6 +5464,7 @@ async fn load_bank_rows_groups_payments_by_counterparty() -> Result<()> {
         date_from: period_start,
         date_to: today,
         query: format!("ІТ Bank CP {suffix}"),
+        selected_counterparty_id: None,
     };
 
     let rows = load_bank_rows(&ctx, &filter).await?;
@@ -5520,6 +5523,7 @@ async fn load_receivables_rows_calculates_overdue_days() -> Result<()> {
         date_from: period_start,
         date_to: today,
         query: format!("ІТ Recv CP {suffix}"),
+        selected_counterparty_id: None,
     };
 
     let rows = load_receivables_rows(&ctx, &filter).await?;
@@ -5577,6 +5581,7 @@ async fn load_payables_rows_returns_expense_schedule_entries() -> Result<()> {
         date_from: period_start,
         date_to: today,
         query: format!("Оренда ІТ {suffix}"),
+        selected_counterparty_id: None,
     };
 
     let rows = load_payables_rows(&ctx, &filter).await?;
@@ -5589,5 +5594,91 @@ async fn load_payables_rows_returns_expense_schedule_entries() -> Result<()> {
     sqlx::query("DELETE FROM payment_schedule WHERE id IN ($1, $2)").bind(ps_id).bind(completed_id).execute(&pool).await?;
     sqlx::query("DELETE FROM counterparties WHERE id = $1").bind(cp.id).execute(&pool).await?;
 
+    Ok(())
+}
+
+#[tokio::test]
+async fn load_top_counterparties_bank_ranks_counterparties_by_flow() -> Result<()> {
+    use acta::app_ctx::AppCtx;
+    use acta::db::reports::load_top_counterparties_bank;
+    use acta::models::reports::{ReportsScope, ResolvedReportsFilter};
+
+    let Some(pool) = test_pool().await? else { return Ok(()); };
+    let suffix = unique_suffix();
+    let today = chrono::Utc::now().date_naive();
+    let period_start = today - Duration::days(30);
+
+    let cp_a = create_test_counterparty(&pool, &suffix, &format!("ТОВ A {suffix}"), None, None).await?;
+    let cp_b = create_test_counterparty(&pool, &suffix, &format!("ТОВ B {suffix}"), None, None).await?;
+
+    let p1 = create_test_payment(&pool, DEFAULT_COMPANY_ID, Some(cp_a.id), dec!(10000), "income", today).await?;
+    let p2 = create_test_payment(&pool, DEFAULT_COMPANY_ID, Some(cp_a.id), dec!(1000), "expense", today).await?;
+    let p3 = create_test_payment(&pool, DEFAULT_COMPANY_ID, Some(cp_b.id), dec!(5000), "income", today).await?;
+
+    let ctx = AppCtx::new(pool.clone(), DEFAULT_COMPANY_ID);
+    let filter = ResolvedReportsFilter {
+        scope: ReportsScope::Active,
+        date_from: period_start,
+        date_to: today,
+        query: String::new(),
+        selected_counterparty_id: None,
+    };
+
+    let rows = load_top_counterparties_bank(&ctx, &filter).await?;
+
+    // знаходимо наші рядки серед усіх (можуть бути інші дані в БД)
+    let row_a = rows.iter().find(|r| r.counterparty_id == cp_a.id.to_string())
+        .expect("рядок для cp_a має бути присутній");
+    let row_b = rows.iter().find(|r| r.counterparty_id == cp_b.id.to_string())
+        .expect("рядок для cp_b має бути присутній");
+
+    assert_eq!(row_a.counterparty_name, format!("ТОВ A {suffix}"));
+    assert_eq!(row_a.primary_amount, dec!(11000));
+    assert_eq!(row_b.primary_amount, dec!(5000));
+
+    // cp_a має бути вище cp_b у рейтингу
+    let pos_a = rows.iter().position(|r| r.counterparty_id == cp_a.id.to_string()).unwrap();
+    let pos_b = rows.iter().position(|r| r.counterparty_id == cp_b.id.to_string()).unwrap();
+    assert!(pos_a < pos_b, "cp_a (11000) має бути вище cp_b (5000) у рейтингу");
+
+    sqlx::query("DELETE FROM payments WHERE id IN ($1, $2, $3)").bind(p1).bind(p2).bind(p3).execute(&pool).await?;
+    sqlx::query("DELETE FROM counterparties WHERE id IN ($1, $2)").bind(cp_a.id).bind(cp_b.id).execute(&pool).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn load_bank_rows_respects_selected_counterparty_id() -> Result<()> {
+    use acta::app_ctx::AppCtx;
+    use acta::db::reports::load_bank_rows;
+    use acta::models::reports::{ReportsScope, ResolvedReportsFilter};
+
+    let Some(pool) = test_pool().await? else { return Ok(()); };
+    let suffix = unique_suffix();
+    let today = chrono::Utc::now().date_naive();
+    let period_start = today - Duration::days(30);
+
+    let cp_a = create_test_counterparty(&pool, &suffix, &format!("ТОВ Drill A {suffix}"), None, None).await?;
+    let cp_b = create_test_counterparty(&pool, &suffix, &format!("ТОВ Drill B {suffix}"), None, None).await?;
+
+    let p1 = create_test_payment(&pool, DEFAULT_COMPANY_ID, Some(cp_a.id), dec!(7000), "income", today).await?;
+    let p2 = create_test_payment(&pool, DEFAULT_COMPANY_ID, Some(cp_b.id), dec!(3000), "income", today).await?;
+
+    let ctx = AppCtx::new(pool.clone(), DEFAULT_COMPANY_ID);
+    let filter = ResolvedReportsFilter {
+        scope: ReportsScope::Active,
+        date_from: period_start,
+        date_to: today,
+        query: String::new(),
+        selected_counterparty_id: Some(cp_a.id.to_string()),
+    };
+
+    let rows = load_bank_rows(&ctx, &filter).await?;
+
+    assert!(rows.iter().all(|r| r.key == cp_a.id.to_string()),
+        "усі рядки мають бути лише для cp_a, знайдено: {:?}", rows.iter().map(|r| &r.key).collect::<Vec<_>>());
+    assert!(rows.iter().any(|r| r.key == cp_a.id.to_string()), "cp_a має бути в результатах");
+
+    sqlx::query("DELETE FROM payments WHERE id IN ($1, $2)").bind(p1).bind(p2).execute(&pool).await?;
+    sqlx::query("DELETE FROM counterparties WHERE id IN ($1, $2)").bind(cp_a.id).bind(cp_b.id).execute(&pool).await?;
     Ok(())
 }

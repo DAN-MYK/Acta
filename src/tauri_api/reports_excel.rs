@@ -609,7 +609,10 @@ mod tests {
                 date_from: "2026-02-01".to_string(),
                 date_to: "2026-05-01".to_string(),
                 query: "послуги".to_string(),
+                selected_counterparty_id: None,
             },
+            selected_counterparty: None,
+            top_counterparties: vec![],
             summary: ReportsSummaryDto {
                 opening_balance_str: "125 000,00 грн".to_string(),
                 income_str: "48 200,00 грн".to_string(),
