@@ -246,6 +246,7 @@ describe("CounterpartiesScreen component", () => {
 
   it("wires key CTA actions and opens detail from the list row", async () => {
     const { component, target } = renderCounterparties();
+    vi.spyOn(window, "confirm").mockReturnValueOnce(true);
 
     buttonByText(target, "ТОВ Ромашка").click();
     buttonByText(target, "Редагувати").click();
@@ -256,7 +257,7 @@ describe("CounterpartiesScreen component", () => {
     expect(mocks.open).toHaveBeenCalledWith("cp-1");
     expect(mocks.openEditor).toHaveBeenCalledWith("cp-2");
     expect(mocks.createDocument).toHaveBeenCalled();
-    expect(mocks.archiveCurrent).toHaveBeenCalled();
+    expect(mocks.archiveCurrent).toHaveBeenCalledTimes(1);
 
     component.$destroy();
   });
