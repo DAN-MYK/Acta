@@ -1377,3 +1377,110 @@ pub async fn document_chain_create_draft(
         show_editor: true,
     })
 }
+
+fn document_word_form(count: usize) -> &'static str {
+    let remainder_100 = count % 100;
+    if (11..=14).contains(&remainder_100) {
+        return "документів";
+    }
+
+    match count % 10 {
+        1 => "документ",
+        2..=4 => "документи",
+        _ => "документів",
+    }
+}
+
+pub async fn documents_bulk_delete_live(
+    ctx: &AppCtx,
+    request: BulkDocumentRequest,
+) -> Result<BulkMutationResultDto> {
+    let mut result = BulkMutationResultDto {
+        total: request.doc_ids.len(),
+        ..BulkMutationResultDto::default()
+    };
+
+    for doc_id in request.doc_ids {
+        let delete_result = match parse_document_ref(&doc_id) {
+            Some(DocumentRef::Act(id)) => db::acts::delete(ctx.pool(), id).await,
+            Some(DocumentRef::Invoice(id)) => db::invoices::delete(ctx.pool(), id).await,
+            Some(DocumentRef::Waybill(id)) => db::waybills::delete(ctx.pool(), id).await,
+            None => Err(anyhow!("Некоректний ідентифікатор документа: {doc_id}")),
+        };
+
+        match delete_result {
+            Ok(_) => result.succeeded += 1,
+            Err(error) => {
+                result.failed += 1;
+                result.errors.push(format!("{doc_id}: {error}"));
+            }
+        }
+    }
+
+    result.message = match (result.succeeded, result.failed) {
+        (0, failed) if failed > 0 => {
+            format!("Не вдалося видалити жодного документа ({failed} помилок)")
+        }
+        (succeeded, 0) => format!("Видалено {succeeded} {}", document_word_form(succeeded)),
+        (succeeded, failed) => format!(
+            "Видалено {succeeded} {}, {failed} помилок",
+            document_word_form(succeeded)
+        ),
+    };
+
+    Ok(result)
+}
+
+pub async fn documents_bulk_advance_status_live(
+    ctx: &AppCtx,
+    request: BulkDocumentRequest,
+) -> Result<BulkMutationResultDto> {
+    let mut result = BulkMutationResultDto {
+        total: request.doc_ids.len(),
+        ..BulkMutationResultDto::default()
+    };
+
+    for doc_id in request.doc_ids {
+        let advance_result = match parse_document_ref(&doc_id) {
+            Some(DocumentRef::Act(id)) => db::acts::advance_status(ctx.pool(), id)
+                .await
+                .map(|value| value.map(|_| ())),
+            Some(DocumentRef::Invoice(id)) => db::invoices::advance_status(ctx.pool(), id)
+                .await
+                .map(|value| value.map(|_| ())),
+            Some(DocumentRef::Waybill(id)) => db::waybills::advance_status(ctx.pool(), id)
+                .await
+                .map(|value| value.map(|_| ())),
+            None => Err(anyhow!("РќРµРєРѕСЂРµРєС‚РЅРёР№ С–РґРµРЅС‚РёС„С–РєР°С‚РѕСЂ РґРѕРєСѓРјРµРЅС‚Р°: {doc_id}")),
+        };
+
+        match advance_result {
+            Ok(Some(())) => result.succeeded += 1,
+            Ok(None) => {
+                result.failed += 1;
+                result
+                    .errors
+                    .push(format!("{doc_id}: РґРѕРєСѓРјРµРЅС‚ РЅРµ Р·РЅР°Р№РґРµРЅРѕ"));
+            }
+            Err(error) => {
+                result.failed += 1;
+                result.errors.push(format!("{doc_id}: {error}"));
+            }
+        }
+    }
+
+    result.message = match (result.succeeded, result.failed) {
+        (0, failed) if failed > 0 => {
+            format!("РќРµ РІРґР°Р»РѕСЃСЏ РѕРЅРѕРІРёС‚Рё СЃС‚Р°С‚СѓСЃ Р¶РѕРґРЅРѕРіРѕ РґРѕРєСѓРјРµРЅС‚Р° ({failed} РїРѕРјРёР»РѕРє)")
+        }
+        (succeeded, 0) => {
+            format!("РћРЅРѕРІР»РµРЅРѕ СЃС‚Р°С‚СѓСЃ РґР»СЏ {succeeded} {}", document_word_form(succeeded))
+        }
+        (succeeded, failed) => format!(
+            "РћРЅРѕРІР»РµРЅРѕ СЃС‚Р°С‚СѓСЃ РґР»СЏ {succeeded} {}, {failed} РїРѕРјРёР»РѕРє",
+            document_word_form(succeeded)
+        ),
+    };
+
+    Ok(result)
+}

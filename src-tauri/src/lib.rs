@@ -55,6 +55,8 @@ pub fn run() {
             commands::documents::document_save,
             commands::documents::document_advance_status,
             commands::documents::document_delete,
+            commands::documents::documents_bulk_advance_status,
+            commands::documents::documents_bulk_delete,
             commands::documents::document_chain_get,
             commands::documents::document_chain_create_draft,
             commands::payments::payments_list,

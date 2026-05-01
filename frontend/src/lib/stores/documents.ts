@@ -7,6 +7,8 @@ import {
   documentDelete,
   documentOpen,
   documentSave,
+  documentsBulkAdvanceStatus,
+  documentsBulkDelete,
   documentsList
 } from "../api";
 import type { DocumentChainDto, DocumentEditorDto, DocumentsListDto } from "../types";
@@ -16,6 +18,7 @@ interface DocumentsState {
   editor: DocumentEditorDto | null;
   chain: DocumentChainDto | null;
   draftContext: { counterpartyId: string; counterpartyName: string } | null;
+  selectedIds: string[];
   loading: boolean;
   error: string | null;
   message: string | null;
@@ -27,6 +30,7 @@ const initialState: DocumentsState = {
   editor: null,
   chain: null,
   draftContext: null,
+  selectedIds: [],
   loading: false,
   error: null,
   message: null,
@@ -57,7 +61,12 @@ function createDocumentsStore() {
 
       try {
         const list = await documentsList(query);
-        update((state) => ({ ...state, list, loading: false }));
+        update((state) => ({
+          ...state,
+          list,
+          selectedIds: state.selectedIds.filter((id) => list.items.some((item) => item.id === id)),
+          loading: false
+        }));
       } catch (error) {
         update((state) => ({ ...state, loading: false, error: String(error) }));
       }
@@ -124,6 +133,33 @@ function createDocumentsStore() {
     },
     clearMessage() {
       update((state) => ({ ...state, message: null }));
+    },
+    toggleSelected(docId: string) {
+      update((state) => ({
+        ...state,
+        selectedIds: state.selectedIds.includes(docId)
+          ? state.selectedIds.filter((id) => id !== docId)
+          : [...state.selectedIds, docId]
+      }));
+    },
+    selectAllVisible() {
+      update((state) => {
+        const visibleIds = state.list?.items.map((item) => item.id) ?? [];
+        if (visibleIds.length === 0) {
+          return state;
+        }
+
+        const allVisibleSelected = visibleIds.every((id) => state.selectedIds.includes(id));
+        return {
+          ...state,
+          selectedIds: allVisibleSelected
+            ? state.selectedIds.filter((id) => !visibleIds.includes(id))
+            : Array.from(new Set([...state.selectedIds, ...visibleIds]))
+        };
+      });
+    },
+    clearSelection() {
+      update((state) => ({ ...state, selectedIds: [] }));
     },
     setEditor(editor: DocumentEditorDto) {
       update((state) => ({ ...state, editor }));
@@ -311,6 +347,71 @@ function createDocumentsStore() {
           list,
           loading: false,
           message: "Пов’язану чернетку створено"
+        }));
+      } catch (error) {
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      }
+    },
+    async bulkDelete() {
+      const snapshot = get({ subscribe });
+      if (snapshot.selectedIds.length === 0) {
+        return;
+      }
+
+      update((state) => ({ ...state, loading: true, error: null, message: null }));
+
+      try {
+        const response = await documentsBulkDelete(snapshot.selectedIds);
+        const list = await documentsList(snapshot.query);
+        const deletedCurrent = snapshot.editor
+          ? snapshot.selectedIds.includes(snapshot.editor.form.id)
+          : false;
+
+        update((state) => ({
+          ...state,
+          list,
+          editor: deletedCurrent ? null : state.editor,
+          chain: deletedCurrent ? null : state.chain,
+          selectedIds: [],
+          loading: false,
+          message: response.message
+        }));
+      } catch (error) {
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      }
+    },
+    async bulkAdvanceStatus() {
+      const snapshot = get({ subscribe });
+      if (snapshot.selectedIds.length === 0) {
+        return;
+      }
+
+      update((state) => ({ ...state, loading: true, error: null, message: null }));
+
+      try {
+        const response = await documentsBulkAdvanceStatus(snapshot.selectedIds);
+        const list = await documentsList(snapshot.query);
+        const reopenedCurrent = snapshot.editor
+          ? snapshot.selectedIds.includes(snapshot.editor.form.id)
+          : false;
+
+        let nextEditor = snapshot.editor;
+        let nextChain = snapshot.chain;
+
+        if (reopenedCurrent && snapshot.editor) {
+          const { editor, chain } = await loadEditorAndChain(snapshot.editor.form.id);
+          nextEditor = editor;
+          nextChain = chain;
+        }
+
+        update((state) => ({
+          ...state,
+          list,
+          editor: nextEditor,
+          chain: nextChain,
+          selectedIds: [],
+          loading: false,
+          message: response.message
         }));
       } catch (error) {
         update((state) => ({ ...state, loading: false, error: String(error) }));

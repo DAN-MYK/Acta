@@ -9,9 +9,9 @@
 | 1 | Tauri scaffold | ✅ Завершено |
 | 2 | Shared backend bootstrap | ✅ Завершено |
 | 3 | Command contract | ✅ Завершено |
-| 4 | Shell + feature screens (Svelte) | 🟡 В процесі |
+| 4 | Shell + feature screens (Svelte) | ✅ Завершено |
 | 5 | Refresh/wiring модель | ✅ Завершено в invoke/store flow |
-| 6 | Дизайн-система | 🟡 В процесі |
+| 6 | Дизайн-система | ✅ Завершено як migration foundation |
 | 7 | Тести | 🟢 Є Rust vertical slice, Vitest store+component tests і Tauri WebView e2e smoke |
 | 8 | CI/checks | 🟢 Є frontend/backend/DB gates, Linux Tauri smoke, Linux WebView e2e smoke і Windows packaging gate |
 | 9 | Фінальний cutover (видалення Slint) | ✅ Завершено |
@@ -24,6 +24,27 @@
 - `frontend/src/lib/api.ts` — Tauri invoke layer.
 - `frontend/src/lib/stores/*` — orchestration на фронтенді.
 - `src/tauri_api/*` — backend DTO/command surface для Tauri.
+
+## Shell + feature screens статус
+
+Етап `Shell + feature screens (Svelte)` для цілей cutover слід вважати завершеним:
+
+- root shell живе в `frontend/src/App.svelte`;
+- live screens існують для `dashboard`, `documents`, `counterparties`, `payments`, `reports`, `tasks`, `settings`;
+- для цих slices є відповідні frontend stores у `frontend/src/lib/stores/*`;
+- public Tauri commands для shell і feature screens зареєстровані в `src-tauri/src/lib.rs`.
+
+Отже, статус `в процесі` для цього етапу більше не є коректним як migration-статус. Незакриті UX-питання треба трактувати як post-cutover product/UI backlog, а не як незавершений перенос shell/screens у Tauri.
+
+## Дизайн-система статус
+
+Етап `Дизайн-система` для цілей міграції також слід вважати завершеним на рівні foundation:
+
+- канонічні web tokens живуть у `frontend/src/lib/styles/tokens.css`;
+- глобальні layout/style rules живуть у `frontend/src/styles.css`;
+- канонічну design-system опору для live runtime зафіксовано в `docs/architecture/svelte-tauri-design-system.md`.
+
+Водночас це не означає, що весь UI polish завершено. Подальша уніфікація кнопок, empty states, form controls, action bars і screen-level UX належить до окремого post-cutover roadmap, а не до відкритого migration blocker.
 
 ## CI та packaging gates
 

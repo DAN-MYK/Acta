@@ -178,4 +178,36 @@ describe("PaymentsScreen component", () => {
 
     component.$destroy();
   });
+
+  it("uses canonical date control and action hierarchy in the payment editor", () => {
+    mocks.paymentsState.set({
+      list: makePayments(),
+      loading: false,
+      error: null,
+      editor: {
+        id: "",
+        date: "2026-05-01",
+        amount: "1000,00",
+        direction: "income",
+        counterpartyId: "",
+        counterpartyName: "",
+        bankName: "ПриватБанк",
+        reference: "REF-1",
+        description: "Тестовий платіж"
+      },
+      message: null
+    });
+
+    const { component, target } = renderPayments();
+    const dateInput = Array.from(target.querySelectorAll("input")).find((input) =>
+      (input as HTMLInputElement).value === "2026-05-01"
+    ) as HTMLInputElement | undefined;
+    const saveButton = buttonByText(target, "Зберегти");
+
+    expect(dateInput).toBeTruthy();
+    expect(dateInput?.type).toBe("date");
+    expect(saveButton.className).toContain("btn-primary");
+
+    component.$destroy();
+  });
 });

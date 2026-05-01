@@ -20,13 +20,36 @@ function createPaletteStore() {
     error: null
   });
 
+  function buildClosedState() {
+    return {
+      open: false,
+      query: "",
+      items: [],
+      loading: false,
+      error: null
+    };
+  }
+
   return {
     subscribe,
+    open() {
+      set({
+        ...buildClosedState(),
+        open: true
+      });
+    },
     toggle() {
-      update((state) => ({ ...state, open: !state.open }));
+      update((state) =>
+        state.open
+          ? buildClosedState()
+          : {
+              ...buildClosedState(),
+              open: true
+            }
+      );
     },
     close() {
-      update((state) => ({ ...state, open: false }));
+      set(buildClosedState());
     },
     async search(query: string) {
       update((state) => ({ ...state, query, loading: true, error: null }));
@@ -49,13 +72,7 @@ function createPaletteStore() {
       return result;
     },
     reset() {
-      set({
-        open: false,
-        query: "",
-        items: [],
-        loading: false,
-        error: null
-      });
+      set(buildClosedState());
     }
   };
 }

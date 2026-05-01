@@ -14,6 +14,17 @@ async function flushAsyncWork() {
   await Promise.resolve();
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+
+  return { promise, resolve, reject };
+}
+
 function makeShellState(activeCompanyId = "company-1"): ShellStateDto {
   return {
     chrome: {
@@ -197,10 +208,81 @@ describe("frontend Tauri store smoke: shell + documents", () => {
     expect(selectedCounterpartyId).toBe("cp-9");
   });
 
-  it("covers documents list, open, create, save, chain, status and delete flow", async () => {
+  it("resets palette query and items after close so next open starts predictably", async () => {
+    const { paletteStore } = await loadStores();
+
+    const paletteSearch: PaletteSearchResultDto = {
+      items: [
+        {
+          kind: "navigate",
+          title: "Документи",
+          subtitle: "Перейти до екрану",
+          shortcut: "Ctrl+2",
+          payload: "nav:documents"
+        }
+      ]
+    };
+
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "shell_palette_search") {
+        return paletteSearch;
+      }
+
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    paletteStore.toggle();
+    await paletteStore.search("док");
+
+    expect(snapshot(paletteStore)).toMatchObject({
+      open: true,
+      query: "док",
+      items: paletteSearch.items
+    });
+
+    paletteStore.close();
+
+    expect(snapshot(paletteStore)).toMatchObject({
+      open: false,
+      query: "",
+      items: [],
+      loading: false,
+      error: null
+    });
+  });
+
+  it("enters visible loading state while switching active company", async () => {
+    const { shellStore } = await loadStores();
+    const deferred = createDeferred<ShellStateDto>();
+
+    invokeMock.mockImplementation(async (command) => {
+      switch (command) {
+        case "shell_load":
+          return makeShellState("company-1");
+        case "shell_set_active_company":
+          return deferred.promise;
+        default:
+          throw new Error(`unexpected command: ${command}`);
+      }
+    });
+
+    await shellStore.load();
+
+    const switchPromise = shellStore.setActiveCompany("company-2");
+    expect(snapshot(shellStore).loading).toBe(true);
+    expect(snapshot(shellStore).state?.activeCompanyId).toBe("company-1");
+
+    deferred.resolve(makeShellState("company-2"));
+    await switchPromise;
+
+    expect(snapshot(shellStore).loading).toBe(false);
+    expect(snapshot(shellStore).state?.activeCompanyId).toBe("company-2");
+  });
+
+  it("covers documents list, selection, bulk status, bulk delete, open, create, save, chain, status and delete flow", async () => {
     const { documentsStore } = await loadStores();
 
-    let docs = makeDocumentsList(["doc-1"]);
+    let docs = makeDocumentsList(["doc-1", "doc-2"]);
     const editors = new Map<string, DocumentEditorDto>([["doc-1", makeEditor("doc-1")]]);
     const chains = new Map<string, DocumentChainDto>([["doc-1", makeChain("doc-1")]]);
 
@@ -208,6 +290,20 @@ describe("frontend Tauri store smoke: shell + documents", () => {
       switch (command) {
         case "documents_list":
           return docs;
+        case "documents_bulk_delete":
+          expect(payload).toEqual({
+            request: {
+              docIds: ["doc-2"]
+            }
+          });
+          docs = makeDocumentsList(["doc-1"]);
+          return {
+            total: 1,
+            succeeded: 1,
+            failed: 0,
+            errors: [],
+            message: "Видалено 1 документ"
+          };
         case "document_open":
           return editors.get((payload as { docId: string }).docId) ?? makeEditor("missing");
         case "document_chain_get":
@@ -259,7 +355,21 @@ describe("frontend Tauri store smoke: shell + documents", () => {
     });
 
     await documentsStore.load();
+    expect(snapshot(documentsStore).list?.totalCount).toBe(2);
+
+    documentsStore.toggleSelected("doc-1");
+    expect(snapshot(documentsStore).selectedIds).toEqual(["doc-1"]);
+
+    documentsStore.toggleSelected("doc-2");
+    expect(snapshot(documentsStore).selectedIds).toEqual(["doc-1", "doc-2"]);
+
+    documentsStore.toggleSelected("doc-1");
+    expect(snapshot(documentsStore).selectedIds).toEqual(["doc-2"]);
+
+    await documentsStore.bulkDelete();
     expect(snapshot(documentsStore).list?.totalCount).toBe(1);
+    expect(snapshot(documentsStore).selectedIds).toEqual([]);
+    expect(snapshot(documentsStore).message).toBe("Видалено 1 документ");
 
     await documentsStore.open("doc-1");
     expect(snapshot(documentsStore).editor?.form.id).toBe("doc-1");

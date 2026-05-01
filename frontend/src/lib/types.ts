@@ -136,6 +136,14 @@ export interface SaveDocumentResponse {
   message: string;
 }
 
+export interface BulkMutationResultDto {
+  total: number;
+  succeeded: number;
+  failed: number;
+  errors: string[];
+  message: string;
+}
+
 export interface DashboardKpiDto {
   label: string;
   value: string;

@@ -23,6 +23,11 @@
     waybill: "waybill"
   };
 
+  const itemTotalFormatter = new Intl.NumberFormat("uk-UA", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+
   $: if ($documents.draftContext?.counterpartyId) {
     createCounterpartyId = $documents.draftContext.counterpartyId;
   }
@@ -70,6 +75,22 @@
 
   function onReloadChain() {
     void documents.reloadCurrent();
+  }
+
+  function onToggleSelection(docId: string) {
+    documents.toggleSelected(docId);
+  }
+
+  function onToggleSelectAll() {
+    documents.selectAllVisible();
+  }
+
+  function onBulkDelete() {
+    void documents.bulkDelete();
+  }
+
+  function onBulkAdvanceStatus() {
+    void documents.bulkAdvanceStatus();
   }
 
   function getChainTargets(kind: string): DocumentKind[] {
@@ -129,6 +150,51 @@
     }
     return kind;
   }
+
+  function getCreateHint(counterpartyId: string, kind: DocumentKind): string {
+    if (!counterpartyId) {
+      return "Спочатку оберіть контрагента, щоб ми відкрили чернетку в правильному контексті.";
+    }
+
+    return `Чернетка типу "${documentKindLabels[kind]}" відкриється одразу з прив'язкою до вибраного контрагента.`;
+  }
+
+  function getNextStepMessage(kind: string): string {
+    if (kind === "invoice") {
+      return "На основі рахунку можна одразу підготувати акт або накладну.";
+    }
+    if (kind === "act") {
+      return "Після акту зазвичай лишається підготувати накладну або оновити статус документа.";
+    }
+    if (kind === "waybill") {
+      return "Накладна вже закриває сценарій відвантаження, тож далі варто лише перевірити статус і зв'язки.";
+    }
+
+    return "Перевірте, який похідний документ потрібен далі, і створіть його звідси.";
+  }
+
+  function getItemsCountLabel(count: number): string {
+    if (count === 1) {
+      return "1 позиція";
+    }
+    if (count >= 2 && count <= 4) {
+      return `${count} позиції`;
+    }
+    return `${count} позицій`;
+  }
+
+  function formatItemTotal(quantity: string, price: string): string {
+    const normalizedQuantity = Number.parseFloat(quantity.replace(",", "."));
+    const normalizedPrice = Number.parseFloat(price.replace(",", "."));
+
+    if (!Number.isFinite(normalizedQuantity) || !Number.isFinite(normalizedPrice)) {
+      return "—";
+    }
+
+    return `${itemTotalFormatter
+      .format(normalizedQuantity * normalizedPrice)
+      .replace(/\u00A0/g, " ")} грн`;
+  }
 </script>
 
 <section class="panel">
@@ -140,21 +206,74 @@
     <input placeholder="Пошук документів" on:input={onDocumentSearch} />
   </div>
 
-  <div class="create-strip">
-    <select bind:value={createCounterpartyId}>
-      <option value="">— Оберіть контрагента —</option>
-      {#each $counterparties.screen?.items ?? [] as cp}
-        <option value={cp.id}>{cp.name}</option>
-      {/each}
-    </select>
-    <select bind:value={createKind}>
-      <option value="act">Акт</option>
-      <option value="invoice">Рахунок</option>
-      <option value="waybill">Накладна</option>
-    </select>
-    <button class="create-doc-button" on:click={onCreateDraft}>
-      <AppIcon name={documentKindIcons[createKind]} surface={true} />
-      <span>Створити чернетку</span>
+  <div class="create-strip-card">
+    <div class="create-strip-header">
+      <div>
+        <strong>Новий документ</strong>
+        <p>1. Оберіть контрагента  2. Вкажіть тип документа  3. Створіть чернетку</p>
+      </div>
+      <span class="doc-kind-badge">
+        <AppIcon name={documentKindIcons[createKind]} size={14} />
+        <span>{documentKindLabels[createKind]}</span>
+      </span>
+    </div>
+
+    <div class="create-strip">
+      <label class="create-strip-field">
+        <span>Контрагент</span>
+        <select bind:value={createCounterpartyId}>
+          <option value="">— Оберіть контрагента —</option>
+          {#each $counterparties.screen?.items ?? [] as cp}
+            <option value={cp.id}>{cp.name}</option>
+          {/each}
+        </select>
+      </label>
+
+      <label class="create-strip-field">
+        <span>Тип документа</span>
+        <select bind:value={createKind}>
+          <option value="act">Акт</option>
+          <option value="invoice">Рахунок</option>
+          <option value="waybill">Накладна</option>
+        </select>
+      </label>
+
+      <button class="btn-primary create-doc-button" disabled={!createCounterpartyId} on:click={onCreateDraft}>
+        <AppIcon name={documentKindIcons[createKind]} surface={true} />
+        <span>Створити чернетку</span>
+      </button>
+    </div>
+
+    <p class="create-strip-hint">{getCreateHint(createCounterpartyId, createKind)}</p>
+  </div>
+
+  <div class="bulk-actions">
+    <label class="bulk-select-all">
+      <input
+        type="checkbox"
+        checked={
+          ($documents.list?.items.length ?? 0) > 0 &&
+          ($documents.list?.items ?? []).every((item) => $documents.selectedIds.includes(item.id))
+        }
+        on:click|stopPropagation={onToggleSelectAll}
+      />
+      <span>Вибрати все</span>
+    </label>
+
+    <button
+      class="btn-secondary"
+      disabled={$documents.selectedIds.length === 0}
+      on:click={onBulkAdvanceStatus}
+    >
+      Оновити статус вибраних
+    </button>
+
+    <button
+      class="btn-danger"
+      disabled={$documents.selectedIds.length === 0}
+      on:click={onBulkDelete}
+    >
+      Видалити вибрані
     </button>
   </div>
 
@@ -169,6 +288,13 @@
   <div class="documents-list">
     {#each $documents.list?.items ?? [] as item}
       <button class="doc-row" on:click={() => documents.open(item.id)}>
+        <label class="doc-row-checkbox" aria-label={`Вибрати ${item.number}`}>
+          <input
+            type="checkbox"
+            checked={$documents.selectedIds.includes(item.id)}
+            on:click|stopPropagation={() => onToggleSelection(item.id)}
+          />
+        </label>
         <div>
           <strong class="doc-row-title">
             <AppIcon name={getDocumentKindIcon(item.kind)} surface={true} size={16} />
@@ -199,7 +325,7 @@
       <div class="editor-actions">
         <button class="btn-ghost" on:click={() => documents.addItem()}>Додати позицію</button>
         <button class="btn-primary" on:click={() => documents.save()}>Зберегти</button>
-        <button class="btn-ghost" on:click={() => documents.advanceStatus()}>Наступний статус</button>
+        <button class="btn-secondary" on:click={() => documents.advanceStatus()}>Наступний статус</button>
         <button class="btn-danger" on:click={onDeleteCurrent}>Видалити</button>
         <button class="btn-ghost" on:click={() => documents.closeEditor()}>Закрити</button>
       </div>
@@ -212,7 +338,7 @@
       </label>
       <label>
         Дата
-        <input value={$documents.editor.form.date} on:input={onEditorDateChange} />
+        <input type="date" value={$documents.editor.form.date} on:input={onEditorDateChange} />
       </label>
       <label class="editor-grid-span">
         Примітки
@@ -223,18 +349,29 @@
     <div class="chain-panel">
       <div class="chain-panel-header">
         <div>
-          <strong>Ланцюжок документа</strong>
-          <p>Створення похідних документів і швидке оновлення зв'язків.</p>
+          <strong>Що далі</strong>
+          <p>Переходьте до наступного документа без пошуку по інших екранах.</p>
         </div>
-        <div class="chain-actions">
-          <button on:click={onReloadChain}>Оновити</button>
-          {#each getChainTargets($documents.editor.form.kind) as targetKind}
-            <button class="chain-action-button" on:click={() => onCreateChainDraft(targetKind)}>
-              <AppIcon name={documentKindIcons[targetKind]} size={16} />
-              <span>+ {documentKindLabels[targetKind]}</span>
-            </button>
-          {/each}
+        <div class="chain-summary">
+          <div class="chain-summary-block">
+            <span>Поточний документ</span>
+            <strong>{getDocumentKindLabel($documents.editor.form.kind)}</strong>
+          </div>
+          <div class="chain-summary-block">
+            <span>Наступний крок</span>
+            <strong>{getNextStepMessage($documents.editor.form.kind)}</strong>
+          </div>
         </div>
+      </div>
+
+      <div class="chain-actions">
+        <button class="btn-ghost" on:click={onReloadChain}>Оновити</button>
+        {#each getChainTargets($documents.editor.form.kind) as targetKind}
+          <button class="btn-secondary chain-action-button" on:click={() => onCreateChainDraft(targetKind)}>
+            <AppIcon name={documentKindIcons[targetKind]} size={16} />
+            <span>Створити {documentKindLabels[targetKind]}</span>
+          </button>
+        {/each}
       </div>
 
       {#if $documents.chain}
@@ -258,25 +395,78 @@
       {/if}
     </div>
 
-    <div class="editor-items">
-      {#if $documents.editor.items.length > 0}
-        <div class="editor-item editor-item-head">
-          <span>Опис</span>
-          <span>Од.</span>
-          <span>Кількість</span>
-          <span>Ціна, грн</span>
-          <span></span>
+    <div class="editor-items-card">
+      <div class="editor-items-header">
+        <div>
+          <strong>Позиції документа</strong>
+          <p>Додайте товари або послуги, щоб документ одразу мав зрозумілу суму й склад.</p>
         </div>
-      {/if}
-      {#each $documents.editor.items as item, index}
-        <div class="editor-item">
-          <input value={item.description} placeholder="Опис" on:input={(event) => onItemFieldChange(index, "description", event)} />
-          <input value={item.unit} placeholder="Од." on:input={(event) => onItemFieldChange(index, "unit", event)} />
-          <input value={item.quantity} placeholder="Кількість" on:input={(event) => onItemFieldChange(index, "quantity", event)} />
-          <input value={item.price} placeholder="Ціна" on:input={(event) => onItemFieldChange(index, "price", event)} />
-          <button on:click={() => documents.removeItem(index)}>Видалити</button>
-        </div>
-      {/each}
+        <span class="editor-items-count">{getItemsCountLabel($documents.editor.items.length)}</span>
+      </div>
+
+      <div class="editor-items">
+        {#if $documents.editor.items.length === 0}
+          <div class="editor-items-empty">
+            <strong>Поки що без позицій</strong>
+            <p>Додайте перший рядок, щоб заповнити номенклатуру, кількість та ціну в одному місці.</p>
+            <button class="btn-secondary" on:click={() => documents.addItem()}>Додати першу позицію</button>
+          </div>
+        {:else}
+          <div class="editor-item editor-item-head">
+            <span>Опис</span>
+            <span>Од.</span>
+            <span>Кількість</span>
+            <span>Ціна, грн</span>
+            <span></span>
+          </div>
+          {#each $documents.editor.items as item, index}
+            <div class="editor-item-card">
+              <div class="editor-item-meta">
+                <strong>Рядок {index + 1}</strong>
+                <span>Сума позиції {formatItemTotal(item.quantity, item.price)}</span>
+              </div>
+
+              <div class="editor-item">
+                <label class="editor-item-field">
+                  <span>Опис</span>
+                  <input
+                    value={item.description}
+                    placeholder="Опис"
+                    on:input={(event) => onItemFieldChange(index, "description", event)}
+                  />
+                </label>
+                <label class="editor-item-field">
+                  <span>Од.</span>
+                  <input
+                    value={item.unit}
+                    placeholder="Од."
+                    on:input={(event) => onItemFieldChange(index, "unit", event)}
+                  />
+                </label>
+                <label class="editor-item-field">
+                  <span>Кількість</span>
+                  <input
+                    value={item.quantity}
+                    placeholder="Кількість"
+                    on:input={(event) => onItemFieldChange(index, "quantity", event)}
+                  />
+                </label>
+                <label class="editor-item-field">
+                  <span>Ціна, грн</span>
+                  <input
+                    value={item.price}
+                    placeholder="Ціна"
+                    on:input={(event) => onItemFieldChange(index, "price", event)}
+                  />
+                </label>
+                <button class="btn-danger editor-item-remove" on:click={() => documents.removeItem(index)}>
+                  Видалити позицію
+                </button>
+              </div>
+            </div>
+          {/each}
+        {/if}
+      </div>
     </div>
   </section>
 {/if}

@@ -27,6 +27,9 @@ const mocks = vi.hoisted(() => {
         for (const run of subscribers) {
           run(value);
         }
+      },
+      get() {
+        return value;
       }
     };
   }
@@ -50,7 +53,7 @@ const mocks = vi.hoisted(() => {
     settingsState,
     importState,
     setSection: vi.fn((section: SettingsSection) => {
-      settingsState.set({ ...settingsState["_value"], section });
+      settingsState.set({ ...settingsState.get(), section });
     }),
     savePreferences: vi.fn().mockResolvedValue(undefined),
     saveCompany: vi.fn().mockResolvedValue(true),
@@ -176,8 +179,8 @@ describe("SettingsScreen", () => {
     });
     mocks.importState.set({ plan: null, result: null, loading: false, error: null });
     Object.values(mocks).forEach((m) => {
-      if (typeof m === "object" && m !== null && "mockReset" in m) {
-        (m as ReturnType<typeof vi.fn>).mockReset();
+      if (typeof m === "function" && "mockReset" in m) {
+        m.mockReset();
       }
     });
     mocks.savePreferences.mockResolvedValue(undefined);
@@ -244,6 +247,20 @@ describe("SettingsScreen", () => {
 
       component.$destroy();
     });
+
+    it("використовує українські підписи щільності замість англійських", () => {
+      const { component, target } = renderSettings();
+      const options = Array.from(target.querySelectorAll("option")).map((option) => option.textContent?.trim());
+
+      expect(options).toContain("Компактно");
+      expect(options).toContain("Збалансовано");
+      expect(options).toContain("Просторо");
+      expect(options).not.toContain("Compact");
+      expect(options).not.toContain("Comfortable");
+      expect(options).not.toContain("Spacious");
+
+      component.$destroy();
+    });
   });
 
   describe("Company settings save", () => {
@@ -282,6 +299,35 @@ describe("SettingsScreen", () => {
       buttonByText(target, "Зберегти").click();
       await tick();
       expect(mocks.saveCompany).toHaveBeenCalled();
+
+      component.$destroy();
+    });
+
+    it("використовує канонічні варіанти кнопок для дій settings", async () => {
+      mocks.settingsState.set({
+        section: "company",
+        screen: makeSettingsScreen(),
+        loading: false,
+        error: null,
+        message: null
+      });
+
+      const { component, target } = renderSettings();
+      await tick();
+
+      expect(buttonByText(target, "Зберегти").className).toContain("btn-primary");
+
+      mocks.settingsState.set({
+        section: "integrations",
+        screen: makeSettingsScreen(),
+        loading: false,
+        error: null,
+        message: null
+      });
+      await tick();
+
+      expect(buttonByText(target, "Налаштувати").className).toContain("btn-ghost");
+      expect(buttonByText(target, "Імпортувати").className).toContain("btn-secondary");
 
       component.$destroy();
     });

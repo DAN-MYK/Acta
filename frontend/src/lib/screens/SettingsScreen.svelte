@@ -83,16 +83,16 @@
         <div class="settings-card">
           <h3>Зовнішній вигляд</h3>
           <div class="settings-actions-row">
-            <button class:active={!$settings.screen?.preferences.darkMode} on:click={() => onSettingsThemeChange(false)}>
+            <button class="btn-secondary" class:active={!$settings.screen?.preferences.darkMode} on:click={() => onSettingsThemeChange(false)}>
               Світла тема
             </button>
-            <button class:active={$settings.screen?.preferences.darkMode} on:click={() => onSettingsThemeChange(true)}>
+            <button class="btn-secondary" class:active={$settings.screen?.preferences.darkMode} on:click={() => onSettingsThemeChange(true)}>
               Темна тема
             </button>
             <select value={$settings.screen?.preferences.density ?? 1} on:change={onSettingsDensityChange}>
-              <option value="0">Compact</option>
-              <option value="1">Comfortable</option>
-              <option value="2">Spacious</option>
+              <option value="0">Компактно</option>
+              <option value="1">Збалансовано</option>
+              <option value="2">Просторо</option>
             </select>
           </div>
         </div>
@@ -104,7 +104,7 @@
               <p>{$settings.screen?.company.vatCert ?? ""}</p>
             </div>
             <div class="editor-actions">
-              <button on:click={onSettingsCompanySave}>Зберегти</button>
+              <button class="btn-primary" on:click={onSettingsCompanySave}>Зберегти</button>
             </div>
           </div>
 
@@ -179,13 +179,13 @@
                 </div>
                 <div class="settings-row-actions">
                   <span>{integration.enabled ? "Активно" : "Вимкнено"}</span>
-                  <button class="action-button compact" on:click={() => settings.configureIntegration(integration.tag)}>
+                  <button class="btn-ghost" on:click={() => settings.configureIntegration(integration.tag)}>
                     <AppIcon name={integration.enabled ? "edit" : "add"} size={14} />
                     <span>{integration.enabled ? "Налаштувати" : "Підключити"}</span>
                   </button>
                   {#if integration.tag === "bas"}
                     <button
-                      class="action-button compact"
+                      class="btn-secondary"
                       on:click={() => { showBasImport = !showBasImport; if (!showBasImport) importBas.reset(); }}
                     >
                       <AppIcon name="import" size={14} />
@@ -207,7 +207,7 @@
                 <p>Помістіть файли BAS у <code>storage/import/bas/</code></p>
                 <div class="settings-actions-row" style="margin-top: 0.5rem;">
                   <button
-                    class="action-button compact"
+                    class="btn-secondary"
                     on:click={() => importBas.fetchPlan()}
                     disabled={$importBas.loading}
                   >
@@ -240,7 +240,7 @@
                   </div>
                   <div class="settings-actions-row" style="margin-top: 0.5rem;">
                     <button
-                      class="action-button compact"
+                      class="btn-primary"
                       on:click={() => importBas.execute()}
                       disabled={$importBas.loading || ($importBas.plan?.entities.every(e => !e.fileName || !!e.error) ?? true)}
                     >
@@ -248,7 +248,7 @@
                       <span>{$importBas.loading ? "Виконання..." : "Виконати імпорт"}</span>
                     </button>
                     <button
-                      class="action-button compact"
+                      class="btn-ghost"
                       on:click={() => { showBasImport = false; importBas.reset(); }}
                     >
                       <span>Скасувати</span>
@@ -275,7 +275,7 @@
                 {/each}
                 <div class="settings-actions-row" style="margin-top: 0.5rem;">
                   <button
-                    class="action-button compact"
+                    class="btn-ghost"
                     on:click={() => { showBasImport = false; importBas.reset(); }}
                   >
                     <span>Закрити</span>
@@ -293,7 +293,7 @@
               <p>{$settings.screen?.team.length ?? 0} користувачів</p>
             </div>
             <div class="editor-actions">
-              <button on:click={() => settings.inviteTeam()}>Запросити</button>
+              <button class="btn-secondary" on:click={() => settings.inviteTeam()}>Запросити</button>
             </div>
           </div>
           <div class="linked-list">
@@ -319,8 +319,8 @@
               <p>{$settings.screen?.backup.kind ?? ""}</p>
             </div>
             <div class="editor-actions">
-              <button on:click={() => settings.openLatestBackup()}>Відкрити копію</button>
-              <button on:click={() => settings.backupNow()}>Створити зараз</button>
+              <button class="btn-ghost" on:click={() => settings.openLatestBackup()}>Відкрити копію</button>
+              <button class="btn-secondary" on:click={() => settings.backupNow()}>Створити зараз</button>
             </div>
           </div>
 

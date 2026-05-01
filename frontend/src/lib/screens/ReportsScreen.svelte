@@ -28,7 +28,7 @@
   <div class="panel-header">
     <div>
       <h2>Звіти</h2>
-      <p>Bank / receivables / payables у Tauri runtime</p>
+      <p>Гроші, дебіторка та кредиторка по компаніях</p>
     </div>
     <div class="panel-actions">
       <input
@@ -36,7 +36,7 @@
         value={$reports.screen?.filter.query ?? ""}
         on:input={onReportsSearch}
       />
-      <button on:click={() => reports.exportCsv()}>Експорт CSV</button>
+      <button class="btn-secondary" on:click={() => reports.exportCsv()}>Експорт CSV</button>
     </div>
   </div>
 
@@ -61,7 +61,7 @@
 
     <div class="reports-filter-grid">
       <label>
-        Scope
+        Показувати
         <select value={$reports.screen?.filter.scope ?? "active"} on:change={onReportsScopeChange}>
           <option value="active">Активна компанія</option>
           <option value="all">Усі компанії</option>
@@ -119,7 +119,7 @@
         <span>Група</span>
         <span>Надходження</span>
         <span>Витрати</span>
-        <span>Net</span>
+        <span>Чистий рух</span>
       </div>
       {#each $reports.screen?.bankRows ?? [] as row}
         <div class="reports-table-row">

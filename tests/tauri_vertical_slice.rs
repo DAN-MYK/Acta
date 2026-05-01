@@ -180,6 +180,71 @@ async fn tauri_vertical_slice_shell_and_documents_smoke() -> Result<()> {
             "після зміни статусу документ не має лишатися у чернетці"
         );
 
+        let bulk_draft = acta::tauri_api::documents::document_create_draft(
+            &ctx,
+            acta::tauri_api::documents::CreateDocumentDraftRequest {
+                counterparty_id: counterparty.id.to_string(),
+                kind: "invoice".to_string(),
+            },
+        )
+        .await?;
+        cleanup_doc_ids.push(bulk_draft.form.id.clone());
+
+        let bulk_delete_result = acta::tauri_api::documents::documents_bulk_delete_live(
+            &ctx,
+            acta::tauri_api::documents::BulkDocumentRequest {
+                doc_ids: vec![bulk_draft.form.id.clone()],
+            },
+        )
+        .await?;
+        assert_eq!(bulk_delete_result.total, 1);
+        assert_eq!(bulk_delete_result.succeeded, 1);
+        assert_eq!(bulk_delete_result.failed, 0);
+        assert!(
+            bulk_delete_result.message.contains("Видалено 1 документ"),
+            "bulk delete має повертати зрозуміле повідомлення"
+        );
+
+        let bulk_status_draft = acta::tauri_api::documents::document_create_draft(
+            &ctx,
+            acta::tauri_api::documents::CreateDocumentDraftRequest {
+                counterparty_id: counterparty.id.to_string(),
+                kind: "invoice".to_string(),
+            },
+        )
+        .await?;
+        cleanup_doc_ids.push(bulk_status_draft.form.id.clone());
+
+        let bulk_status_result = acta::tauri_api::documents::documents_bulk_advance_status_live(
+            &ctx,
+            acta::tauri_api::documents::BulkDocumentRequest {
+                doc_ids: vec![bulk_status_draft.form.id.clone()],
+            },
+        )
+        .await?;
+        assert_eq!(bulk_status_result.total, 1);
+        assert_eq!(bulk_status_result.succeeded, 1);
+        assert_eq!(bulk_status_result.failed, 0);
+        assert!(
+            bulk_status_result.message.contains("1"),
+            "bulk advance status РјР°С” РїРѕРІРµСЂС‚Р°С‚Рё РїРѕРІС–РґРѕРјР»РµРЅРЅСЏ Р· Р»С–С‡РёР»СЊРЅРёРєРѕРј РѕР±СЂРѕР±Р»РµРЅРёС… РґРѕРєСѓРјРµРЅС‚С–РІ"
+        );
+
+        let bulk_status_list = acta::tauri_api::documents::documents_list(
+            &ctx,
+            acta::tauri_api::documents::DocumentsListRequest::default(),
+        )
+        .await?;
+        let advanced_bulk_item = bulk_status_list
+            .items
+            .iter()
+            .find(|item| item.id == bulk_status_draft.form.id)
+            .ok_or_else(|| anyhow!("bulk-status draft РјР°С” Р±СѓС‚Рё РїСЂРёСЃСѓС‚РЅС–Р№ Сѓ СЃРїРёСЃРєСѓ"))?;
+        assert_ne!(
+            advanced_bulk_item.status_label, "Р§РµСЂРЅРµС‚РєР°",
+            "РїС–СЃР»СЏ bulk advance status РґРѕРєСѓРјРµРЅС‚ РЅРµ РјР°С” Р»РёС€Р°С‚РёСЃСЏ Сѓ С‡РµСЂРЅРµС‚С†С–"
+        );
+
         Ok(())
     }
     .await;

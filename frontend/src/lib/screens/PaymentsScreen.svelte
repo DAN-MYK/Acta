@@ -17,10 +17,10 @@
       <p>{$payments.list?.items.length ?? 0} записів</p>
     </div>
     <div class="panel-actions">
-      <button on:click={() => payments.importCsv()}>Імпорт CSV</button>
-      <button on:click={() => payments.syncBank()}>Синхронізувати банк</button>
-      <button on:click={() => payments.openManualTemplate()}>Шаблон CSV</button>
-      <button on:click={() => payments.openEditor()}>Новий платіж</button>
+      <button class="btn-secondary" on:click={() => payments.importCsv()}>Імпорт CSV</button>
+      <button class="btn-ghost" on:click={() => payments.syncBank()}>Синхронізувати банк</button>
+      <button class="btn-ghost" on:click={() => payments.openManualTemplate()}>Шаблон CSV</button>
+      <button class="btn-primary" on:click={() => payments.openEditor()}>Новий платіж</button>
     </div>
   </div>
 
@@ -69,9 +69,9 @@
         </button>
         <div>
           {#if item.matchedDoc}
-            <button on:click={() => payments.unreconcile(item.id)}>Зняти зведення</button>
+            <button class="btn-ghost" on:click={() => payments.unreconcile(item.id)}>Зняти зведення</button>
           {:else}
-            <button on:click={() => payments.reconcile(item.id)}>Звести</button>
+            <button class="btn-secondary" on:click={() => payments.reconcile(item.id)}>Звести</button>
           {/if}
         </div>
       </div>
@@ -95,7 +95,7 @@
     <div class="editor-grid">
       <label>
         Дата
-        <input value={$payments.editor.date} on:input={(event) => onPaymentFieldChange("date", event)} />
+        <input type="date" value={$payments.editor.date} on:input={(event) => onPaymentFieldChange("date", event)} />
       </label>
       <label>
         Сума

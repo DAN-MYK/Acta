@@ -420,9 +420,7 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
 
   it("keeps unused document commands out of the public Tauri invoke surface", () => {
     for (const command of [
-      "document_prepare_new",
-      "documents_bulk_advance_status",
-      "documents_bulk_delete"
+      "document_prepare_new"
     ]) {
       expect(frontendApiSource).not.toContain(command);
       expect(tauriLibSource).not.toContain(command);
