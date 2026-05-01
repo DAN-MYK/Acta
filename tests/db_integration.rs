@@ -148,6 +148,31 @@ async fn create_test_act(
     Ok(id)
 }
 
+async fn create_test_payment(
+    pool: &PgPool,
+    company_id: Uuid,
+    counterparty_id: Option<Uuid>,
+    amount: Decimal,
+    direction: &str,
+    date: chrono::NaiveDate,
+) -> Result<Uuid> {
+    let id = Uuid::new_v4();
+    sqlx::query(
+        r#"INSERT INTO payments
+           (id, company_id, counterparty_id, amount, direction, date)
+           VALUES ($1, $2, $3, $4, $5::payment_direction, $6)"#,
+    )
+    .bind(id)
+    .bind(company_id)
+    .bind(counterparty_id)
+    .bind(amount)
+    .bind(direction)
+    .bind(date)
+    .execute(pool)
+    .await?;
+    Ok(id)
+}
+
 #[tokio::test]
 async fn bas_counterparty_preview_updates_existing_by_exact_name() -> Result<()> {
     let Some(pool) = test_pool().await? else {
@@ -5151,6 +5176,54 @@ async fn load_pnl_rows_groups_by_category_and_excludes_draft() -> Result<()> {
         .bind(cp.id)
         .execute(&pool)
         .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn compute_opening_balance_sums_payments_before_period() -> Result<()> {
+    use acta::app_ctx::AppCtx;
+    use acta::db::reports::compute_opening_balance;
+    use acta::models::reports::{ReportsScope, ResolvedReportsFilter};
+
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+    let today = chrono::Utc::now().date_naive();
+    let period_start = today - Duration::days(10);
+    let before_period = today - Duration::days(20);
+
+    // Payment BEFORE period_start → included in opening balance
+    let p1 = create_test_payment(&pool, DEFAULT_COMPANY_ID, None, dec!(5000), "income", before_period).await?;
+    // Expense BEFORE period_start → reduces opening balance
+    let p2 = create_test_payment(&pool, DEFAULT_COMPANY_ID, None, dec!(1000), "expense", before_period).await?;
+    // Payment WITHIN period → NOT in opening balance
+    let p3 = create_test_payment(&pool, DEFAULT_COMPANY_ID, None, dec!(9999), "income", today).await?;
+
+    let ctx = AppCtx::new(pool.clone(), DEFAULT_COMPANY_ID);
+    let filter = ResolvedReportsFilter {
+        scope: ReportsScope::Active,
+        date_from: period_start,
+        date_to: today,
+        query: String::new(),
+    };
+
+    let balance_before = compute_opening_balance(&ctx, &filter).await?;
+
+    // Remove within-period payment, verify it doesn't affect opening balance
+    sqlx::query("DELETE FROM payments WHERE id = $1").bind(p3).execute(&pool).await?;
+
+    let balance_after = compute_opening_balance(&ctx, &filter).await?;
+    assert_eq!(balance_before, balance_after, "payment within period must not affect opening balance");
+
+    // The balance must include 5000 income - 1000 expense = net +4000 from our test payments
+    // (there may be other payments in the DB, so we check delta)
+    // We verify by comparing before and after removing p1 and p2
+    sqlx::query("DELETE FROM payments WHERE id IN ($1, $2)").bind(p1).bind(p2).execute(&pool).await?;
+    let balance_without_test_payments = compute_opening_balance(&ctx, &filter).await?;
+    let delta = balance_before - balance_without_test_payments;
+    use rust_decimal_macros::dec;
+    assert_eq!(delta, dec!(4000), "test payments net 5000-1000=4000 must be in opening balance");
 
     Ok(())
 }
