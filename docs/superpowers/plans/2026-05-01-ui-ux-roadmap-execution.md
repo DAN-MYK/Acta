@@ -58,12 +58,12 @@
 - Test: `frontend/src/lib/stores/__tests__/palette-behavior.test.ts`
 - Test: `frontend/src/lib/stores/__tests__/shell-documents.test.ts`
 
-- [ ] Зафіксувати контракт shell loading: initial load, company reload, temporary disabling critical actions, visible progress state.
-- [ ] Довести command palette до deterministic behavior: `Esc` always closes, reopen starts from clean query/results state, focus returns predictably.
-- [ ] Прибрати “німі” стани при reload компанії та перевірити, що switcher не допускає повторних ризикових дій.
-- [ ] Оновити Vitest coverage для palette/shell сценаріїв.
-- [ ] Запустити `npm run test:frontend -- palette-behavior` або еквівалентний таргетований Vitest suite.
-- [ ] Зробити окремий коміт: `feat: polish shell loading and command palette flow`.
+- [x] Зафіксувати контракт shell loading: initial load, company reload, temporary disabling critical actions, visible progress state.
+- [x] Довести command palette до deterministic behavior: `Esc` always closes, reopen starts from clean query/results state, focus returns predictably.
+- [x] Прибрати “німі” стани при reload компанії та перевірити, що switcher не допускає повторних ризикових дій.
+- [x] Оновити Vitest coverage для palette/shell сценаріїв.
+- [x] Запустити `npm run test:frontend -- palette-behavior` або еквівалентний таргетований Vitest suite.
+- [x] Зробити окремий коміт: `feat: polish shell loading and command palette flow`.
 
 ### Task 2: Unified UI foundation для buttons, states і form controls
 
@@ -74,13 +74,13 @@
 - Modify: `frontend/src/styles/settings.css`
 - Test: `frontend/src/lib/screens/__tests__/SettingsScreen.test.ts`
 
-- [ ] Зафіксувати канонічну ієрархію `primary / secondary / ghost / danger` без локальних button-винятків.
-- [ ] Уніфікувати `loading / disabled / error / success` states для кнопок та базових controls.
-- [ ] Довести `input / select / textarea / date` до спільної висоти, padding, focus-visible і disabled semantics.
-- [ ] Використати `Settings` як референсний екран для action rows, section cards і integration states.
-- [ ] Уточнити долю `density`: або реально підключити вплив на layout, або прибрати selector до готового рішення.
-- [ ] Запустити `npm run check` і `npm run test:frontend -- SettingsScreen`.
-- [ ] Зробити окремий коміт: `feat: unify button hierarchy and control states`.
+- [x] Зафіксувати канонічну ієрархію `primary / secondary / ghost / danger` без локальних button-винятків.
+- [x] Уніфікувати `loading / disabled / error / success` states для кнопок та базових controls.
+- [x] Довести `input / select / textarea / date` до спільної висоти, padding, focus-visible і disabled semantics.
+- [x] Використати `Settings` як референсний екран для action rows, section cards і integration states.
+- [x] Уточнити долю `density`: або реально підключити вплив на layout, або прибрати selector до готового рішення.
+- [x] Запустити `npm run check` і `npm run test:frontend -- SettingsScreen`.
+- [x] Зробити окремий коміт: `feat: unify button hierarchy and control states`.
 
 ### Task 3: Documents як перший повний сценарний екран
 
@@ -90,13 +90,13 @@
 - Modify: `frontend/src/lib/stores/documents.ts`
 - Test: `frontend/src/lib/screens/__tests__/DocumentsScreen.test.ts`
 
-- [ ] Переробити create-strip навколо реального сценарію: контрагент, тип документа, головний CTA.
-- [ ] Вирівняти editor-header: `Зберегти` як primary, `Наступний статус` як secondary, `Видалити` як danger, `Закрити` як ghost.
-- [ ] Уніфікувати date control і прибрати неоднозначний формат вводу дати.
-- [ ] Перетворити ланцюжок документа зі списку зв’язків на status-flow/navigation block.
-- [ ] Поліпшити item editor: читабельність числових колонок, CTA для додавання позиції, сильніший empty state.
-- [ ] Запустити `npm run test:frontend -- DocumentsScreen` і `npm run check`.
-- [ ] Зробити окремий коміт: `feat: redesign documents flow around scenario-first actions`.
+- [x] Переробити create-strip навколо реального сценарію: контрагент, тип документа, головний CTA.
+- [x] Вирівняти editor-header: `Зберегти` як primary, `Наступний статус` як secondary, `Видалити` як danger, `Закрити` як ghost.
+- [x] Уніфікувати date control і прибрати неоднозначний формат вводу дати.
+- [x] Перетворити ланцюжок документа зі списку зв’язків на status-flow/navigation block.
+- [x] Поліпшити item editor: читабельність числових колонок, CTA для додавання позиції, сильніший empty state.
+- [x] Запустити `npm run test:frontend -- DocumentsScreen` і `npm run check`.
+- [x] Зробити окремий коміт: `feat: redesign documents flow around scenario-first actions`.
 
 ### Task 4: Payments навколо імпорту і звірки
 
@@ -105,13 +105,13 @@
 - Modify: `frontend/src/lib/stores/payments.ts`
 - Test: `frontend/src/lib/screens/__tests__/PaymentsScreen.test.ts`
 
-- [ ] Перебудувати header навколо трьох головних дій: імпорт, звірка, ручний платіж.
-- [ ] Візуально відокремити `matched` і `unmatched`, щоб незведені платежі читалися з першого погляду.
-- [ ] Підсилити CTA `Звести` / `Зняти зведення` і не ховати їх серед другорядних дій.
-- [ ] Уніфікувати date control і поля editor-а: напрям, сума, контрагент, референс, зв’язок з документом.
-- [ ] Додати чіткі loading/empty/error states для import/reconciliation flow.
-- [ ] Запустити `npm run test:frontend -- PaymentsScreen` і `npm run check`.
-- [ ] Зробити окремий коміт: `feat: refocus payments screen on reconciliation workflow`.
+- [x] Перебудувати header навколо трьох головних дій: імпорт, звірка, ручний платіж.
+- [x] Візуально відокремити `matched` і `unmatched`, щоб незведені платежі читалися з першого погляду.
+- [x] Підсилити CTA `Звести` / `Зняти зведення` і не ховати їх серед другорядних дій.
+- [x] Уніфікувати date control і поля editor-а: напрям, сума, контрагент, референс, зв’язок з документом.
+- [x] Додати чіткі loading/empty/error states для import/reconciliation flow.
+- [x] Запустити `npm run test:frontend -- PaymentsScreen` і `npm run check`.
+- [x] Зробити окремий коміт: `feat: refocus payments screen on reconciliation workflow`.
 
 ### Task 5: Counterparties як operational/risk card
 
@@ -121,12 +121,12 @@
 - Modify: `frontend/src/lib/stores/counterparties.ts`
 - Test: `frontend/src/lib/screens/__tests__/CounterpartiesScreen.test.ts`
 
-- [ ] Підняти в detail panel уже наявний DTO-контекст: баланс, прострочка, сума прострочки, останній контакт, директор, банк, VAT-статус.
-- [ ] Перетворити праву панель на сценарний блок: хто це, фінансовий стан, документи, платежі, наступна дія.
-- [ ] Посилити CTA `Редагувати`, `Створити документ`, `Архівувати`.
-- [ ] Поліпшити empty state правої панелі, щоб він підказував корисний наступний крок.
-- [ ] Запустити `npm run test:frontend -- CounterpartiesScreen` і `npm run check`.
-- [ ] Зробити окремий коміт: `feat: turn counterparty detail into operational risk view`.
+- [x] Підняти в detail panel уже наявний DTO-контекст: баланс, прострочка, сума прострочки, останній контакт, директор, банк, VAT-статус.
+- [x] Перетворити праву панель на сценарний блок: хто це, фінансовий стан, документи, платежі, наступна дія.
+- [x] Посилити CTA `Редагувати`, `Створити документ`, `Архівувати`.
+- [x] Поліпшити empty state правої панелі, щоб він підказував корисний наступний крок.
+- [x] Запустити `npm run test:frontend -- CounterpartiesScreen` і `npm run check`.
+- [x] Зробити окремий коміт: `feat: turn counterparty detail into operational risk view`.
 
 ### Task 6: Reports readability і KPI context
 
@@ -136,12 +136,12 @@
 - Modify: `frontend/src/lib/stores/reports.ts`
 - Test: `frontend/src/lib/screens/__tests__/ReportsScreen.test.ts`
 
-- [ ] Переписати мікрокопі українською і зробити фільтри зрозумілими без знання внутрішньої моделі.
-- [ ] Підсилити KPI-блок залежно від активної вкладки звіту.
-- [ ] Поліпшити wide-table scanning: sticky header, контраст, типографіка сум, акценти на прострочці, вирівнювання колонок.
-- [ ] За можливості додати сценарний порядок важливості або принаймні стабільне ранжування проблемних рядків.
-- [ ] Запустити `npm run test:frontend -- ReportsScreen` і `npm run check`.
-- [ ] Зробити окремий коміт: `feat: improve reports readability and KPI context`.
+- [x] Переписати мікрокопі українською і зробити фільтри зрозумілими без знання внутрішньої моделі.
+- [x] Підсилити KPI-блок залежно від активної вкладки звіту.
+- [x] Поліпшити wide-table scanning: sticky header, контраст, типографіка сум, акценти на прострочці, вирівнювання колонок.
+- [x] За можливості додати сценарний порядок важливості або принаймні стабільне ранжування проблемних рядків.
+- [x] Запустити `npm run test:frontend -- ReportsScreen` і `npm run check`.
+- [x] Зробити окремий коміт: `feat: improve reports readability and KPI context`.
 
 ### Task 7: Cross-screen polish, empty states і accessibility
 
@@ -205,3 +205,25 @@
 - Не плодити локальні CSS-винятки, якщо їх можна підняти в shared tokens/base styles.
 - Не змішувати behavioral fixes і великий visual redesign в одній хвилі без окремих тестів.
 - Якщо екран вимагає нового reusable pattern, спочатку зафіксувати його в system foundation, а вже потім копіювати в екран.
+
+---
+
+## Статус реалізації
+
+**Tasks 1–6 повністю реалізовані** — 2026-05-01. Commit: `dd31c7d` (merged via feat/ui-roadmap-wave-1 + reports session).
+
+| Task | Статус |
+|------|--------|
+| Task 1: Shell polish і deterministic command palette | ✅ |
+| Task 2: Unified UI foundation (buttons, states, form controls) | ✅ |
+| Task 3: Documents як сценарний екран | ✅ |
+| Task 4: Payments навколо reconciliation workflow | ✅ |
+| Task 5: Counterparties як operational/risk card | ✅ |
+| Task 6: Reports readability і KPI context | ✅ |
+| **Task 7: Cross-screen polish, empty states, accessibility** | **⏭ відкладено** |
+
+**Task 7 залишається відкритим** і містить:
+- Уніфікація empty states до єдиного патерну з поясненням і наступним кроком
+- Destructive confirmations там де ризик справді високий
+- Фінансова типографіка: суми, негативні значення, alignment, status colors
+- Accessibility pass: focus order, focus trap, hit areas, keyboard flow, focus-visible

@@ -33,7 +33,7 @@
 **Files:**
 - Modify: `tests/db_integration.rs`
 
-- [ ] **Step 1: Додати хелпер create_test_act в кінець блоку хелперів (після create_test_contract, ~рядок 100)**
+- [x] **Step 1: Додати хелпер create_test_act в кінець блоку хелперів (після create_test_contract, ~рядок 100)**
 
 ```rust
 async fn create_test_act(
@@ -66,7 +66,7 @@ async fn create_test_act(
 }
 ```
 
-- [ ] **Step 2: Додати хелпер create_test_category**
+- [x] **Step 2: Додати хелпер create_test_category**
 
 ```rust
 async fn create_test_category(
@@ -90,7 +90,7 @@ async fn create_test_category(
 }
 ```
 
-- [ ] **Step 3: Написати тест load_pnl_rows_groups_by_category_and_excludes_draft**
+- [x] **Step 3: Написати тест load_pnl_rows_groups_by_category_and_excludes_draft**
 
 ```rust
 #[tokio::test]
@@ -152,7 +152,7 @@ async fn load_pnl_rows_groups_by_category_and_excludes_draft() -> Result<()> {
 }
 ```
 
-- [ ] **Step 4: Запустити тест**
+- [x] **Step 4: Запустити тест**
 
 ```bash
 cargo test load_pnl_rows_groups_by_category_and_excludes_draft -- --nocapture
@@ -160,7 +160,7 @@ cargo test load_pnl_rows_groups_by_category_and_excludes_draft -- --nocapture
 
 Очікувано: PASS (або SKIP якщо DB не налаштована).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/db_integration.rs
@@ -174,7 +174,7 @@ git commit -m "test(reports): add integration test for pnl rows SQL"
 **Files:**
 - Modify: `tests/db_integration.rs`
 
-- [ ] **Step 1: Додати хелпер create_test_payment**
+- [x] **Step 1: Додати хелпер create_test_payment**
 
 Після хелперів вище, перед тестами:
 
@@ -205,7 +205,7 @@ async fn create_test_payment(
 }
 ```
 
-- [ ] **Step 2: Написати тест compute_opening_balance_sums_payments_before_period**
+- [x] **Step 2: Написати тест compute_opening_balance_sums_payments_before_period**
 
 ```rust
 #[tokio::test]
@@ -252,7 +252,7 @@ async fn compute_opening_balance_sums_payments_before_period() -> Result<()> {
 }
 ```
 
-- [ ] **Step 3: Запустити тест**
+- [x] **Step 3: Запустити тест**
 
 ```bash
 cargo test compute_opening_balance_sums_payments_before_period -- --nocapture
@@ -260,7 +260,7 @@ cargo test compute_opening_balance_sums_payments_before_period -- --nocapture
 
 Очікувано: PASS або SKIP.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/db_integration.rs
@@ -274,7 +274,7 @@ git commit -m "test(reports): add integration test for opening balance calculati
 **Files:**
 - Modify: `tests/db_integration.rs`
 
-- [ ] **Step 1: Написати тест load_bank_rows_groups_payments_by_counterparty**
+- [x] **Step 1: Написати тест load_bank_rows_groups_payments_by_counterparty**
 
 ```rust
 #[tokio::test]
@@ -318,7 +318,7 @@ async fn load_bank_rows_groups_payments_by_counterparty() -> Result<()> {
 }
 ```
 
-- [ ] **Step 2: Запустити тест**
+- [x] **Step 2: Запустити тест**
 
 ```bash
 cargo test load_bank_rows_groups_payments_by_counterparty -- --nocapture
@@ -326,7 +326,7 @@ cargo test load_bank_rows_groups_payments_by_counterparty -- --nocapture
 
 Очікувано: PASS або SKIP.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/db_integration.rs
@@ -340,7 +340,7 @@ git commit -m "test(reports): add integration test for bank rows grouping"
 **Files:**
 - Modify: `tests/db_integration.rs`
 
-- [ ] **Step 1: Додати хелпер create_test_invoice**
+- [x] **Step 1: Додати хелпер create_test_invoice**
 
 ```rust
 async fn create_test_invoice(
@@ -373,7 +373,7 @@ async fn create_test_invoice(
 }
 ```
 
-- [ ] **Step 2: Написати тест load_receivables_rows_calculates_overdue_days**
+- [x] **Step 2: Написати тест load_receivables_rows_calculates_overdue_days**
 
 ```rust
 #[tokio::test]
@@ -434,7 +434,7 @@ async fn load_receivables_rows_calculates_overdue_days() -> Result<()> {
 }
 ```
 
-- [ ] **Step 3: Запустити тест**
+- [x] **Step 3: Запустити тест**
 
 ```bash
 cargo test load_receivables_rows_calculates_overdue_days -- --nocapture
@@ -442,7 +442,7 @@ cargo test load_receivables_rows_calculates_overdue_days -- --nocapture
 
 Очікувано: PASS або SKIP.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/db_integration.rs
@@ -456,7 +456,7 @@ git commit -m "test(reports): add integration test for receivables overdue calcu
 **Files:**
 - Modify: `tests/db_integration.rs`
 
-- [ ] **Step 1: Додати хелпер create_test_payment_schedule**
+- [x] **Step 1: Додати хелпер create_test_payment_schedule**
 
 ```rust
 async fn create_test_payment_schedule(
@@ -485,7 +485,7 @@ async fn create_test_payment_schedule(
 }
 ```
 
-- [ ] **Step 2: Написати тест load_payables_rows_returns_expense_schedule_entries**
+- [x] **Step 2: Написати тест load_payables_rows_returns_expense_schedule_entries**
 
 ```rust
 #[tokio::test]
@@ -531,7 +531,7 @@ async fn load_payables_rows_returns_expense_schedule_entries() -> Result<()> {
 }
 ```
 
-- [ ] **Step 3: Перевірити повну компіляцію**
+- [x] **Step 3: Перевірити повну компіляцію**
 
 ```bash
 cargo build --tests 2>&1 | tail -5
@@ -539,7 +539,7 @@ cargo build --tests 2>&1 | tail -5
 
 Очікувано: `Finished ... [unoptimized + debuginfo] target(s) in ...`
 
-- [ ] **Step 4: Запустити всі нові тести разом**
+- [x] **Step 4: Запустити всі нові тести разом**
 
 ```bash
 cargo test load_pnl_rows load_bank_rows compute_opening_balance load_receivables_rows load_payables_rows -- --nocapture
@@ -547,7 +547,7 @@ cargo test load_pnl_rows load_bank_rows compute_opening_balance load_receivables
 
 Очікувано: всі 5 тестів PASS або SKIP.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/db_integration.rs
@@ -574,3 +574,19 @@ git commit -m "test(reports): add integration test for payables rows from paymen
 - `ResolvedReportsFilter` використовується однаково у всіх тестах
 - `DEFAULT_COMPANY_ID` — константа з main test file
 - `dec!(...)` macro з `rust_decimal_macros` — вже є в Cargo.toml
+
+---
+
+## Статус реалізації
+
+**Повністю реалізовано** — 2026-05-01
+
+| Задача | Коміт | Статус |
+|--------|-------|--------|
+| Task 1: `load_pnl_rows` (хелпер act + category, draft excluded) | `fe07084` | ✅ |
+| Task 2: `compute_opening_balance` (delta strategy, boundary date) | `6cc787e`–`4b6f...` | ✅ |
+| Task 3: `load_bank_rows` (counterparty grouping, income/expense) | committed | ✅ |
+| Task 4: `load_receivables_rows` (overdue_days, paid excluded) | committed | ✅ |
+| Task 5: `load_payables_rows` (schedule, is_completed excluded) | `fe07084` | ✅ |
+
+Результат: `69/69` тестів PASS. Commit: `dd31c7d`.
