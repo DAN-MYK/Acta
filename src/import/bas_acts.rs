@@ -84,12 +84,9 @@ pub async fn parse_acts_file(path: &Path) -> Result<Vec<ImportedAct>> {
 }
 
 pub async fn parse_acts_xml_file(path: &Path) -> Result<Vec<ImportedAct>> {
-    let xml_text = fs::read_to_string(path).await.with_context(|| {
-        format!(
-            "РќРµ РІРґР°Р»РѕСЃСЏ РїСЂРѕС‡РёС‚Р°С‚Рё С„Р°Р№Р» {}",
-            path.display()
-        )
-    })?;
+    let xml_text = fs::read_to_string(path)
+        .await
+        .with_context(|| format!("Не вдалося прочитати файл {}", path.display()))?;
     parse_acts_xml(&xml_text)
 }
 
@@ -153,9 +150,7 @@ pub fn parse_acts_xml(xml: &str) -> Result<Vec<ImportedAct>> {
     }
 
     if rows.is_empty() {
-        return Err(anyhow!(
-            "РЈ XML РЅРµ Р·РЅР°Р№РґРµРЅРѕ Р¶РѕРґРЅРѕРіРѕ Р°РєС‚Сѓ"
-        ));
+        return Err(anyhow!("У XML не знайдено жодного акту"));
     }
 
     Ok(rows)
@@ -169,15 +164,6 @@ pub async fn import_acts_from_xml(
 ) -> Result<ActImportReport> {
     let rows = parse_acts_file(path).await?;
     apply_imported_acts(pool, company_id, &rows, dry_run).await
-}
-
-pub async fn import_acts_from_file(
-    pool: &PgPool,
-    company_id: Uuid,
-    path: &Path,
-    dry_run: bool,
-) -> Result<ActImportReport> {
-    import_acts_from_xml(pool, company_id, path, dry_run).await
 }
 
 pub async fn apply_imported_acts(
@@ -200,7 +186,7 @@ pub async fn apply_imported_acts(
                 bas_id: row.bas_id.clone(),
                 number: row.number.clone(),
                 action: ActImportAction::Skip,
-                note: Some("РќРµ Р·РЅР°Р№РґРµРЅРѕ РєРѕРЅС‚СЂР°РіРµРЅС‚Р° Р·Р° bas_id".to_string()),
+                note: Some("Не знайдено контрагента за bas_id".to_string()),
             });
             continue;
         };
@@ -213,7 +199,7 @@ pub async fn apply_imported_acts(
                 bas_id: row.bas_id.clone(),
                 number: row.number.clone(),
                 action: ActImportAction::Skip,
-                note: Some("РќРµ Р·РЅР°Р№РґРµРЅРѕ РґРѕРіРѕРІС–СЂ Р·Р° bas_id".to_string()),
+                note: Some("Не знайдено договір за bas_id".to_string()),
             });
             continue;
         }
@@ -244,7 +230,7 @@ pub async fn apply_imported_acts(
                     number: row.number.clone(),
                     action: ActImportAction::Conflict,
                     note: Some(format!(
-                        "conflict: Р·РЅР°Р№РґРµРЅРѕ {} Р°РєС‚С–РІ Р·Р° С‚РёРј СЃР°РјРёРј fingerprint",
+                        "conflict: знайдено {} актів за тим самим fingerprint",
                         matches.len()
                     )),
                 });
@@ -281,7 +267,7 @@ pub async fn apply_imported_acts(
         match existing {
             Some(act) => {
                 let loaded = db::acts::get_by_id(pool, act.id).await?.ok_or_else(|| {
-                    anyhow!("РђРєС‚ Р·РЅР°Р№РґРµРЅРѕ РґР»СЏ preview, Р°Р»Рµ РЅРµ РІРґР°Р»РѕСЃСЏ РїРµСЂРµС‡РёС‚Р°С‚Рё Р№РѕРіРѕ РїРѕР·РёС†С–С—")
+                    anyhow!("Акт знайдено для preview, але не вдалося перечитати його позиції")
                 })?;
                 if let Some(conflict_note) = detect_act_conflict(
                     &loaded.0,
@@ -424,27 +410,21 @@ fn detect_act_conflict(
     imported: &ImportedAct,
 ) -> Option<String> {
     if existing.counterparty_id != counterparty_id {
-        return Some("conflict: С–РјРїРѕСЂС‚РѕРІР°РЅРёР№ Р°РєС‚ РїСЂРёРІ'СЏР·СѓС”С‚СЊСЃСЏ РґРѕ С–РЅС€РѕРіРѕ РєРѕРЅС‚СЂР°РіРµРЅС‚Р°".to_string());
+        return Some("conflict: імпортований акт прив'язується до іншого контрагента".to_string());
     }
     if existing.contract_id != contract_id {
-        return Some("conflict: С–РјРїРѕСЂС‚РѕРІР°РЅРёР№ Р°РєС‚ РїСЂРёРІ'СЏР·СѓС”С‚СЊСЃСЏ РґРѕ С–РЅС€РѕРіРѕ РґРѕРіРѕРІРѕСЂСѓ".to_string());
+        return Some("conflict: імпортований акт прив'язується до іншого договору".to_string());
     }
     if existing.direction != imported.direction {
-        return Some(
-            "conflict: РЅР°РїСЂСЏРј Р°РєС‚Сѓ РЅРµ Р·Р±С–РіР°С”С‚СЊСЃСЏ Р· existing row".to_string(),
-        );
+        return Some("conflict: напрям акту не збігається з existing row".to_string());
     }
     if existing.date != imported.date {
-        return Some(
-            "conflict: РґР°С‚Р° Р°РєС‚Сѓ РЅРµ Р·Р±С–РіР°С”С‚СЊСЃСЏ Р· existing row".to_string(),
-        );
+        return Some("conflict: дата акту не збігається з existing row".to_string());
     }
     if normalize_optional_text(Some(&existing.number))
         != normalize_optional_text(Some(&imported.number))
     {
-        return Some(
-            "conflict: РЅРѕРјРµСЂ Р°РєС‚Сѓ РЅРµ Р·Р±С–РіР°С”С‚СЊСЃСЏ Р· existing row".to_string(),
-        );
+        return Some("conflict: номер акту не збігається з existing row".to_string());
     }
 
     let imported_items = imported
@@ -471,13 +451,10 @@ fn detect_act_conflict(
         })
         .collect::<Vec<_>>();
     if imported_items.len() != stored_items.len() {
-        return Some("conflict: РєС–Р»СЊРєС–СЃС‚СЊ РїРѕР·РёС†С–Р№ Р°РєС‚Сѓ РЅРµ Р·Р±С–РіР°С”С‚СЊСЃСЏ Р· existing row".to_string());
+        return Some("conflict: кількість позицій акту не збігається з existing row".to_string());
     }
     if imported_items != stored_items {
-        return Some(
-            "conflict: РїРѕР·РёС†С–С— Р°РєС‚Сѓ РІС–РґСЂС–Р·РЅСЏСЋС‚СЊСЃСЏ РІС–Рґ existing row"
-                .to_string(),
-        );
+        return Some("conflict: позиції акту відрізняються від existing row".to_string());
     }
 
     None
@@ -521,7 +498,7 @@ fn build_act_from_fields(
         fields
             .get("date")
             .map(String::as_str)
-            .ok_or_else(|| anyhow!("РЈ Р°РєС‚С– {number} РІС–РґСЃСѓС‚РЅСЏ РґР°С‚Р°"))?,
+            .ok_or_else(|| anyhow!("У акті {number} відсутня дата"))?,
     )?;
 
     if let Some(item) = build_act_item_from_fields(fields.clone())? {
@@ -532,13 +509,13 @@ fn build_act_from_fields(
         if let Some(total) = optional_decimal(fields.get("amount"))? {
             items.push(ImportedActItem {
                 description: clean_optional(fields.get("subject"))
-                    .unwrap_or_else(|| format!("Р†РјРїРѕСЂС‚ Р· BAS: {number}")),
+                    .unwrap_or_else(|| format!("Імпорт з BAS: {number}")),
                 quantity: Decimal::ONE,
-                unit: "РїРѕСЃР»СѓРіР°".to_string(),
+                unit: "послуга".to_string(),
                 unit_price: total,
             });
         } else {
-            bail!("РЈ Р°РєС‚С– {number} РЅРµ Р·РЅР°Р№РґРµРЅРѕ РїРѕР·РёС†С–Р№ Р°Р±Рѕ РїС–РґСЃСѓРјРєРѕРІРѕС— СЃСѓРјРё");
+            bail!("У акті {number} не знайдено позицій або підсумкової суми");
         }
     }
 
@@ -563,14 +540,13 @@ fn build_act_item_from_fields(fields: BTreeMap<String, String>) -> Result<Option
     };
 
     let quantity = optional_decimal(fields.get("quantity"))?.unwrap_or(Decimal::ONE);
-    let unit = clean_optional(fields.get("unit")).unwrap_or_else(|| "РїРѕСЃР»СѓРіР°".to_string());
+    let unit = clean_optional(fields.get("unit")).unwrap_or_else(|| "послуга".to_string());
     let amount = optional_decimal(fields.get("amount"))?;
     let unit_price = match optional_decimal(fields.get("unit_price"))? {
         Some(unit_price) => unit_price,
         None => {
-            let amount = amount.ok_or_else(|| {
-                anyhow!("РЈ РїРѕР·РёС†С–С— '{description}' РІС–РґСЃСѓС‚РЅСЏ С†С–РЅР°")
-            })?;
+            let amount =
+                amount.ok_or_else(|| anyhow!("У позиції '{description}' відсутня ціна"))?;
             if quantity.is_zero() {
                 amount
             } else {
@@ -589,7 +565,7 @@ fn build_act_item_from_fields(fields: BTreeMap<String, String>) -> Result<Option
 
 fn parse_direction(raw: Option<&str>) -> DocumentDirection {
     match raw.map(normalize_value).as_deref() {
-        Some("incoming") | Some("РІС…С–РґРЅРёР№") | Some("РІС…С–РґРЅР°") => {
+        Some("incoming") | Some("вхідний") | Some("вхідна") => {
             DocumentDirection::Incoming
         }
         _ => DocumentDirection::Outgoing,
@@ -598,9 +574,9 @@ fn parse_direction(raw: Option<&str>) -> DocumentDirection {
 
 fn parse_act_status(raw: Option<&str>) -> ActStatus {
     match raw.map(normalize_value).as_deref() {
-        Some("draft") | Some("С‡РµСЂРЅРµС‚РєР°") => ActStatus::Draft,
-        Some("signed") | Some("РїС–РґРїРёСЃР°РЅРѕ") => ActStatus::Signed,
-        Some("paid") | Some("РѕРїР»Р°С‡РµРЅРѕ") => ActStatus::Paid,
+        Some("draft") | Some("чернетка") => ActStatus::Draft,
+        Some("signed") | Some("підписано") => ActStatus::Signed,
+        Some("paid") | Some("оплачено") => ActStatus::Paid,
         _ => ActStatus::Issued,
     }
 }
@@ -642,14 +618,14 @@ fn capture_text_value(
 fn is_act_record_tag(tag: &str) -> bool {
     matches!(
         tag,
-        "Р°РєС‚"
+        "акт"
             | "act"
             | "document"
             | "record"
             | "row"
-            | "РґРѕРєСѓРјРµРЅС‚"
-            | "Р°РєС‚РІРёРєРѕРЅР°РЅРёС…СЂРѕР±С–С‚"
-            | "Р°РєС‚РІС‹РїРѕР»РЅРµРЅРЅС‹С…СЂР°Р±РѕС‚"
+            | "документ"
+            | "актвиконанихробіт"
+            | "актвыполненныхработ"
     )
 }
 
@@ -657,14 +633,14 @@ fn is_act_item_tag(tag: &str) -> bool {
     matches!(
         tag,
         "item"
-            | "РїРѕР·РёС†С–СЏ"
-            | "РїРѕР·РёС†РёРё"
+            | "позиція"
+            | "позиции"
             | "position"
             | "service"
-            | "С‚РѕРІР°СЂ"
-            | "РїРѕСЃР»СѓРіР°"
-            | "СЃС‚СЂРѕРєР°"
-            | "СЂСЏРґРѕРє"
+            | "товар"
+            | "послуга"
+            | "строка"
+            | "рядок"
             | "line"
             | "serviceline"
     )
@@ -679,7 +655,7 @@ fn map_act_field_name_for_stack(stack: &[String]) -> Option<&'static str> {
         .map(String::as_str)
         .unwrap_or_default();
 
-    if matches!(tag, "id" | "uid" | "uuid" | "РєРѕРґ") {
+    if matches!(tag, "id" | "uid" | "uuid" | "код") {
         if is_counterparty_container_tag(parent) {
             return Some("counterparty_bas_id");
         }
@@ -693,49 +669,43 @@ fn map_act_field_name_for_stack(stack: &[String]) -> Option<&'static str> {
 
 fn map_act_field_name(tag: &str) -> Option<&'static str> {
     match tag {
-        "id" | "bas_id" | "basid" | "uid" | "uuid" | "РєРѕРґ" => Some("bas_id"),
-        "number" | "РЅРѕРјРµСЂ" | "num" | "docnumber" | "РЅРѕРјРµСЂРґРѕРєСѓРјРµРЅС‚Р°" => {
+        "id" | "bas_id" | "basid" | "uid" | "uuid" | "код" => Some("bas_id"),
+        "number" | "номер" | "num" | "docnumber" | "номердокумента" => {
             Some("number")
         }
-        "date" | "РґР°С‚Р°" | "documentdate" | "docdate" | "РґР°С‚Р°РґРѕРєСѓРјРµРЅС‚Р°" => {
+        "date" | "дата" | "documentdate" | "docdate" | "датадокумента" => {
             Some("date")
         }
         "expected_payment_date"
         | "payment_date"
         | "expecteddate"
-        | "РґР°С‚Р°РїР»Р°С‚РµР¶Сѓ"
-        | "РґР°С‚Р°РїРѕРіР°С€РµРЅРЅСЏ" => Some("expected_payment_date"),
-        "direction" | "РЅР°РїСЂСЏРј" | "doctype" | "С‚РёРїРґРѕРєСѓРјРµРЅС‚Р°" => {
-            Some("direction")
-        }
-        "status" | "СЃС‚Р°С‚СѓСЃ" => Some("status"),
-        "notes" | "comment" | "description" | "РїСЂРёРјС–С‚РєР°" | "РєРѕРјРµРЅС‚Р°СЂ" => {
+        | "датаплатежу"
+        | "датапогашення" => Some("expected_payment_date"),
+        "direction" | "напрям" | "doctype" | "типдокумента" => Some("direction"),
+        "status" | "статус" => Some("status"),
+        "notes" | "comment" | "description" | "примітка" | "коментар" => {
             Some("notes")
         }
-        "subject" | "title" | "name" | "РЅР°Р·РІР°" | "content" | "Р·РјС–СЃС‚" => {
-            Some("subject")
-        }
-        "amount" | "sum" | "total" | "СЃСѓРјР°" | "summa" | "documenttotal" => {
-            Some("amount")
-        }
+        "subject" | "title" | "name" | "назва" | "content" | "зміст" => Some("subject"),
+        "amount" | "sum" | "total" | "сума" | "summa" | "documenttotal" => Some("amount"),
         "counterparty_id"
         | "counterparty_bas_id"
         | "client_id"
         | "partner_id"
         | "partner"
         | "counterparty"
-        | "РєРѕРЅС‚СЂР°РіРµРЅС‚id"
-        | "РєРѕРЅС‚СЂР°РіРµРЅС‚"
-        | "РєРѕРґРєРѕРЅС‚СЂР°РіРµРЅС‚Р°"
-        | "РєРѕРЅС‚СЂР°РіРµРЅС‚РєРѕРґ" => Some("counterparty_bas_id"),
+        | "контрагентid"
+        | "контрагент"
+        | "кодконтрагента"
+        | "контрагенткод" => Some("counterparty_bas_id"),
         "contract_id"
         | "contract_bas_id"
         | "contract"
         | "agreement"
-        | "РґРѕРіРѕРІС–СЂ"
-        | "РґРѕРіРѕРІРѕСЂ"
-        | "РґРѕРіРѕРІС–СЂid"
-        | "РєРѕРґРґРѕРіРѕРІРѕСЂСѓ"
+        | "договір"
+        | "договор"
+        | "договірid"
+        | "коддоговору"
         | "contractref" => Some("contract_bas_id"),
         _ => None,
     }
@@ -744,20 +714,12 @@ fn map_act_field_name(tag: &str) -> Option<&'static str> {
 fn is_counterparty_container_tag(tag: &str) -> bool {
     matches!(
         tag,
-        "counterparty"
-            | "partner"
-            | "client"
-            | "РєРѕРЅС‚СЂР°РіРµРЅС‚"
-            | "РїР°СЂС‚РЅРµСЂ"
-            | "РєР»РёРµРЅС‚"
+        "counterparty" | "partner" | "client" | "контрагент" | "партнер" | "клиент"
     )
 }
 
 fn is_contract_container_tag(tag: &str) -> bool {
-    matches!(
-        tag,
-        "contract" | "agreement" | "РґРѕРіРѕРІС–СЂ" | "РґРѕРіРѕРІРѕСЂ"
-    )
+    matches!(tag, "contract" | "agreement" | "договір" | "договор")
 }
 
 fn map_act_item_field_name_for_stack(stack: &[String]) -> Option<&'static str> {
@@ -770,25 +732,22 @@ fn map_act_item_field_name(tag: &str) -> Option<&'static str> {
         "description"
         | "name"
         | "title"
-        | "РїРѕСЃР»СѓРіР°"
-        | "РѕРїРёСЃ"
-        | "РЅРѕРјРµРЅРєР»Р°С‚СѓСЂР°"
-        | "РЅР°Р№РјРµРЅСѓРІР°РЅРЅСЏ"
-        | "СЃРѕРґРµСЂР¶Р°РЅРёРµ"
+        | "послуга"
+        | "опис"
+        | "номенклатура"
+        | "найменування"
+        | "содержание"
         | "service_name" => Some("description"),
-        "quantity"
-        | "qty"
-        | "count"
-        | "РєС–Р»СЊРєС–СЃС‚СЊ"
-        | "РєРѕР»РёС‡РµСЃС‚РІРѕ"
-        | "РѕР±СЃСЏРі" => Some("quantity"),
-        "unit" | "uom" | "measure" | "РѕРґРёРЅРёС†СЏ" | "РµРґРёРЅРёС†Р°" | "РѕРґРІРёРј" => {
+        "quantity" | "qty" | "count" | "кількість" | "количество" | "обсяг" => {
+            Some("quantity")
+        }
+        "unit" | "uom" | "measure" | "одиниця" | "единица" | "одвим" => {
             Some("unit")
         }
-        "price" | "unit_price" | "rate" | "cost" | "tariff" | "С†С–РЅР°" | "С†РµРЅР°" => {
+        "price" | "unit_price" | "rate" | "cost" | "tariff" | "ціна" | "цена" => {
             Some("unit_price")
         }
-        "amount" | "sum" | "total" | "СЃСѓРјР°" | "summa" | "linetotal" => Some("amount"),
+        "amount" | "sum" | "total" | "сума" | "summa" | "linetotal" => Some("amount"),
         _ => None,
     }
 }
@@ -825,38 +784,32 @@ fn parse_date(raw: &str) -> Result<NaiveDate> {
         }
     }
 
-    Err(anyhow!(
-        "РќРµ РІРґР°Р»РѕСЃСЏ СЂРѕР·С–Р±СЂР°С‚Рё РґР°С‚Сѓ '{raw}'"
-    ))
+    Err(anyhow!("Не вдалося розібрати дату '{raw}'"))
 }
 
 fn parse_decimal(raw: &str) -> Result<Decimal> {
     let normalized = raw.trim().replace(' ', "").replace(',', ".");
     normalized
         .parse::<Decimal>()
-        .with_context(|| format!("РќРµ РІРґР°Р»РѕСЃСЏ СЂРѕР·С–Р±СЂР°С‚Рё СЃСѓРјСѓ '{raw}'"))
+        .with_context(|| format!("Не вдалося розібрати суму '{raw}'"))
 }
 
 async fn parse_acts_excel_file(path: &Path) -> Result<Vec<ImportedAct>> {
     let path = path.to_path_buf();
     task::spawn_blocking(move || {
-        let mut workbook = open_workbook_auto(&path).with_context(|| {
-            format!(
-                "РќРµ РІРґР°Р»РѕСЃСЏ РІС–РґРєСЂРёС‚Рё Excel С„Р°Р№Р» {}",
-                path.display()
-            )
-        })?;
+        let mut workbook = open_workbook_auto(&path)
+            .with_context(|| format!("Не вдалося відкрити Excel файл {}", path.display()))?;
         let sheet_name = workbook
             .sheet_names()
             .first()
             .cloned()
-            .ok_or_else(|| anyhow!("РЈ Excel С„Р°Р№Р»С– РЅРµРјР°С” Р¶РѕРґРЅРѕРіРѕ sheet"))?;
+            .ok_or_else(|| anyhow!("У Excel файлі немає жодного sheet"))?;
         let range = workbook.worksheet_range(&sheet_name)?;
 
         let mut rows_iter = range.rows();
         let headers = rows_iter
             .next()
-            .ok_or_else(|| anyhow!("Excel С„Р°Р№Р» РЅРµ РјС–СЃС‚РёС‚СЊ Р·Р°РіРѕР»РѕРІРєС–РІ"))?
+            .ok_or_else(|| anyhow!("Excel файл не містить заголовків"))?
             .iter()
             .map(|cell| normalize_tag(&cell.to_string()))
             .collect::<Vec<_>>();
@@ -895,15 +848,13 @@ async fn parse_acts_excel_file(path: &Path) -> Result<Vec<ImportedAct>> {
 
         let rows = grouped.into_values().collect::<Vec<_>>();
         if rows.is_empty() {
-            return Err(anyhow!(
-                "РЈ Excel РЅРµ Р·РЅР°Р№РґРµРЅРѕ Р¶РѕРґРЅРѕРіРѕ Р°РєС‚Сѓ"
-            ));
+            return Err(anyhow!("У Excel не знайдено жодного акту"));
         }
 
         Ok(rows)
     })
     .await
-    .context("Excel parser РґР»СЏ Р°РєС‚С–РІ Р·Р°РІРµСЂС€РёРІСЃСЏ РїРѕРјРёР»РєРѕСЋ")?
+    .context("Excel parser для актів завершився помилкою")?
 }
 
 fn merge_act(target: &mut ImportedAct, incoming: ImportedAct) -> Result<()> {
@@ -911,7 +862,7 @@ fn merge_act(target: &mut ImportedAct, incoming: ImportedAct) -> Result<()> {
         || target.date != incoming.date
         || target.direction != incoming.direction
     {
-        bail!("Excel grouping РґР»СЏ Р°РєС‚С–РІ РѕС‚СЂРёРјР°РІ РЅРµСЃСѓРјС–СЃРЅС– header rows");
+        bail!("Excel grouping для актів отримав несумісні header rows");
     }
 
     if target.bas_id.is_none() {
@@ -961,20 +912,19 @@ mod tests {
                     <id>act-001</id>
                     <counterparty_id>cp-001</counterparty_id>
                     <contract_id>ctr-001</contract_id>
-                    <number>РђРљРў-001</number>
+                    <number>АКТ-001</number>
                     <date>2026-04-10</date>
                     <item>
-                        <description>РљРѕРЅСЃСѓР»СЊС‚Р°С†С–С—</description>
+                        <description>Консультації</description>
                         <quantity>2</quantity>
-                        <unit>РіРѕРґ</unit>
+                        <unit>год</unit>
                         <price>1500</price>
                     </item>
                 </act>
             </acts>
         "#;
 
-        let rows =
-            parse_acts_xml(xml).expect("РїР°СЂСЃРёРЅРі Р°РєС‚С–РІ РјР°С” СЃРїСЂР°С†СЋРІР°С‚Рё");
+        let rows = parse_acts_xml(xml).expect("парсинг актів має спрацювати");
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].bas_id.as_deref(), Some("act-001"));
         assert_eq!(rows[0].counterparty_bas_id.as_deref(), Some("cp-001"));
@@ -988,18 +938,17 @@ mod tests {
     fn parse_acts_xml_builds_fallback_item_from_total() {
         let xml = r#"
             <root>
-                <Р°РєС‚>
-                    <РєРѕРґ>act-002</РєРѕРґ>
-                    <РєРѕРґРєРѕРЅС‚СЂР°РіРµРЅС‚Р°>cp-002</РєРѕРґРєРѕРЅС‚СЂР°РіРµРЅС‚Р°>
-                    <РЅРѕРјРµСЂ>РђРљРў-002</РЅРѕРјРµСЂ>
-                    <РґР°С‚Р°>11.04.2026</РґР°С‚Р°>
-                    <СЃСѓРјР°>3 200,00</СЃСѓРјР°>
-                </Р°РєС‚>
+                <акт>
+                    <код>act-002</код>
+                    <кодконтрагента>cp-002</кодконтрагента>
+                    <номер>АКТ-002</номер>
+                    <дата>11.04.2026</дата>
+                    <сума>3 200,00</сума>
+                </акт>
             </root>
         "#;
 
-        let rows = parse_acts_xml(xml)
-            .expect("fallback-РїРѕР·РёС†С–СЏ РјР°С” Р±СѓРґСѓРІР°С‚РёСЃСЏ Р· СЃСѓРјРё");
+        let rows = parse_acts_xml(xml).expect("fallback-позиція має будуватися з суми");
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].items.len(), 1);
         assert_eq!(rows[0].items[0].unit_price, Decimal::new(320000, 2));
@@ -1009,36 +958,32 @@ mod tests {
     #[test]
     fn parse_acts_xml_supports_nested_bas_like_fields() {
         let xml = r#"
-            <Р”РѕРєСѓРјРµРЅС‚>
-                <РљРѕРґ>act-777</РљРѕРґ>
-                <РќРѕРјРµСЂР”РѕРєСѓРјРµРЅС‚Р°>РђРљРў-777</РќРѕРјРµСЂР”РѕРєСѓРјРµРЅС‚Р°>
-                <Р”Р°С‚Р°Р”РѕРєСѓРјРµРЅС‚Р°>2026-04-10</Р”Р°С‚Р°Р”РѕРєСѓРјРµРЅС‚Р°>
-                <РљРѕРЅС‚СЂР°РіРµРЅС‚>
-                    <РљРѕРґ>cp-777</РљРѕРґ>
-                </РљРѕРЅС‚СЂР°РіРµРЅС‚>
-                <Р”РѕРіРѕРІС–СЂ>
-                    <РљРѕРґ>ctr-777</РљРѕРґ>
-                </Р”РѕРіРѕРІС–СЂ>
-                <РЎС‚СЂРѕРєР°>
-                    <РќР°Р№РјРµРЅСѓРІР°РЅРЅСЏ>РџРѕСЃР»СѓРіРё РїС–РґС‚СЂРёРјРєРё</РќР°Р№РјРµРЅСѓРІР°РЅРЅСЏ>
-                    <РљС–Р»СЊРєС–СЃС‚СЊ>2</РљС–Р»СЊРєС–СЃС‚СЊ>
-                    <РћРґР’РёРј>РїРѕСЃР»СѓРіР°</РћРґР’РёРј>
-                    <РЎСѓРјР°>3000</РЎСѓРјР°>
-                </РЎС‚СЂРѕРєР°>
-            </Р”РѕРєСѓРјРµРЅС‚>
+            <Документ>
+                <Код>act-777</Код>
+                <НомерДокумента>АКТ-777</НомерДокумента>
+                <ДатаДокумента>2026-04-10</ДатаДокумента>
+                <Контрагент>
+                    <Код>cp-777</Код>
+                </Контрагент>
+                <Договір>
+                    <Код>ctr-777</Код>
+                </Договір>
+                <Строка>
+                    <Найменування>Послуги підтримки</Найменування>
+                    <Кількість>2</Кількість>
+                    <ОдВим>послуга</ОдВим>
+                    <Сума>3000</Сума>
+                </Строка>
+            </Документ>
         "#;
 
-        let rows =
-            parse_acts_xml(xml).expect("РІРєР»Р°РґРµРЅРёР№ BAS XML РјР°С” РїР°СЂСЃРёС‚РёСЃСЏ");
+        let rows = parse_acts_xml(xml).expect("вкладений BAS XML має парситися");
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].bas_id.as_deref(), Some("act-777"));
         assert_eq!(rows[0].counterparty_bas_id.as_deref(), Some("cp-777"));
         assert_eq!(rows[0].contract_bas_id.as_deref(), Some("ctr-777"));
         assert_eq!(rows[0].items.len(), 1);
-        assert_eq!(
-            rows[0].items[0].description,
-            "РџРѕСЃР»СѓРіРё РїС–РґС‚СЂРёРјРєРё"
-        );
+        assert_eq!(rows[0].items[0].description, "Послуги підтримки");
         assert_eq!(rows[0].items[0].quantity, Decimal::new(2, 0));
         assert_eq!(rows[0].items[0].unit_price, Decimal::new(1500, 0));
     }
@@ -1046,31 +991,27 @@ mod tests {
     #[test]
     fn parse_acts_xml_reads_cdata_and_fallback_total() {
         let xml = r#"
-            <РђРєС‚Р’РёРєРѕРЅР°РЅРёС…Р РѕР±С–С‚>
-                <РљРѕРґ><![CDATA[act-900]]></РљРѕРґ>
-                <РќРѕРјРµСЂР”РѕРєСѓРјРµРЅС‚Р°><![CDATA[РђРљРў-900]]></РќРѕРјРµСЂР”РѕРєСѓРјРµРЅС‚Р°>
-                <Р”Р°С‚Р°Р”РѕРєСѓРјРµРЅС‚Р°>2026-04-11</Р”Р°С‚Р°Р”РѕРєСѓРјРµРЅС‚Р°>
-                <РќР°Р·РІР°><![CDATA[РЎСѓРїСЂРѕРІС–Рґ]]></РќР°Р·РІР°>
+            <АктВиконанихРобіт>
+                <Код><![CDATA[act-900]]></Код>
+                <НомерДокумента><![CDATA[АКТ-900]]></НомерДокумента>
+                <ДатаДокумента>2026-04-11</ДатаДокумента>
+                <Назва><![CDATA[Супровід]]></Назва>
                 <DocumentTotal>4500</DocumentTotal>
-            </РђРєС‚Р’РёРєРѕРЅР°РЅРёС…Р РѕР±С–С‚>
+            </АктВиконанихРобіт>
         "#;
 
-        let rows =
-            parse_acts_xml(xml).expect("CDATA С– fallback total РјР°СЋС‚СЊ РїР°СЂСЃРёС‚РёСЃСЏ");
+        let rows = parse_acts_xml(xml).expect("CDATA і fallback total мають парситися");
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].bas_id.as_deref(), Some("act-900"));
         assert_eq!(rows[0].items.len(), 1);
-        assert_eq!(rows[0].items[0].description, "РЎСѓРїСЂРѕРІС–Рґ");
+        assert_eq!(rows[0].items[0].description, "Супровід");
         assert_eq!(rows[0].items[0].unit_price, Decimal::new(4500, 0));
     }
 
     #[test]
     fn parse_acts_xml_fails_when_no_records_found() {
-        let error = parse_acts_xml("<root/>")
-            .expect_err("РїРѕСЂРѕР¶РЅС–Р№ XML РјР°С” РґР°РІР°С‚Рё РїРѕРјРёР»РєСѓ");
-        assert!(error
-            .to_string()
-            .contains("РЅРµ Р·РЅР°Р№РґРµРЅРѕ Р¶РѕРґРЅРѕРіРѕ Р°РєС‚Сѓ"));
+        let error = parse_acts_xml("<root/>").expect_err("empty XML should fail");
+        assert!(error.to_string().contains("?? ???????? ??????? ????"));
     }
 
     #[test]
@@ -1080,19 +1021,19 @@ mod tests {
             ("date".to_string(), "2026-04-12".to_string()),
             ("counterparty_bas_id".to_string(), "cp-001".to_string()),
             ("contract_bas_id".to_string(), "ctr-001".to_string()),
-            ("description".to_string(), "Консультації".to_string()),
+            ("description".to_string(), "Consulting".to_string()),
             ("quantity".to_string(), "2".to_string()),
-            ("unit".to_string(), "год".to_string()),
+            ("unit".to_string(), "hour".to_string()),
             ("unit_price".to_string(), "1500.00".to_string()),
         ]);
 
         let act = build_act_from_fields(fields, Vec::new())
-            .expect("рядок Excel має парситися")
-            .expect("акт має бути створений");
+            .expect("excel row should parse")
+            .expect("act should be built");
 
         assert_eq!(act.number, "ACT-XL-001");
         assert_eq!(act.items.len(), 1);
-        assert_eq!(act.items[0].description, "Консультації");
+        assert_eq!(act.items[0].description, "Consulting");
         assert_eq!(act.items[0].quantity, Decimal::new(2, 0));
         assert_eq!(act.items[0].unit_price, Decimal::new(150000, 2));
     }
@@ -1104,29 +1045,29 @@ mod tests {
             counterparty_bas_id: Some("cp-001".to_string()),
             contract_bas_id: Some("ctr-001".to_string()),
             number: "ACT-001".to_string(),
-            date: NaiveDate::from_ymd_opt(2026, 4, 10).expect("валідна дата"),
+            date: NaiveDate::from_ymd_opt(2026, 4, 10).expect("valid date"),
             expected_payment_date: None,
             direction: DocumentDirection::Outgoing,
             status: ActStatus::Issued,
             notes: None,
             items: vec![ImportedActItem {
-                description: "Послуга 1".to_string(),
+                description: "Service 1".to_string(),
                 quantity: Decimal::ONE,
-                unit: "шт".to_string(),
+                unit: "pcs".to_string(),
                 unit_price: Decimal::new(10000, 2),
             }],
         };
         let second = ImportedAct {
             items: vec![ImportedActItem {
-                description: "Послуга 2".to_string(),
+                description: "Service 2".to_string(),
                 quantity: Decimal::new(3, 0),
-                unit: "год".to_string(),
+                unit: "hour".to_string(),
                 unit_price: Decimal::new(250000, 2),
             }],
             ..first.clone()
         };
 
-        merge_act(&mut first, second).expect("merge має спрацювати");
+        merge_act(&mut first, second).expect("merge should succeed");
         assert_eq!(first.items.len(), 2);
         assert_eq!(act_merge_key(&first), "bas:act-001");
     }

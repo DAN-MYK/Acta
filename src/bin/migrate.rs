@@ -897,6 +897,8 @@ async fn main() {
         return;
     };
 
+    let _ = dotenvy::dotenv();
+
     let input_dir = PathBuf::from(&opts.input_dir);
     let report = match discover_artifacts(&input_dir) {
         Ok(report) => report,
@@ -1008,7 +1010,7 @@ async fn main() {
             .get_mut(&ImporterKey::Acts)
             .expect("totals for acts must exist"),
         |path, pool, company_id, dry_run| {
-            Box::pin(bas_acts::import_acts_from_file(
+            Box::pin(bas_acts::import_acts_from_xml(
                 pool, company_id, path, dry_run,
             ))
         },
