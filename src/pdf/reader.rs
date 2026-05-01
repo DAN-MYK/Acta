@@ -119,19 +119,7 @@ mod tests {
         )
         .expect("generate_act_pdf має завершитись успішно");
 
-        let text = match read_pdf_text(&out) {
-            Ok(text) => text,
-            Err(e) => {
-                let error_chain = format!("{:?}", e);
-                if error_chain.contains("ToUnicode") {
-                    eprintln!("пропуск: lopdf не підтримує Typst ToUnicode CMap");
-                    let _ = std::fs::remove_file(&out);
-                    return;
-                } else {
-                    panic!("Непередбачена помилка при читанні PDF: {e}");
-                }
-            }
-        };
+        let text = read_pdf_text(&out).expect("read_pdf_text має повернути Ok");
         assert!(!text.is_empty(), "витягнутий текст не повинен бути порожнім");
 
         let _ = std::fs::remove_file(&out);

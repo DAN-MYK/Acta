@@ -1011,7 +1011,7 @@ mod tests {
     #[test]
     fn parse_acts_xml_fails_when_no_records_found() {
         let error = parse_acts_xml("<root/>").expect_err("empty XML should fail");
-        assert!(error.to_string().contains("?? ???????? ??????? ????"));
+        assert!(error.to_string().contains("не знайдено жодного акту"));
     }
 
     #[test]
