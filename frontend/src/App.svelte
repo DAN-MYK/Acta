@@ -32,9 +32,15 @@
   const reports = reportsStore;
   const payments = paymentsStore;
   const settings = settingsStore;
+  const paletteInputAriaLabel = "Пошук у командній палітрі";
+  const paletteInputPlaceholder = "Пошук команд, екранів або документів";
 
   let paletteInput: HTMLInputElement | null = null;
   let isCompanyReloading = false;
+  let paletteDialog: HTMLElement | null = null;
+  let paletteToggleButton: HTMLButtonElement | null = null;
+  let paletteReturnFocusTarget: HTMLElement | null = null;
+  let wasPaletteOpen = false;
 
   const sidebarScreens: Array<{
     screen: ScreenId;
@@ -66,8 +72,23 @@
     ]);
   });
 
-  $: if ($palette.open) {
-    void tick().then(() => paletteInput?.focus());
+  $: {
+    const paletteOpen = $palette.open;
+    if (paletteOpen && !wasPaletteOpen) {
+      paletteReturnFocusTarget = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      void tick().then(() => paletteInput?.focus());
+    }
+
+    if (!paletteOpen && wasPaletteOpen) {
+      const focusTarget =
+        paletteReturnFocusTarget && document.contains(paletteReturnFocusTarget)
+          ? paletteReturnFocusTarget
+          : paletteToggleButton;
+      void tick().then(() => focusTarget?.focus());
+      paletteReturnFocusTarget = null;
+    }
+
+    wasPaletteOpen = paletteOpen;
   }
 
   $: document.body.dataset.theme = $theme;
@@ -79,6 +100,46 @@
   function onPaletteInput(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
     void palette.search(input.value);
+  }
+
+  function getPaletteFocusableElements() {
+    if (!paletteDialog) {
+      return [];
+    }
+
+    return Array.from(
+      paletteDialog.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+      )
+    ).filter((element) => element.getAttribute("aria-hidden") !== "true" && !element.hasAttribute("disabled"));
+  }
+
+  function handlePaletteKeydown(event: KeyboardEvent) {
+    if (event.key !== "Tab") {
+      return;
+    }
+
+    const focusableElements = getPaletteFocusableElements();
+    if (focusableElements.length === 0) {
+      event.preventDefault();
+      paletteDialog?.focus();
+      return;
+    }
+
+    const firstElement = focusableElements[0];
+    const lastElement = focusableElements[focusableElements.length - 1];
+    const activeElement = document.activeElement;
+
+    if (event.shiftKey && activeElement === firstElement) {
+      event.preventDefault();
+      lastElement?.focus();
+      return;
+    }
+
+    if (!event.shiftKey && activeElement === lastElement) {
+      event.preventDefault();
+      firstElement?.focus();
+    }
   }
 
   async function onCompanyChange(event: Event) {
@@ -128,10 +189,18 @@
     }
   }
 
+  function closePalette() {
+    palette.close();
+  }
+
   function handleKeydown(event: KeyboardEvent) {
+    if (event.key === "Tab" && $palette.open) {
+      handlePaletteKeydown(event);
+    }
+
     if (event.key === "Escape" && $palette.open) {
       event.preventDefault();
-      palette.close();
+      closePalette();
       return;
     }
 
@@ -218,7 +287,15 @@
           {/each}
         </select>
 
-        <button data-testid="palette-toggle" disabled={isShellBusy} on:click={() => palette.toggle()}>
+        <button
+          bind:this={paletteToggleButton}
+          data-testid="palette-toggle"
+          disabled={isShellBusy}
+          aria-haspopup="dialog"
+          aria-expanded={$palette.open}
+          aria-controls="command-palette-dialog"
+          on:click={() => palette.toggle()}
+        >
           <AppIcon name="palette" surface={true} />
           <span>Ctrl+K</span>
         </button>
@@ -254,9 +331,28 @@
   </main>
 
   {#if $palette.open}
-    <button type="button" class="palette-backdrop" aria-label="Закрити палітру команд" on:click={() => palette.close()}></button>
-    <section class="palette" data-testid="palette">
-      <input bind:this={paletteInput} placeholder="Пошук команд, екранів і документів" on:input={onPaletteInput} />
+    <button
+      type="button"
+      class="palette-backdrop"
+      aria-label="Закрити палітру команд"
+      on:click={closePalette}
+    ></button>
+    <section
+      id="command-palette-dialog"
+      class="palette"
+      data-testid="palette"
+      bind:this={paletteDialog}
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
+      aria-label="Командна палітра навігації та швидких дій"
+    >
+      <input
+        bind:this={paletteInput}
+        aria-label={paletteInputAriaLabel}
+        placeholder={paletteInputPlaceholder}
+        on:input={onPaletteInput}
+      />
 
       <div class="palette-items" data-testid="palette-items">
         {#each $palette.items as item, index}
@@ -265,7 +361,7 @@
             class="palette-item"
             on:click={async () => {
               await palette.activate(item.payload);
-              palette.close();
+              closePalette();
             }}
           >
             <div>

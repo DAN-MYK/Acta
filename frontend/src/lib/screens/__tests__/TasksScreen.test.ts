@@ -8,6 +8,8 @@ import type { TaskEditorDto, TaskItemDto, TasksScreenDto } from "../../types";
 
 type TasksTab = "open" | "done" | "all";
 
+const RealDate = Date;
+
 const mocks = vi.hoisted(() => {
   function createMockStore<T>(initialValue: T) {
     let value = initialValue;
@@ -141,8 +143,41 @@ function buttonByText(target: HTMLElement, text: string): HTMLButtonElement {
   return button as HTMLButtonElement;
 }
 
+function freezeLocalKyivMidnight() {
+  class MockDate extends RealDate {
+    constructor(...args: any[]) {
+      if (args.length === 0) {
+        super("2026-04-30T21:30:00.000Z");
+        return;
+      }
+
+      super(args[0]);
+    }
+
+    getFullYear() {
+      return 2026;
+    }
+
+    getMonth() {
+      return 4;
+    }
+
+    getDate() {
+      return 1;
+    }
+
+    static now() {
+      return new RealDate("2026-04-30T21:30:00.000Z").getTime();
+    }
+  }
+
+  vi.stubGlobal("Date", MockDate);
+}
+
 describe("TasksScreen component", () => {
   beforeEach(() => {
+    freezeLocalKyivMidnight();
+
     setTasksState([
       makeTask("task-1"),
       makeTask("task-2", {
@@ -168,6 +203,7 @@ describe("TasksScreen component", () => {
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     document.body.innerHTML = "";
   });
 
@@ -213,6 +249,29 @@ describe("TasksScreen component", () => {
 
     expect(target.textContent).toContain("На сьогодні");
     expect(target.textContent).toContain("Сьогодні немає нагадувань");
+    expect(target.textContent).toContain("Створіть нове завдання");
+    expect(target.textContent).toContain("або закрийте хвости");
+
+    component.$destroy();
+  });
+
+  it("uses local calendar day for overdue emphasis near kyiv midnight", () => {
+    setTasksState([
+      makeTask("task-overdue", {
+        dueDate: "2026-04-30",
+        reminderAt: "2026-04-30T09:00",
+        priority: "critical",
+        priorityLabel: "Критичний"
+      })
+    ]);
+
+    const { component, target } = renderTasks();
+
+    expect(target.textContent).toContain("Прострочено");
+
+    const criticalPill = target.querySelector(".task-pill-critical");
+    expect(criticalPill).toBeTruthy();
+    expect(criticalPill?.textContent).toContain("Критичний");
 
     component.$destroy();
   });

@@ -81,6 +81,11 @@ textarea {
   text-align: left;
   cursor: pointer;
   color: inherit;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
 }
 
 
@@ -432,6 +437,9 @@ textarea {
   width: min(760px, calc(100vw - 32px));
   padding: 16px;
   z-index: 50;
+  box-shadow:
+    0 28px 64px color-mix(in srgb, black 18%, transparent),
+    0 1px 0 color-mix(in srgb, white 24%, transparent) inset;
 }
 
 .palette input {
@@ -610,8 +618,38 @@ button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--accent-soft) 72%, transparent),
+    0 14px 30px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.nav button:focus-visible,
+.theme-switcher button:focus-visible,
+.topbar-actions button:focus-visible,
+.topbar-actions select:focus-visible,
+.palette-item:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border-hairline));
+  background: color-mix(in srgb, var(--accent-soft) 48%, var(--bg-hover));
+}
+
+.sidebar:focus-within,
+.topbar:focus-within,
+.palette:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border-hairline));
+}
+
+.palette:focus-within {
+  box-shadow:
+    0 28px 64px color-mix(in srgb, black 18%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--accent) 26%, transparent),
+    0 0 0 6px color-mix(in srgb, var(--accent-soft) 30%, transparent);
+}
+
+.palette:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline-offset: 3px;
 }
 
 /* --- Form controls --- */
