@@ -106,6 +106,14 @@ fn bas_import_dir() -> PathBuf {
     PathBuf::from("storage/import/bas")
 }
 
+fn resolve_import_dir(input_dir: Option<&str>) -> PathBuf {
+    input_dir
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(bas_import_dir)
+}
+
 async fn collect_sorted_files(dir: &Path) -> Result<Vec<PathBuf>> {
     let mut paths = Vec::new();
     let mut entries = fs::read_dir(dir).await?;
@@ -118,8 +126,8 @@ async fn collect_sorted_files(dir: &Path) -> Result<Vec<PathBuf>> {
     Ok(paths)
 }
 
-pub async fn import_bas_plan(ctx: &AppCtx) -> Result<ImportPlanDto> {
-    let dir = bas_import_dir();
+pub async fn import_bas_plan(ctx: &AppCtx, input_dir: Option<&str>) -> Result<ImportPlanDto> {
+    let dir = resolve_import_dir(input_dir);
     fs::create_dir_all(&dir).await?;
     let files = collect_sorted_files(&dir).await?;
 
@@ -222,8 +230,8 @@ pub async fn import_bas_plan(ctx: &AppCtx) -> Result<ImportPlanDto> {
     Ok(ImportPlanDto { entities })
 }
 
-pub async fn import_bas_execute(ctx: &AppCtx) -> Result<ImportResultDto> {
-    let dir = bas_import_dir();
+pub async fn import_bas_execute(ctx: &AppCtx, input_dir: Option<&str>) -> Result<ImportResultDto> {
+    let dir = resolve_import_dir(input_dir);
     fs::create_dir_all(&dir).await?;
     let files = collect_sorted_files(&dir).await?;
 
@@ -348,5 +356,17 @@ mod tests {
     fn xlsx_contracts_not_routed() {
         let path = Path::new("contracts_2024.xlsx");
         assert_eq!(route_file(path), None);
+    }
+
+    #[test]
+    fn resolve_import_dir_uses_selected_path_when_provided() {
+        let path = resolve_import_dir(Some("C:\\tmp\\bas-export"));
+        assert_eq!(path, PathBuf::from("C:\\tmp\\bas-export"));
+    }
+
+    #[test]
+    fn resolve_import_dir_falls_back_for_empty_value() {
+        let path = resolve_import_dir(Some("   "));
+        assert_eq!(path, bas_import_dir());
     }
 }

@@ -17,6 +17,7 @@ pub fn run() {
     let _ = dotenvy::dotenv();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let template_dir = app
                 .path()
@@ -83,6 +84,7 @@ pub fn run() {
             commands::payments::payment_create_or_update,
             commands::payments::payment_reconcile,
             commands::payments::payment_unreconcile,
+            commands::import::import_bas_pick_directory,
             commands::import::import_bas_plan,
             commands::import::import_bas_execute
         ])
