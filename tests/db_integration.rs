@@ -5199,6 +5199,9 @@ async fn compute_opening_balance_sums_payments_before_period() -> Result<()> {
     let p2 = create_test_payment(&pool, DEFAULT_COMPANY_ID, None, dec!(1000), "expense", before_period).await?;
     // Payment WITHIN period → NOT in opening balance
     let p3 = create_test_payment(&pool, DEFAULT_COMPANY_ID, None, dec!(9999), "income", today).await?;
+    // Payment on the boundary date (date_from itself) — must be excluded from opening balance
+    // because the SQL uses strict `date < date_from`
+    let p4 = create_test_payment(&pool, DEFAULT_COMPANY_ID, None, dec!(777), "income", period_start).await?;
 
     let ctx = AppCtx::new(pool.clone(), DEFAULT_COMPANY_ID);
     let filter = ResolvedReportsFilter {
@@ -5210,11 +5213,12 @@ async fn compute_opening_balance_sums_payments_before_period() -> Result<()> {
 
     let balance_before = compute_opening_balance(&ctx, &filter).await?;
 
-    // Remove within-period payment, verify it doesn't affect opening balance
-    sqlx::query("DELETE FROM payments WHERE id = $1").bind(p3).execute(&pool).await?;
+    // Remove within-period payments (p3) and boundary-date payment (p4),
+    // verify neither affects opening balance
+    sqlx::query("DELETE FROM payments WHERE id IN ($1, $2)").bind(p3).bind(p4).execute(&pool).await?;
 
     let balance_after = compute_opening_balance(&ctx, &filter).await?;
-    assert_eq!(balance_before, balance_after, "payment within period must not affect opening balance");
+    assert_eq!(balance_before, balance_after, "payment within period and on boundary date must not affect opening balance");
 
     // The balance must include 5000 income - 1000 expense = net +4000 from our test payments
     // (there may be other payments in the DB, so we check delta)
@@ -5222,7 +5226,6 @@ async fn compute_opening_balance_sums_payments_before_period() -> Result<()> {
     sqlx::query("DELETE FROM payments WHERE id IN ($1, $2)").bind(p1).bind(p2).execute(&pool).await?;
     let balance_without_test_payments = compute_opening_balance(&ctx, &filter).await?;
     let delta = balance_before - balance_without_test_payments;
-    use rust_decimal_macros::dec;
     assert_eq!(delta, dec!(4000), "test payments net 5000-1000=4000 must be in opening balance");
 
     Ok(())
