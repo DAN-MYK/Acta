@@ -101,12 +101,13 @@ describe("ReportsScreen", () => {
     document.body.innerHTML = "";
   });
 
-  it("uses Ukrainian scenario-first microcopy in the header and filters", () => {
+  it("uses Ukrainian scenario-first microcopy in the header, focus card and filters", () => {
     const { component, target } = renderReports();
 
     expect(target.textContent).toContain("Звіти");
     expect(target.textContent).toContain("Контроль грошей і боргів");
     expect(target.textContent).toContain("Що аналізуємо");
+    expect(target.textContent).toContain("У фокусі зараз");
     expect(target.textContent).toContain("Показувати");
     expect(target.textContent).not.toContain("Bank / receivables / payables");
     expect(target.textContent).not.toContain("Scope");
@@ -162,7 +163,31 @@ describe("ReportsScreen", () => {
 
     expect(target.textContent).toContain("Дебіторка під контролем");
     expect(target.textContent).toContain("Прострочено 4 дн.");
+    expect(target.textContent).toContain("Потрібно сьогодні");
     expect(target.querySelector(".reports-table-row-overdue")).toBeTruthy();
+
+    component.$destroy();
+  });
+
+  it("shows a strong empty state when the active report has no rows", () => {
+    mocks.reportsState.set({
+      screen: {
+        ...makeReportsScreen(),
+        filter: {
+          ...makeReportsScreen().filter,
+          tab: "payables"
+        },
+        payablesRows: []
+      },
+      loading: false,
+      error: null,
+      message: null
+    });
+
+    const { component, target } = renderReports();
+
+    expect(target.textContent).toContain("На цей період немає записів");
+    expect(target.textContent).toContain("Змініть період");
 
     component.$destroy();
   });
