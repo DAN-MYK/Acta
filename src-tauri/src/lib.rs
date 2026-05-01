@@ -59,6 +59,7 @@ pub fn run() {
             commands::documents::documents_bulk_delete,
             commands::documents::document_chain_get,
             commands::documents::document_chain_create_draft,
+            commands::documents::document_generate_pdf,
             commands::payments::payments_list,
             commands::payments::payments_import_latest_csv,
             commands::payments::payments_sync_bank,

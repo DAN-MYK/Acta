@@ -109,3 +109,13 @@ pub async fn document_chain_create_draft(
         .await
         .map_err(|error| error.to_string())
 }
+
+#[tauri::command]
+pub async fn document_generate_pdf(
+    state: State<'_, TauriState>,
+    doc_id: String,
+) -> CommandResult<MutationResultDto> {
+    acta::tauri_api::documents::generate_document_pdf(&state.ctx, doc_id)
+        .await
+        .map_err(|error| error.to_string())
+}
