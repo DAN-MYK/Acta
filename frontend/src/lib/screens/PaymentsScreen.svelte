@@ -142,6 +142,10 @@
             <button class="btn-primary" on:click={() => payments.confirmPreviewAutoMatch()}>
               Підтвердити автозіставлення
             </button>
+          {:else if $payments.matchPreview.decisionKind === "ambiguous"}
+            <button class="btn-primary" on:click={() => payments.confirmSelectedPreviewCandidate()}>
+              Підтвердити вибраний варіант
+            </button>
           {/if}
           <button class="btn-ghost" on:click={() => payments.closeMatchPreview()}>Закрити preview</button>
         </div>
@@ -191,7 +195,7 @@
       {:else}
         <div class="editor-items-empty">
           <strong>Автоматична звірка не знайшла точного документа</strong>
-          <p>Поки що backend не викликається для ручного підтвердження з цього екрана. Можна переглянути платіж і підготувати наступний крок вручну.</p>
+          <p>Можна переглянути платіж, підготувати ручне звіряння або перейти до наступного picker flow, коли він буде доданий.</p>
         </div>
       {/if}
     </section>
