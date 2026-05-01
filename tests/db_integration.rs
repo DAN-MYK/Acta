@@ -5230,3 +5230,42 @@ async fn compute_opening_balance_sums_payments_before_period() -> Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn load_bank_rows_groups_payments_by_counterparty() -> Result<()> {
+    use acta::app_ctx::AppCtx;
+    use acta::db::reports::load_bank_rows;
+    use acta::models::reports::{ReportsScope, ResolvedReportsFilter};
+
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+    let suffix = unique_suffix();
+    let today = chrono::Utc::now().date_naive();
+    let period_start = today - Duration::days(30);
+
+    let cp = create_test_counterparty(&pool, &suffix, &format!("ІТ Bank CP {suffix}"), None, None).await?;
+
+    let p1 = create_test_payment(&pool, DEFAULT_COMPANY_ID, Some(cp.id), dec!(3000), "income", today).await?;
+    let p2 = create_test_payment(&pool, DEFAULT_COMPANY_ID, Some(cp.id), dec!(1000), "expense", today).await?;
+
+    let ctx = AppCtx::new(pool.clone(), DEFAULT_COMPANY_ID);
+    let filter = ResolvedReportsFilter {
+        scope: ReportsScope::Active,
+        date_from: period_start,
+        date_to: today,
+        query: format!("ІТ Bank CP {suffix}"),
+    };
+
+    let rows = load_bank_rows(&ctx, &filter).await?;
+
+    assert_eq!(rows.len(), 1, "має бути один рядок по контрагенту після query фільтра");
+    assert_eq!(rows[0].income, dec!(3000));
+    assert_eq!(rows[0].expense, dec!(1000));
+    assert!(rows[0].label.contains(&suffix));
+
+    sqlx::query("DELETE FROM payments WHERE id IN ($1, $2)").bind(p1).bind(p2).execute(&pool).await?;
+    sqlx::query("DELETE FROM counterparties WHERE id = $1").bind(cp.id).execute(&pool).await?;
+
+    Ok(())
+}
