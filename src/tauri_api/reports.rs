@@ -7,6 +7,7 @@ use crate::db::reports::{
 };
 use crate::models::reports::{
     BankAggregateRow, PayableRow, ReceivableRow, ReportsScope, ResolvedReportsFilter,
+    TopCounterpartyRow,
 };
 use crate::tauri_api::reports_excel::export_excel_bytes;
 use anyhow::{anyhow, Context, Result};
@@ -23,6 +24,7 @@ pub struct ReportsLoadRequest {
     pub date_from: Option<String>,
     pub date_to: Option<String>,
     pub query: Option<String>,
+    pub selected_counterparty_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -33,6 +35,25 @@ pub struct ReportsFilterDto {
     pub date_from: String,
     pub date_to: String,
     pub query: String,
+    pub selected_counterparty_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SelectedCounterpartyDto {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TopCounterpartyRowDto {
+    pub counterparty_id: String,
+    pub counterparty_name: String,
+    pub primary_amount_str: String,
+    pub secondary_label: String,
+    pub secondary_value: String,
+    pub share_percent: u8,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -91,6 +112,8 @@ pub struct PayableRowDto {
 #[serde(rename_all = "camelCase")]
 pub struct ReportsScreenDto {
     pub filter: ReportsFilterDto,
+    pub selected_counterparty: Option<SelectedCounterpartyDto>,
+    pub top_counterparties: Vec<TopCounterpartyRowDto>,
     pub summary: ReportsSummaryDto,
     pub bank_rows: Vec<BankReportRowDto>,
     pub pnl_rows: Vec<BankReportRowDto>,
@@ -179,6 +202,10 @@ fn resolve_filter(
     };
 
     let query = request.query.unwrap_or_default().trim().to_string();
+    let selected_counterparty_id = request
+        .selected_counterparty_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
 
     Ok((
         ResolvedReportsFilter {
@@ -186,6 +213,7 @@ fn resolve_filter(
             date_from,
             date_to,
             query: query.clone(),
+            selected_counterparty_id: selected_counterparty_id.clone(),
         },
         ReportsFilterDto {
             tab,
@@ -196,6 +224,7 @@ fn resolve_filter(
             date_from: date_from.format("%Y-%m-%d").to_string(),
             date_to: date_to.format("%Y-%m-%d").to_string(),
             query,
+            selected_counterparty_id,
         },
     ))
 }
@@ -247,6 +276,19 @@ fn payables_to_dto(rows: Vec<PayableRow>) -> Vec<PayableRowDto> {
         .collect()
 }
 
+fn top_counterparties_to_dto(rows: Vec<TopCounterpartyRow>) -> Vec<TopCounterpartyRowDto> {
+    rows.into_iter()
+        .map(|row| TopCounterpartyRowDto {
+            counterparty_id: row.counterparty_id,
+            counterparty_name: row.counterparty_name,
+            primary_amount_str: format_money_ua(row.primary_amount),
+            secondary_label: row.secondary_label,
+            secondary_value: row.secondary_value,
+            share_percent: row.share_percent,
+        })
+        .collect()
+}
+
 fn sum_receivables(rows: &[ReceivableRow]) -> Decimal {
     rows.iter().fold(Decimal::ZERO, |acc, row| acc + row.amount)
 }
@@ -287,6 +329,8 @@ async fn build_reports_screen(
 
     Ok(ReportsScreenDto {
         filter: filter_dto,
+        selected_counterparty: None,
+        top_counterparties: top_counterparties_to_dto(Vec::new()),
         summary: ReportsSummaryDto {
             opening_balance_str: format_money_ua(opening_balance),
             income_str: format_money_ua(income),

@@ -22,7 +22,9 @@ import type {
   PaymentMatchPreviewRequest,
   PaymentReconcileRequest,
   PaymentDraftFormDto,
+  PaymentManualMatchCandidatesDto,
   PaymentsScreenDto,
+  PaymentMatchManualCandidatesRequest,
   PaymentUnreconcileAllRequest,
   PaymentUnreconcileRequest,
   ReportsExportResultDto,
@@ -221,7 +223,8 @@ export function reportsLoad(filter: ReportsFilterDto): Promise<ReportsScreenDto>
       scope: filter.scope,
       dateFrom: filter.dateFrom,
       dateTo: filter.dateTo,
-      query: filter.query
+      query: filter.query,
+      selectedCounterpartyId: filter.selectedCounterpartyId ?? null
     }
   });
 }
@@ -346,6 +349,12 @@ export function paymentMatchApplyAuto(
   request: PaymentMatchApplyAutoRequest
 ): Promise<MutationResultDto> {
   return appInvoke("payment_match_apply_auto", { request });
+}
+
+export function paymentMatchManualCandidates(
+  request: PaymentMatchManualCandidatesRequest
+): Promise<PaymentManualMatchCandidatesDto> {
+  return appInvoke("payment_match_manual_candidates", { request });
 }
 
 export function documentGeneratePdf(docId: string): Promise<MutationResultDto> {

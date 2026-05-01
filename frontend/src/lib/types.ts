@@ -308,7 +308,7 @@ export interface PaymentUnreconcileAllRequest {
   paymentId: string;
 }
 
-export type PaymentMatchDecisionKind = "exact" | "ambiguous" | "none";
+export type PaymentMatchDecisionKind = "exact" | "ambiguous" | "split" | "none";
 
 export interface PaymentMatchPreviewRequest {
   paymentId: string;
@@ -316,6 +316,11 @@ export interface PaymentMatchPreviewRequest {
 
 export interface PaymentMatchApplyAutoRequest {
   paymentId: string;
+}
+
+export interface PaymentMatchManualCandidatesRequest {
+  paymentId: string;
+  query: string;
 }
 
 export interface PaymentMatchCandidateDto {
@@ -343,6 +348,12 @@ export interface PaymentMatchPreviewDto {
   decisionKind: PaymentMatchDecisionKind;
   candidates: PaymentMatchCandidateDto[];
   autoMatch: PaymentAutoMatchDto | null;
+}
+
+export interface PaymentManualMatchCandidatesDto {
+  paymentId: string;
+  query: string;
+  candidates: PaymentMatchCandidateDto[];
 }
 
 export type TaskStatus = "open" | "in_progress" | "done" | "cancelled";
@@ -420,6 +431,7 @@ export interface ReportsFilterDto {
   dateFrom: string;
   dateTo: string;
   query: string;
+  selectedCounterpartyId: string | null;
 }
 
 export interface ReportsSummaryDto {
@@ -466,8 +478,24 @@ export interface PayableRowDto {
   recurrence: string;
 }
 
+export interface SelectedCounterpartyDto {
+  id: string;
+  name: string;
+}
+
+export interface TopCounterpartyRowDto {
+  counterpartyId: string;
+  counterpartyName: string;
+  primaryAmountStr: string;
+  secondaryLabel: string;
+  secondaryValue: string;
+  sharePercent: number;
+}
+
 export interface ReportsScreenDto {
   filter: ReportsFilterDto;
+  selectedCounterparty: SelectedCounterpartyDto | null;
+  topCounterparties: TopCounterpartyRowDto[];
   summary: ReportsSummaryDto;
   bankRows: BankReportRowDto[];
   pnlRows?: BankReportRowDto[];

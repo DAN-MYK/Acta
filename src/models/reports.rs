@@ -13,6 +13,7 @@ pub struct ResolvedReportsFilter {
     pub date_from: NaiveDate,
     pub date_to: NaiveDate,
     pub query: String,
+    pub selected_counterparty_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -24,6 +25,16 @@ pub struct BankAggregateRow {
 }
 
 pub type PnlCategoryRow = BankAggregateRow;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TopCounterpartyRow {
+    pub counterparty_id: String,
+    pub counterparty_name: String,
+    pub primary_amount: Decimal,
+    pub secondary_label: String,
+    pub secondary_value: String,
+    pub share_percent: u8,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReceivableRow {
