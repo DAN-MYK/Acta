@@ -173,6 +173,35 @@ async fn create_test_payment(
     Ok(id)
 }
 
+async fn create_test_invoice(
+    pool: &PgPool,
+    company_id: Uuid,
+    counterparty_id: Uuid,
+    number: &str,
+    amount: Decimal,
+    status: &str,
+    expected_payment_date: Option<chrono::NaiveDate>,
+    date: chrono::NaiveDate,
+) -> Result<Uuid> {
+    let id = Uuid::new_v4();
+    sqlx::query(
+        r#"INSERT INTO invoices
+           (id, company_id, counterparty_id, number, date, total_amount, status, expected_payment_date)
+           VALUES ($1, $2, $3, $4, $5, $6, $7::invoice_status, $8)"#,
+    )
+    .bind(id)
+    .bind(company_id)
+    .bind(counterparty_id)
+    .bind(number)
+    .bind(date)
+    .bind(amount)
+    .bind(status)
+    .bind(expected_payment_date)
+    .execute(pool)
+    .await?;
+    Ok(id)
+}
+
 #[tokio::test]
 async fn bas_counterparty_preview_updates_existing_by_exact_name() -> Result<()> {
     let Some(pool) = test_pool().await? else {
@@ -5266,6 +5295,62 @@ async fn load_bank_rows_groups_payments_by_counterparty() -> Result<()> {
     assert_eq!(rows[0].key, cp.id.to_string());
 
     sqlx::query("DELETE FROM payments WHERE id IN ($1, $2)").bind(p1).bind(p2).execute(&pool).await?;
+    sqlx::query("DELETE FROM counterparties WHERE id = $1").bind(cp.id).execute(&pool).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn load_receivables_rows_calculates_overdue_days() -> Result<()> {
+    use acta::app_ctx::AppCtx;
+    use acta::db::reports::load_receivables_rows;
+    use acta::models::reports::{ReportsScope, ResolvedReportsFilter};
+
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+    let suffix = unique_suffix();
+    let today = chrono::Utc::now().date_naive();
+    let period_start = today - Duration::days(60);
+    let overdue_expected = today - Duration::days(10);
+
+    let cp = create_test_counterparty(&pool, &suffix, &format!("ІТ Recv CP {suffix}"), None, None).await?;
+
+    // Issued invoice with overdue expected_payment_date
+    let inv_id = create_test_invoice(
+        &pool, DEFAULT_COMPANY_ID, cp.id,
+        &format!("INV-{suffix}"),
+        dec!(8000),
+        "issued",
+        Some(overdue_expected),
+        period_start + Duration::days(1),
+    ).await?;
+
+    // Paid invoice — must NOT appear in receivables
+    let paid_id = create_test_invoice(
+        &pool, DEFAULT_COMPANY_ID, cp.id,
+        &format!("INV-{suffix}-PAID"),
+        dec!(5000),
+        "paid",
+        None,
+        period_start + Duration::days(1),
+    ).await?;
+
+    let ctx = AppCtx::new(pool.clone(), DEFAULT_COMPANY_ID);
+    let filter = ResolvedReportsFilter {
+        scope: ReportsScope::Active,
+        date_from: period_start,
+        date_to: today,
+        query: format!("ІТ Recv CP {suffix}"),
+    };
+
+    let rows = load_receivables_rows(&ctx, &filter).await?;
+
+    assert_eq!(rows.len(), 1, "тільки issued рахунок має бути в дебіторці");
+    assert_eq!(rows[0].amount, dec!(8000));
+    assert!(rows[0].overdue_days >= 10, "прострочка має бути >= 10 днів");
+
+    sqlx::query("DELETE FROM invoices WHERE id IN ($1, $2)").bind(inv_id).bind(paid_id).execute(&pool).await?;
     sqlx::query("DELETE FROM counterparties WHERE id = $1").bind(cp.id).execute(&pool).await?;
 
     Ok(())
