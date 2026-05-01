@@ -426,6 +426,49 @@ describe("ReportsScreen", () => {
     component.$destroy();
   });
 
+  it("renders top counterparties card with focus state and reset button", async () => {
+    mocks.reportsState.set({
+      screen: {
+        ...makeReportsScreen(),
+        filter: { ...makeReportsScreen().filter, selectedCounterpartyId: "cp-1" },
+        selectedCounterparty: { id: "cp-1", name: "ТОВ Ромашка" }
+      },
+      initialLoading: false,
+      loading: false,
+      error: null,
+      message: null
+    });
+    const { component, target } = renderReports();
+    await tick();
+
+    expect(target.querySelector('[data-testid="reports-top-counterparties"]')).toBeTruthy();
+    expect(target.textContent).toContain("Топ контрагентів");
+    expect(target.textContent).toContain("Фокус: ТОВ Ромашка");
+    expect(target.textContent).toContain("Скинути");
+
+    component.$destroy();
+  });
+
+  it("renders context text matching selected counterparty and tab", async () => {
+    mocks.reportsState.set({
+      screen: {
+        ...makeReportsScreen(),
+        filter: { ...makeReportsScreen().filter, tab: "receivables", selectedCounterpartyId: "cp-1" },
+        selectedCounterparty: { id: "cp-1", name: "ТОВ Ромашка" }
+      },
+      initialLoading: false,
+      loading: false,
+      error: null,
+      message: null
+    });
+    const { component, target } = renderReports();
+    await tick();
+
+    expect(target.textContent).toContain("Показано: дебіторка по контрагенту ТОВ Ромашка");
+
+    component.$destroy();
+  });
+
   it("resets selectedCounterpartyId to null when tab changes", async () => {
     mocks.reportsState.set({
       screen: {

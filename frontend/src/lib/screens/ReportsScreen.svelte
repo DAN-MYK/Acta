@@ -1,7 +1,7 @@
 <script lang="ts">
   import SkeletonRow from "../components/SkeletonRow.svelte";
   import { reportsStore } from "../stores/reports";
-  import type { PayableRowDto, ReceivableRowDto, ReportsScope, ReportsTab, TopCounterpartyRowDto } from "../types";
+  import type { PayableRowDto, ReceivableRowDto, ReportsScope, ReportsScreenDto, ReportsTab, TopCounterpartyRowDto } from "../types";
 
   interface ReportKpiCard {
     label: string;
@@ -319,6 +319,28 @@
     void reports.toggleCounterparty(row.counterpartyId);
   }
 
+  function getTopCounterpartiesSubtitle(tab: string | undefined): string {
+    if (tab === "receivables") return "Хто формує найбільшу дебіторку у вибраному періоді.";
+    if (tab === "payables") return "Кому зараз найбільше винні або скоро маємо платити.";
+    if (tab === "pnl") return "Хто найбільше впливає на фінрезультат за період.";
+    return "По кому зараз проходить найбільший рух грошей.";
+  }
+
+  function getContextText(screen: ReportsScreenDto | null): string {
+    const selected = screen?.selectedCounterparty;
+    const tab = screen?.filter.tab;
+    if (!selected) {
+      if (tab === "receivables") return "Показано: загальна дебіторка по всіх контрагентах";
+      if (tab === "payables") return "Показано: загальна кредиторка по всіх контрагентах";
+      if (tab === "pnl") return "Показано: загальний фінрезультат по всіх контрагентах";
+      return "Показано: загальний рух грошей по всіх контрагентах";
+    }
+    if (tab === "receivables") return `Показано: дебіторка по контрагенту ${selected.name}`;
+    if (tab === "payables") return `Показано: кредиторка по контрагенту ${selected.name}`;
+    if (tab === "pnl") return `Показано: фінрезультат по контрагенту ${selected.name}`;
+    return `Показано: рух грошей по контрагенту ${selected.name}`;
+  }
+
   function hasActiveRows(tab: ReportsTab | undefined): boolean {
     if (tab === "pnl") {
       return ($reports.screen?.pnlRows?.length ?? 0) > 0;
@@ -448,8 +470,29 @@
     {/each}
   </div>
 
-  {#if ($reports.screen?.topCounterparties?.length ?? 0) > 0}
-    <div class="reports-top-counterparties" data-testid="reports-top-counterparties">
+  <div class="reports-top-counterparties" data-testid="reports-top-counterparties">
+    <div class="reports-top-counterparties-header">
+      <div>
+        <span class="reports-focus-label">Топ контрагентів</span>
+        <p class="reports-top-counterparties-subtitle">{getTopCounterpartiesSubtitle($reports.screen?.filter.tab)}</p>
+      </div>
+      {#if $reports.screen?.selectedCounterparty}
+        <div class="reports-top-counterparties-focus">
+          <span>Фокус: {$reports.screen.selectedCounterparty.name}</span>
+          <button
+            class="btn-secondary reports-top-counterparties-reset"
+            type="button"
+            on:click={() => reports.load({ selectedCounterpartyId: null })}
+          >
+            Скинути
+          </button>
+        </div>
+      {/if}
+    </div>
+
+    {#if ($reports.screen?.topCounterparties?.length ?? 0) === 0}
+      <p class="reports-top-counterparties-empty">Контрагентів немає у вибраному діапазоні.</p>
+    {:else}
       {#each $reports.screen?.topCounterparties ?? [] as row}
         <button
           class="reports-top-counterparty-row"
@@ -462,10 +505,13 @@
           <span class="reports-top-cp-amount">{row.primaryAmountStr}</span>
           <span class="reports-top-cp-share">{row.sharePercent}%</span>
           <span class="reports-top-cp-secondary">{row.secondaryLabel}: {row.secondaryValue}</span>
+          <div class="reports-top-counterparty-bar"><span style="width: {row.sharePercent}%"></span></div>
         </button>
       {/each}
-    </div>
-  {/if}
+    {/if}
+  </div>
+
+  <p class="reports-context-text">{getContextText($reports.screen)}</p>
 
   {#if $reports.message}
     <p class="message">{$reports.message}</p>
