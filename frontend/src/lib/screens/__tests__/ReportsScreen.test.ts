@@ -101,11 +101,12 @@ describe("ReportsScreen", () => {
     document.body.innerHTML = "";
   });
 
-  it("uses only Ukrainian scenario-first microcopy in the header and filters", () => {
+  it("uses Ukrainian scenario-first microcopy in the header and filters", () => {
     const { component, target } = renderReports();
 
     expect(target.textContent).toContain("Звіти");
-    expect(target.textContent).toContain("Гроші, дебіторка та кредиторка");
+    expect(target.textContent).toContain("Контроль грошей і боргів");
+    expect(target.textContent).toContain("Що аналізуємо");
     expect(target.textContent).toContain("Показувати");
     expect(target.textContent).not.toContain("Bank / receivables / payables");
     expect(target.textContent).not.toContain("Scope");
@@ -113,15 +114,55 @@ describe("ReportsScreen", () => {
     component.$destroy();
   });
 
-  it("renders canonical action classes for report controls", () => {
+  it("renders canonical action classes and scenario tabs for report controls", () => {
     const { component, target } = renderReports();
 
     const exportButton = Array.from(target.querySelectorAll("button")).find((button) =>
-      button.textContent?.includes("Експорт CSV")
+      button.textContent?.includes("Експортувати CSV")
     );
 
     expect(exportButton).toBeTruthy();
     expect(exportButton?.className).toContain("btn-secondary");
+    expect(target.textContent).toContain("Рух грошей");
+    expect(target.textContent).toContain("Нам мають");
+    expect(target.textContent).toContain("Ми винні");
+
+    component.$destroy();
+  });
+
+  it("adapts KPI context and overdue emphasis to the active report tab", () => {
+    mocks.reportsState.set({
+      screen: {
+        ...makeReportsScreen(),
+        filter: {
+          ...makeReportsScreen().filter,
+          tab: "receivables"
+        },
+        receivablesRows: [
+          {
+            docId: "doc-1",
+            docType: "invoice",
+            docNumber: "INV-2026-0042",
+            docDate: "2026-05-01",
+            companyName: "ТОВ Акт",
+            counterparty: "ТОВ Ромашка",
+            amountStr: "48 200,00 грн",
+            expectedDate: "2026-05-05",
+            overdueDays: 4,
+            status: "Очікується"
+          }
+        ]
+      },
+      loading: false,
+      error: null,
+      message: null
+    });
+
+    const { component, target } = renderReports();
+
+    expect(target.textContent).toContain("Дебіторка під контролем");
+    expect(target.textContent).toContain("Прострочено 4 дн.");
+    expect(target.querySelector(".reports-table-row-overdue")).toBeTruthy();
 
     component.$destroy();
   });

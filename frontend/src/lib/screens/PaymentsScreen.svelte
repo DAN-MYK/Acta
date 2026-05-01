@@ -8,6 +8,10 @@
     const input = event.currentTarget as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
     payments.updateFormField(field, input.value);
   }
+
+  function getPaymentStateLabel(matchedDoc: string): string {
+    return matchedDoc ? `Зв'язано з ${matchedDoc}` : "Не зведено";
+  }
 </script>
 
 <section class="panel">
@@ -17,11 +21,25 @@
       <p>{$payments.list?.items.length ?? 0} записів</p>
     </div>
     <div class="panel-actions">
-      <button class="btn-secondary" on:click={() => payments.importCsv()}>Імпорт CSV</button>
-      <button class="btn-ghost" on:click={() => payments.syncBank()}>Синхронізувати банк</button>
+      <button class="btn-secondary" on:click={() => payments.importCsv()}>Імпортувати виписку</button>
+      <button class="btn-ghost" on:click={() => payments.syncBank()}>Оновити з банку</button>
       <button class="btn-ghost" on:click={() => payments.openManualTemplate()}>Шаблон CSV</button>
-      <button class="btn-primary" on:click={() => payments.openEditor()}>Новий платіж</button>
+      <button class="btn-primary" on:click={() => payments.openEditor()}>Створити платіж</button>
     </div>
+  </div>
+
+  <div class="create-strip-card">
+    <div class="create-strip-header">
+      <div>
+        <strong>Контроль руху грошей</strong>
+        <p>1. Імпорт  2. Звірка  3. Ручний платіж</p>
+      </div>
+      <span class="doc-kind-badge">Звірка в центрі уваги</span>
+    </div>
+
+    <p class="create-strip-hint">
+      Імпортуйте виписку, швидко знайдіть незведені рухи та лише потім додавайте ручні коригування.
+    </p>
   </div>
 
   <div class="task-kpis">
@@ -51,31 +69,50 @@
     <p class="error">{$payments.error}</p>
   {/if}
 
+  {#if $payments.loading}
+    <p class="message">Оновлюємо платежі та статуси звірки…</p>
+  {/if}
+
   <div class="documents-list">
-    {#each $payments.list?.items ?? [] as item}
-      <div class="doc-row">
-        <button class="task-row-main" on:click={() => payments.openEditor(item)}>
+    {#if ($payments.list?.items.length ?? 0) === 0}
+      <div class="editor-items-empty">
+        <strong>Ще немає жодного платежу</strong>
+        <p>Імпортуйте виписку або створіть ручний платіж, щоб почати звірку руху грошей.</p>
+      </div>
+    {:else}
+      {#each $payments.list?.items ?? [] as item}
+        <div
+          class="doc-row payment-row"
+          class:payment-row-matched={Boolean(item.matchedDoc)}
+          class:payment-row-unmatched={!item.matchedDoc}
+        >
+          <button class="task-row-main" on:click={() => payments.openEditor(item)}>
+            <div>
+              <strong>{item.date} - {item.counterparty || "Без контрагента"}</strong>
+              <p>{item.account || ""}</p>
+            </div>
+            <div class="task-row-meta">
+              <span class="task-pill">{item.direction === "in" ? "Надходження" : "Витрата"}</span>
+              <span>{item.amountStr}</span>
+              <span
+                class="payment-state"
+                class:payment-state-matched={Boolean(item.matchedDoc)}
+                class:payment-state-unmatched={!item.matchedDoc}
+              >
+                {getPaymentStateLabel(item.matchedDoc)}
+              </span>
+            </div>
+          </button>
           <div>
-            <strong>{item.date} - {item.counterparty || "Без контрагента"}</strong>
-            <p>{item.account || ""}</p>
-          </div>
-          <div class="task-row-meta">
-            <span class="task-pill">{item.direction === "in" ? "Надходження" : "Витрата"}</span>
-            <span>{item.amountStr}</span>
             {#if item.matchedDoc}
-              <span>Зведено</span>
+              <button class="btn-ghost" on:click={() => payments.unreconcile(item.id)}>Зняти звірку</button>
+            {:else}
+              <button class="btn-secondary" on:click={() => payments.reconcile(item.id)}>Звірити платіж</button>
             {/if}
           </div>
-        </button>
-        <div>
-          {#if item.matchedDoc}
-            <button class="btn-ghost" on:click={() => payments.unreconcile(item.id)}>Зняти зведення</button>
-          {:else}
-            <button class="btn-secondary" on:click={() => payments.reconcile(item.id)}>Звести</button>
-          {/if}
         </div>
-      </div>
-    {/each}
+      {/each}
+    {/if}
   </div>
 </section>
 
@@ -89,6 +126,25 @@
       <div class="editor-actions">
         <button class="btn-primary" on:click={() => payments.save()}>Зберегти</button>
         <button class="btn-ghost" on:click={() => payments.closeEditor()}>Закрити</button>
+      </div>
+    </div>
+
+    <div class="chain-panel">
+      <div class="chain-panel-header">
+        <div>
+          <strong>Що перевірити перед збереженням</strong>
+          <p>Перевірте напрям, суму, контрагента та джерело платежу, щоб звірка не губилась після імпорту.</p>
+        </div>
+        <div class="chain-summary">
+          <div class="chain-summary-block">
+            <span>Напрям</span>
+            <strong>{$payments.editor.direction === "income" ? "Надходження" : "Витрата"}</strong>
+          </div>
+          <div class="chain-summary-block">
+            <span>Пов'язаний документ</span>
+            <strong>{$payments.editor.reference || "Ще не вказано"}</strong>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -122,7 +178,7 @@
         <input value={$payments.editor.bankName} on:input={(event) => onPaymentFieldChange("bankName", event)} />
       </label>
       <label>
-        Референс
+        Пов'язаний документ
         <input value={$payments.editor.reference} on:input={(event) => onPaymentFieldChange("reference", event)} />
       </label>
       <label class="editor-grid-span">

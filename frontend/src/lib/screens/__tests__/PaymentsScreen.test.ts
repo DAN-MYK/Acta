@@ -113,6 +113,23 @@ function renderPayments() {
   return { component, target };
 }
 
+function setPaymentsState(overrides: Partial<{
+  list: PaymentsScreenDto | null;
+  loading: boolean;
+  error: string | null;
+  editor: PaymentDraftFormDto | null;
+  message: string | null;
+}> = {}) {
+  mocks.paymentsState.set({
+    list: makePayments(),
+    loading: false,
+    error: null,
+    editor: null,
+    message: null,
+    ...overrides
+  });
+}
+
 function buttonByText(target: HTMLElement, text: string): HTMLButtonElement {
   const button = Array.from(target.querySelectorAll("button")).find((candidate) =>
     candidate.textContent?.includes(text)
@@ -124,13 +141,7 @@ function buttonByText(target: HTMLElement, text: string): HTMLButtonElement {
 
 describe("PaymentsScreen component", () => {
   beforeEach(() => {
-    mocks.paymentsState.set({
-      list: makePayments(),
-      loading: false,
-      error: null,
-      editor: null,
-      message: null
-    });
+    setPaymentsState();
 
     for (const fn of [
       mocks.closeEditor,
@@ -151,13 +162,37 @@ describe("PaymentsScreen component", () => {
     document.body.innerHTML = "";
   });
 
-  it("renders payment KPIs and rows", () => {
+  it("renders payment KPIs, scenario header and reconciliation states", () => {
     const { component, target } = renderPayments();
 
     expect(target.textContent).toContain("Платежі");
+    expect(target.textContent).toContain("Контроль руху грошей");
+    expect(target.textContent).toContain("Імпорт");
+    expect(target.textContent).toContain("Звірка");
+    expect(target.textContent).toContain("Ручний платіж");
     expect(target.textContent).toContain("8 450,00 грн");
     expect(target.textContent).toContain("ТОВ Ромашка");
     expect(target.textContent).toContain("ФОП Петренко");
+    expect(target.textContent).toContain("Не зведено");
+    expect(target.textContent).toContain("Зв'язано з ACT-9");
+
+    component.$destroy();
+  });
+
+  it("uses canonical payment action hierarchy and row states", () => {
+    const { component, target } = renderPayments();
+
+    expect(buttonByText(target, "Імпортувати виписку").className).toContain("btn-secondary");
+    expect(buttonByText(target, "Оновити з банку").className).toContain("btn-ghost");
+    expect(buttonByText(target, "Шаблон CSV").className).toContain("btn-ghost");
+    expect(buttonByText(target, "Створити платіж").className).toContain("btn-primary");
+    expect(buttonByText(target, "Звірити платіж").className).toContain("btn-secondary");
+    expect(buttonByText(target, "Зняти звірку").className).toContain("btn-ghost");
+
+    const rows = target.querySelectorAll(".payment-row");
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.className).toContain("payment-row-unmatched");
+    expect(rows[1]?.className).toContain("payment-row-matched");
 
     component.$destroy();
   });
@@ -166,9 +201,9 @@ describe("PaymentsScreen component", () => {
     const { component, target } = renderPayments();
 
     buttonByText(target, "ТОВ Ромашка").click();
-    buttonByText(target, "Звести").click();
-    buttonByText(target, "Зняти зведення").click();
-    buttonByText(target, "Новий платіж").click();
+    buttonByText(target, "Звірити платіж").click();
+    buttonByText(target, "Зняти звірку").click();
+    buttonByText(target, "Створити платіж").click();
     await tick();
 
     expect(mocks.openEditor).toHaveBeenCalledWith(makePayments().items[0]);
@@ -179,11 +214,8 @@ describe("PaymentsScreen component", () => {
     component.$destroy();
   });
 
-  it("uses canonical date control and action hierarchy in the payment editor", () => {
-    mocks.paymentsState.set({
-      list: makePayments(),
-      loading: false,
-      error: null,
+  it("uses canonical date control and scenario-first payment editor", () => {
+    setPaymentsState({
       editor: {
         id: "",
         date: "2026-05-01",
@@ -204,9 +236,39 @@ describe("PaymentsScreen component", () => {
     ) as HTMLInputElement | undefined;
     const saveButton = buttonByText(target, "Зберегти");
 
+    expect(target.textContent).toContain("Картка платежу");
+    expect(target.textContent).toContain("Перевірте напрям, суму, контрагента");
+    expect(target.textContent).toContain("Пов'язаний документ");
     expect(dateInput).toBeTruthy();
     expect(dateInput?.type).toBe("date");
     expect(saveButton.className).toContain("btn-primary");
+
+    component.$destroy();
+  });
+
+  it("shows visible loading and empty states for payment review flow", () => {
+    setPaymentsState({
+      list: {
+        items: [],
+        counterparties: [],
+        kpi: {
+          incomingStr: "0,00 грн",
+          outgoingStr: "0,00 грн",
+          netStr: "0,00 грн",
+          unmatchedStr: "0",
+          incomingSub: "надходження",
+          outgoingSub: "витрати",
+          unmatchedCount: 0
+        }
+      },
+      loading: true
+    });
+
+    const { component, target } = renderPayments();
+
+    expect(target.textContent).toContain("Оновлюємо платежі");
+    expect(target.textContent).toContain("Ще немає жодного платежу");
+    expect(target.textContent).toContain("Імпортуйте виписку");
 
     component.$destroy();
   });
