@@ -306,5 +306,16 @@ export function documentGeneratePdf(docId: string): Promise<MutationResultDto> {
   return appInvoke("document_generate_pdf", { docId });
 }
 
-export const importBasPlan = () => appInvoke<ImportPlanDto>("import_bas_plan");
-export const importBasExecute = () => appInvoke<ImportResultDto>("import_bas_execute");
+export const importBasPickDirectory = () => appInvoke<string | null>("import_bas_pick_directory");
+export const importBasPlan = (inputDir?: string | null) =>
+  appInvoke<ImportPlanDto>("import_bas_plan", {
+    request: {
+      inputDir: inputDir ?? null
+    }
+  });
+export const importBasExecute = (inputDir?: string | null) =>
+  appInvoke<ImportResultDto>("import_bas_execute", {
+    request: {
+      inputDir: inputDir ?? null
+    }
+  });

@@ -609,6 +609,8 @@ export async function browserFixtureInvoke<T>(command: string, payload?: Record<
       return clone({ ok: true, message: "Платіж зведено" } satisfies MutationResultDto) as T;
     case "payment_unreconcile":
       return clone({ ok: true, message: "Зведення скасовано" } satisfies MutationResultDto) as T;
+    case "import_bas_pick_directory":
+      return "C:\\tmp\\bas-export" as T;
     case "import_bas_plan":
       return clone({
         entities: [

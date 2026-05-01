@@ -204,17 +204,33 @@
               {/if}
 
               {#if $importBas.result === null}
-                <p>Помістіть файли BAS у <code>storage/import/bas/</code></p>
+                <p>Оберіть папку, у якій лежить експорт BAS, щоб перевірити файли перед імпортом.</p>
                 <div class="settings-actions-row" style="margin-top: 0.5rem;">
                   <button
                     class="btn-secondary"
-                    on:click={() => importBas.fetchPlan()}
+                    on:click={() => importBas.chooseDirectory()}
                     disabled={$importBas.loading}
+                  >
+                    <AppIcon name="add" size={14} />
+                    <span>
+                      {$importBas.selectedDirectory ? "Змінити папку" : "Обрати папку"}
+                    </span>
+                  </button>
+                  <button
+                    class="btn-secondary"
+                    on:click={() => importBas.fetchPlan()}
+                    disabled={$importBas.loading || !$importBas.selectedDirectory}
                   >
                     <AppIcon name="refresh" size={14} />
                     <span>{$importBas.loading ? "Перевірка..." : "Перевірити файли"}</span>
                   </button>
                 </div>
+
+                {#if $importBas.selectedDirectory}
+                  <p style="margin-top: 0.75rem;">
+                    Обрана папка: <code>{$importBas.selectedDirectory}</code>
+                  </p>
+                {/if}
 
                 {#if $importBas.plan !== null}
                   <div class="reports-table" style="margin-top: 1rem;">

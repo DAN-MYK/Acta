@@ -43,6 +43,7 @@ const mocks = vi.hoisted(() => {
   });
 
   const importState = createMockStore({
+    selectedDirectory: null as string | null,
     plan: null as ImportPlanDto | null,
     result: null as ImportResultDto | null,
     loading: false,
@@ -66,6 +67,7 @@ const mocks = vi.hoisted(() => {
     shellLoad: vi.fn().mockResolvedValue(undefined),
     themeSetMode: vi.fn(),
     themeToggle: vi.fn(),
+    importChooseDirectory: vi.fn(),
     importFetchPlan: vi.fn(),
     importExecute: vi.fn(),
     importReset: vi.fn()
@@ -105,6 +107,7 @@ vi.mock("../../stores/theme", () => ({
 vi.mock("../../stores/import", () => ({
   importStore: {
     subscribe: mocks.importState.subscribe,
+    chooseDirectory: mocks.importChooseDirectory,
     fetchPlan: mocks.importFetchPlan,
     execute: mocks.importExecute,
     reset: mocks.importReset
@@ -177,7 +180,7 @@ describe("SettingsScreen", () => {
       error: null,
       message: null
     });
-    mocks.importState.set({ plan: null, result: null, loading: false, error: null });
+    mocks.importState.set({ selectedDirectory: null, plan: null, result: null, loading: false, error: null });
     Object.values(mocks).forEach((m) => {
       if (typeof m === "function" && "mockReset" in m) {
         m.mockReset();
@@ -361,8 +364,22 @@ describe("SettingsScreen", () => {
       buttonByText(target, "Імпортувати").click();
       await tick();
 
-      expect(target.textContent).toContain("storage/import/bas/");
+      expect(target.textContent).toContain("Обрати папку");
       expect(target.textContent).toContain("Перевірити файли");
+
+      component.$destroy();
+    });
+
+    it("викликає importStore.chooseDirectory при кліку Обрати папку", async () => {
+      const { component, target } = renderSettings();
+      await tick();
+
+      buttonByText(target, "Імпортувати").click();
+      await tick();
+      buttonByText(target, "Обрати папку").click();
+      await tick();
+
+      expect(mocks.importChooseDirectory).toHaveBeenCalled();
 
       component.$destroy();
     });
@@ -373,6 +390,16 @@ describe("SettingsScreen", () => {
 
       buttonByText(target, "Імпортувати").click();
       await tick();
+
+      mocks.importState.set({
+        selectedDirectory: "C:\\tmp\\bas-export",
+        plan: null,
+        result: null,
+        loading: false,
+        error: null
+      });
+      await tick();
+
       buttonByText(target, "Перевірити файли").click();
       await tick();
 
@@ -389,6 +416,7 @@ describe("SettingsScreen", () => {
       await tick();
 
       mocks.importState.set({
+        selectedDirectory: "C:\\tmp\\bas-export",
         plan: {
           entities: [
             {
@@ -418,6 +446,7 @@ describe("SettingsScreen", () => {
       expect(target.textContent).toContain("counterparties");
       expect(target.textContent).toContain("counterparties.xml");
       expect(target.textContent).toContain("25 нових / 5 дублікатів");
+      expect(target.textContent).toContain("C:\\tmp\\bas-export");
       expect(target.textContent).toContain("Виконати імпорт");
 
       component.$destroy();
@@ -431,6 +460,7 @@ describe("SettingsScreen", () => {
       await tick();
 
       mocks.importState.set({
+        selectedDirectory: "C:\\tmp\\bas-export",
         plan: {
           entities: [
             {
@@ -465,6 +495,7 @@ describe("SettingsScreen", () => {
       await tick();
 
       mocks.importState.set({
+        selectedDirectory: "C:\\tmp\\bas-export",
         plan: null,
         result: {
           entities: [
@@ -497,6 +528,7 @@ describe("SettingsScreen", () => {
       await tick();
 
       mocks.importState.set({
+        selectedDirectory: "C:\\tmp\\bas-export",
         plan: {
           entities: [
             {
