@@ -498,6 +498,9 @@ async fn bas_payment_preview_marks_duplicate_by_bank_ref() -> Result<()> {
         description: payment.description.clone().unwrap_or_default(),
         bank_ref: payment.bank_ref.clone(),
         bank_name: payment.bank_name.clone().unwrap_or_default(),
+        counterparty_name: None,
+        counterparty_iban: None,
+        currency: None,
     };
 
     let report = apply_imported_payments(&pool, DEFAULT_COMPANY_ID, &[imported], true).await?;

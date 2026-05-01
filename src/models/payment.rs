@@ -9,7 +9,7 @@ use rust_decimal::Decimal;
 use uuid::Uuid;
 
 /// Напрямок платежу.
-#[derive(Debug, Clone, PartialEq, sqlx::Type)]
+#[derive(Debug, Clone, PartialEq, Eq, sqlx::Type)]
 #[sqlx(type_name = "payment_direction", rename_all = "lowercase")]
 pub enum PaymentDirection {
     Income,

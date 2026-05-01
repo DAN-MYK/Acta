@@ -1,0 +1,131 @@
+.counterparties-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.counterparties-list,
+.linked-list {
+  display: grid;
+  gap: 10px;
+}
+
+.counterparty-row,
+.linked-row {
+  border: 0;
+  background: var(--bg-card);
+  border-radius: var(--radius-2xl);
+  padding: 12px 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.counterparty-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.counterparty-row-main,
+.counterparty-row-meta {
+  display: grid;
+  gap: 8px;
+}
+
+.counterparty-row-meta {
+  justify-items: end;
+  text-align: right;
+}
+
+.counterparty-overview-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.risk-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: var(--font-sm);
+  font-weight: 600;
+}
+
+.risk-chip-danger {
+  background: color-mix(in srgb, var(--danger-soft) 70%, var(--bg-card));
+  color: var(--danger);
+}
+
+.risk-chip-ok {
+  background: color-mix(in srgb, var(--success-soft) 72%, var(--bg-card));
+  color: var(--success-text);
+}
+
+.counterparty-overview {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.counterparty-overview-panel {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 44%, transparent), transparent 66%),
+    var(--bg-subtle);
+}
+
+.counterparty-row.active {
+  outline: 2px solid var(--accent);
+}
+
+.counterparty-row p,
+.linked-row {
+  margin: 6px 0 0;
+}
+
+.counterparty-detail {
+  display: grid;
+  gap: 16px;
+}
+
+.counterparty-detail-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.counterparty-detail-header h3 {
+  margin: 0;
+}
+
+.counterparty-detail-header p {
+  margin: 6px 0 0;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.detail-grid p {
+  margin: 6px 0 0;
+}
+
+.linked-block {
+  display: grid;
+  gap: 10px;
+}
+
+.linked-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.linked-row.static {
+  cursor: default;
+}

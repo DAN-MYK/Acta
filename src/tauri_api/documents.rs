@@ -9,14 +9,20 @@ use uuid::Uuid;
 
 use crate::app_ctx::AppCtx;
 use crate::db;
-use crate::models::act::{ActItem, ActStatus, NewAct, NewActItem, UpdateAct};
+use crate::models::act::{Act, ActItem, ActStatus, NewAct, NewActItem, UpdateAct};
+use crate::models::company::Company;
+use crate::models::counterparty::Counterparty;
 use crate::models::invoice::{
-    InvoiceItem, InvoiceStatus, NewInvoice, NewInvoiceItem, UpdateInvoice,
+    Invoice, InvoiceItem, InvoiceStatus, NewInvoice, NewInvoiceItem, UpdateInvoice,
 };
 use crate::models::waybill::{
     NewWaybill, NewWaybillItem, UpdateWaybill, WaybillItem, WaybillStatus,
 };
 use crate::models::DocumentDirection;
+use crate::pdf::generator::{
+    amount_to_words, ensure_invoice_output_dir, ensure_output_dir, generate_act_pdf,
+    generate_invoice_pdf, PdfActData, PdfActItem, PdfCompany, PdfInvoiceData, PdfInvoiceItem,
+};
 
 const CHAIN_PARENT_PREFIX: &str = "[chain-parent:";
 const CHAIN_PARENT_SUFFIX: &str = "]";
@@ -362,6 +368,151 @@ fn normalize_chain_kind(kind: &str) -> Option<&'static str> {
         "waybill" | "wbl" => Some("waybill"),
         _ => None,
     }
+}
+
+fn to_pdf_company(c: &Company) -> PdfCompany {
+    PdfCompany {
+        name: c.name.clone(),
+        edrpou: c.edrpou.clone().unwrap_or_default(),
+        iban: c.iban.clone().unwrap_or_default(),
+        address: c
+            .actual_address
+            .clone()
+            .or_else(|| c.legal_address.clone())
+            .unwrap_or_default(),
+    }
+}
+
+fn counterparty_to_pdf_company(cp: &Counterparty) -> PdfCompany {
+    PdfCompany {
+        name: cp.name.clone(),
+        edrpou: cp
+            .edrpou
+            .clone()
+            .or_else(|| cp.ipn.clone())
+            .unwrap_or_default(),
+        iban: cp.iban.clone().unwrap_or_default(),
+        address: cp.address.clone().unwrap_or_default(),
+    }
+}
+
+fn build_act_pdf_data(
+    act: &Act,
+    items: &[ActItem],
+    company: &Company,
+    client: &Counterparty,
+) -> PdfActData {
+    PdfActData {
+        number: act.number.clone(),
+        date: act.date.format("%d.%m.%Y").to_string(),
+        company: to_pdf_company(company),
+        client: counterparty_to_pdf_company(client),
+        items: items
+            .iter()
+            .enumerate()
+            .map(|(i, item)| PdfActItem {
+                num: (i + 1) as u32,
+                name: item.description.clone(),
+                qty: format!("{:.4}", item.quantity),
+                unit: item.unit.clone(),
+                price: format!("{:.2}", item.unit_price),
+                amount: format!("{:.2}", item.amount),
+            })
+            .collect(),
+        total: format!("{:.2}", act.total_amount),
+        total_words: amount_to_words(&act.total_amount),
+        notes: act.notes.clone().unwrap_or_default(),
+    }
+}
+
+fn build_invoice_pdf_data(
+    invoice: &Invoice,
+    items: &[InvoiceItem],
+    company: &Company,
+    client: &Counterparty,
+) -> PdfInvoiceData {
+    PdfInvoiceData {
+        number: invoice.number.clone(),
+        date: invoice.date.format("%d.%m.%Y").to_string(),
+        company: to_pdf_company(company),
+        client: counterparty_to_pdf_company(client),
+        items: items
+            .iter()
+            .enumerate()
+            .map(|(i, item)| PdfInvoiceItem {
+                num: (i + 1) as u32,
+                name: item.description.clone(),
+                qty: format!("{:.4}", item.quantity),
+                unit: item.unit.clone().unwrap_or_default(),
+                price: format!("{:.2}", item.price),
+                amount: format!("{:.2}", item.amount),
+            })
+            .collect(),
+        total: format!("{:.2}", invoice.total_amount),
+        vat_amount: format!("{:.2}", invoice.vat_amount),
+        total_words: amount_to_words(&invoice.total_amount),
+        notes: invoice.notes.clone().unwrap_or_default(),
+    }
+}
+
+pub async fn generate_document_pdf(ctx: &AppCtx, doc_id: String) -> Result<MutationResultDto> {
+    let doc_ref = parse_document_ref(&doc_id)
+        .ok_or_else(|| anyhow!("Некоректний ідентифікатор документу: {doc_id}"))?;
+
+    let pool = ctx.pool();
+    let company_id = ctx.company_id();
+
+    let path = match doc_ref {
+        DocumentRef::Act(id) => {
+            let (act, items) = db::acts::get_by_id(pool, id)
+                .await?
+                .ok_or_else(|| anyhow!("Акт не знайдено"))?;
+
+            let (company_res, counterparty_res) = tokio::join!(
+                db::companies::get_by_id(pool, company_id),
+                db::counterparties::get_by_id(pool, company_id, act.counterparty_id)
+            );
+            let company = company_res?.ok_or_else(|| anyhow!("Компанію не знайдено"))?;
+            let counterparty =
+                counterparty_res?.ok_or_else(|| anyhow!("Контрагента не знайдено"))?;
+
+            let data = build_act_pdf_data(&act, &items, &company, &counterparty);
+            let path = ensure_output_dir(ctx.storage_dir(), &act.number)?;
+            generate_act_pdf(&data, &ctx.template_dir().join("act.typ"), &path)?;
+            path
+        }
+        DocumentRef::Invoice(id) => {
+            let (invoice, items) = db::invoices::get_by_id(pool, id)
+                .await?
+                .ok_or_else(|| anyhow!("Рахунок не знайдено"))?;
+
+            let (company_res, counterparty_res) = tokio::join!(
+                db::companies::get_by_id(pool, company_id),
+                db::counterparties::get_by_id(pool, company_id, invoice.counterparty_id)
+            );
+            let company = company_res?.ok_or_else(|| anyhow!("Компанію не знайдено"))?;
+            let counterparty =
+                counterparty_res?.ok_or_else(|| anyhow!("Контрагента не знайдено"))?;
+
+            let data = build_invoice_pdf_data(&invoice, &items, &company, &counterparty);
+            let path = ensure_invoice_output_dir(ctx.storage_dir(), &invoice.number)?;
+            generate_invoice_pdf(&data, &ctx.template_dir().join("invoice.typ"), &path)?;
+            path
+        }
+        DocumentRef::Waybill(_) => {
+            anyhow::bail!("PDF для накладних не підтримується");
+        }
+    };
+
+    if let Err(e) = open::that(&path) {
+        tracing::warn!("Не вдалось відкрити PDF: {e}");
+    }
+
+    Ok(MutationResultDto {
+        ok: true,
+        document_id: doc_id,
+        message: format!("PDF збережено: {}", path.display()),
+    })
 }
 
 fn chain_kind_rank(kind: &str) -> Option<u8> {
@@ -1376,4 +1527,326 @@ pub async fn document_chain_create_draft(
         show_type_picker: false,
         show_editor: true,
     })
+}
+
+fn document_word_form(count: usize) -> &'static str {
+    let remainder_100 = count % 100;
+    if (11..=14).contains(&remainder_100) {
+        return "документів";
+    }
+
+    match count % 10 {
+        1 => "документ",
+        2..=4 => "документи",
+        _ => "документів",
+    }
+}
+
+pub async fn documents_bulk_delete_live(
+    ctx: &AppCtx,
+    request: BulkDocumentRequest,
+) -> Result<BulkMutationResultDto> {
+    let mut result = BulkMutationResultDto {
+        total: request.doc_ids.len(),
+        ..BulkMutationResultDto::default()
+    };
+
+    for doc_id in request.doc_ids {
+        let delete_result = match parse_document_ref(&doc_id) {
+            Some(DocumentRef::Act(id)) => db::acts::delete(ctx.pool(), id).await,
+            Some(DocumentRef::Invoice(id)) => db::invoices::delete(ctx.pool(), id).await,
+            Some(DocumentRef::Waybill(id)) => db::waybills::delete(ctx.pool(), id).await,
+            None => Err(anyhow!("Некоректний ідентифікатор документа: {doc_id}")),
+        };
+
+        match delete_result {
+            Ok(_) => result.succeeded += 1,
+            Err(error) => {
+                result.failed += 1;
+                result.errors.push(format!("{doc_id}: {error}"));
+            }
+        }
+    }
+
+    result.message = match (result.succeeded, result.failed) {
+        (0, failed) if failed > 0 => {
+            format!("Не вдалося видалити жодного документа ({failed} помилок)")
+        }
+        (succeeded, 0) => format!("Видалено {succeeded} {}", document_word_form(succeeded)),
+        (succeeded, failed) => format!(
+            "Видалено {succeeded} {}, {failed} помилок",
+            document_word_form(succeeded)
+        ),
+    };
+
+    Ok(result)
+}
+
+pub async fn documents_bulk_advance_status_live(
+    ctx: &AppCtx,
+    request: BulkDocumentRequest,
+) -> Result<BulkMutationResultDto> {
+    let mut result = BulkMutationResultDto {
+        total: request.doc_ids.len(),
+        ..BulkMutationResultDto::default()
+    };
+
+    for doc_id in request.doc_ids {
+        let advance_result = match parse_document_ref(&doc_id) {
+            Some(DocumentRef::Act(id)) => db::acts::advance_status(ctx.pool(), id)
+                .await
+                .map(|value| value.map(|_| ())),
+            Some(DocumentRef::Invoice(id)) => db::invoices::advance_status(ctx.pool(), id)
+                .await
+                .map(|value| value.map(|_| ())),
+            Some(DocumentRef::Waybill(id)) => db::waybills::advance_status(ctx.pool(), id)
+                .await
+                .map(|value| value.map(|_| ())),
+            None => Err(anyhow!("Некоректний ідентифікатор документа: {doc_id}")),
+        };
+
+        match advance_result {
+            Ok(Some(())) => result.succeeded += 1,
+            Ok(None) => {
+                result.failed += 1;
+                result
+                    .errors
+                    .push(format!("{doc_id}: документ не знайдено"));
+            }
+            Err(error) => {
+                result.failed += 1;
+                result.errors.push(format!("{doc_id}: {error}"));
+            }
+        }
+    }
+
+    result.message = match (result.succeeded, result.failed) {
+        (0, failed) if failed > 0 => {
+            format!("Не вдалося оновити статус жодного документа ({failed} помилок)")
+        }
+        (succeeded, 0) => {
+            format!(
+                "Оновлено статус для {succeeded} {}",
+                document_word_form(succeeded)
+            )
+        }
+        (succeeded, failed) => format!(
+            "Оновлено статус для {succeeded} {}, {failed} помилок",
+            document_word_form(succeeded)
+        ),
+    };
+
+    Ok(result)
+}
+
+#[cfg(test)]
+mod pdf_tests {
+    use super::*;
+    use chrono::Utc;
+    use rust_decimal_macros::dec;
+
+    fn sample_company() -> crate::models::company::Company {
+        crate::models::company::Company {
+            id: uuid::Uuid::nil(),
+            name: "ФОП Тестовий".into(),
+            short_name: None,
+            edrpou: Some("1234567890".into()),
+            ipn: None,
+            iban: Some("UA123456789012345678901234567".into()),
+            legal_address: Some("вул. Юридична, 1".into()),
+            actual_address: Some("вул. Фактична, 2".into()),
+            phone: None,
+            email: None,
+            director_name: None,
+            accountant_name: None,
+            tax_system: None,
+            is_vat_payer: false,
+            logo_path: None,
+            notes: None,
+            is_archived: false,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    #[test]
+    fn to_pdf_company_prefers_actual_address() {
+        let company = sample_company();
+        let pdf = to_pdf_company(&company);
+        assert_eq!(pdf.name, "ФОП Тестовий");
+        assert_eq!(pdf.edrpou, "1234567890");
+        assert_eq!(pdf.iban, "UA123456789012345678901234567");
+        assert_eq!(pdf.address, "вул. Фактична, 2");
+    }
+
+    #[test]
+    fn to_pdf_company_falls_back_to_legal_address() {
+        let mut company = sample_company();
+        company.actual_address = None;
+        let pdf = to_pdf_company(&company);
+        assert_eq!(pdf.address, "вул. Юридична, 1");
+    }
+
+    #[test]
+    fn to_pdf_company_empty_when_no_address() {
+        let mut company = sample_company();
+        company.actual_address = None;
+        company.legal_address = None;
+        let pdf = to_pdf_company(&company);
+        assert_eq!(pdf.address, "");
+    }
+
+    fn sample_counterparty() -> crate::models::counterparty::Counterparty {
+        crate::models::counterparty::Counterparty {
+            id: uuid::Uuid::nil(),
+            name: "ТОВ Замовник".into(),
+            edrpou: Some("9876543210".into()),
+            ipn: None,
+            iban: Some("UA987654321098765432109876543".into()),
+            address: Some("вул. Замовника, 5".into()),
+            phone: None,
+            email: None,
+            notes: None,
+            is_archived: false,
+            bas_id: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    fn sample_act() -> crate::models::act::Act {
+        use crate::models::act::ActStatus;
+        use crate::models::DocumentDirection;
+        crate::models::act::Act {
+            id: uuid::Uuid::nil(),
+            number: "АКТ-2026-001".into(),
+            counterparty_id: uuid::Uuid::nil(),
+            contract_id: None,
+            category_id: None,
+            direction: DocumentDirection::Outgoing,
+            date: chrono::NaiveDate::from_ymd_opt(2026, 4, 15).unwrap(),
+            expected_payment_date: None,
+            total_amount: dec!(45000.00),
+            status: ActStatus::Draft,
+            notes: Some("Примітка".into()),
+            bas_id: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    fn sample_act_items() -> Vec<crate::models::act::ActItem> {
+        vec![crate::models::act::ActItem {
+            id: uuid::Uuid::nil(),
+            act_id: uuid::Uuid::nil(),
+            description: "Розробка ПЗ".into(),
+            quantity: dec!(1),
+            unit: "послуга".into(),
+            unit_price: dec!(45000.00),
+            amount: dec!(45000.00),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }]
+    }
+
+    #[test]
+    fn build_act_pdf_data_maps_fields_correctly() {
+        let act = sample_act();
+        let items = sample_act_items();
+        let company = sample_company();
+        let client = sample_counterparty();
+
+        let data = build_act_pdf_data(&act, &items, &company, &client);
+
+        assert_eq!(data.number, "АКТ-2026-001");
+        assert_eq!(data.date, "15.04.2026");
+        assert_eq!(data.total, "45000.00");
+        assert_eq!(data.notes, "Примітка");
+        assert_eq!(data.items.len(), 1);
+
+        let item = &data.items[0];
+        assert_eq!(item.num, 1);
+        assert_eq!(item.name, "Розробка ПЗ");
+        assert_eq!(item.unit, "послуга");
+        assert_eq!(item.price, "45000.00"); // unit_price → price у PdfActItem
+        assert_eq!(item.amount, "45000.00");
+    }
+
+    fn sample_invoice() -> crate::models::invoice::Invoice {
+        use crate::models::invoice::InvoiceStatus;
+        use crate::models::DocumentDirection;
+        crate::models::invoice::Invoice {
+            id: uuid::Uuid::nil(),
+            company_id: uuid::Uuid::nil(),
+            number: "РАХ-2026-001".into(),
+            counterparty_id: uuid::Uuid::nil(),
+            contract_id: None,
+            category_id: None,
+            direction: DocumentDirection::Outgoing,
+            date: chrono::NaiveDate::from_ymd_opt(2026, 4, 15).unwrap(),
+            expected_payment_date: None,
+            total_amount: dec!(1000.00),
+            vat_amount: dec!(0.00),
+            status: InvoiceStatus::Draft,
+            notes: None,
+            pdf_path: None,
+            bas_id: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    fn sample_invoice_items() -> Vec<crate::models::invoice::InvoiceItem> {
+        vec![crate::models::invoice::InvoiceItem {
+            id: uuid::Uuid::nil(),
+            invoice_id: uuid::Uuid::nil(),
+            position: 1,
+            description: "Товар".into(),
+            unit: Some("шт".into()),
+            quantity: dec!(2),
+            price: dec!(500.00),
+            amount: dec!(1000.00),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }]
+    }
+
+    #[test]
+    fn build_invoice_pdf_data_maps_fields_correctly() {
+        let invoice = sample_invoice();
+        let items = sample_invoice_items();
+        let company = sample_company();
+        let client = sample_counterparty();
+
+        let data = build_invoice_pdf_data(&invoice, &items, &company, &client);
+
+        assert_eq!(data.number, "РАХ-2026-001");
+        assert_eq!(data.date, "15.04.2026");
+        assert_eq!(data.total, "1000.00");
+        assert_eq!(data.vat_amount, "0.00");
+        assert_eq!(data.items.len(), 1);
+
+        let item = &data.items[0];
+        assert_eq!(item.unit, "шт"); // Option<String> → String
+        assert_eq!(item.price, "500.00"); // InvoiceItem.price (not unit_price)
+        assert_eq!(item.amount, "1000.00");
+    }
+
+    #[test]
+    fn build_invoice_pdf_data_handles_none_unit() {
+        let invoice = sample_invoice();
+        let mut items = sample_invoice_items();
+        items[0].unit = None; // Option<String> = None
+        let data =
+            build_invoice_pdf_data(&invoice, &items, &sample_company(), &sample_counterparty());
+        assert_eq!(data.items[0].unit, ""); // unwrap_or_default
+    }
+
+    #[test]
+    fn generate_document_pdf_rejects_waybill_id() {
+        // parse_document_ref → DocumentRef::Waybill → bail!
+        let wbl_id = format!("wbl:{}", uuid::Uuid::nil());
+        let doc_ref = parse_document_ref(&wbl_id);
+        assert!(matches!(doc_ref, Some(DocumentRef::Waybill(_))));
+    }
 }

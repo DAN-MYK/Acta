@@ -34,6 +34,7 @@
   const settings = settingsStore;
 
   let paletteInput: HTMLInputElement | null = null;
+  let isCompanyReloading = false;
 
   const sidebarScreens: Array<{
     screen: ScreenId;
@@ -72,6 +73,8 @@
   $: document.body.dataset.theme = $theme;
   $: currentScreen = $navigation;
   $: shellState = $shell.state;
+  $: isShellBusy = $shell.loading || isCompanyReloading;
+  $: themeLabel = $theme === "dark" ? "темна" : "світла";
 
   function onPaletteInput(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
@@ -80,19 +83,29 @@
 
   async function onCompanyChange(event: Event) {
     const select = event.currentTarget as HTMLSelectElement;
-    await shell.setActiveCompany(select.value);
-    const settingsScreen = await settings.load();
-    if (settingsScreen) {
-      theme.setMode(settingsScreen.preferences.darkMode ? "dark" : "light");
+    if (isShellBusy) {
+      return;
     }
-    await Promise.all([
-      dashboard.load(),
-      documents.load(),
-      counterparties.load(),
-      tasks.load(),
-      reports.load(),
-      payments.load()
-    ]);
+
+    isCompanyReloading = true;
+
+    try {
+      await shell.setActiveCompany(select.value);
+      const settingsScreen = await settings.load();
+      if (settingsScreen) {
+        theme.setMode(settingsScreen.preferences.darkMode ? "dark" : "light");
+      }
+      await Promise.all([
+        dashboard.load(),
+        documents.load(),
+        counterparties.load(),
+        tasks.load(),
+        reports.load(),
+        payments.load()
+      ]);
+    } finally {
+      isCompanyReloading = false;
+    }
   }
 
   async function onQuickThemeToggle() {
@@ -116,13 +129,25 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
+    if (event.key === "Escape" && $palette.open) {
+      event.preventDefault();
+      palette.close();
+      return;
+    }
+
     if (event.ctrlKey && event.key.toLowerCase() === "k") {
       event.preventDefault();
+      if (isShellBusy) {
+        return;
+      }
       palette.toggle();
     }
 
     if (event.ctrlKey && event.key >= "1" && event.key <= "7") {
       event.preventDefault();
+      if (isShellBusy) {
+        return;
+      }
       const screens: ScreenId[] = [
         "dashboard",
         "documents",
@@ -151,7 +176,12 @@
 
     <nav class="nav">
       {#each sidebarScreens as item}
-        <button class:active={currentScreen === item.screen} on:click={() => navigation.go(item.screen)}>
+        <button
+          data-testid={`nav-${item.screen}`}
+          class:active={currentScreen === item.screen}
+          disabled={isShellBusy}
+          on:click={() => navigation.go(item.screen)}
+        >
           <AppIcon name={item.icon} surface={currentScreen === item.screen} />
           <span>{item.label}</span>
         </button>
@@ -159,33 +189,47 @@
     </nav>
 
     <div class="theme-switcher">
-      <button on:click={onQuickThemeToggle}>
+      <button disabled={isShellBusy} on:click={onQuickThemeToggle}>
         <AppIcon name="theme" surface={true} />
-        <span>Тема: {$theme}</span>
+        <span>Тема: {themeLabel}</span>
       </button>
     </div>
   </aside>
 
   <main class="content">
-    <header class="topbar">
+    <header class:busy={isShellBusy} class="topbar">
       <div>
         <h1>{shellState?.chrome.companyName ?? "Acta"}</h1>
-        <p>{shellState?.chrome.userRole ?? "Завантаження shell..."}</p>
+        <p>
+          {#if isCompanyReloading}
+            Оновлюємо дані активної компанії...
+          {:else if $shell.loading}
+            Завантажуємо shell...
+          {:else}
+            {shellState?.chrome.userRole ?? "Завантаження shell..."}
+          {/if}
+        </p>
       </div>
 
       <div class="topbar-actions">
-        <select value={shellState?.activeCompanyId} on:change={onCompanyChange}>
+        <select disabled={isShellBusy} value={shellState?.activeCompanyId} on:change={onCompanyChange}>
           {#each shellState?.companyItems ?? [] as company}
             <option value={company.id}>{company.name}</option>
           {/each}
         </select>
 
-        <button on:click={() => palette.toggle()}>
+        <button data-testid="palette-toggle" disabled={isShellBusy} on:click={() => palette.toggle()}>
           <AppIcon name="palette" surface={true} />
           <span>Ctrl+K</span>
         </button>
       </div>
     </header>
+
+    {#if isShellBusy}
+      <div class="shell-progress" aria-live="polite" aria-label="Виконується оновлення shell">
+        <span></span>
+      </div>
+    {/if}
 
     {#if currentScreen === "dashboard"}
       <DashboardScreen />
@@ -207,17 +251,17 @@
         <p>Сторінку не знайдено.</p>
       </section>
     {/if}
-
   </main>
 
   {#if $palette.open}
     <button type="button" class="palette-backdrop" aria-label="Закрити палітру команд" on:click={() => palette.close()}></button>
-    <section class="palette">
+    <section class="palette" data-testid="palette">
       <input bind:this={paletteInput} placeholder="Пошук команд, екранів і документів" on:input={onPaletteInput} />
 
-      <div class="palette-items">
-        {#each $palette.items as item}
+      <div class="palette-items" data-testid="palette-items">
+        {#each $palette.items as item, index}
           <button
+            data-testid={`palette-item-${index}`}
             class="palette-item"
             on:click={async () => {
               await palette.activate(item.payload);

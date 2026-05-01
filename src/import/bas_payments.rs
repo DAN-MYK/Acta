@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
 use sqlx::PgPool;
@@ -33,6 +33,42 @@ pub struct PaymentImportReport {
     pub skipped: usize,
     pub conflicts: usize,
     pub rows: Vec<PaymentImportPlanRow>,
+}
+
+pub fn bank_import_dir() -> PathBuf {
+    PathBuf::from("storage/import/bank")
+}
+
+pub async fn newest_payments_csv_path() -> Result<PathBuf> {
+    let dir = bank_import_dir();
+    tokio::fs::create_dir_all(&dir).await?;
+    let mut entries = tokio::fs::read_dir(&dir).await?;
+    let mut newest: Option<(std::time::SystemTime, PathBuf)> = None;
+
+    while let Some(entry) = entries.next_entry().await? {
+        let path = entry.path();
+        let Some(ext) = path.extension().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        if !ext.eq_ignore_ascii_case("csv") {
+            continue;
+        }
+
+        let modified = entry
+            .metadata()
+            .await
+            .and_then(|metadata| metadata.modified())
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+
+        match &newest {
+            Some((current, _)) if modified <= *current => {}
+            _ => newest = Some((modified, path)),
+        }
+    }
+
+    newest
+        .map(|(_, path)| path)
+        .ok_or_else(|| anyhow!("У `storage/import/bank/` не знайдено CSV для імпорту"))
 }
 
 pub async fn parse_payments_csv_file(path: &Path) -> Result<Vec<ParsedBankRow>> {
@@ -214,6 +250,9 @@ mod tests {
             description: "Оплата".to_string(),
             bank_ref: Some("REF-001".to_string()),
             bank_name: "Тест Банк".to_string(),
+            counterparty_name: None,
+            counterparty_iban: None,
+            currency: None,
         }];
 
         let report = PaymentImportReport {
@@ -243,6 +282,9 @@ mod tests {
             description: "Оплата".to_string(),
             bank_ref: Some("REF-001".to_string()),
             bank_name: "Тест Банк".to_string(),
+            counterparty_name: None,
+            counterparty_iban: None,
+            currency: None,
         };
         let no_ref = ParsedBankRow {
             bank_ref: None,

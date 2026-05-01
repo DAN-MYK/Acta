@@ -1,6 +1,6 @@
 # UI/UX Fix Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Усунути 16 дефектів UI/UX виявлених аудитом: артефакти розробки, відсутні CSS класи, відсутні hover/focus стани, UX проблеми редактора документів та платежів.
 
@@ -38,7 +38,7 @@ npx vitest run 2>&1 | tail -10
 **Files:**
 - Modify: `frontend/src/App.svelte:149`
 
-- [ ] **Step 1: Прибрати placeholder з бренду**
+- [x] **Step 1: Прибрати placeholder з бренду**
 
 У `frontend/src/App.svelte` знайти рядок 149 і замінити:
 
@@ -50,14 +50,14 @@ npx vitest run 2>&1 | tail -10
 <p>Управлінський облік</p>
 ```
 
-- [ ] **Step 2: Запустити svelte-check**
+- [x] **Step 2: Запустити svelte-check**
 
 ```bash
 cd C:/Users/MykhailoDan/apps/acta && npx svelte-check --tsconfig ./tsconfig.json 2>&1 | tail -5
 ```
 Очікувано: `0 errors, 0 warnings`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/App.svelte
@@ -73,7 +73,7 @@ git commit -m "fix(ui): remove 'Tauri migration scaffold' placeholder from brand
 
 **Проблема:** `position: fixed` без `z-index`. Sidebar і panel мають `backdrop-filter` що створює stacking context. Без явного z-index palette може потрапити під інші елементи.
 
-- [ ] **Step 1: Додати z-index до backdrop і palette**
+- [x] **Step 1: Додати z-index до backdrop і palette**
 
 У `frontend/src/styles.css` знайти `.palette-backdrop` (~рядок 849) і додати `z-index`:
 
@@ -97,13 +97,13 @@ git commit -m "fix(ui): remove 'Tauri migration scaffold' placeholder from brand
 }
 ```
 
-- [ ] **Step 2: svelte-check**
+- [x] **Step 2: svelte-check**
 
 ```bash
 cd C:/Users/MykhailoDan/apps/acta && npx svelte-check --tsconfig ./tsconfig.json 2>&1 | tail -5
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/styles.css
@@ -119,7 +119,7 @@ git commit -m "fix(ui): add z-index to command palette to prevent stacking issue
 
 **Проблема:** 7 класів використовуються в шаблонах але відсутні у styles.css. Відповідний HTML рендериться без стилів.
 
-- [ ] **Step 1: Додати всі 7 відсутніх класів у кінець styles.css** (перед `@media`)
+- [x] **Step 1: Додати всі 7 відсутніх класів у кінець styles.css** (перед `@media`)
 
 ```css
 /* --- Відсутні класи (аудит 2026-04-30) --- */
@@ -182,13 +182,13 @@ git commit -m "fix(ui): add z-index to command palette to prevent stacking issue
 }
 ```
 
-- [ ] **Step 2: svelte-check**
+- [x] **Step 2: svelte-check**
 
 ```bash
 cd C:/Users/MykhailoDan/apps/acta && npx svelte-check --tsconfig ./tsconfig.json 2>&1 | tail -5
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/styles.css
@@ -204,7 +204,7 @@ git commit -m "fix(ui): add 7 missing CSS classes referenced in templates"
 
 **Проблема:** Grep на `:hover` і `:focus-visible` — нуль результатів. Кнопки не дають жодного feedback при hover. Focus ring відсутній — accessibility порушена попри заявлені Ctrl+1-7 shortcuts.
 
-- [ ] **Step 1: Додати hover-стани до всіх інтерактивних елементів**
+- [x] **Step 1: Додати hover-стани до всіх інтерактивних елементів**
 
 Додати у `frontend/src/styles.css` одразу після нових класів з Task 3:
 
@@ -270,13 +270,13 @@ textarea:focus-visible {
 }
 ```
 
-- [ ] **Step 2: svelte-check**
+- [x] **Step 2: svelte-check**
 
 ```bash
 cd C:/Users/MykhailoDan/apps/acta && npx svelte-check --tsconfig ./tsconfig.json 2>&1 | tail -5
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/styles.css
@@ -291,7 +291,7 @@ git commit -m "fix(ui): add hover states and focus-visible ring for keyboard nav
 - Modify: `frontend/src/styles.css:322-324`
 - Modify: `frontend/src/lib/screens/PaymentsScreen.svelte:39`
 
-- [ ] **Step 1: Виправити `.task-pill` у styles.css**
+- [x] **Step 1: Виправити `.task-pill` у styles.css**
 
 Знайти рядок ~322:
 ```css
@@ -311,7 +311,7 @@ git commit -m "fix(ui): add hover states and focus-visible ring for keyboard nav
 }
 ```
 
-- [ ] **Step 2: Замінити "Net" на "Баланс" у PaymentsScreen.svelte**
+- [x] **Step 2: Замінити "Net" на "Баланс" у PaymentsScreen.svelte**
 
 У `frontend/src/lib/screens/PaymentsScreen.svelte` рядок ~39:
 ```svelte
@@ -322,13 +322,13 @@ git commit -m "fix(ui): add hover states and focus-visible ring for keyboard nav
 <span>Баланс</span>
 ```
 
-- [ ] **Step 3: svelte-check**
+- [x] **Step 3: svelte-check**
 
 ```bash
 cd C:/Users/MykhailoDan/apps/acta && npx svelte-check --tsconfig ./tsconfig.json 2>&1 | tail -5
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/src/styles.css frontend/src/lib/screens/PaymentsScreen.svelte
@@ -347,7 +347,7 @@ git commit -m "fix(ui): style task-pill as actual badge; translate 'Net' to Ukra
 
 **Проблема:** Зберегти / Видалити / Наступний статус / Закрити — всі однаково виглядають. Ієрархія важливості невидима.
 
-- [ ] **Step 1: Додати `.btn-primary`, `.btn-ghost`, `.btn-danger` у styles.css**
+- [x] **Step 1: Додати `.btn-primary`, `.btn-ghost`, `.btn-danger` у styles.css**
 
 Додати після hover-states з Task 4:
 
@@ -402,7 +402,7 @@ git commit -m "fix(ui): style task-pill as actual badge; translate 'Net' to Ukra
 }
 ```
 
-- [ ] **Step 2: Застосувати класи у DocumentsScreen.svelte**
+- [x] **Step 2: Застосувати класи у DocumentsScreen.svelte**
 
 У `frontend/src/lib/screens/DocumentsScreen.svelte` знайти `editor-actions` (~рядок 197):
 
@@ -426,7 +426,7 @@ git commit -m "fix(ui): style task-pill as actual badge; translate 'Net' to Ukra
 </div>
 ```
 
-- [ ] **Step 3: Застосувати класи у PaymentsScreen.svelte**
+- [x] **Step 3: Застосувати класи у PaymentsScreen.svelte**
 
 У `frontend/src/lib/screens/PaymentsScreen.svelte` знайти editor-actions (~рядок 89):
 
@@ -444,7 +444,7 @@ git commit -m "fix(ui): style task-pill as actual badge; translate 'Net' to Ukra
 </div>
 ```
 
-- [ ] **Step 4: Виправити кнопку "Оновити" на DashboardScreen.svelte**
+- [x] **Step 4: Виправити кнопку "Оновити" на DashboardScreen.svelte**
 
 У `frontend/src/lib/screens/DashboardScreen.svelte` рядок ~36:
 
@@ -460,14 +460,14 @@ git commit -m "fix(ui): style task-pill as actual badge; translate 'Net' to Ukra
 </button>
 ```
 
-- [ ] **Step 5: svelte-check**
+- [x] **Step 5: svelte-check**
 
 ```bash
 cd C:/Users/MykhailoDan/apps/acta && npx svelte-check --tsconfig ./tsconfig.json 2>&1 | tail -5
 ```
 Очікувано: `0 errors, 0 warnings`
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/styles.css \
@@ -486,7 +486,7 @@ git commit -m "feat(ui): add btn-primary/ghost/danger hierarchy; apply to editor
 
 **Проблема:** Рядок 142 показує поле `placeholder="UUID контрагента для нового документа"` — кінцевий користувач не знає UUID. Counterparties вже завантажені в `$counterparties.screen?.items`.
 
-- [ ] **Step 1: Додати імпорт counterpartiesStore у DocumentsScreen.svelte**
+- [x] **Step 1: Додати імпорт counterpartiesStore у DocumentsScreen.svelte**
 
 У блоці `<script>` знайти існуючі імпорти і додати:
 
@@ -497,7 +497,7 @@ import { counterpartiesStore } from "../stores/counterparties";
 const counterparties = counterpartiesStore;
 ```
 
-- [ ] **Step 2: Замінити text input на select у create-strip**
+- [x] **Step 2: Замінити text input на select у create-strip**
 
 Знайти рядок ~141-143:
 
@@ -518,7 +518,7 @@ const counterparties = counterpartiesStore;
   <select bind:value={createKind}>
 ```
 
-- [ ] **Step 3: Прибрати hint-рядок нижче create-strip**
+- [x] **Step 3: Прибрати hint-рядок нижче create-strip**
 
 Знайти рядок ~154:
 
@@ -529,14 +529,14 @@ const counterparties = counterpartiesStore;
 {/if}
 ```
 
-- [ ] **Step 4: svelte-check**
+- [x] **Step 4: svelte-check**
 
 ```bash
 cd C:/Users/MykhailoDan/apps/acta && npx svelte-check --tsconfig ./tsconfig.json 2>&1 | tail -5
 ```
 Очікувано: `0 errors, 0 warnings`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/lib/screens/DocumentsScreen.svelte
@@ -553,7 +553,7 @@ git commit -m "fix(ui): replace UUID text input with counterparty select in docu
 
 **Проблема:** `editor-item` grid (Опис / Од. / Кількість / Ціна / [кнопка]) не має лейблів. При масовому введенні стовпці легко переплутати.
 
-- [ ] **Step 1: Додати `.editor-item-head` у styles.css**
+- [x] **Step 1: Додати `.editor-item-head` у styles.css**
 
 ```css
 .editor-item-head {
@@ -566,7 +566,7 @@ git commit -m "fix(ui): replace UUID text input with counterparty select in docu
 }
 ```
 
-- [ ] **Step 2: Додати header-рядок перед списком позицій у DocumentsScreen.svelte**
+- [x] **Step 2: Додати header-рядок перед списком позицій у DocumentsScreen.svelte**
 
 Знайти `<div class="editor-items">` (~рядок 258) і замінити:
 
@@ -589,13 +589,13 @@ git commit -m "fix(ui): replace UUID text input with counterparty select in docu
   {#each $documents.editor.items as item, index}
 ```
 
-- [ ] **Step 3: svelte-check**
+- [x] **Step 3: svelte-check**
 
 ```bash
 cd C:/Users/MykhailoDan/apps/acta && npx svelte-check --tsconfig ./tsconfig.json 2>&1 | tail -5
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/src/styles.css frontend/src/lib/screens/DocumentsScreen.svelte
@@ -612,7 +612,7 @@ git commit -m "feat(ui): add column headers to document line items editor"
 
 **Проблема:** "Грошовий потік" задекларований як chart але виглядає як неструктурований список. Cashflow-bars показує лише кольоровий текст. Мінімальне виправлення — зробити 4-колонковий grid з лейблами.
 
-- [ ] **Step 1: Оновити `.cashflow-row` у styles.css**
+- [x] **Step 1: Оновити `.cashflow-row` у styles.css**
 
 Знайти `cashflow-row` (~рядок 779) і замінити весь блок:
 
@@ -663,7 +663,7 @@ git commit -m "feat(ui): add column headers to document line items editor"
 }
 ```
 
-- [ ] **Step 2: Оновити розмітку cashflow у DashboardScreen.svelte**
+- [x] **Step 2: Оновити розмітку cashflow у DashboardScreen.svelte**
 
 Знайти `<div class="cashflow-list">` (~рядок 61) і замінити весь блок:
 
@@ -686,13 +686,13 @@ git commit -m "feat(ui): add column headers to document line items editor"
 </div>
 ```
 
-- [ ] **Step 3: svelte-check**
+- [x] **Step 3: svelte-check**
 
 ```bash
 cd C:/Users/MykhailoDan/apps/acta && npx svelte-check --tsconfig ./tsconfig.json 2>&1 | tail -5
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/src/styles.css frontend/src/lib/screens/DashboardScreen.svelte
@@ -713,7 +713,7 @@ git commit -m "fix(ui): restructure cashflow section as aligned 4-column grid wi
 2. `body[data-theme="dark"] .reports-table-head { background: var(--accent-soft); }` — потрібний (light mode `.reports-table-head` має `background: var(--accent-soft)`, dark mode `--accent-soft` = `#2f4063`, відрізняється — OK)
 3. `body[data-theme="dark"] .nav button.active { ... }` — НЕ існує, active стан вже через `--accent` який overridden.
 
-- [ ] **Step 1: Видалити NO-OP dark mode блоки**
+- [x] **Step 1: Видалити NO-OP dark mode блоки**
 
 Видалити всі блоки що відповідають паттерну `body[data-theme="dark"] .CLASS { background: var(--bg-*); color: inherit; }`:
 
@@ -768,14 +768,14 @@ body[data-theme="dark"] .reports-table-head {
 }
 ```
 
-- [ ] **Step 2: svelte-check**
+- [x] **Step 2: svelte-check**
 
 ```bash
 cd C:/Users/MykhailoDan/apps/acta && npx svelte-check --tsconfig ./tsconfig.json 2>&1 | tail -5
 ```
 Очікувано: `0 errors, 0 warnings`
 
-- [ ] **Step 3: Перевірити dark mode вручну**
+- [x] **Step 3: Перевірити dark mode вручну**
 
 ```bash
 # Запустити dev-сервер, переключити на dark theme, пройтись по всіх 7 екранах
@@ -783,7 +783,7 @@ cd src-tauri && cargo tauri dev
 ```
 Перевірити: чи всі елементи темні (фони, текст), чи немає білих/сірих flash елементів.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/src/styles.css

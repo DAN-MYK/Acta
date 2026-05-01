@@ -17,6 +17,7 @@ temp_*.md
 tmp_*.md
 .tmp-pr*.md
 *.ps1
+.vite-dev.log
 
 # Згенеровані PDF документи
 storage/documents/

@@ -1,5 +1,6 @@
 pub mod commands;
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use acta::app_ctx::AppCtx;
@@ -16,8 +17,24 @@ pub fn run() {
     let _ = dotenvy::dotenv();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            let ctx = tauri::async_runtime::block_on(runtime::init_app_ctx())?;
+            let template_dir = app
+                .path()
+                .resource_dir()
+                .map(|p| p.join("templates"))
+                .unwrap_or_else(|_| PathBuf::from("templates"));
+
+            let storage_dir = app
+                .path()
+                .app_local_data_dir()
+                .map(|p| p.join("documents"))
+                .unwrap_or_else(|_| PathBuf::from("storage/documents"));
+
+            let ctx = tauri::async_runtime::block_on(runtime::init_app_ctx_with_paths(
+                template_dir,
+                storage_dir,
+            ))?;
             let runtime_handle = tauri::async_runtime::handle();
             let _ = runtime::spawn_background_tasks(&ctx, runtime_handle.inner());
             app.manage(TauriState { ctx });
@@ -55,8 +72,11 @@ pub fn run() {
             commands::documents::document_save,
             commands::documents::document_advance_status,
             commands::documents::document_delete,
+            commands::documents::documents_bulk_advance_status,
+            commands::documents::documents_bulk_delete,
             commands::documents::document_chain_get,
             commands::documents::document_chain_create_draft,
+            commands::documents::document_generate_pdf,
             commands::payments::payments_list,
             commands::payments::payments_import_latest_csv,
             commands::payments::payments_sync_bank,
@@ -64,6 +84,7 @@ pub fn run() {
             commands::payments::payment_create_or_update,
             commands::payments::payment_reconcile,
             commands::payments::payment_unreconcile,
+            commands::import::import_bas_pick_directory,
             commands::import::import_bas_plan,
             commands::import::import_bas_execute
         ])

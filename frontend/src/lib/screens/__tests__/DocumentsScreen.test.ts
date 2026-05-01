@@ -31,25 +31,41 @@ const mocks = vi.hoisted(() => {
     editor: null as DocumentEditorDto | null,
     chain: null as DocumentChainDto | null,
     draftContext: null as { counterpartyId: string; counterpartyName: string } | null,
+    selectedIds: [] as string[],
     loading: false,
     error: null as string | null,
     message: null as string | null,
     query: ""
   });
 
+  const counterpartiesState = createMockStore({
+    screen: {
+      items: [
+        { id: "counterparty-1", name: "ТОВ Ромашка" },
+        { id: "counterparty-2", name: "ФОП Тест" }
+      ]
+    }
+  });
+
   return {
+    counterpartiesState,
     documentsState,
     addItem: vi.fn(),
     advanceStatus: vi.fn(),
+    bulkAdvanceStatus: vi.fn(),
+    bulkDelete: vi.fn(),
     closeEditor: vi.fn(),
     create: vi.fn(),
     createChainDraft: vi.fn(),
     deleteCurrent: vi.fn(),
+    generatePdf: vi.fn(),
     load: vi.fn(),
     open: vi.fn(),
     reloadCurrent: vi.fn(),
     removeItem: vi.fn(),
     save: vi.fn(),
+    selectAllVisible: vi.fn(),
+    toggleSelected: vi.fn(),
     updateFormField: vi.fn(),
     updateItemField: vi.fn()
   };
@@ -60,17 +76,28 @@ vi.mock("../../stores/documents", () => ({
     subscribe: mocks.documentsState.subscribe,
     addItem: mocks.addItem,
     advanceStatus: mocks.advanceStatus,
+    bulkAdvanceStatus: mocks.bulkAdvanceStatus,
+    bulkDelete: mocks.bulkDelete,
     closeEditor: mocks.closeEditor,
     create: mocks.create,
     createChainDraft: mocks.createChainDraft,
     deleteCurrent: mocks.deleteCurrent,
+    generatePdf: mocks.generatePdf,
     load: mocks.load,
     open: mocks.open,
     reloadCurrent: mocks.reloadCurrent,
     removeItem: mocks.removeItem,
     save: mocks.save,
+    selectAllVisible: mocks.selectAllVisible,
+    toggleSelected: mocks.toggleSelected,
     updateFormField: mocks.updateFormField,
     updateItemField: mocks.updateItemField
+  }
+}));
+
+vi.mock("../../stores/counterparties", () => ({
+  counterpartiesStore: {
+    subscribe: mocks.counterpartiesState.subscribe
   }
 }));
 
@@ -87,12 +114,23 @@ function makeList(): DocumentsListDto {
         status: "draft",
         statusLabel: "Чернетка",
         linkedId: ""
+      },
+      {
+        id: "doc-2",
+        kind: "act",
+        number: "ACT-9",
+        date: "2026-05-01",
+        counterparty: "ФОП Тест",
+        amountStr: "2 500,00 грн",
+        status: "issued",
+        statusLabel: "Виставлено",
+        linkedId: ""
       }
     ],
     invoiceItems: [],
     actItems: [],
     waybillItems: [],
-    totalCount: 1,
+    totalCount: 2,
     pageCount: 1
   };
 }
@@ -122,6 +160,52 @@ function makeEditor(): DocumentEditorDto {
   };
 }
 
+function makeChain(): DocumentChainDto {
+  return {
+    sourceId: "doc-1",
+    steps: [
+      {
+        docType: "invoice",
+        docNumber: "INV-7",
+        amountStr: "5 000,00 грн",
+        status: "Чернетка",
+        exists: true
+      }
+    ]
+  };
+}
+
+function setDocumentsState(selectedIds: string[] = []) {
+  mocks.documentsState.set({
+    list: makeList(),
+    editor: makeEditor(),
+    chain: makeChain(),
+    draftContext: {
+      counterpartyId: "counterparty-1",
+      counterpartyName: "ТОВ Ромашка"
+    },
+    selectedIds,
+    loading: false,
+    error: null,
+    message: "Готово",
+    query: ""
+  });
+}
+
+function setDocumentsStateWithoutDraftContext() {
+  mocks.documentsState.set({
+    list: makeList(),
+    editor: makeEditor(),
+    chain: makeChain(),
+    draftContext: null,
+    selectedIds: [],
+    loading: false,
+    error: null,
+    message: "Готово",
+    query: ""
+  });
+}
+
 function renderDocuments() {
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -141,64 +225,87 @@ function buttonByText(target: HTMLElement, text: string): HTMLButtonElement {
 
 describe("DocumentsScreen component", () => {
   beforeEach(() => {
-    mocks.documentsState.set({
-      list: makeList(),
-      editor: makeEditor(),
-      chain: {
-        sourceId: "doc-1",
-        steps: [
-          {
-            docType: "invoice",
-            docNumber: "INV-7",
-            amountStr: "5 000,00 грн",
-            status: "Чернетка",
-            exists: true
-          }
-        ]
-      },
-      draftContext: {
-        counterpartyId: "counterparty-1",
-        counterpartyName: "ТОВ Ромашка"
-      },
-      loading: false,
-      error: null,
-      message: "Готово",
-      query: ""
-    });
+    setDocumentsState();
 
     for (const fn of [
       mocks.addItem,
       mocks.advanceStatus,
+      mocks.bulkAdvanceStatus,
+      mocks.bulkDelete,
       mocks.closeEditor,
       mocks.create,
       mocks.createChainDraft,
       mocks.deleteCurrent,
+      mocks.generatePdf,
       mocks.load,
       mocks.open,
       mocks.reloadCurrent,
       mocks.removeItem,
       mocks.save,
+      mocks.selectAllVisible,
+      mocks.toggleSelected,
       mocks.updateFormField,
       mocks.updateItemField
     ]) {
       fn.mockReset();
     }
+
+    mocks.selectAllVisible.mockImplementation(() => {
+      setDocumentsState(["doc-1", "doc-2"]);
+    });
+
+    mocks.toggleSelected.mockImplementation((docId: string) => {
+      setDocumentsState([docId]);
+    });
   });
 
   afterEach(() => {
     document.body.innerHTML = "";
   });
 
-  it("renders document rows, editor and chain controls", () => {
+  it("renders document rows, attention summary and scenario guidance", () => {
     const { component, target } = renderDocuments();
 
     expect(target.textContent).toContain("Документи");
     expect(target.textContent).toContain("INV-7");
     expect(target.textContent).toContain("ТОВ Ромашка");
+    expect(target.textContent).toContain("Що потребує уваги");
     expect(target.textContent).toContain("Рахунок INV-7");
-    expect(target.textContent).toContain("Ланцюжок документа");
-    expect(target.textContent).toContain("+ Акт");
-    expect(target.textContent).toContain("+ Накладна");
+    expect(target.textContent).toContain("Новий документ");
+    expect(target.textContent).toContain("Що далі");
+    expect(target.textContent).toContain("Позиції документа");
+    expect(target.textContent).toContain("Створити Акт");
+    expect(target.textContent).toContain("Створити Накладну");
+
+    component.$destroy();
+  });
+
+  it("uses canonical button hierarchy in create strip and editor header", () => {
+    const { component, target } = renderDocuments();
+
+    expect(buttonByText(target, "Створити чернетку").className).toContain("btn-primary");
+    expect(buttonByText(target, "Додати позицію").className).toContain("btn-ghost");
+    expect(buttonByText(target, "Зберегти").className).toContain("btn-primary");
+    expect(buttonByText(target, "Наступний статус").className).toContain("btn-secondary");
+    expect(buttonByText(target, "Видалити").className).toContain("btn-danger");
+    expect(buttonByText(target, "Видалити позицію").className).toContain("btn-danger");
+    expect(buttonByText(target, "Закрити").className).toContain("btn-ghost");
+
+    component.$destroy();
+  });
+
+  it("shows create-strip as a guided flow and disables draft creation without counterparty", () => {
+    setDocumentsStateWithoutDraftContext();
+    const { component, target } = renderDocuments();
+
+    const createButton = buttonByText(target, "Створити чернетку");
+
+    expect(target.textContent).toContain("Новий документ");
+    expect(target.textContent).toContain("1. Оберіть контрагента");
+    expect(target.textContent).toContain("2. Вкажіть тип документа");
+    expect(target.textContent).toContain("3. Створіть чернетку");
+    expect(target.textContent).toContain("Спочатку оберіть контрагента");
+    expect(createButton.disabled).toBe(true);
 
     component.$destroy();
   });
@@ -219,13 +326,78 @@ describe("DocumentsScreen component", () => {
     buttonByText(target, "Додати позицію").click();
     buttonByText(target, "Зберегти").click();
     buttonByText(target, "Наступний статус").click();
-    buttonByText(target, "+ Акт").click();
+    buttonByText(target, "Створити Акт").click();
     await tick();
 
     expect(mocks.addItem).toHaveBeenCalled();
     expect(mocks.save).toHaveBeenCalled();
     expect(mocks.advanceStatus).toHaveBeenCalled();
     expect(mocks.createChainDraft).toHaveBeenCalledWith("act");
+
+    component.$destroy();
+  });
+
+  it("uses canonical date input and primary action hierarchy in the editor", () => {
+    const { component, target } = renderDocuments();
+
+    const dateInput = Array.from(target.querySelectorAll("input")).find((input) =>
+      (input as HTMLInputElement).value === "2026-04-30"
+    ) as HTMLInputElement | undefined;
+    const saveButton = buttonByText(target, "Зберегти");
+
+    expect(dateInput).toBeTruthy();
+    expect(dateInput?.type).toBe("date");
+    expect(saveButton.className).toContain("btn-primary");
+
+    component.$destroy();
+  });
+
+  it("shows chain panel as next-step guidance instead of only technical links", () => {
+    const { component, target } = renderDocuments();
+
+    expect(target.textContent).toContain("Що далі");
+    expect(target.textContent).toContain("Поточний документ");
+    expect(target.textContent).toContain("Наступний крок");
+    expect(target.textContent).toContain("На основі рахунку можна одразу підготувати акт або накладну.");
+
+    component.$destroy();
+  });
+
+  it("exposes stable smoke markers for the shell and native e2e layer", () => {
+    const { component, target } = renderDocuments();
+
+    expect(target.querySelector('[data-testid="documents-screen"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="documents-create-strip"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="documents-focus-primary"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="documents-list"]')).toBeTruthy();
+
+    component.$destroy();
+  });
+
+  it("shows a useful empty state when there are no documents yet", () => {
+    mocks.documentsState.set({
+      list: {
+        items: [],
+        invoiceItems: [],
+        actItems: [],
+        waybillItems: [],
+        totalCount: 0,
+        pageCount: 0
+      },
+      editor: null,
+      chain: null,
+      draftContext: null,
+      selectedIds: [],
+      loading: false,
+      error: null,
+      message: null,
+      query: ""
+    });
+
+    const { component, target } = renderDocuments();
+
+    expect(target.textContent).toContain("Поки що документів немає");
+    expect(target.textContent).toContain("Створіть першу чернетку");
 
     component.$destroy();
   });

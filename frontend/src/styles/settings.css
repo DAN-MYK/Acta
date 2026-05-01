@@ -1,0 +1,82 @@
+.settings-layout {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.settings-nav,
+.settings-content,
+.settings-card {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-nav button,
+.settings-actions-row button,
+.settings-row-actions button {
+  border: 0;
+  background: var(--bg-card);
+  border-radius: var(--radius-xl);
+  padding: 10px 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-nav button.active,
+.settings-actions-row button.active {
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+
+.settings-card {
+  padding: 18px;
+  border-radius: 20px;
+  background: var(--bg-card);
+}
+
+.settings-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.settings-actions-row select {
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-xl);
+  padding: 12px 14px;
+  background: var(--bg-field);
+}
+
+.settings-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 16px;
+  border-radius: var(--radius-2xl);
+  background: var(--bg-card);
+}
+
+.settings-row p,
+.settings-card p {
+  margin: 6px 0 0;
+}
+
+.settings-row-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.settings-checkbox {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.settings-numbering-row {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}

@@ -1,6 +1,6 @@
 # BAS Import Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add two Tauri commands (`import_bas_plan`, `import_bas_execute`) and a Svelte UI that lets users preview and execute BAS data import from the Settings → Integrations screen.
 
@@ -66,7 +66,7 @@ AppCtx access: ctx.pool() -> &PgPool, ctx.company_id() -> Uuid
 - Create: `src/tauri_api/import.rs`
 - Modify: `src/tauri_api/mod.rs`
 
-- [ ] **Step 1: Write the failing tests for `route_file`**
+- [x] **Step 1: Write the failing tests for `route_file`**
 
 Create `src/tauri_api/import.rs` with tests only (stub the missing items):
 
@@ -100,7 +100,7 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 cargo test --lib tauri_api::import::tests
@@ -108,7 +108,7 @@ cargo test --lib tauri_api::import::tests
 
 Expected: FAIL — `route_file` and `FileType` not defined
 
-- [ ] **Step 3: Replace `src/tauri_api/import.rs` with full implementation**
+- [x] **Step 3: Replace `src/tauri_api/import.rs` with full implementation**
 
 ```rust
 use std::path::{Path, PathBuf};
@@ -355,7 +355,7 @@ mod tests {
 }
 ```
 
-- [ ] **Step 4: Add `pub mod import;` to `src/tauri_api/mod.rs`**
+- [x] **Step 4: Add `pub mod import;` to `src/tauri_api/mod.rs`**
 
 Append to the file:
 
@@ -363,7 +363,7 @@ Append to the file:
 pub mod import;
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 ```bash
 cargo test --lib tauri_api::import::tests
@@ -371,7 +371,7 @@ cargo test --lib tauri_api::import::tests
 
 Expected: 3 tests pass
 
-- [ ] **Step 6: Verify lib compiles**
+- [x] **Step 6: Verify lib compiles**
 
 ```bash
 cargo build --lib
@@ -379,7 +379,7 @@ cargo build --lib
 
 Expected: `Finished` with no errors
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/tauri_api/import.rs src/tauri_api/mod.rs
@@ -393,7 +393,7 @@ git commit -m "feat: add import_bas_plan with DTOs and file routing"
 **Files:**
 - Modify: `src/tauri_api/import.rs`
 
-- [ ] **Step 1: Add execute-specific imports at the top of `src/tauri_api/import.rs`**
+- [x] **Step 1: Add execute-specific imports at the top of `src/tauri_api/import.rs`**
 
 Append to the existing use block (after the plan imports):
 
@@ -405,7 +405,7 @@ use crate::import::bas_invoices::import_invoices_from_file;
 use crate::import::bas_payments::import_payments_from_csv;
 ```
 
-- [ ] **Step 2: Append `import_bas_execute` to `src/tauri_api/import.rs` (before the `#[cfg(test)]` block)**
+- [x] **Step 2: Append `import_bas_execute` to `src/tauri_api/import.rs` (before the `#[cfg(test)]` block)**
 
 ```rust
 pub async fn import_bas_execute(ctx: &AppCtx) -> Result<ImportResultDto> {
@@ -490,7 +490,7 @@ pub async fn import_bas_execute(ctx: &AppCtx) -> Result<ImportResultDto> {
 }
 ```
 
-- [ ] **Step 3: Build to verify compilation**
+- [x] **Step 3: Build to verify compilation**
 
 ```bash
 cargo build --lib
@@ -498,7 +498,7 @@ cargo build --lib
 
 Expected: `Finished` with no errors
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/tauri_api/import.rs
@@ -514,7 +514,7 @@ git commit -m "feat: add import_bas_execute"
 - Modify: `src-tauri/src/commands/mod.rs`
 - Modify: `src-tauri/src/lib.rs`
 
-- [ ] **Step 1: Create `src-tauri/src/commands/import.rs`**
+- [x] **Step 1: Create `src-tauri/src/commands/import.rs`**
 
 ```rust
 use acta::tauri_api::import::{ImportPlanDto, ImportResultDto};
@@ -539,7 +539,7 @@ pub async fn import_bas_execute(state: State<'_, TauriState>) -> CommandResult<I
 }
 ```
 
-- [ ] **Step 2: Add `pub mod import;` to `src-tauri/src/commands/mod.rs`**
+- [x] **Step 2: Add `pub mod import;` to `src-tauri/src/commands/mod.rs`**
 
 Append to the file:
 
@@ -547,7 +547,7 @@ Append to the file:
 pub mod import;
 ```
 
-- [ ] **Step 3: Register commands in `src-tauri/src/lib.rs`**
+- [x] **Step 3: Register commands in `src-tauri/src/lib.rs`**
 
 In the `tauri::generate_handler![...]` block, add after `commands::payments::payment_unreconcile`:
 
@@ -556,7 +556,7 @@ In the `tauri::generate_handler![...]` block, add after `commands::payments::pay
             commands::import::import_bas_execute,
 ```
 
-- [ ] **Step 4: Build Tauri binary**
+- [x] **Step 4: Build Tauri binary**
 
 ```bash
 cd src-tauri && cargo build
@@ -564,7 +564,7 @@ cd src-tauri && cargo build
 
 Expected: `Finished` with no errors
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src-tauri/src/commands/import.rs src-tauri/src/commands/mod.rs src-tauri/src/lib.rs
@@ -579,7 +579,7 @@ git commit -m "feat: register import_bas_plan and import_bas_execute Tauri comma
 - Modify: `frontend/src/lib/types.ts`
 - Modify: `frontend/src/lib/api.ts`
 
-- [ ] **Step 1: Append 4 interfaces to `frontend/src/lib/types.ts`**
+- [x] **Step 1: Append 4 interfaces to `frontend/src/lib/types.ts`**
 
 Add at the end of the file:
 
@@ -611,7 +611,7 @@ export interface ImportResultDto {
 }
 ```
 
-- [ ] **Step 2: Add imports + 2 API functions to `frontend/src/lib/api.ts`**
+- [x] **Step 2: Add imports + 2 API functions to `frontend/src/lib/api.ts`**
 
 In the existing type import block at the top of `api.ts`, add `ImportPlanDto` and `ImportResultDto` to the list.
 
@@ -622,7 +622,7 @@ export const importBasPlan = () => invoke<ImportPlanDto>("import_bas_plan");
 export const importBasExecute = () => invoke<ImportResultDto>("import_bas_execute");
 ```
 
-- [ ] **Step 3: Verify TypeScript compiles**
+- [x] **Step 3: Verify TypeScript compiles**
 
 ```bash
 cd frontend && npx tsc --noEmit
@@ -630,7 +630,7 @@ cd frontend && npx tsc --noEmit
 
 Expected: no errors
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/src/lib/types.ts frontend/src/lib/api.ts
@@ -644,7 +644,7 @@ git commit -m "feat: add BAS import TypeScript types and API functions"
 **Files:**
 - Create: `frontend/src/lib/stores/import.ts`
 
-- [ ] **Step 1: Create `frontend/src/lib/stores/import.ts`**
+- [x] **Step 1: Create `frontend/src/lib/stores/import.ts`**
 
 ```typescript
 import { writable } from "svelte/store";
@@ -696,7 +696,7 @@ function createImportStore() {
 export const importStore = createImportStore();
 ```
 
-- [ ] **Step 2: Verify TypeScript compiles**
+- [x] **Step 2: Verify TypeScript compiles**
 
 ```bash
 cd frontend && npx tsc --noEmit
@@ -704,7 +704,7 @@ cd frontend && npx tsc --noEmit
 
 Expected: no errors
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/lib/stores/import.ts
@@ -718,7 +718,7 @@ git commit -m "feat: add Svelte import store"
 **Files:**
 - Modify: `frontend/src/lib/screens/SettingsScreen.svelte`
 
-- [ ] **Step 1: Add import store import to the `<script>` block**
+- [x] **Step 1: Add import store import to the `<script>` block**
 
 After the existing imports at the top of the `<script lang="ts">` block, add:
 
@@ -729,7 +729,7 @@ After the existing imports at the top of the `<script lang="ts">` block, add:
   let showBasImport = false;
 ```
 
-- [ ] **Step 2: Replace the integrations section with the version that includes the BAS button and inline panel**
+- [x] **Step 2: Replace the integrations section with the version that includes the BAS button and inline panel**
 
 Find this block in the template:
 
@@ -880,7 +880,7 @@ Replace it with:
         </div>
 ```
 
-- [ ] **Step 3: Verify TypeScript compiles**
+- [x] **Step 3: Verify TypeScript compiles**
 
 ```bash
 cd frontend && npx tsc --noEmit
@@ -888,7 +888,7 @@ cd frontend && npx tsc --noEmit
 
 Expected: no errors
 
-- [ ] **Step 4: Test manually in dev mode**
+- [x] **Step 4: Test manually in dev mode**
 
 Start Tauri dev mode from `src-tauri/`:
 ```bash
@@ -903,7 +903,7 @@ Navigate to Settings → Інтеграції. Verify:
 5. "Виконати імпорт" calls `import_bas_execute` and shows the results table
 6. "Скасувати" / "Закрити" hides the panel and resets state
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/lib/screens/SettingsScreen.svelte

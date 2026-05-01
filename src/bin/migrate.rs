@@ -3,7 +3,7 @@
 // Поточний expanded baseline:
 // - counterparties: XML + XLSX/XLS
 // - contracts: XML + XLSX/XLS
-// - acts: XML
+// - acts: XML + XLSX/XLS
 // - invoices: XML + XLSX/XLS
 // - payments: CSV
 // - dry-run підключається до БД і показує aggregated DB-aware preview
@@ -331,7 +331,7 @@ fn is_importable_artifact(kind: BasArtifactKind, path: &Path) -> bool {
         | BasArtifactKind::Invoices => {
             matches!(extension.as_str(), "xml" | "xlsx" | "xls")
         }
-        BasArtifactKind::Acts => extension == "xml",
+        BasArtifactKind::Acts => matches!(extension.as_str(), "xml" | "xlsx" | "xls"),
         BasArtifactKind::Payments | BasArtifactKind::BankCsv => extension == "csv",
         BasArtifactKind::Unknown => false,
     }
@@ -897,6 +897,8 @@ async fn main() {
         return;
     };
 
+    let _ = dotenvy::dotenv();
+
     let input_dir = PathBuf::from(&opts.input_dir);
     let report = match discover_artifacts(&input_dir) {
         Ok(report) => report,
@@ -1210,7 +1212,7 @@ mod tests {
             BasArtifactKind::Invoices,
             Path::new("invoices.xlsx")
         ));
-        assert!(!is_importable_artifact(
+        assert!(is_importable_artifact(
             BasArtifactKind::Acts,
             Path::new("acts.xlsx")
         ));

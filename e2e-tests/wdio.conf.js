@@ -2,14 +2,29 @@ import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { download as downloadEdgeDriver } from "edgedriver";
+import { ensureTauriBuild } from "./tauri-build-coordinator.js";
 
 const e2eDir = fileURLToPath(new URL(".", import.meta.url));
 const repoRoot = path.resolve(e2eDir, "..");
 const binaryName = process.platform === "win32" ? "acta-tauri.exe" : "acta-tauri";
 const applicationPath = path.resolve(repoRoot, "src-tauri", "target", "debug", binaryName);
+const buildLockPath = path.resolve(repoRoot, "tmp", "wdio", "tauri-build.lock");
+const buildStampPath = path.resolve(repoRoot, "tmp", "wdio", "tauri-build-stamp.json");
+const tauriBuildDependencies = [
+  path.resolve(repoRoot, "package.json"),
+  path.resolve(repoRoot, "package-lock.json"),
+  path.resolve(repoRoot, "vite.config.ts"),
+  path.resolve(repoRoot, "Cargo.toml"),
+  path.resolve(repoRoot, "Cargo.lock"),
+  path.resolve(repoRoot, "src"),
+  path.resolve(repoRoot, "frontend", "src"),
+  path.resolve(repoRoot, "templates"),
+  path.resolve(repoRoot, "src-tauri", "src"),
+  path.resolve(repoRoot, "src-tauri", "tauri.conf.json")
+];
 const tauriDriverName = process.platform === "win32" ? "tauri-driver.exe" : "tauri-driver";
 const tauriDriverPath = resolveExecutable(tauriDriverName);
 const driverHost = "127.0.0.1";
@@ -37,20 +52,14 @@ export const config = {
     ui: "bdd",
     timeout: 90000
   },
-  onPrepare: () => {
-    const result = spawnSync(
-      "npm",
-      ["run", "tauri", "build", "--", "--debug", "--no-bundle"],
-      {
-        cwd: repoRoot,
-        stdio: "inherit",
-        shell: true
-      }
-    );
-
-    if (result.status !== 0) {
-      throw new Error(`Tauri debug build failed with exit code ${result.status}`);
-    }
+  onPrepare: async () => {
+    await ensureTauriBuild({
+      applicationPath,
+      dependencyPaths: tauriBuildDependencies,
+      lockPath: buildLockPath,
+      stampPath: buildStampPath,
+      repoRoot
+    });
   },
   beforeSession: async () => {
     if (!tauriDriverPath) {
@@ -80,18 +89,34 @@ export const config = {
 
     await waitForPort(driverHost, driverPort);
   },
-  afterSession: () => {
-    closeTauriDriver();
+  afterSession: async () => {
+    await closeTauriDriver();
   }
 };
 
-function closeTauriDriver() {
+async function closeTauriDriver() {
   expectedShutdown = true;
-  tauriDriver?.kill();
+
+  if (!tauriDriver) {
+    return;
+  }
+
+  const processToClose = tauriDriver;
+  tauriDriver = undefined;
+
+  if (processToClose.exitCode !== null) {
+    return;
+  }
+
+  await new Promise((resolve) => {
+    processToClose.once("exit", () => resolve(undefined));
+    processToClose.kill();
+    setTimeout(() => resolve(undefined), 5000);
+  });
 }
 
 function cleanupAndExit(signal) {
-  closeTauriDriver();
+  void closeTauriDriver();
   process.exit(signal === "SIGINT" ? 130 : 0);
 }
 

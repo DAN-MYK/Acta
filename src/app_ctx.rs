@@ -3,8 +3,9 @@
 // Передається через Arc<AppCtx> у всі модулі UI wiring.
 // Всі accessor'и безпечні при отруєному mutex.
 
-use sqlx::PgPool;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use sqlx::PgPool;
 
 // ---------------------------------------------------------------------------
 // List state structs — клонуються для кожного refresh
@@ -60,11 +61,30 @@ pub struct AppCtx {
     counterparty_state: Arc<Mutex<CounterpartyListState>>,
     reports_state: Arc<Mutex<ReportsState>>,
     task_state: Arc<Mutex<TaskListState>>,
+    template_dir: PathBuf,
+    storage_dir: PathBuf,
 }
 
 impl AppCtx {
     /// Створює новий контекст з початковим UUID компанії.
+    /// Шляхи за замовчуванням відносні до CWD — для dev-режиму та тестів.
     pub fn new(pool: PgPool, initial_company_id: uuid::Uuid) -> Self {
+        Self::with_dirs(
+            pool,
+            initial_company_id,
+            PathBuf::from("templates"),
+            PathBuf::from("storage/documents"),
+        )
+    }
+
+    /// Створює контекст з явними шляхами до шаблонів і сховища документів.
+    /// Використовується в production Tauri builds де шляхи визначаються через app.path().
+    pub fn with_dirs(
+        pool: PgPool,
+        initial_company_id: uuid::Uuid,
+        template_dir: PathBuf,
+        storage_dir: PathBuf,
+    ) -> Self {
         Self {
             pool,
             active_company_id: Arc::new(Mutex::new(initial_company_id)),
@@ -84,6 +104,8 @@ impl AppCtx {
                 query: String::new(),
                 filter: "open".to_string(),
             })),
+            template_dir,
+            storage_dir,
         }
     }
 
@@ -91,6 +113,16 @@ impl AppCtx {
 
     pub fn pool(&self) -> &PgPool {
         &self.pool
+    }
+
+    // --- Шляхи до шаблонів і сховища ---
+
+    pub fn template_dir(&self) -> &Path {
+        &self.template_dir
+    }
+
+    pub fn storage_dir(&self) -> &Path {
+        &self.storage_dir
     }
 
     // --- Безпечний доступ до активної компанії ---

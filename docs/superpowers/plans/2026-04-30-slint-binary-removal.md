@@ -2,7 +2,7 @@
 
 > **Archived/pre-cutover:** execution plan збережено як історичний cleanup trace. Поточний runtime — Tauri/Svelte; Slint file lists тут не є live backlog.
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Видалити legacy Slint binary (`[[bin]] acta`) разом із усіма його приватними модулями (`src/bootstrap/`, `src/ui/`), зберігши при цьому Slint runtime для `tests/ui_events.rs`, та підготувати фінальний cascade-removal diff.
 
@@ -47,7 +47,7 @@
 
 **Files:** читання, без змін
 
-- [ ] **Step 1: Зберегти baseline тестів**
+- [x] **Step 1: Зберегти baseline тестів**
 
 ```bash
 cargo test 2>&1 | tail -20
@@ -55,7 +55,7 @@ cargo test 2>&1 | tail -20
 
 Очікувано: всі тести проходять. Запиши кількість тестів — вона має залишитись такою ж після видалення.
 
-- [ ] **Step 2: Перевірити що migrate та reseed компілюються без Slint**
+- [x] **Step 2: Перевірити що migrate та reseed компілюються без Slint**
 
 ```bash
 cargo build --bin migrate --bin reseed 2>&1 | tail -5
@@ -70,7 +70,7 @@ cargo build --bin migrate --bin reseed 2>&1 | tail -5
 **Files:**
 - Modify: `Cargo.toml`
 
-- [ ] **Step 1: Видалити `default-run` та `[[bin]] acta`**
+- [x] **Step 1: Видалити `default-run` та `[[bin]] acta`**
 
 Знайти і видалити рядок:
 ```toml
@@ -95,7 +95,7 @@ name = "reseed"
 path = "src/bin/reseed.rs"
 ```
 
-- [ ] **Step 2: Перевірити що Cargo.toml валідний**
+- [x] **Step 2: Перевірити що Cargo.toml валідний**
 
 ```bash
 cargo metadata --no-deps --quiet 2>&1 | head -5
@@ -110,13 +110,13 @@ cargo metadata --no-deps --quiet 2>&1 | head -5
 **Files:**
 - Delete: `src/main.rs`
 
-- [ ] **Step 1: Видалити файл**
+- [x] **Step 1: Видалити файл**
 
 ```bash
 rm src/main.rs
 ```
 
-- [ ] **Step 2: Перевірити що lib і тести ще компілюються**
+- [x] **Step 2: Перевірити що lib і тести ще компілюються**
 
 ```bash
 cargo build --lib 2>&1 | tail -5
@@ -132,13 +132,13 @@ cargo build --lib 2>&1 | tail -5
 - Delete: `src/bootstrap.rs`
 - Delete: `src/bootstrap/` (8 файлів)
 
-- [ ] **Step 1: Видалити bootstrap module root**
+- [x] **Step 1: Видалити bootstrap module root**
 
 ```bash
 rm src/bootstrap.rs
 ```
 
-- [ ] **Step 2: Видалити всі файли в src/bootstrap/**
+- [x] **Step 2: Видалити всі файли в src/bootstrap/**
 
 ```bash
 rm src/bootstrap/company_switcher.rs
@@ -152,7 +152,7 @@ rm src/bootstrap/wiring.rs
 rmdir src/bootstrap
 ```
 
-- [ ] **Step 3: Перевірити що lib ще компілюється**
+- [x] **Step 3: Перевірити що lib ще компілюється**
 
 ```bash
 cargo build --lib 2>&1 | tail -5
@@ -167,7 +167,7 @@ cargo build --lib 2>&1 | tail -5
 **Files:**
 - Delete: `src/ui/` (9 файлів)
 
-- [ ] **Step 1: Видалити всі файли в src/ui/**
+- [x] **Step 1: Видалити всі файли в src/ui/**
 
 ```bash
 rm src/ui/mod.rs
@@ -188,7 +188,7 @@ rmdir src/ui
 
 **Files:** без змін, тільки запуск
 
-- [ ] **Step 1: Повна компіляція включно з тестами**
+- [x] **Step 1: Повна компіляція включно з тестами**
 
 ```bash
 cargo build --tests 2>&1 | tail -10
@@ -197,7 +197,7 @@ cargo build --tests 2>&1 | tail -10
 Очікувано: `Finished` без помилок.  
 Якщо є помилки компіляції — розбити за модулями і виправити.
 
-- [ ] **Step 2: Перевірити що tests/ui_events.rs ще компілюється окремо**
+- [x] **Step 2: Перевірити що tests/ui_events.rs ще компілюється окремо**
 
 ```bash
 cargo test --test ui_events --no-run 2>&1 | tail -5
@@ -205,7 +205,7 @@ cargo test --test ui_events --no-run 2>&1 | tail -5
 
 Очікувано: `Finished` або `Compiling ... Finished`.
 
-- [ ] **Step 3: Запустити всі тести**
+- [x] **Step 3: Запустити всі тести**
 
 ```bash
 cargo test 2>&1 | tail -20
@@ -220,7 +220,7 @@ cargo test 2>&1 | tail -20
 **Files:**
 - Modify: `CLAUDE.md`
 
-- [ ] **Step 1: Оновити секцію `## Команди`**
+- [x] **Step 1: Оновити секцію `## Команди`**
 
 Знайти поточну секцію:
 ```markdown
@@ -259,7 +259,7 @@ cargo test                                        # всі тести
 
 **Files:** всі змінені/видалені файли
 
-- [ ] **Step 1: Перевірити що staging виглядає правильно**
+- [x] **Step 1: Перевірити що staging виглядає правильно**
 
 ```bash
 git status
@@ -267,7 +267,7 @@ git status
 
 Очікувано: видалені файли (`D`) для src/main.rs, src/bootstrap.*, src/ui/*.
 
-- [ ] **Step 2: Stage і commit**
+- [x] **Step 2: Stage і commit**
 
 ```bash
 git add -u
@@ -286,7 +286,7 @@ Next: replace ui_events.rs with Playwright/Vitest, then cascade-remove all Slint
 **Files:**
 - Create: `docs/planning/slint-final-cascade-removal-2026-04-30.md`
 
-- [ ] **Step 1: Створити документ з точними командами**
+- [x] **Step 1: Створити документ з точними командами**
 
 ```markdown
 # Slint — Фінальне каскадне видалення
@@ -371,11 +371,11 @@ tests/ui_events.rs replaced with Playwright/Vitest. Slint fully gone."
 **Разом: 14 файлів + 3 dep записи.**
 ```
 
-- [ ] **Step 2: Зберегти документ**
+- [x] **Step 2: Зберегти документ**
 
 Зберегти як `docs/planning/slint-final-cascade-removal-2026-04-30.md`.
 
-- [ ] **Step 3: Додати в commit**
+- [x] **Step 3: Додати в commit**
 
 ```bash
 git add docs/planning/slint-final-cascade-removal-2026-04-30.md

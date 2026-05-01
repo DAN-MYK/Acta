@@ -1,0 +1,142 @@
+.dashboard-panel {
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--success) 18%, transparent), transparent 34%),
+    radial-gradient(circle at bottom right, color-mix(in srgb, var(--warning) 16%, transparent), transparent 32%),
+    var(--bg-card-strong);
+}
+
+body[data-theme="dark"] .dashboard-panel {
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--success) 18%, transparent), transparent 34%),
+    radial-gradient(circle at bottom right, color-mix(in srgb, var(--warning) 14%, transparent), transparent 32%),
+    var(--bg-card-strong);
+}
+
+.dashboard-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.dashboard-kpi-card,
+.dashboard-card {
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-3xl);
+  background: var(--bg-card);
+  box-shadow: var(--floating-shadow);
+}
+
+.dashboard-kpi-card {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+}
+
+.dashboard-kpi-card span,
+.dashboard-kpi-card small,
+.card-title span {
+  color: var(--text-muted);
+}
+
+.dashboard-kpi-card strong {
+  font-size: clamp(1.35rem, 2.4vw, 2rem);
+}
+
+.dashboard-kpi-card.positive {
+  border-color: color-mix(in srgb, var(--success) 34%, var(--border));
+}
+
+.dashboard-kpi-card.warning {
+  border-color: color-mix(in srgb, var(--warning) 38%, var(--border));
+}
+
+.dashboard-kpi-card.danger {
+  border-color: color-mix(in srgb, var(--danger) 34%, var(--border));
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.dashboard-card {
+  padding: 18px;
+}
+
+.dashboard-card.wide {
+  grid-column: 1 / -1;
+}
+
+.card-title,
+.dashboard-list-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
+.card-title h3 {
+  margin: 0;
+}
+
+.cashflow-list {
+  display: grid;
+  gap: 0;
+  margin-top: 16px;
+}
+
+.cashflow-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(3, 110px);
+  gap: 0 16px;
+  align-items: center;
+  padding: 10px 0;
+  border-top: 1px solid var(--border-hairline);
+}
+
+.cashflow-row.cashflow-head {
+  border-top: 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  padding-bottom: 6px;
+}
+
+.cashflow-income {
+  color: var(--success);
+  text-align: right;
+}
+
+.cashflow-expense {
+  color: var(--warning);
+  text-align: right;
+}
+
+.cashflow-net {
+  font-weight: 600;
+  text-align: right;
+}
+
+.dashboard-list-row {
+  width: 100%;
+  margin-top: 10px;
+  text-align: left;
+  border: 0;
+  border-radius: var(--radius-2xl);
+  padding: 12px 14px;
+  background: var(--bg-stripe);
+  color: inherit;
+}
+
+.dashboard-list-empty {
+  padding: var(--space-4) 0;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+.overdue strong,
+.overdue .dashboard-list-row {
+  color: var(--danger);
+}

@@ -1,6 +1,6 @@
 # Fix Document Chain — Code Review Issues Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Виправити всі 7 проблем знайдених при code review документного ланцюжка в `src/ui/documents.rs`.
 
@@ -23,7 +23,7 @@
 
 Три виклики `.await.unwrap_or_default()` ковтають DB помилки без логу. Замінити на `.await?`.
 
-- [ ] **Step 1: Замінити unwrap_or_default → ? (три місця)**
+- [x] **Step 1: Замінити unwrap_or_default → ? (три місця)**
 
 У `src/ui/documents.rs` знайти і замінити:
 
@@ -44,14 +44,14 @@ for row in db::waybills::list(pool, company_id, None).await.unwrap_or_default() 
 for row in db::waybills::list(pool, company_id, None).await? {
 ```
 
-- [ ] **Step 2: Перевірити компіляцію**
+- [x] **Step 2: Перевірити компіляцію**
 
 ```bash
 cargo build --tests 2>&1 | tail -5
 ```
 Expected: `Finished` без помилок.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/ui/documents.rs
@@ -67,7 +67,7 @@ git commit -m "fix: propagate DB errors in find_document_by_parent_ref instead o
 
 Цикл `while let Some(parent_ref) = ...` не захищений від циклічних посилань у БД.
 
-- [ ] **Step 1: Додати `use std::collections::HashSet;` у верх файлу (якщо відсутній)**
+- [x] **Step 1: Додати `use std::collections::HashSet;` у верх файлу (якщо відсутній)**
 
 Перевірити imports у верхній частині файлу. Якщо `HashSet` не імпортовано — додати:
 
@@ -75,7 +75,7 @@ git commit -m "fix: propagate DB errors in find_document_by_parent_ref instead o
 use std::collections::HashSet;
 ```
 
-- [ ] **Step 2: Замінити while-цикл у `load_document_chain` на варіант з visited set**
+- [x] **Step 2: Замінити while-цикл у `load_document_chain` на варіант з visited set**
 
 Знайти блок:
 ```rust
@@ -118,14 +118,14 @@ use std::collections::HashSet;
     }
 ```
 
-- [ ] **Step 3: Перевірити компіляцію**
+- [x] **Step 3: Перевірити компіляцію**
 
 ```bash
 cargo build --tests 2>&1 | tail -5
 ```
 Expected: `Finished` без помилок.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/ui/documents.rs
@@ -141,22 +141,22 @@ git commit -m "fix: add cycle detection to load_document_chain parent traversal"
 
 Обидві функції `pub` але ніде не викликаються. `load_document_chain_legacy` використовує неправильний алгоритм (пошук за counterparty_name).
 
-- [ ] **Step 1: Видалити `load_document_chain_legacy`**
+- [x] **Step 1: Видалити `load_document_chain_legacy`**
 
 Видалити весь блок від рядка `/// Завантажує ланцюг пов'язаних документів` (doc comment) до кінця функції `load_document_chain_legacy` включно — рядки ~769–865.
 
-- [ ] **Step 2: Видалити `prefill_items_from_source`**
+- [x] **Step 2: Видалити `prefill_items_from_source`**
 
 Видалити весь блок від рядка `/// Prefills items for new document` (doc comment) до кінця функції `prefill_items_from_source` — рядки ~934–986 (після зсуву від попереднього видалення).
 
-- [ ] **Step 3: Перевірити компіляцію та що нема посилань**
+- [x] **Step 3: Перевірити компіляцію та що нема посилань**
 
 ```bash
 cargo build --tests 2>&1 | grep -E "error|warning.*unused|load_document_chain_legacy|prefill_items_from_source"
 ```
 Expected: жодних рядків.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/ui/documents.rs
@@ -172,7 +172,7 @@ git commit -m "refactor: remove dead pub functions load_document_chain_legacy an
 
 `DocumentRef` є `Copy`. Замінити `load_chain_from_id(pool, company_id, source_id)` на `load_document_chain(pool, company_id, source_ref)` — уникає повторного парсингу рядка.
 
-- [ ] **Step 1: Замінити виклик у `create_chain_draft_from_source`**
+- [x] **Step 1: Замінити виклик у `create_chain_draft_from_source`**
 
 Знайти рядок:
 ```rust
@@ -186,14 +186,14 @@ git commit -m "refactor: remove dead pub functions load_document_chain_legacy an
 
 (`source_ref` вже розпарсований вище у функції і є `Copy`)
 
-- [ ] **Step 2: Перевірити компіляцію**
+- [x] **Step 2: Перевірити компіляцію**
 
 ```bash
 cargo build --tests 2>&1 | tail -5
 ```
 Expected: `Finished` без помилок.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/ui/documents.rs
@@ -209,7 +209,7 @@ git commit -m "refactor: use already-parsed source_ref in create_chain_draft_fro
 
 Функція стала `pub` без зовнішніх викликів.
 
-- [ ] **Step 1: Прибрати `pub`**
+- [x] **Step 1: Прибрати `pub`**
 
 Знайти:
 ```rust
@@ -220,20 +220,20 @@ pub async fn load_counterparty_name(pool: &PgPool, company_id: Uuid, counterpart
 async fn load_counterparty_name(pool: &PgPool, company_id: Uuid, counterparty_id: Uuid) -> Result<String> {
 ```
 
-- [ ] **Step 2: Перевірити що немає зовнішніх використань**
+- [x] **Step 2: Перевірити що немає зовнішніх використань**
 
 ```bash
 grep -rn "load_counterparty_name" src/ --include="*.rs"
 ```
 Expected: лише рядки всередині `src/ui/documents.rs`.
 
-- [ ] **Step 3: Перевірити компіляцію**
+- [x] **Step 3: Перевірити компіляцію**
 
 ```bash
 cargo build --tests 2>&1 | tail -5
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/ui/documents.rs
@@ -249,7 +249,7 @@ git commit -m "refactor: make load_counterparty_name private (no external caller
 
 Функції `split_visible_notes_and_chain_parent`, `compose_notes_with_chain_parent`, `normalize_chain_kind`, `can_create_chain_target`, `chain_kind_rank` не мають тестів.
 
-- [ ] **Step 1: Дописати тести у існуючий `mod tests`**
+- [x] **Step 1: Дописати тести у існуючий `mod tests`**
 
 Знайти кінець блоку `#[cfg(test)] mod tests` (закриваюча `}`) і перед нею вставити:
 
@@ -332,14 +332,14 @@ git commit -m "refactor: make load_counterparty_name private (no external caller
     }
 ```
 
-- [ ] **Step 2: Запустити тести**
+- [x] **Step 2: Запустити тести**
 
 ```bash
 cargo test --lib 2>&1 | grep -E "test.*ok|test.*FAILED|error"
 ```
 Expected: всі нові тести `ok`, без `FAILED`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/ui/documents.rs

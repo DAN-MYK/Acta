@@ -206,7 +206,10 @@ mod tests {
     #[test]
     fn load_from_legacy_toml_keeps_new_defaults() {
         let path = std::env::temp_dir().join("acta_config_legacy_roundtrip.toml");
-        let _ = std::fs::write(&path, br#"last_company_id = "00000000-0000-0000-0000-000000000000""#);
+        let _ = std::fs::write(
+            &path,
+            br#"last_company_id = "00000000-0000-0000-0000-000000000000""#,
+        );
         let loaded = AppConfig::load_from(&path);
         let _ = std::fs::remove_file(&path);
 

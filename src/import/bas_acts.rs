@@ -2,12 +2,14 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use anyhow::{anyhow, bail, Context, Result};
+use calamine::{open_workbook_auto, Reader as CalamineReader};
 use chrono::NaiveDate;
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use tokio::fs;
+use tokio::task;
 use uuid::Uuid;
 
 use crate::db;
@@ -66,6 +68,19 @@ pub struct ActImportReport {
 struct Resolution<T> {
     value: T,
     source: &'static str,
+}
+
+pub async fn parse_acts_file(path: &Path) -> Result<Vec<ImportedAct>> {
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_lowercase())
+        .unwrap_or_default();
+
+    match extension.as_str() {
+        "xlsx" | "xls" => parse_acts_excel_file(path).await,
+        _ => parse_acts_xml_file(path).await,
+    }
 }
 
 pub async fn parse_acts_xml_file(path: &Path) -> Result<Vec<ImportedAct>> {
@@ -147,7 +162,7 @@ pub async fn import_acts_from_xml(
     path: &Path,
     dry_run: bool,
 ) -> Result<ActImportReport> {
-    let rows = parse_acts_xml_file(path).await?;
+    let rows = parse_acts_file(path).await?;
     apply_imported_acts(pool, company_id, &rows, dry_run).await
 }
 
@@ -486,6 +501,10 @@ fn build_act_from_fields(
             .ok_or_else(|| anyhow!("У акті {number} відсутня дата"))?,
     )?;
 
+    if let Some(item) = build_act_item_from_fields(fields.clone())? {
+        items.push(item);
+    }
+
     if items.is_empty() {
         if let Some(total) = optional_decimal(fields.get("amount"))? {
             items.push(ImportedActItem {
@@ -775,6 +794,112 @@ fn parse_decimal(raw: &str) -> Result<Decimal> {
         .with_context(|| format!("Не вдалося розібрати суму '{raw}'"))
 }
 
+async fn parse_acts_excel_file(path: &Path) -> Result<Vec<ImportedAct>> {
+    let path = path.to_path_buf();
+    task::spawn_blocking(move || {
+        let mut workbook = open_workbook_auto(&path)
+            .with_context(|| format!("Не вдалося відкрити Excel файл {}", path.display()))?;
+        let sheet_name = workbook
+            .sheet_names()
+            .first()
+            .cloned()
+            .ok_or_else(|| anyhow!("У Excel файлі немає жодного sheet"))?;
+        let range = workbook.worksheet_range(&sheet_name)?;
+
+        let mut rows_iter = range.rows();
+        let headers = rows_iter
+            .next()
+            .ok_or_else(|| anyhow!("Excel файл не містить заголовків"))?
+            .iter()
+            .map(|cell| normalize_tag(&cell.to_string()))
+            .collect::<Vec<_>>();
+
+        let mut grouped: BTreeMap<String, ImportedAct> = BTreeMap::new();
+        for row in rows_iter {
+            let mut fields = BTreeMap::new();
+            for (idx, cell) in row.iter().enumerate() {
+                let value = cell.to_string().trim().to_string();
+                if value.is_empty() {
+                    continue;
+                }
+                if let Some(field) = headers
+                    .get(idx)
+                    .and_then(|header| map_act_field_name(header))
+                {
+                    fields.entry(field.to_string()).or_insert(value.clone());
+                }
+                if let Some(field) = headers
+                    .get(idx)
+                    .and_then(|header| map_act_item_field_name(header))
+                {
+                    fields.entry(field.to_string()).or_insert(value);
+                }
+            }
+
+            if let Some(act) = build_act_from_fields(fields, Vec::new())? {
+                let key = act_merge_key(&act);
+                if let Some(existing) = grouped.get_mut(&key) {
+                    merge_act(existing, act)?;
+                } else {
+                    grouped.insert(key, act);
+                }
+            }
+        }
+
+        let rows = grouped.into_values().collect::<Vec<_>>();
+        if rows.is_empty() {
+            return Err(anyhow!("У Excel не знайдено жодного акту"));
+        }
+
+        Ok(rows)
+    })
+    .await
+    .context("Excel parser для актів завершився помилкою")?
+}
+
+fn merge_act(target: &mut ImportedAct, incoming: ImportedAct) -> Result<()> {
+    if target.number != incoming.number
+        || target.date != incoming.date
+        || target.direction != incoming.direction
+    {
+        bail!("Excel grouping для актів отримав несумісні header rows");
+    }
+
+    if target.bas_id.is_none() {
+        target.bas_id = incoming.bas_id;
+    }
+    if target.counterparty_bas_id.is_none() {
+        target.counterparty_bas_id = incoming.counterparty_bas_id;
+    }
+    if target.contract_bas_id.is_none() {
+        target.contract_bas_id = incoming.contract_bas_id;
+    }
+    if target.expected_payment_date.is_none() {
+        target.expected_payment_date = incoming.expected_payment_date;
+    }
+    if target.notes.is_none() {
+        target.notes = incoming.notes;
+    }
+    target.status = incoming.status;
+    target.items.extend(incoming.items);
+
+    Ok(())
+}
+
+fn act_merge_key(row: &ImportedAct) -> String {
+    if let Some(bas_id) = row.bas_id.as_deref() {
+        return format!("bas:{bas_id}");
+    }
+
+    format!(
+        "{}|{}|{}|{}",
+        row.number,
+        row.date,
+        row.counterparty_bas_id.as_deref().unwrap_or(""),
+        row.contract_bas_id.as_deref().unwrap_or("")
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -885,7 +1010,65 @@ mod tests {
 
     #[test]
     fn parse_acts_xml_fails_when_no_records_found() {
-        let error = parse_acts_xml("<root/>").expect_err("порожній XML має давати помилку");
+        let error = parse_acts_xml("<root/>").expect_err("empty XML should fail");
         assert!(error.to_string().contains("не знайдено жодного акту"));
+    }
+
+    #[test]
+    fn build_act_from_fields_builds_single_excel_row_item() {
+        let fields = BTreeMap::from([
+            ("number".to_string(), "ACT-XL-001".to_string()),
+            ("date".to_string(), "2026-04-12".to_string()),
+            ("counterparty_bas_id".to_string(), "cp-001".to_string()),
+            ("contract_bas_id".to_string(), "ctr-001".to_string()),
+            ("description".to_string(), "Consulting".to_string()),
+            ("quantity".to_string(), "2".to_string()),
+            ("unit".to_string(), "hour".to_string()),
+            ("unit_price".to_string(), "1500.00".to_string()),
+        ]);
+
+        let act = build_act_from_fields(fields, Vec::new())
+            .expect("excel row should parse")
+            .expect("act should be built");
+
+        assert_eq!(act.number, "ACT-XL-001");
+        assert_eq!(act.items.len(), 1);
+        assert_eq!(act.items[0].description, "Consulting");
+        assert_eq!(act.items[0].quantity, Decimal::new(2, 0));
+        assert_eq!(act.items[0].unit_price, Decimal::new(150000, 2));
+    }
+
+    #[test]
+    fn merge_act_appends_items_from_same_excel_document() {
+        let mut first = ImportedAct {
+            bas_id: Some("act-001".to_string()),
+            counterparty_bas_id: Some("cp-001".to_string()),
+            contract_bas_id: Some("ctr-001".to_string()),
+            number: "ACT-001".to_string(),
+            date: NaiveDate::from_ymd_opt(2026, 4, 10).expect("valid date"),
+            expected_payment_date: None,
+            direction: DocumentDirection::Outgoing,
+            status: ActStatus::Issued,
+            notes: None,
+            items: vec![ImportedActItem {
+                description: "Service 1".to_string(),
+                quantity: Decimal::ONE,
+                unit: "pcs".to_string(),
+                unit_price: Decimal::new(10000, 2),
+            }],
+        };
+        let second = ImportedAct {
+            items: vec![ImportedActItem {
+                description: "Service 2".to_string(),
+                quantity: Decimal::new(3, 0),
+                unit: "hour".to_string(),
+                unit_price: Decimal::new(250000, 2),
+            }],
+            ..first.clone()
+        };
+
+        merge_act(&mut first, second).expect("merge should succeed");
+        assert_eq!(first.items.len(), 2);
+        assert_eq!(act_merge_key(&first), "bas:act-001");
     }
 }

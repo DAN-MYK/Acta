@@ -10,6 +10,7 @@ use crate::models::payment::{
     NewPayment, NewPaymentSchedule, Payment, PaymentDirection, PaymentListRow, PaymentSchedule,
     UpdatePayment,
 };
+use crate::services::payment_matching::MatchCandidate;
 
 /// KPI-агрегати для верхньої смужки екрана платежів.
 pub struct PaymentKpi {
@@ -264,6 +265,20 @@ pub async fn get_by_id_scoped(
     .fetch_optional(pool)
     .await?;
     Ok(row)
+}
+
+/// Завантажити всі відкриті документи-кандидати для matching напряму платежу.
+pub async fn list_open_document_candidates(
+    pool: &PgPool,
+    company_id: Uuid,
+    direction: PaymentDirection,
+) -> Result<Vec<MatchCandidate>> {
+    let mut candidates =
+        crate::db::acts::list_open_act_candidates(pool, company_id, direction.clone()).await?;
+    candidates.extend(
+        crate::db::invoices::list_open_invoice_candidates(pool, company_id, direction).await?,
+    );
+    Ok(candidates)
 }
 
 /// Створити платіж.

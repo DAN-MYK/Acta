@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -44,21 +45,43 @@ pub async fn run_migrations(pool: &PgPool) -> Result<()> {
     Ok(())
 }
 
-/// Ініціалізує спільний AppCtx для Slint/Tauri runtime.
+/// Ініціалізує спільний AppCtx з CWD-відносними шляхами (dev-режим та тести).
 pub async fn init_app_ctx() -> Result<Arc<AppCtx>> {
+    init_app_ctx_with_paths(
+        PathBuf::from("templates"),
+        PathBuf::from("storage/documents"),
+    )
+    .await
+}
+
+/// Ініціалізує спільний AppCtx з явними шляхами.
+/// Використовується в production Tauri builds через app.path().
+pub async fn init_app_ctx_with_paths(
+    template_dir: PathBuf,
+    storage_dir: PathBuf,
+) -> Result<Arc<AppCtx>> {
     let pool = connect_pool().await?;
     run_migrations(&pool).await?;
     let config = AppConfig::load();
     let company_id = match config.last_company_id {
-        Some(company_id) if crate::db::companies::get_by_id(&pool, company_id).await?.is_some() => {
+        Some(company_id)
+            if crate::db::companies::get_by_id(&pool, company_id)
+                .await?
+                .is_some() =>
+        {
             company_id
         }
         _ => get_first_company_id(&pool).await,
     };
-    Ok(Arc::new(AppCtx::new(pool, company_id)))
+    Ok(Arc::new(AppCtx::with_dirs(
+        pool,
+        company_id,
+        template_dir,
+        storage_dir,
+    )))
 }
 
-/// Ініціалізує AppCtx у вже створеному Runtime.
+/// Ініціалізує AppCtx у вже створеному Runtime (CWD-відносні шляхи).
 pub fn init_app_ctx_blocking(rt: &Runtime) -> Result<Arc<AppCtx>> {
     rt.block_on(init_app_ctx())
 }
