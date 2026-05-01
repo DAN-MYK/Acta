@@ -917,3 +917,9 @@ git commit -m "docs(ui): document content-area FocusScope as intentional Tab anc
 | Debt #9: inconsistent hover | Task 1 (вже покриває) |
 | Refactor #10: PaletteItem дублювання | — (розміри різні навмисно, задокументовано) |
 | Refactor #11: content-area tab stop | Task 9 |
+
+---
+
+## Статус реалізації
+
+✅ **Повністю реалізовано** — 2026-04-28

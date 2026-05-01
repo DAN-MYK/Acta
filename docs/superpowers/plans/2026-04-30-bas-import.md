@@ -909,3 +909,9 @@ Navigate to Settings → Інтеграції. Verify:
 git add frontend/src/lib/screens/SettingsScreen.svelte
 git commit -m "feat: add BAS import button and inline panel to SettingsScreen"
 ```
+
+---
+
+## Статус реалізації
+
+✅ **Повністю реалізовано** — 2026-04-30
