@@ -1,6 +1,6 @@
 # Fix Documents Code Review Issues
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Fix critical error handling, silent failures, and unimplemented features in documents.rs and bootstrap.rs identified in code review.
 
@@ -31,7 +31,7 @@
 
 Create a helper struct to track success/failure counts for bulk operations.
 
-- [ ] **Step 1: Add OperationResult struct to helpers.rs**
+- [x] **Step 1: Add OperationResult struct to helpers.rs**
 
 Add this code after the `format_money_ua` function (after line 87):
 
@@ -102,7 +102,7 @@ impl OperationResult {
 }
 ```
 
-- [ ] **Step 2: Add test for OperationResult**
+- [x] **Step 2: Add test for OperationResult**
 
 Add test in `helpers.rs` test module (at the end of the file, before the closing brace):
 
@@ -141,7 +141,7 @@ fn operation_result_all_failed_message() {
 }
 ```
 
-- [ ] **Step 3: Run tests to verify**
+- [x] **Step 3: Run tests to verify**
 
 ```bash
 cargo test --lib ui::helpers::tests::operation_result
@@ -149,7 +149,7 @@ cargo test --lib ui::helpers::tests::operation_result
 
 Expected: PASS (3 new tests)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/ui/helpers.rs
@@ -165,7 +165,7 @@ git commit -m "feat: add OperationResult helper for tracking bulk operation outc
 
 Replace the silent error-discarding `doc_send` with proper error logging and notification.
 
-- [ ] **Step 1: Replace doc_send implementation**
+- [x] **Step 1: Replace doc_send implementation**
 
 Find the `ui.on_doc_send` block (starting at line 541) and replace the entire callback:
 
@@ -214,13 +214,13 @@ ui.on_doc_send({
 });
 ```
 
-- [ ] **Step 2: Verify parsing function exists**
+- [x] **Step 2: Verify parsing function exists**
 
 Run: `grep -n "fn parse_document_ref" src/ui/documents.rs`
 
 Expected: Line number where function is defined (should exist from previous work)
 
-- [ ] **Step 3: Test the change (manual)**
+- [x] **Step 3: Test the change (manual)**
 
 After compiling, in the UI:
 1. Open Documents screen
@@ -228,7 +228,7 @@ After compiling, in the UI:
 3. Verify success notification appears
 4. Check that tracing log shows "documents: sent successfully"
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/ui/documents.rs
@@ -244,7 +244,7 @@ git commit -m "fix: add error logging and user notification to doc_send callback
 
 Replace silent error discarding in delete callback with proper logging.
 
-- [ ] **Step 1: Replace doc_delete implementation**
+- [x] **Step 1: Replace doc_delete implementation**
 
 Find the `ui.on_doc_delete` block (starting at line 567) and replace:
 
@@ -293,7 +293,7 @@ ui.on_doc_delete({
 });
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add src/ui/documents.rs
@@ -309,7 +309,7 @@ git commit -m "fix: add error logging and user notification to doc_delete callba
 
 Replace generic success message with operation result tracking.
 
-- [ ] **Step 1: Import OperationResult at top of documents.rs**
+- [x] **Step 1: Import OperationResult at top of documents.rs**
 
 Add after existing imports (around line 10):
 
@@ -317,7 +317,7 @@ Add after existing imports (around line 10):
 use crate::ui::helpers::OperationResult;
 ```
 
-- [ ] **Step 2: Replace bulk send implementation**
+- [x] **Step 2: Replace bulk send implementation**
 
 Find the `ui.on_doc_bulk_send` block and replace it. First find it:
 
@@ -409,7 +409,7 @@ ui.on_doc_bulk_send({
 });
 ```
 
-- [ ] **Step 3: Test in UI**
+- [x] **Step 3: Test in UI**
 
 After compiling:
 1. Select multiple documents
@@ -417,7 +417,7 @@ After compiling:
 3. Verify accurate message ("X з Y надіслано")
 4. Check tracing logs show counts
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/ui/documents.rs
@@ -433,7 +433,7 @@ git commit -m "fix: add operation result tracking to doc_bulk_send with accurate
 
 Same pattern as bulk send — replace with OperationResult tracking.
 
-- [ ] **Step 1: Find and replace bulk archive callback**
+- [x] **Step 1: Find and replace bulk archive callback**
 
 Find line with `on_doc_bulk_archive`:
 
@@ -525,7 +525,7 @@ ui.on_doc_bulk_archive({
 });
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add src/ui/documents.rs
@@ -541,7 +541,7 @@ git commit -m "fix: add operation result tracking to doc_bulk_archive with accur
 
 Same pattern as bulk operations.
 
-- [ ] **Step 1: Find and replace bulk delete callback**
+- [x] **Step 1: Find and replace bulk delete callback**
 
 Find line with `on_doc_bulk_delete`:
 
@@ -633,7 +633,7 @@ ui.on_doc_bulk_delete({
 });
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add src/ui/documents.rs
@@ -650,7 +650,7 @@ git commit -m "fix: add operation result tracking to doc_bulk_delete with accura
 
 Load document chain data and populate chain_steps model.
 
-- [ ] **Step 1: Add helper function to prepare chain data**
+- [x] **Step 1: Add helper function to prepare chain data**
 
 Add this to `src/ui/documents.rs` after the existing helper functions (around line 430):
 
@@ -745,7 +745,7 @@ pub async fn load_document_chain(
 }
 ```
 
-- [ ] **Step 2: Import load_document_chain in bootstrap.rs**
+- [x] **Step 2: Import load_document_chain in bootstrap.rs**
 
 At top of `src/bootstrap.rs`, add:
 
@@ -753,7 +753,7 @@ At top of `src/bootstrap.rs`, add:
 use crate::ui::documents::load_document_chain;
 ```
 
-- [ ] **Step 3: Replace doc_chain_load stub with real implementation**
+- [x] **Step 3: Replace doc_chain_load stub with real implementation**
 
 Replace the `on_doc_chain_load` callback in `wire_stub_callbacks` (lines 704-723):
 
@@ -802,7 +802,7 @@ ui.on_doc_chain_load({
 });
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/ui/documents.rs src/bootstrap.rs
@@ -819,7 +819,7 @@ git commit -m "feat: implement doc_chain_load callback with real document chain 
 
 Create new document with prefilled data from source document.
 
-- [ ] **Step 1: Add item prefill helper to documents.rs**
+- [x] **Step 1: Add item prefill helper to documents.rs**
 
 Add after `load_document_chain` function:
 
@@ -884,7 +884,7 @@ pub async fn prefill_items_from_source(
 }
 ```
 
-- [ ] **Step 2: Replace doc_chain_create stub**
+- [x] **Step 2: Replace doc_chain_create stub**
 
 Replace the `on_doc_chain_create` callback in `wire_stub_callbacks` (lines 724-726):
 
@@ -989,7 +989,7 @@ ui.on_doc_chain_create({
 });
 ```
 
-- [ ] **Step 3: Import format_money in bootstrap.rs**
+- [x] **Step 3: Import format_money in bootstrap.rs**
 
 At top of bootstrap.rs, verify imports include:
 
@@ -997,7 +997,7 @@ At top of bootstrap.rs, verify imports include:
 use crate::ui::helpers::format_money;
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/ui/documents.rs src/bootstrap.rs
@@ -1013,17 +1013,17 @@ git commit -m "feat: implement doc_chain_create callback with prefilled counterp
 
 Remove hardcoded `x: 150px; y: 100px;` from context menu.
 
-- [ ] **Step 1: Find DocContextMenu in documents.slint**
+- [x] **Step 1: Find DocContextMenu in documents.slint**
 
 ```bash
 grep -n "DocContextMenu" ui/documents.slint | head -5
 ```
 
-- [ ] **Step 2: Read the component**
+- [x] **Step 2: Read the component**
 
 Use Read tool to find and view the current DocContextMenu definition.
 
-- [ ] **Step 3: Replace hardcoded position with binding**
+- [x] **Step 3: Replace hardcoded position with binding**
 
 Change from:
 ```slint
@@ -1056,7 +1056,7 @@ DocContextMenu {
 }
 ```
 
-- [ ] **Step 4: Compile and verify**
+- [x] **Step 4: Compile and verify**
 
 ```bash
 cargo build
@@ -1064,7 +1064,7 @@ cargo build
 
 Expected: No errors, menu position adjusts dynamically
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add ui/documents.slint
@@ -1080,7 +1080,7 @@ git commit -m "fix: remove hardcoded context menu position, make it dynamic"
 
 Verify proper imports for slint::Model::row_count/row_data.
 
-- [ ] **Step 1: Check imports at top of documents.rs**
+- [x] **Step 1: Check imports at top of documents.rs**
 
 Verify these are present:
 
@@ -1088,11 +1088,11 @@ Verify these are present:
 use slint::Model;  // <- for row_count(), row_data()
 ```
 
-- [ ] **Step 2: If missing, add it**
+- [x] **Step 2: If missing, add it**
 
 Add `use slint::Model;` after other slint imports (around line 5-10).
 
-- [ ] **Step 3: Commit if needed**
+- [x] **Step 3: Commit if needed**
 
 ```bash
 git add src/ui/documents.rs
@@ -1108,7 +1108,7 @@ git commit -m "chore: ensure slint::Model trait is imported for safe model itera
 
 Verify all changes compile and tests pass.
 
-- [ ] **Step 1: Build full project**
+- [x] **Step 1: Build full project**
 
 ```bash
 cargo build --all
@@ -1116,7 +1116,7 @@ cargo build --all
 
 Expected: Compiles without errors or warnings
 
-- [ ] **Step 2: Run library tests**
+- [x] **Step 2: Run library tests**
 
 ```bash
 cargo test --lib
@@ -1124,7 +1124,7 @@ cargo test --lib
 
 Expected: All tests pass (including new OperationResult tests)
 
-- [ ] **Step 3: Run integration tests**
+- [x] **Step 3: Run integration tests**
 
 ```bash
 cargo test --test '*' 
@@ -1132,7 +1132,7 @@ cargo test --test '*'
 
 Expected: All integration tests pass
 
-- [ ] **Step 4: Build tests**
+- [x] **Step 4: Build tests**
 
 ```bash
 cargo build --tests
@@ -1140,7 +1140,7 @@ cargo build --tests
 
 Expected: Full compilation of all test binaries succeeds (catches issues like lessons.md 2026-04-08 mentioned)
 
-- [ ] **Step 5: Check for unused imports or dead code**
+- [x] **Step 5: Check for unused imports or dead code**
 
 ```bash
 cargo clippy --all
@@ -1148,7 +1148,7 @@ cargo clippy --all
 
 Expected: No new warnings introduced
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add Cargo.lock  # if changed

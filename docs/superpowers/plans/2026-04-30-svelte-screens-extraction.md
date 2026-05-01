@@ -1,6 +1,6 @@
 # Svelte Screens Extraction Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Розбити `frontend/src/App.svelte` (1386 рядків) на 8 окремих файлів: тонка оболонка `App.svelte` + 7 screen-компонентів у `frontend/src/screens/`, без жодних змін логіки чи дизайну.
 
@@ -32,7 +32,7 @@
 - Modify: `.gitignore`
 - Create: `frontend/src/screens/Dashboard.svelte`
 
-- [ ] **Step 1: Додати `.superpowers/` до `.gitignore`**
+- [x] **Step 1: Додати `.superpowers/` до `.gitignore`**
 
 Відкрий `.gitignore` і додай рядок в кінець:
 
@@ -40,7 +40,7 @@
 .superpowers/
 ```
 
-- [ ] **Step 2: Створити `frontend/src/screens/Dashboard.svelte`**
+- [x] **Step 2: Створити `frontend/src/screens/Dashboard.svelte`**
 
 ```svelte
 <script lang="ts">
@@ -146,7 +146,7 @@
 </section>
 ```
 
-- [ ] **Step 3: Перевірити TypeScript**
+- [x] **Step 3: Перевірити TypeScript**
 
 ```bash
 cd frontend && npm run check
@@ -154,7 +154,7 @@ cd frontend && npm run check
 
 Очікується: `svelte-check` завершується без помилок.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add .gitignore frontend/src/screens/Dashboard.svelte
@@ -168,7 +168,7 @@ git commit -m "feat(screens): add Dashboard screen component"
 **Files:**
 - Create: `frontend/src/screens/Documents.svelte`
 
-- [ ] **Step 1: Створити `frontend/src/screens/Documents.svelte`**
+- [x] **Step 1: Створити `frontend/src/screens/Documents.svelte`**
 
 ```svelte
 <script lang="ts">
@@ -368,7 +368,7 @@ git commit -m "feat(screens): add Dashboard screen component"
 {/if}
 ```
 
-- [ ] **Step 2: Перевірити TypeScript**
+- [x] **Step 2: Перевірити TypeScript**
 
 ```bash
 cd frontend && npm run check
@@ -376,7 +376,7 @@ cd frontend && npm run check
 
 Очікується: без помилок.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/screens/Documents.svelte
@@ -390,7 +390,7 @@ git commit -m "feat(screens): add Documents screen component"
 **Files:**
 - Create: `frontend/src/screens/Counterparties.svelte`
 
-- [ ] **Step 1: Створити `frontend/src/screens/Counterparties.svelte`**
+- [x] **Step 1: Створити `frontend/src/screens/Counterparties.svelte`**
 
 ```svelte
 <script lang="ts">
@@ -578,7 +578,7 @@ git commit -m "feat(screens): add Documents screen component"
 {/if}
 ```
 
-- [ ] **Step 2: Перевірити TypeScript**
+- [x] **Step 2: Перевірити TypeScript**
 
 ```bash
 cd frontend && npm run check
@@ -586,7 +586,7 @@ cd frontend && npm run check
 
 Очікується: без помилок.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/screens/Counterparties.svelte
@@ -600,7 +600,7 @@ git commit -m "feat(screens): add Counterparties screen component"
 **Files:**
 - Create: `frontend/src/screens/Payments.svelte`
 
-- [ ] **Step 1: Створити `frontend/src/screens/Payments.svelte`**
+- [x] **Step 1: Створити `frontend/src/screens/Payments.svelte`**
 
 ```svelte
 <script lang="ts">
@@ -739,7 +739,7 @@ git commit -m "feat(screens): add Counterparties screen component"
 {/if}
 ```
 
-- [ ] **Step 2: Перевірити TypeScript**
+- [x] **Step 2: Перевірити TypeScript**
 
 ```bash
 cd frontend && npm run check
@@ -747,7 +747,7 @@ cd frontend && npm run check
 
 Очікується: без помилок.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/screens/Payments.svelte
@@ -761,7 +761,7 @@ git commit -m "feat(screens): add Payments screen component"
 **Files:**
 - Create: `frontend/src/screens/Reports.svelte`
 
-- [ ] **Step 1: Створити `frontend/src/screens/Reports.svelte`**
+- [x] **Step 1: Створити `frontend/src/screens/Reports.svelte`**
 
 ```svelte
 <script lang="ts">
@@ -932,7 +932,7 @@ git commit -m "feat(screens): add Payments screen component"
 </section>
 ```
 
-- [ ] **Step 2: Перевірити TypeScript**
+- [x] **Step 2: Перевірити TypeScript**
 
 ```bash
 cd frontend && npm run check
@@ -940,7 +940,7 @@ cd frontend && npm run check
 
 Очікується: без помилок.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/screens/Reports.svelte
@@ -954,7 +954,7 @@ git commit -m "feat(screens): add Reports screen component"
 **Files:**
 - Create: `frontend/src/screens/Tasks.svelte`
 
-- [ ] **Step 1: Створити `frontend/src/screens/Tasks.svelte`**
+- [x] **Step 1: Створити `frontend/src/screens/Tasks.svelte`**
 
 ```svelte
 <script lang="ts">
@@ -1129,7 +1129,7 @@ git commit -m "feat(screens): add Reports screen component"
 {/if}
 ```
 
-- [ ] **Step 2: Перевірити TypeScript**
+- [x] **Step 2: Перевірити TypeScript**
 
 ```bash
 cd frontend && npm run check
@@ -1137,7 +1137,7 @@ cd frontend && npm run check
 
 Очікується: без помилок.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/screens/Tasks.svelte
@@ -1151,7 +1151,7 @@ git commit -m "feat(screens): add Tasks screen component"
 **Files:**
 - Create: `frontend/src/screens/Settings.svelte`
 
-- [ ] **Step 1: Створити `frontend/src/screens/Settings.svelte`**
+- [x] **Step 1: Створити `frontend/src/screens/Settings.svelte`**
 
 ```svelte
 <script lang="ts">
@@ -1389,7 +1389,7 @@ git commit -m "feat(screens): add Tasks screen component"
 </section>
 ```
 
-- [ ] **Step 2: Перевірити TypeScript**
+- [x] **Step 2: Перевірити TypeScript**
 
 ```bash
 cd frontend && npm run check
@@ -1397,7 +1397,7 @@ cd frontend && npm run check
 
 Очікується: без помилок.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/screens/Settings.svelte
@@ -1411,7 +1411,7 @@ git commit -m "feat(screens): add Settings screen component"
 **Files:**
 - Modify: `frontend/src/App.svelte` — замінити повністю
 
-- [ ] **Step 1: Замінити вміст `frontend/src/App.svelte`**
+- [x] **Step 1: Замінити вміст `frontend/src/App.svelte`**
 
 ```svelte
 <script lang="ts">
@@ -1600,7 +1600,7 @@ git commit -m "feat(screens): add Settings screen component"
 </div>
 ```
 
-- [ ] **Step 2: Перевірити TypeScript**
+- [x] **Step 2: Перевірити TypeScript**
 
 ```bash
 cd frontend && npm run check
@@ -1608,7 +1608,7 @@ cd frontend && npm run check
 
 Очікується: без помилок.
 
-- [ ] **Step 3: Перевірити build**
+- [x] **Step 3: Перевірити build**
 
 ```bash
 cd frontend && npm run build
@@ -1616,7 +1616,7 @@ cd frontend && npm run build
 
 Очікується: `dist/` згенеровано без помилок.
 
-- [ ] **Step 4: Запустити frontend-тести**
+- [x] **Step 4: Запустити frontend-тести**
 
 ```bash
 cd frontend && npm run test:frontend
@@ -1624,7 +1624,7 @@ cd frontend && npm run test:frontend
 
 Очікується: всі тести проходять (тести stores не залежать від App.svelte).
 
-- [ ] **Step 5: Перевірити що App.svelte став меншим**
+- [x] **Step 5: Перевірити що App.svelte став меншим**
 
 ```bash
 wc -l frontend/src/App.svelte
@@ -1632,7 +1632,7 @@ wc -l frontend/src/App.svelte
 
 Очікується: ~120 рядків (було 1386).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/App.svelte

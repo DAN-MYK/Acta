@@ -2,7 +2,7 @@
 
 > **Archived/pre-cutover:** execution plan збережено як історія Tauri cutover. Після `2026-04-30` не використовуй його Slint mapping або deletion checklist як live backlog; актуальний стан у `docs/architecture/tauri-runtime.md` і `docs/architecture/tauri-command-surface.md`.
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Замінити Slint UI на Tauri + Svelte + TypeScript, зберігши весь Rust бекенд (db/, models/, import/, pdf/).
 
@@ -89,14 +89,14 @@ acta/
 - Create: `svelte.config.js`
 - Create: `index.html`
 
-- [ ] **Step 1: Встановити Tauri CLI та залежності**
+- [x] **Step 1: Встановити Tauri CLI та залежності**
 
 ```bash
 npm install --save-dev @tauri-apps/cli @tauri-apps/api
 npm install --save-dev vite @sveltejs/vite-plugin-svelte svelte svelte-check typescript
 ```
 
-- [ ] **Step 2: Створити `package.json`**
+- [x] **Step 2: Створити `package.json`**
 
 ```json
 {
@@ -124,7 +124,7 @@ npm install --save-dev vite @sveltejs/vite-plugin-svelte svelte svelte-check typ
 }
 ```
 
-- [ ] **Step 3: Створити `vite.config.ts`**
+- [x] **Step 3: Створити `vite.config.ts`**
 
 ```typescript
 import { defineConfig } from "vite";
@@ -141,7 +141,7 @@ export default defineConfig({
 });
 ```
 
-- [ ] **Step 4: Створити `svelte.config.js`**
+- [x] **Step 4: Створити `svelte.config.js`**
 
 ```javascript
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
@@ -151,7 +151,7 @@ export default {
 };
 ```
 
-- [ ] **Step 5: Створити `tsconfig.json`**
+- [x] **Step 5: Створити `tsconfig.json`**
 
 ```json
 {
@@ -171,7 +171,7 @@ export default {
 }
 ```
 
-- [ ] **Step 6: Створити `index.html`**
+- [x] **Step 6: Створити `index.html`**
 
 ```html
 <!DOCTYPE html>
@@ -188,7 +188,7 @@ export default {
 </html>
 ```
 
-- [ ] **Step 7: Створити `src/main.ts`**
+- [x] **Step 7: Створити `src/main.ts`**
 
 ```typescript
 import App from "./app.svelte";
@@ -198,7 +198,7 @@ const app = new App({ target: document.getElementById("app")! });
 export default app;
 ```
 
-- [ ] **Step 8: Перемістити Rust код в `src-tauri/`**
+- [x] **Step 8: Перемістити Rust код в `src-tauri/`**
 
 ```bash
 mkdir -p src-tauri/src
@@ -207,7 +207,7 @@ cp Cargo.toml src-tauri/Cargo.toml
 # НЕ видаляти src/ ще — видалимо в Task 14
 ```
 
-- [ ] **Step 9: Створити `src-tauri/build.rs`**
+- [x] **Step 9: Створити `src-tauri/build.rs`**
 
 ```rust
 fn main() {
@@ -215,7 +215,7 @@ fn main() {
 }
 ```
 
-- [ ] **Step 10: Створити `src-tauri/tauri.conf.json`**
+- [x] **Step 10: Створити `src-tauri/tauri.conf.json`**
 
 ```json
 {
@@ -248,7 +248,7 @@ fn main() {
 }
 ```
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 git add package.json vite.config.ts svelte.config.js tsconfig.json index.html src/ src-tauri/
@@ -265,7 +265,7 @@ git commit -m "chore: scaffold Tauri + Svelte + TypeScript project structure"
 - Create: `src-tauri/src/lib.rs`
 - Modify: `src-tauri/src/main.rs`
 
-- [ ] **Step 1: Оновити `src-tauri/Cargo.toml` — замінити Slint на Tauri**
+- [x] **Step 1: Оновити `src-tauri/Cargo.toml` — замінити Slint на Tauri**
 
 ```toml
 [package]
@@ -310,7 +310,7 @@ csv = "1"
 lopdf = "0.34"
 ```
 
-- [ ] **Step 2: Створити `src-tauri/src/state.rs`**
+- [x] **Step 2: Створити `src-tauri/src/state.rs`**
 
 ```rust
 use sqlx::PgPool;
@@ -346,7 +346,7 @@ impl AppState {
 }
 ```
 
-- [ ] **Step 3: Створити `src-tauri/src/lib.rs` (порожній реєстр команд поки)**
+- [x] **Step 3: Створити `src-tauri/src/lib.rs` (порожній реєстр команд поки)**
 
 ```rust
 pub mod commands;
@@ -399,7 +399,7 @@ pub fn run() {
 }
 ```
 
-- [ ] **Step 4: Оновити `src-tauri/src/main.rs`**
+- [x] **Step 4: Оновити `src-tauri/src/main.rs`**
 
 ```rust
 fn main() {
@@ -409,7 +409,7 @@ fn main() {
 }
 ```
 
-- [ ] **Step 5: Перевірити компіляцію (без команд ще)**
+- [x] **Step 5: Перевірити компіляцію (без команд ще)**
 
 ```bash
 cd src-tauri && cargo check 2>&1 | head -50
@@ -417,7 +417,7 @@ cd src-tauri && cargo check 2>&1 | head -50
 
 Очікується: помилки про відсутні модулі `commands` — нормально, створимо в Task 3.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src-tauri/Cargo.toml src-tauri/src/state.rs src-tauri/src/lib.rs src-tauri/src/main.rs src-tauri/build.rs
@@ -434,7 +434,7 @@ git commit -m "feat: add Tauri backend scaffold with AppState and DB initializat
 
 Цей task встановлює паттерн для всіх наступних команд.
 
-- [ ] **Step 1: Створити `src-tauri/src/commands/mod.rs`**
+- [x] **Step 1: Створити `src-tauri/src/commands/mod.rs`**
 
 ```rust
 pub mod settings;
@@ -446,7 +446,7 @@ pub mod tasks;
 pub mod reports;
 ```
 
-- [ ] **Step 2: Створити `src-tauri/src/commands/settings.rs`**
+- [x] **Step 2: Створити `src-tauri/src/commands/settings.rs`**
 
 ```rust
 use crate::state::AppState;
@@ -541,7 +541,7 @@ pub async fn save_company(
 }
 ```
 
-- [ ] **Step 3: Створити placeholder файли для інших команд (щоб проект компілювався)**
+- [x] **Step 3: Створити placeholder файли для інших команд (щоб проект компілювався)**
 
 Для кожного файлу (`dashboard.rs`, `counterparties.rs`, `documents.rs`, `payments.rs`, `tasks.rs`, `reports.rs`) — порожній модуль:
 
@@ -558,7 +558,7 @@ pub async fn get_dashboard(_state: State<'_, AppState>) -> Result<serde_json::Va
 
 Повторити для counterparties, documents, payments, tasks, reports з відповідними заглушками.
 
-- [ ] **Step 4: Перевірити компіляцію**
+- [x] **Step 4: Перевірити компіляцію**
 
 ```bash
 cd src-tauri && cargo build 2>&1 | tail -20
@@ -566,7 +566,7 @@ cd src-tauri && cargo build 2>&1 | tail -20
 
 Очікується: `Finished` без помилок.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src-tauri/src/commands/
@@ -581,7 +581,7 @@ git commit -m "feat: add Tauri commands scaffold — settings + placeholder modu
 - Create: `src/lib/types.ts`
 - Create: `src/lib/api.ts`
 
-- [ ] **Step 1: Створити `src/lib/types.ts`**
+- [x] **Step 1: Створити `src/lib/types.ts`**
 
 ```typescript
 // Навігація
@@ -760,7 +760,7 @@ export interface SettingsData {
 }
 ```
 
-- [ ] **Step 2: Створити `src/lib/api.ts`**
+- [x] **Step 2: Створити `src/lib/api.ts`**
 
 ```typescript
 import { invoke } from "@tauri-apps/api/core";
@@ -814,7 +814,7 @@ export const getReports = (year: number, month: number) =>
   invoke<ReportsData>("get_reports", { year, month });
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/lib/types.ts src/lib/api.ts
@@ -832,7 +832,7 @@ git commit -m "feat: add TypeScript types and Tauri API client"
 - Create: `src/lib/components/Sidebar.svelte`
 - Create: `src/app.svelte`
 
-- [ ] **Step 1: Створити `src/lib/styles/tokens.css`**
+- [x] **Step 1: Створити `src/lib/styles/tokens.css`**
 
 ```css
 :root {
@@ -879,7 +879,7 @@ git commit -m "feat: add TypeScript types and Tauri API client"
 }
 ```
 
-- [ ] **Step 2: Створити `src/lib/styles/global.css`**
+- [x] **Step 2: Створити `src/lib/styles/global.css`**
 
 ```css
 @import "./tokens.css";
@@ -943,7 +943,7 @@ input, textarea, select {
 .badge-gray { background: var(--color-row-alt); color: var(--color-text-muted); }
 ```
 
-- [ ] **Step 3: Створити `src/lib/components/Sidebar.svelte`**
+- [x] **Step 3: Створити `src/lib/components/Sidebar.svelte`**
 
 ```svelte
 <script lang="ts">
@@ -1011,7 +1011,7 @@ input, textarea, select {
 </style>
 ```
 
-- [ ] **Step 4: Створити `src/app.svelte`**
+- [x] **Step 4: Створити `src/app.svelte`**
 
 ```svelte
 <script lang="ts">
@@ -1064,7 +1064,7 @@ input, textarea, select {
 </style>
 ```
 
-- [ ] **Step 5: Створити заглушки для всіх screens (щоб компілювалось)**
+- [x] **Step 5: Створити заглушки для всіх screens (щоб компілювалось)**
 
 Для кожного `src/screens/*.svelte`:
 ```svelte
@@ -1073,7 +1073,7 @@ input, textarea, select {
 </div>
 ```
 
-- [ ] **Step 6: Запустити та перевірити що вікно відкривається з sidebar**
+- [x] **Step 6: Запустити та перевірити що вікно відкривається з sidebar**
 
 ```bash
 npm run dev
@@ -1081,7 +1081,7 @@ npm run dev
 
 Очікується: вікно відкрилось, sidebar видно, навігація між секціями працює.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/
@@ -1096,7 +1096,7 @@ git commit -m "feat: add Svelte app shell with sidebar navigation and design tok
 - Modify: `src-tauri/src/commands/settings.rs` (вже створено в Task 3)
 - Create: `src/screens/Settings.svelte`
 
-- [ ] **Step 1: Створити `src/screens/Settings.svelte`**
+- [x] **Step 1: Створити `src/screens/Settings.svelte`**
 
 ```svelte
 <script lang="ts">
@@ -1226,7 +1226,7 @@ git commit -m "feat: add Svelte app shell with sidebar navigation and design tok
 </style>
 ```
 
-- [ ] **Step 2: Запустити та перевірити Settings**
+- [x] **Step 2: Запустити та перевірити Settings**
 
 ```bash
 npm run dev
@@ -1234,7 +1234,7 @@ npm run dev
 
 Перейти на Settings — форма завантажується, редагується, кнопка "Зберегти" спрацьовує.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/screens/Settings.svelte
@@ -1251,7 +1251,7 @@ git commit -m "feat: implement Settings screen with company form"
 - Create: `src/lib/components/BarChart.svelte`
 - Modify: `src/screens/Dashboard.svelte`
 
-- [ ] **Step 1: Реалізувати `src-tauri/src/commands/dashboard.rs`**
+- [x] **Step 1: Реалізувати `src-tauri/src/commands/dashboard.rs`**
 
 ```rust
 use crate::state::AppState;
@@ -1347,7 +1347,7 @@ pub async fn get_dashboard(state: State<'_, AppState>) -> Result<DashboardRespon
 }
 ```
 
-- [ ] **Step 2: Створити `src/lib/components/KpiCard.svelte`**
+- [x] **Step 2: Створити `src/lib/components/KpiCard.svelte`**
 
 ```svelte
 <script lang="ts">
@@ -1376,7 +1376,7 @@ pub async fn get_dashboard(state: State<'_, AppState>) -> Result<DashboardRespon
 </style>
 ```
 
-- [ ] **Step 3: Реалізувати `src/screens/Dashboard.svelte`**
+- [x] **Step 3: Реалізувати `src/screens/Dashboard.svelte`**
 
 ```svelte
 <script lang="ts">
@@ -1457,7 +1457,7 @@ pub async fn get_dashboard(state: State<'_, AppState>) -> Result<DashboardRespon
 </style>
 ```
 
-- [ ] **Step 4: Перевірити Dashboard**
+- [x] **Step 4: Перевірити Dashboard**
 
 ```bash
 npm run dev
@@ -1465,7 +1465,7 @@ npm run dev
 
 Dashboard відкривається, показує KPI та таблицю.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src-tauri/src/commands/dashboard.rs src/screens/Dashboard.svelte src/lib/components/KpiCard.svelte
@@ -1480,7 +1480,7 @@ git commit -m "feat: implement Dashboard command and screen with KPI and journal
 - Modify: `src-tauri/src/commands/counterparties.rs`
 - Create: `src/screens/Counterparties.svelte`
 
-- [ ] **Step 1: Реалізувати `src-tauri/src/commands/counterparties.rs`**
+- [x] **Step 1: Реалізувати `src-tauri/src/commands/counterparties.rs`**
 
 ```rust
 use crate::{db, state::AppState};
@@ -1624,7 +1624,7 @@ pub async fn delete_counterparty(
 }
 ```
 
-- [ ] **Step 2: Реалізувати `src/screens/Counterparties.svelte`**
+- [x] **Step 2: Реалізувати `src/screens/Counterparties.svelte`**
 
 ```svelte
 <script lang="ts">
@@ -1767,7 +1767,7 @@ pub async fn delete_counterparty(
 </style>
 ```
 
-- [ ] **Step 3: Перевірити Counterparties**
+- [x] **Step 3: Перевірити Counterparties**
 
 ```bash
 npm run dev
@@ -1775,7 +1775,7 @@ npm run dev
 
 Список контрагентів, кліком відкривається деталь, кнопка "Редагувати" відкриває модальне вікно.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src-tauri/src/commands/counterparties.rs src/screens/Counterparties.svelte
@@ -1790,7 +1790,7 @@ git commit -m "feat: implement Counterparties command and master-detail screen"
 - Modify: `src-tauri/src/commands/documents.rs`
 - Create: `src/screens/Documents.svelte`
 
-- [ ] **Step 1: Реалізувати `src-tauri/src/commands/documents.rs`**
+- [x] **Step 1: Реалізувати `src-tauri/src/commands/documents.rs`**
 
 ```rust
 use crate::{db, models, state::AppState};
@@ -1946,7 +1946,7 @@ pub async fn save_document(
 }
 ```
 
-- [ ] **Step 2: Реалізувати `src/screens/Documents.svelte`**
+- [x] **Step 2: Реалізувати `src/screens/Documents.svelte`**
 
 ```svelte
 <script lang="ts">
@@ -2110,7 +2110,7 @@ pub async fn save_document(
 </style>
 ```
 
-- [ ] **Step 3: Перевірити Documents**
+- [x] **Step 3: Перевірити Documents**
 
 ```bash
 npm run dev
@@ -2118,7 +2118,7 @@ npm run dev
 
 Три вкладки, пошук, таблиця з документами, статус badges, дії.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src-tauri/src/commands/documents.rs src/screens/Documents.svelte
@@ -2129,7 +2129,7 @@ git commit -m "feat: implement Documents command and tabbed screen"
 
 ## Task 10: Payments, Tasks, Reports
 
-- [ ] **Step 1: Реалізувати `src-tauri/src/commands/payments.rs`**
+- [x] **Step 1: Реалізувати `src-tauri/src/commands/payments.rs`**
 
 ```rust
 use crate::{db, state::AppState};
@@ -2193,7 +2193,7 @@ pub async fn import_payments_csv(
 }
 ```
 
-- [ ] **Step 2: Реалізувати `src-tauri/src/commands/tasks.rs`**
+- [x] **Step 2: Реалізувати `src-tauri/src/commands/tasks.rs`**
 
 ```rust
 use crate::{db, models, state::AppState};
@@ -2307,7 +2307,7 @@ pub async fn set_task_status(
 }
 ```
 
-- [ ] **Step 3: Реалізувати `src-tauri/src/commands/reports.rs`**
+- [x] **Step 3: Реалізувати `src-tauri/src/commands/reports.rs`**
 
 ```rust
 use crate::{db, state::AppState};
@@ -2370,7 +2370,7 @@ pub async fn get_reports(
 }
 ```
 
-- [ ] **Step 4: Реалізувати три Svelte screens — Payments, Tasks, Reports**
+- [x] **Step 4: Реалізувати три Svelte screens — Payments, Tasks, Reports**
 
 `src/screens/Payments.svelte`:
 ```svelte
@@ -2597,13 +2597,13 @@ pub async fn get_reports(
 </style>
 ```
 
-- [ ] **Step 5: Перевірити всі три screens**
+- [x] **Step 5: Перевірити всі три screens**
 
 ```bash
 npm run dev
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src-tauri/src/commands/ src/screens/Payments.svelte src/screens/Tasks.svelte src/screens/Reports.svelte
@@ -2618,7 +2618,7 @@ git commit -m "feat: implement Payments, Tasks, Reports commands and screens"
 - Create: `src-tauri/src/commands/pdf.rs`
 - Modify: `src-tauri/src/lib.rs` (додати команди)
 
-- [ ] **Step 1: Додати PDF команду**
+- [x] **Step 1: Додати PDF команду**
 
 ```rust
 // src-tauri/src/commands/pdf.rs
@@ -2660,13 +2660,13 @@ pub async fn generate_pdf(
 }
 ```
 
-- [ ] **Step 2: Додати команду до `lib.rs` invoke_handler**
+- [x] **Step 2: Додати команду до `lib.rs` invoke_handler**
 
 ```rust
 commands::pdf::generate_pdf,
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src-tauri/src/commands/pdf.rs src-tauri/src/lib.rs
@@ -2680,7 +2680,7 @@ git commit -m "feat: add PDF generation command with file save dialog"
 **Files:**
 - Create: `src-tauri/src/commands/import.rs`
 
-- [ ] **Step 1: Реалізувати `src-tauri/src/commands/import.rs`**
+- [x] **Step 1: Реалізувати `src-tauri/src/commands/import.rs`**
 
 ```rust
 use crate::{import, state::AppState};
@@ -2724,13 +2724,13 @@ pub async fn import_bas(
 }
 ```
 
-- [ ] **Step 2: Додати команду до `lib.rs`**
+- [x] **Step 2: Додати команду до `lib.rs`**
 
 ```rust
 commands::import::import_bas,
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src-tauri/src/commands/import.rs src-tauri/src/lib.rs
@@ -2747,14 +2747,14 @@ git commit -m "feat: add BAS import command with file picker dialog"
 - Modify: `CLAUDE.md`
 - Modify: `.claude/lessons.md`
 
-- [ ] **Step 1: Перевірити що `src-tauri/` містить всі потрібні файли**
+- [x] **Step 1: Перевірити що `src-tauri/` містить всі потрібні файли**
 
 ```bash
 ls src-tauri/src/
 # очікується: main.rs lib.rs state.rs commands/ db/ models/ import/ pdf/
 ```
 
-- [ ] **Step 2: Запустити повну збірку**
+- [x] **Step 2: Запустити повну збірку**
 
 ```bash
 npm run build
@@ -2762,7 +2762,7 @@ npm run build
 
 Очікується: успішна збірка без помилок.
 
-- [ ] **Step 3: Видалити старі Slint файли**
+- [x] **Step 3: Видалити старі Slint файли**
 
 ```bash
 rm -rf ui/
@@ -2771,7 +2771,7 @@ rm -rf src/bootstrap/ # старий bootstrap (якщо залишився)
 
 > **Обережно:** `src/` тепер — Svelte фронтенд. Видаляти тільки `ui/` (Slint).
 
-- [ ] **Step 4: Оновити `CLAUDE.md`**
+- [x] **Step 4: Оновити `CLAUDE.md`**
 
 Замінити секцію стеку та структури проекту:
 - Slint → Tauri + Svelte + TypeScript
@@ -2779,7 +2779,7 @@ rm -rf src/bootstrap/ # старий bootstrap (якщо залишився)
 - `src/ui/*.rs` → `src-tauri/src/commands/*.rs`
 - `src/bootstrap.rs` → `src-tauri/src/lib.rs`
 
-- [ ] **Step 5: Перевірити кінцевий результат**
+- [x] **Step 5: Перевірити кінцевий результат**
 
 ```bash
 npm run dev
@@ -2787,7 +2787,7 @@ npm run dev
 
 Всі 7 секцій відкриваються, дані завантажуються, форми зберігаються.
 
-- [ ] **Step 6: Final commit**
+- [x] **Step 6: Final commit**
 
 ```bash
 git add -A
@@ -2798,17 +2798,17 @@ git commit -m "feat: complete migration from Slint to Tauri + Svelte + TypeScrip
 
 ## Контрольний список перед завершенням
 
-- [ ] `cargo build` в `src-tauri/` проходить без помилок
-- [ ] `npm run build` проходить без помилок
-- [ ] Dashboard відображає KPI дані
-- [ ] Documents: 3 вкладки, пошук, статус badges
-- [ ] Counterparties: master-detail, форма редагування
-- [ ] Payments: список з KPI
-- [ ] Tasks: список з checkbox виконання
-- [ ] Reports: KPI + категорії
-- [ ] Settings: форма компанії зберігається
-- [ ] `ui/` директорія видалена
-- [ ] `CLAUDE.md` оновлений
+- [x] `cargo build` в `src-tauri/` проходить без помилок
+- [x] `npm run build` проходить без помилок
+- [x] Dashboard відображає KPI дані
+- [x] Documents: 3 вкладки, пошук, статус badges
+- [x] Counterparties: master-detail, форма редагування
+- [x] Payments: список з KPI
+- [x] Tasks: список з checkbox виконання
+- [x] Reports: KPI + категорії
+- [x] Settings: форма компанії зберігається
+- [x] `ui/` директорія видалена
+- [x] `CLAUDE.md` оновлений
 
 ---
 

@@ -8,9 +8,9 @@
 
 ## Goal
 
-- [ ] Прибрати головні user-facing `TODO`
-- [ ] Довести `tasks` до реального MVP flow
-- [ ] Прибрати двозначність по `BAS import` і `payments`
+- [x] Прибрати головні user-facing `TODO`
+- [x] Довести `tasks` до реального MVP flow
+- [x] Прибрати двозначність по `BAS import` і `payments`
 
 ## Workstream 1. Documents
 
@@ -23,26 +23,26 @@
 
 ## Workstream 2. Tasks
 
-- [ ] Реалізувати `task_more` як корисний flow
-- [ ] Наповнити `day_events`
-- [ ] Перевірити `task_save` end-to-end behavior
-- [ ] Оновити `ui_events` або суміжні тести
+- [x] Реалізувати `task_more` як корисний flow
+- [x] Наповнити `day_events`
+- [x] Перевірити `task_save` end-to-end behavior
+- [x] Оновити `ui_events` або суміжні тести
 
 ## Workstream 3. BAS Import
 
-- [ ] Прибрати фінальну `TODO`-заглушку з `migrate.rs`
-- [ ] Додати file discovery
-- [ ] Додати реальний `dry-run`
-- [ ] Додати базові тести
+- [x] Прибрати фінальну `TODO`-заглушку з `migrate.rs`
+- [x] Додати file discovery
+- [x] Додати реальний `dry-run`
+- [x] Додати базові тести
 
 ## Workstream 4. Payments
 
-- [ ] Прийняти рішення по `unreconcile`
-- [ ] Якщо `unreconcile` входить у scope, реалізувати callback + UI + test
-- [ ] Якщо `unreconcile` не входить у scope, оновити docs без двозначності
+- [x] Прийняти рішення по `unreconcile`
+- [x] Якщо `unreconcile` входить у scope, реалізувати callback + UI + test
+- [x] Якщо `unreconcile` не входить у scope, оновити docs без двозначності
 
 ## Verification
 
-- [ ] Прогнати релевантні unit-тести
-- [ ] Прогнати `tests/ui_events.rs`
-- [ ] Оновити `sprint-report` після фактичного завершення
+- [x] Прогнати релевантні unit-тести
+- [x] Прогнати `tests/ui_events.rs`
+- [x] Оновити `sprint-report` після фактичного завершення

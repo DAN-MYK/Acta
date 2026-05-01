@@ -2,7 +2,7 @@
 
 > **Archived/pre-cutover:** Slint review plan збережено як історичний контекст. Після `2026-04-30` live shell/navigation work іде через Tauri/Svelte, не через `ui/shell.slint`.
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Виправити 11 проблем знайдених в ревью `ui/shell.slint`: баги hover-state, SkipNav, CommandPalette, хибні дефолти, заглушки даних та технічний борг.
 
@@ -36,11 +36,11 @@
 - Modify: `ui/shell.slint:128-182` (SavedViewItem)
 - Modify: `ui/shell.slint:269-338` (PaletteItem)
 
-- [ ] **Step 1: Перевірити поточну поведінку**
+- [x] **Step 1: Перевірити поточну поведінку**
 
 Запустити `cargo run`, навести мишу на пункт меню і швидко прибрати. Переконатись що підсвітка залишається (відтворюємо баг).
 
-- [ ] **Step 2: Виправити NavItem**
+- [x] **Step 2: Виправити NavItem**
 
 Замінити рядки 65–124 у `ui/shell.slint`:
 
@@ -144,7 +144,7 @@ component NavItem inherits Rectangle {
 }
 ```
 
-- [ ] **Step 3: Виправити SavedViewItem**
+- [x] **Step 3: Виправити SavedViewItem**
 
 Замінити рядки 128–182 у `ui/shell.slint`:
 
@@ -236,7 +236,7 @@ component SavedViewItem inherits Rectangle {
 }
 ```
 
-- [ ] **Step 4: Виправити PaletteItem**
+- [x] **Step 4: Виправити PaletteItem**
 
 Замінити рядки 269–338 у `ui/shell.slint`:
 
@@ -336,21 +336,21 @@ component PaletteItem inherits Rectangle {
 }
 ```
 
-- [ ] **Step 5: Перевірити компіляцію**
+- [x] **Step 5: Перевірити компіляцію**
 
 ```bash
 cargo build
 ```
 Очікується: `Finished` без помилок.
 
-- [ ] **Step 6: Перевірити поведінку**
+- [x] **Step 6: Перевірити поведінку**
 
 ```bash
 cargo run
 ```
 Навести мишу на пункти навігації і швидко прибрати — підсвітка має зникати миттєво без "застрягання".
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add ui/shell.slint
@@ -367,7 +367,7 @@ git commit -m "fix(ui): replace hovered property with has-hover in NavItem, Save
 - Modify: `ui/shell.slint:9-52` (компонент SkipNav)
 - Modify: `ui/shell.slint:881-886` (використання в Shell)
 
-- [ ] **Step 1: Оновити компонент SkipNav**
+- [x] **Step 1: Оновити компонент SkipNav**
 
 Замінити рядки 9–52 у `ui/shell.slint`:
 
@@ -396,7 +396,7 @@ component SkipNav inherits Rectangle {
     // ...
 ```
 
-- [ ] **Step 2: Прибрати зовнішній override width у Shell**
+- [x] **Step 2: Прибрати зовнішній override width у Shell**
 
 Замінити рядки 881–886:
 
@@ -419,20 +419,20 @@ skip-nav := SkipNav {
 }
 ```
 
-- [ ] **Step 3: Перевірити компіляцію**
+- [x] **Step 3: Перевірити компіляцію**
 
 ```bash
 cargo build
 ```
 
-- [ ] **Step 4: Перевірити поведінку**
+- [x] **Step 4: Перевірити поведінку**
 
 ```bash
 cargo run
 ```
 Натиснути Tab одразу після запуску — SkipNav має отримати фокус і показати кнопку шириною ≈260px у лівому верхньому куті. Натиснути Enter — фокус переходить у контентну область.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add ui/shell.slint
@@ -449,7 +449,7 @@ git commit -m "fix(ui): fix SkipNav width clipping — expand to 260px on focus"
 **Files:**
 - Modify: `ui/shell.slint:396-417` (TextInput search-field в CommandPalette)
 
-- [ ] **Step 1: Додати `init` і `key-pressed` до search-field**
+- [x] **Step 1: Додати `init` і `key-pressed` до search-field**
 
 Знайти `search-field := TextInput {` (рядок ~397) і додати два нових обробники:
 
@@ -492,24 +492,24 @@ search-field := TextInput {
 }
 ```
 
-- [ ] **Step 2: Перевірити компіляцію**
+- [x] **Step 2: Перевірити компіляцію**
 
 ```bash
 cargo build
 ```
 
-- [ ] **Step 3: Перевірити автофокус**
+- [x] **Step 3: Перевірити автофокус**
 
 ```bash
 cargo run
 ```
 Натиснути Ctrl+K — палітра відкривається і курсор одразу в полі пошуку (можна друкувати без кліку мишею).
 
-- [ ] **Step 4: Перевірити закриття через Escape**
+- [x] **Step 4: Перевірити закриття через Escape**
 
 При відкритій палітрі натиснути Escape — палітра закривається.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add ui/shell.slint
@@ -529,7 +529,7 @@ git commit -m "fix(ui): command palette auto-focuses search field and closes on 
 **Files:**
 - Modify: `ui/shell.slint:824-832`
 
-- [ ] **Step 1: Замінити хибні дефолти**
+- [x] **Step 1: Замінити хибні дефолти**
 
 Знайти і замінити рядки 824–832:
 
@@ -559,14 +559,14 @@ in property <int> documents-badge: 0;
 in property <int> tasks-badge: 0;
 ```
 
-- [ ] **Step 2: Перевірити компіляцію та запуск**
+- [x] **Step 2: Перевірити компіляцію та запуск**
 
 ```bash
 cargo build && cargo run
 ```
 Дані мають відображатись коректно (з БД), без фіктивних значень.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add ui/shell.slint
@@ -587,7 +587,7 @@ git commit -m "fix(ui): replace dev-placeholder defaults with empty/zero values 
 - Modify: `ui/shell.slint:1166-1185` (замінити заглушки на `for` loop)
 - Modify: `ui/app.slint` (прив'язка нової property)
 
-- [ ] **Step 1: Додати SavedFilterItem до types.slint**
+- [x] **Step 1: Додати SavedFilterItem до types.slint**
 
 Дописати в кінець секції "Shell chrome model" (після рядка 206) у `ui/types.slint`:
 
@@ -598,7 +598,7 @@ export struct SavedFilterItem {
 }
 ```
 
-- [ ] **Step 2: Додати import SavedFilterItem в shell.slint**
+- [x] **Step 2: Додати import SavedFilterItem в shell.slint**
 
 Знайти рядок 5:
 ```slint
@@ -610,7 +610,7 @@ import { NavScreen, PaletteItemData, CompanySwitcherItem } from "types.slint";
 import { NavScreen, PaletteItemData, CompanySwitcherItem, SavedFilterItem } from "types.slint";
 ```
 
-- [ ] **Step 3: Додати property і callback до Shell**
+- [x] **Step 3: Додати property і callback до Shell**
 
 Після рядка `in property <int> tasks-badge: 0;` (Task 4 result) додати:
 
@@ -620,7 +620,7 @@ in property <[SavedFilterItem]> saved-filters;
 callback saved-filter-clicked(int);
 ```
 
-- [ ] **Step 4: Замінити заглушки на for loop**
+- [x] **Step 4: Замінити заглушки на for loop**
 
 Знайти рядки 1166–1185:
 
@@ -668,7 +668,7 @@ for filter[i] in root.saved-filters : SavedViewItem {
 }
 ```
 
-- [ ] **Step 5: Прив'язати в app.slint**
+- [x] **Step 5: Прив'язати в app.slint**
 
 Знайти у `ui/app.slint` блок де прив'язуються shell-properties (рядки ~161–166). Додати після `tasks-badge`:
 
@@ -677,20 +677,20 @@ saved-filters: [];
 saved-filter-clicked(i) => { /* TODO: implement */ }
 ```
 
-- [ ] **Step 6: Перевірити компіляцію**
+- [x] **Step 6: Перевірити компіляцію**
 
 ```bash
 cargo build
 ```
 
-- [ ] **Step 7: Перевірити запуск**
+- [x] **Step 7: Перевірити запуск**
 
 ```bash
 cargo run
 ```
 Секція "ЗБЕРЕЖЕНІ ФІЛЬТРИ" показує текст "Немає збережених фільтрів" замість хардкодованих рядків.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add ui/types.slint ui/shell.slint ui/app.slint
@@ -707,7 +707,7 @@ git commit -m "feat(ui): replace hardcoded SavedViewItem stubs with dynamic save
 - Modify: `ui/shell.slint:824+` (нова property)
 - Modify: `ui/shell.slint:957` (Text)
 
-- [ ] **Step 1: Додати property app-subtitle до Shell**
+- [x] **Step 1: Додати property app-subtitle до Shell**
 
 Після рядка `in property <string> company-name: "";` додати:
 
@@ -715,7 +715,7 @@ git commit -m "feat(ui): replace hardcoded SavedViewItem stubs with dynamic save
 in property <string> app-subtitle: "Acta · упр. облік";
 ```
 
-- [ ] **Step 2: Використати property в Text**
+- [x] **Step 2: Використати property в Text**
 
 Знайти (рядок ~957):
 ```slint
@@ -729,13 +729,13 @@ Text {
     text: root.app-subtitle;
 ```
 
-- [ ] **Step 3: Перевірити компіляцію**
+- [x] **Step 3: Перевірити компіляцію**
 
 ```bash
 cargo build
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add ui/shell.slint
@@ -755,7 +755,7 @@ git commit -m "refactor(ui): extract hardcoded app subtitle to Shell property"
 **Files:**
 - Modify: `ui/shell.slint:1263-1265`
 
-- [ ] **Step 1: Додати пояснювальний коментар**
+- [x] **Step 1: Додати пояснювальний коментар**
 
 Знайти (рядок ~1263):
 ```slint
@@ -773,7 +773,7 @@ if root.company-switcher-open : Rectangle {
     y: 84px;
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add ui/shell.slint
@@ -790,7 +790,7 @@ git commit -m "docs(ui): document magic y:84 constant in company switcher popup"
 - Modify: `ui/shell.slint:611` (перед KeyboardHelp)
 - Modify: `ui/shell.slint:1075` (перед FocusScope)
 
-- [ ] **Step 1: Додати cross-reference коментар перед KeyboardHelp**
+- [x] **Step 1: Додати cross-reference коментар перед KeyboardHelp**
 
 Знайти рядок `// ── Keyboard Help Overlay ─────`:
 
@@ -809,7 +809,7 @@ component KeyboardHelp {
 component KeyboardHelp {
 ```
 
-- [ ] **Step 2: Додати cross-reference коментар перед FocusScope**
+- [x] **Step 2: Додати cross-reference коментар перед FocusScope**
 
 Знайти рядок `// Epic 10: Keyboard navigation hotkeys`:
 
@@ -825,13 +825,13 @@ component KeyboardHelp {
                 nav-scope := FocusScope {
 ```
 
-- [ ] **Step 3: Перевірити компіляцію**
+- [x] **Step 3: Перевірити компіляцію**
 
 ```bash
 cargo build
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add ui/shell.slint
@@ -847,7 +847,7 @@ git commit -m "docs(ui): add cross-reference comments between KeyboardHelp and n
 **Files:**
 - Modify: `ui/shell.slint:1419-1431`
 
-- [ ] **Step 1: Пояснити призначення у коментарі**
+- [x] **Step 1: Пояснити призначення у коментарі**
 
 Знайти (рядок ~1419):
 ```slint
@@ -882,7 +882,7 @@ git commit -m "docs(ui): add cross-reference comments between KeyboardHelp and n
                 }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add ui/shell.slint

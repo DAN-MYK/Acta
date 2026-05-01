@@ -1,6 +1,6 @@
 # PDF Generation Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Wire the existing `pdf/generator.rs` into the documents editor UI — кнопка «PDF» генерує файл і відкриває його в системному переглядачі.
 
@@ -29,7 +29,7 @@
 **Files:**
 - Modify: `src/pdf/generator.rs:4`
 
-- [ ] **Step 1: Видалити атрибут**
+- [x] **Step 1: Видалити атрибут**
 
 У `src/pdf/generator.rs` знайди рядок 4:
 ```rust
@@ -45,14 +45,14 @@
 use std::path::{Path, PathBuf};
 ```
 
-- [ ] **Step 2: Перевірка компіляції**
+- [x] **Step 2: Перевірка компіляції**
 
 ```bash
 cargo build --lib
 ```
 Очікується: `Finished` без warnings типу "function is never used".
 
-- [ ] **Step 3: Коміт**
+- [x] **Step 3: Коміт**
 
 ```bash
 git add src/pdf/generator.rs
@@ -66,7 +66,7 @@ git commit -m "chore(pdf): remove dead_code allow — functions are now used"
 **Files:**
 - Modify: `src/tauri_api/documents.rs`
 
-- [ ] **Step 1: Написати тест для `to_pdf_company`**
+- [x] **Step 1: Написати тест для `to_pdf_company`**
 
 Додай в кінець `src/tauri_api/documents.rs` (всередині майбутнього `#[cfg(test)] mod tests {}`):
 
@@ -132,14 +132,14 @@ mod pdf_tests {
 }
 ```
 
-- [ ] **Step 2: Запустити тест — переконатися що не компілюється**
+- [x] **Step 2: Запустити тест — переконатися що не компілюється**
 
 ```bash
 cargo test --lib pdf_tests 2>&1 | head -20
 ```
 Очікується: помилка "cannot find function `to_pdf_company`".
 
-- [ ] **Step 3: Додати imports у `src/tauri_api/documents.rs`**
+- [x] **Step 3: Додати imports у `src/tauri_api/documents.rs`**
 
 Знайди існуючий блок imports на початку файлу. Внеси такі зміни:
 
@@ -175,7 +175,7 @@ use crate::pdf::generator::{
 };
 ```
 
-- [ ] **Step 4: Додати helper-функції `to_pdf_company` та `counterparty_to_pdf_company`**
+- [x] **Step 4: Додати helper-функції `to_pdf_company` та `counterparty_to_pdf_company`**
 
 Додай одразу після приватних функцій (наприклад після `fn normalize_chain_kind`) і до перших `pub async fn`:
 
@@ -201,7 +201,7 @@ fn counterparty_to_pdf_company(cp: &Counterparty) -> PdfCompany {
 }
 ```
 
-- [ ] **Step 5: Запустити тести helper-функцій — мають пройти**
+- [x] **Step 5: Запустити тести helper-функцій — мають пройти**
 
 ```bash
 cargo test --lib pdf_tests 2>&1 | head -30
@@ -215,7 +215,7 @@ cargo test --lib pdf_tests 2>&1 | head -30
 **Files:**
 - Modify: `src/tauri_api/documents.rs`
 
-- [ ] **Step 1: Написати тести для builders**
+- [x] **Step 1: Написати тести для builders**
 
 Додай до блоку `#[cfg(test)] mod pdf_tests` з Task 2:
 
@@ -366,14 +366,14 @@ cargo test --lib pdf_tests 2>&1 | head -30
     }
 ```
 
-- [ ] **Step 2: Запустити тести — переконатися що не компілюються**
+- [x] **Step 2: Запустити тести — переконатися що не компілюються**
 
 ```bash
 cargo test --lib pdf_tests 2>&1 | head -20
 ```
 Очікується: помилка "cannot find function `build_act_pdf_data`".
 
-- [ ] **Step 3: Додати builder-функції**
+- [x] **Step 3: Додати builder-функції**
 
 Додай одразу після `counterparty_to_pdf_company` (з Task 2):
 
@@ -438,14 +438,14 @@ fn build_invoice_pdf_data(
 }
 ```
 
-- [ ] **Step 4: Запустити всі тести builders — мають пройти**
+- [x] **Step 4: Запустити всі тести builders — мають пройти**
 
 ```bash
 cargo test --lib pdf_tests 2>&1 | head -40
 ```
 Очікується: всі `pdf_tests::*` — `ok`.
 
-- [ ] **Step 5: Коміт**
+- [x] **Step 5: Коміт**
 
 ```bash
 git add src/tauri_api/documents.rs
@@ -459,7 +459,7 @@ git commit -m "feat(pdf): add PdfCompany helpers and act/invoice builder functio
 **Files:**
 - Modify: `src/tauri_api/documents.rs`
 
-- [ ] **Step 1: Написати тест для waybill-branch**
+- [x] **Step 1: Написати тест для waybill-branch**
 
 Додай до `#[cfg(test)] mod pdf_tests`:
 
@@ -475,14 +475,14 @@ git commit -m "feat(pdf): add PdfCompany helpers and act/invoice builder functio
     }
 ```
 
-- [ ] **Step 2: Запустити тест — перевірити що компілюється і проходить**
+- [x] **Step 2: Запустити тест — перевірити що компілюється і проходить**
 
 ```bash
 cargo test --lib pdf_tests::generate_document_pdf_rejects_waybill_id 2>&1
 ```
 Очікується: `ok` — `parse_document_ref` і `DocumentRef` вже існують.
 
-- [ ] **Step 3: Додати `generate_document_pdf`**
+- [x] **Step 3: Додати `generate_document_pdf`**
 
 Додай після `build_invoice_pdf_data` (і перед `pub async fn documents_list`):
 
@@ -548,7 +548,7 @@ pub async fn generate_document_pdf(ctx: &AppCtx, doc_id: String) -> Result<Mutat
 }
 ```
 
-- [ ] **Step 4: Перевірка компіляції**
+- [x] **Step 4: Перевірка компіляції**
 
 ```bash
 cargo build --lib 2>&1 | tail -5
@@ -563,7 +563,7 @@ cargo build --lib 2>&1 | tail -5
 - Modify: `src-tauri/src/commands/documents.rs`
 - Modify: `src-tauri/src/lib.rs`
 
-- [ ] **Step 1: Додати command shim**
+- [x] **Step 1: Додати command shim**
 
 В кінці `src-tauri/src/commands/documents.rs` додай:
 
@@ -579,7 +579,7 @@ pub async fn document_generate_pdf(
 }
 ```
 
-- [ ] **Step 2: Зареєструвати в `invoke_handler!`**
+- [x] **Step 2: Зареєструвати в `invoke_handler!`**
 
 У `src-tauri/src/lib.rs` знайди блок `invoke_handler!`. Після рядка:
 ```rust
@@ -590,14 +590,14 @@ commands::documents::document_chain_create_draft,
 commands::documents::document_generate_pdf,
 ```
 
-- [ ] **Step 3: Повна компіляція з тестами**
+- [x] **Step 3: Повна компіляція з тестами**
 
 ```bash
 cargo build --tests 2>&1 | tail -5
 ```
 Очікується: `Finished` без errors.
 
-- [ ] **Step 4: Коміт**
+- [x] **Step 4: Коміт**
 
 ```bash
 git add src/tauri_api/documents.rs src-tauri/src/commands/documents.rs src-tauri/src/lib.rs
@@ -613,7 +613,7 @@ git commit -m "feat(pdf): add document_generate_pdf Tauri command"
 - Modify: `frontend/src/lib/stores/documents.ts`
 - Modify: `frontend/src/lib/screens/DocumentsScreen.svelte`
 
-- [ ] **Step 1: Додати `documentGeneratePdf` у `api.ts`**
+- [x] **Step 1: Додати `documentGeneratePdf` у `api.ts`**
 
 У `frontend/src/lib/api.ts` знайди останній `export function` перед кінцем файлу (наразі це `importBasExecute`). Додай перед ним:
 
@@ -623,7 +623,7 @@ export function documentGeneratePdf(docId: string): Promise<MutationResultDto> {
 }
 ```
 
-- [ ] **Step 2: Додати `generatePdf` у `stores/documents.ts`**
+- [x] **Step 2: Додати `generatePdf` у `stores/documents.ts`**
 
 У `frontend/src/lib/stores/documents.ts` в об'єкт що повертає `createDocumentsStore()` додай метод після `advanceStatus`:
 
@@ -651,7 +651,7 @@ import {
 } from "../api";
 ```
 
-- [ ] **Step 3: Додати кнопку у `DocumentsScreen.svelte`**
+- [x] **Step 3: Додати кнопку у `DocumentsScreen.svelte`**
 
 У `frontend/src/lib/screens/DocumentsScreen.svelte` знайди блок `editor-actions`:
 ```svelte
@@ -678,14 +678,14 @@ import {
 </div>
 ```
 
-- [ ] **Step 4: TypeScript перевірка**
+- [x] **Step 4: TypeScript перевірка**
 
 ```bash
 cd frontend && npx tsc --noEmit 2>&1 | head -20
 ```
 Очікується: без errors.
 
-- [ ] **Step 5: Коміт**
+- [x] **Step 5: Коміт**
 
 ```bash
 git add frontend/src/lib/api.ts frontend/src/lib/stores/documents.ts frontend/src/lib/screens/DocumentsScreen.svelte
@@ -709,3 +709,26 @@ cargo build --tests && cargo test --lib pdf_tests
 3. Натиснути кнопку «PDF» — має відкритись PDF файл у системному переглядачі
 4. Перевірити що файл з'явився в `storage/documents/acts/{рік}/` або `storage/documents/invoices/{рік}/`
 5. Переконатись що для "накладна" кнопки немає
+
+---
+
+## Статус реалізації
+
+**Повністю реалізовано** — 2026-05-01
+
+| Задача | Коміт | Статус |
+|--------|-------|--------|
+| Task 1: видалити `#![allow(dead_code)]` | `8be3db1` | ✅ |
+| Task 2: imports + `to_pdf_company` / `counterparty_to_pdf_company` | `8be3db1` | ✅ |
+| Task 3: `build_act_pdf_data` / `build_invoice_pdf_data` + тести | `cb00619` | ✅ |
+| Task 4: `generate_document_pdf` | `06eeca9` | ✅ |
+| Task 5: Tauri command shim + реєстрація | `af86b68` | ✅ |
+| Task 6: frontend API + store + кнопка «PDF» | `991a6d8` | ✅ |
+| Post-plan: шляхи для production builds | `eb289fb` | ✅ |
+
+**Пост-план зміни (не в оригінальному scope):**
+- `generator.rs` — `generate_act_pdf` / `generate_invoice_pdf` / `ensure_output_dir` / `ensure_invoice_output_dir` приймають явні `template_path: &Path` і `storage_dir: &Path` замість CWD-відносних рядків.
+- `AppCtx` — додано `template_dir` / `storage_dir` поля з CWD-defaults, конструктор `with_dirs()`, аксесори.
+- `runtime.rs` — `init_app_ctx_with_paths(template_dir, storage_dir)`.
+- `src-tauri/src/lib.rs` — розв'язує шляхи через `app.path().resource_dir()` / `app_local_data_dir()`.
+- `tauri.conf.json` — `"resources": ["../templates/*"]` для бандлу шаблонів.
