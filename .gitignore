@@ -25,3 +25,4 @@ storage/backups/
 storage/logs/
 storage/reports/
 storage/test-config/
+src-tauri/storage/

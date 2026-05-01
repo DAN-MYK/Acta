@@ -9,7 +9,7 @@
     "checkJs": false,
     "esModuleInterop": true,
     "resolveJsonModule": true,
-    "types": ["svelte"]
+    "types": ["svelte", "node", "vitest/globals"]
   },
   "include": ["frontend/src/**/*.ts", "frontend/src/**/*.svelte", "vite.config.ts"]
 }
