@@ -119,21 +119,26 @@
 
 .doc-row {
   display: flex;
-  justify-content: space-between;
   gap: 16px;
+  align-items: center;
 }
 
 .doc-row p {
   margin: 6px 0 0;
 }
 
-.doc-row-rich {
-  align-items: center;
-}
-
 .doc-row-checkbox {
   display: flex;
   align-items: center;
+}
+
+.doc-row-open {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
 }
 
 .doc-row-body {

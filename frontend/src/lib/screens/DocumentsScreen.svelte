@@ -1,5 +1,7 @@
 <script lang="ts">
   import AppIcon from "../components/AppIcon.svelte";
+  import SkeletonCard from "../components/SkeletonCard.svelte";
+  import SkeletonRow from "../components/SkeletonRow.svelte";
   import type { AppIconName } from "../icons";
   import { documentsStore } from "../stores/documents";
   import { counterpartiesStore } from "../stores/counterparties";
@@ -11,6 +13,7 @@
   let createCounterpartyId = "";
   let createKind: DocumentKind = "act";
   let selectedCounterpartyName = "";
+  let lastDraftContextCounterpartyId = "";
 
   const documentKindLabels: Record<DocumentKind, string> = {
     invoice: "Рахунок",
@@ -35,8 +38,22 @@
     maximumFractionDigits: 2
   });
 
-  $: if ($documents.draftContext?.counterpartyId) {
-    createCounterpartyId = $documents.draftContext.counterpartyId;
+  interface DecimalValue {
+    value: bigint;
+    scale: number;
+  }
+
+  $: {
+    const nextDraftContextCounterpartyId = $documents.draftContext?.counterpartyId ?? "";
+
+    if (nextDraftContextCounterpartyId && nextDraftContextCounterpartyId !== lastDraftContextCounterpartyId) {
+      createCounterpartyId = nextDraftContextCounterpartyId;
+      lastDraftContextCounterpartyId = nextDraftContextCounterpartyId;
+    }
+
+    if (!nextDraftContextCounterpartyId && lastDraftContextCounterpartyId) {
+      lastDraftContextCounterpartyId = "";
+    }
   }
 
   $: selectedCounterpartyName =
@@ -205,15 +222,95 @@
     return `${count} позицій`;
   }
 
-  function formatItemTotal(quantity: string, price: string): string {
-    const normalizedQuantity = Number.parseFloat(quantity.replace(",", "."));
-    const normalizedPrice = Number.parseFloat(price.replace(",", "."));
+  function pow10(exponent: number): bigint {
+    let result = 1n;
 
-    if (!Number.isFinite(normalizedQuantity) || !Number.isFinite(normalizedPrice)) {
-      return "—";
+    for (let index = 0; index < exponent; index += 1) {
+      result *= 10n;
     }
 
-    return `${itemTotalFormatter.format(normalizedQuantity * normalizedPrice).replace(/\u00A0/g, " ")} грн`;
+    return result;
+  }
+
+  function parseDecimal(value: string): DecimalValue | null {
+    const normalized = value.replace(/\s+/g, "").replace(",", ".").trim();
+    if (!normalized) {
+      return null;
+    }
+
+    const match = normalized.match(/^(-?)(\d+)(?:\.(\d+))?$/);
+    if (!match) {
+      return null;
+    }
+
+    const [, sign, integerPart, fractionalPart = ""] = match;
+    const digits = `${integerPart}${fractionalPart}`.replace(/^0+(?=\d)/, "") || "0";
+
+    return {
+      value: sign === "-" ? -BigInt(digits) : BigInt(digits),
+      scale: fractionalPart.length
+    };
+  }
+
+  function multiplyDecimals(left: string, right: string): DecimalValue | null {
+    const leftDecimal = parseDecimal(left);
+    const rightDecimal = parseDecimal(right);
+
+    if (!leftDecimal || !rightDecimal) {
+      return null;
+    }
+
+    return {
+      value: leftDecimal.value * rightDecimal.value,
+      scale: leftDecimal.scale + rightDecimal.scale
+    };
+  }
+
+  function addDecimalValues(current: DecimalValue, next: DecimalValue): DecimalValue {
+    if (current.scale === next.scale) {
+      return {
+        value: current.value + next.value,
+        scale: current.scale
+      };
+    }
+
+    if (current.scale > next.scale) {
+      return {
+        value: current.value + next.value * pow10(current.scale - next.scale),
+        scale: current.scale
+      };
+    }
+
+    return {
+      value: current.value * pow10(next.scale - current.scale) + next.value,
+      scale: next.scale
+    };
+  }
+
+  function formatScaledMoney(decimal: DecimalValue): string {
+    const negative = decimal.value < 0n;
+    const absoluteValue = negative ? -decimal.value : decimal.value;
+    let roundedMinorUnits: bigint;
+
+    if (decimal.scale > 2) {
+      const divisor = pow10(decimal.scale - 2);
+      roundedMinorUnits = (absoluteValue + divisor / 2n) / divisor;
+    } else if (decimal.scale < 2) {
+      roundedMinorUnits = absoluteValue * pow10(2 - decimal.scale);
+    } else {
+      roundedMinorUnits = absoluteValue;
+    }
+
+    const integerPart = roundedMinorUnits / 100n;
+    const fractionalPart = (roundedMinorUnits % 100n).toString().padStart(2, "0");
+    const groupedIntegerPart = integerPart.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+
+    return `${negative ? "-" : ""}${groupedIntegerPart},${fractionalPart} грн`;
+  }
+
+  function formatItemTotal(quantity: string, price: string): string {
+    const total = multiplyDecimals(quantity, price);
+    return total ? formatScaledMoney(total) : "—";
   }
 
   function formatEditorDateValue(value: string): string {
@@ -243,23 +340,27 @@
   }
 
   function totalDraftAmount(items: DocumentDraftItemDto[]): string {
-    const total = items.reduce((sum, item) => {
-      const quantity = Number.parseFloat(item.quantity.replace(",", "."));
-      const price = Number.parseFloat(item.price.replace(",", "."));
+    let total: DecimalValue = { value: 0n, scale: 0 };
 
-      if (!Number.isFinite(quantity) || !Number.isFinite(price)) {
-        return sum;
+    for (const item of items) {
+      const itemTotal = multiplyDecimals(item.quantity, item.price);
+      if (!itemTotal) {
+        continue;
       }
 
-      return sum + quantity * price;
-    }, 0);
+      total = addDecimalValues(total, itemTotal);
+    }
 
-    return `${itemTotalFormatter.format(total).replace(/\u00A0/g, " ")} грн`;
+    return formatScaledMoney(total);
   }
 
   function getCurrentChainStatus() {
     const steps = $documents.chain?.steps ?? [];
     return steps.length > 0 ? steps[steps.length - 1].status : "Чернетка";
+  }
+
+  function getEditorKindIcon(kind: string): AppIconName {
+    return getDocumentKindIcon(kind);
   }
 </script>
 
@@ -343,18 +444,22 @@
   </div>
 
   <div class="documents-focus-grid">
-    <div class="documents-focus-card" data-testid="documents-focus-primary">
-      <span class="reports-focus-label">Що потребує уваги</span>
-      <strong>{draftCount($documents.list?.items ?? [])}</strong>
-      <p>Чернетки, які ще не пройшли далі по сценарію й можуть затримати оплату або відвантаження.</p>
-      <small>{nextAttentionLabel($documents.list?.items ?? [])}</small>
-    </div>
-    <div class="documents-focus-card documents-focus-card-muted">
-      <span class="reports-focus-label">В роботі</span>
-      <strong>{issuedCount($documents.list?.items ?? [])}</strong>
-      <p>Документи, які вже виставлені або рухаються далі по ланцюжку.</p>
-      <small>Виберіть рядок, щоб одразу перейти до редактора та наступної дії.</small>
-    </div>
+    {#if $documents.initialLoading}
+      <SkeletonCard count={2} />
+    {:else}
+      <div class="documents-focus-card" data-testid="documents-focus-primary">
+        <span class="reports-focus-label">Що потребує уваги</span>
+        <strong>{draftCount($documents.list?.items ?? [])}</strong>
+        <p>Чернетки, які ще не пройшли далі по сценарію й можуть затримати оплату або відвантаження.</p>
+        <small>{nextAttentionLabel($documents.list?.items ?? [])}</small>
+      </div>
+      <div class="documents-focus-card documents-focus-card-muted">
+        <span class="reports-focus-label">В роботі</span>
+        <strong>{issuedCount($documents.list?.items ?? [])}</strong>
+        <p>Документи, які вже виставлені або рухаються далі по ланцюжку.</p>
+        <small>Виберіть рядок, щоб одразу перейти до редактора та наступної дії.</small>
+      </div>
+    {/if}
   </div>
 
   <div class="bulk-actions">
@@ -395,7 +500,9 @@
     <p class="error">{$documents.error}</p>
   {/if}
 
-  {#if ($documents.list?.items.length ?? 0) === 0}
+  {#if $documents.initialLoading}
+    <SkeletonRow count={5} />
+  {:else if ($documents.list?.items.length ?? 0) === 0}
     <div class="empty-state-card" data-testid="documents-empty-state">
       <strong>Поки що документів немає</strong>
       <p>Почніть зі створення першого рахунку, акта або накладної, щоб запустити повний сценарій документа.</p>
@@ -403,7 +510,7 @@
   {:else}
     <div class="documents-list" data-testid="documents-list">
       {#each $documents.list?.items ?? [] as item}
-        <button class="doc-row doc-row-rich" on:click={() => documents.open(item.id)} disabled={$documents.loading}>
+        <div class="doc-row doc-row-rich" data-testid={`documents-row-${item.id}`}>
           <label class="doc-row-checkbox" aria-label={`Вибрати ${item.number}`}>
             <input
               type="checkbox"
@@ -412,25 +519,33 @@
             />
           </label>
 
-          <div class="doc-row-body">
-            <div>
-              <strong class="doc-row-title">
-                <AppIcon name={getDocumentKindIcon(item.kind)} surface={true} size={16} />
-                <span>{item.number}</span>
-              </strong>
-              <p>{item.counterparty}</p>
+          <button
+            class="doc-row-open"
+            type="button"
+            on:click={() => documents.open(item.id)}
+            disabled={$documents.loading}
+            aria-label={`Відкрити документ ${item.number}`}
+          >
+            <div class="doc-row-body">
+              <div>
+                <strong class="doc-row-title">
+                  <AppIcon name={getDocumentKindIcon(item.kind)} surface={true} size={16} />
+                  <span>{item.number}</span>
+                </strong>
+                <p>{item.counterparty}</p>
+              </div>
+              <div class="doc-row-meta">
+                <span>{item.date}</span>
+                <span>{item.amountStr}</span>
+                <span class="doc-kind-badge">
+                  <AppIcon name={getDocumentKindIcon(item.kind)} size={14} />
+                  <span>{getDocumentKindLabel(item.kind)}</span>
+                </span>
+                <span class="doc-status-chip">{item.statusLabel}</span>
+              </div>
             </div>
-            <div class="doc-row-meta">
-              <span>{item.date}</span>
-              <span>{item.amountStr}</span>
-              <span class="doc-kind-badge">
-                <AppIcon name={getDocumentKindIcon(item.kind)} size={14} />
-                <span>{getDocumentKindLabel(item.kind)}</span>
-              </span>
-              <span class="doc-status-chip">{item.statusLabel}</span>
-            </div>
-          </div>
-        </button>
+          </button>
+        </div>
       {/each}
     </div>
   {/if}
@@ -442,7 +557,7 @@
       <div>
         <div class="editor-header-meta">
           <span class="doc-kind-badge">
-            <AppIcon name={documentKindIcons[$documents.editor.form.kind as DocumentKind]} size={14} />
+            <AppIcon name={getEditorKindIcon($documents.editor.form.kind)} size={14} />
             <span>{getDocumentKindLabel($documents.editor.form.kind)}</span>
           </span>
           <span class="doc-status-chip">{getCurrentChainStatus()}</span>

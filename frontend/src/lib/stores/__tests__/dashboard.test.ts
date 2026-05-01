@@ -91,6 +91,7 @@ describe("frontend Tauri store smoke: dashboard", () => {
 
     await dashboardStore.load();
 
+    expect(snapshot(dashboardStore).initialLoading).toBe(false);
     expect(snapshot(dashboardStore).loading).toBe(false);
     expect(snapshot(dashboardStore).error).toBeNull();
     expect(snapshot(dashboardStore).screen?.kpis).toHaveLength(2);

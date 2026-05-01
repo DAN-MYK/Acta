@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => {
     chain: null as DocumentChainDto | null,
     draftContext: null as { counterpartyId: string; counterpartyName: string } | null,
     selectedIds: [] as string[],
+    initialLoading: false,
     loading: false,
     error: null as string | null,
     message: null as string | null,
@@ -135,7 +136,7 @@ function makeList(): DocumentsListDto {
   };
 }
 
-function makeEditor(items = true): DocumentEditorDto {
+function makeEditor(items: boolean | DocumentEditorDto["items"] = true): DocumentEditorDto {
   return {
     form: {
       id: "doc-1",
@@ -147,16 +148,18 @@ function makeEditor(items = true): DocumentEditorDto {
       date: "2026-04-30",
       notes: "Початковий коментар"
     },
-    items: items
-      ? [
-          {
-            description: "Консультація",
-            unit: "год",
-            quantity: "2",
-            price: "2500"
-          }
-        ]
-      : [],
+    items: Array.isArray(items)
+      ? items
+      : items
+        ? [
+            {
+              description: "Консультація",
+              unit: "год",
+              quantity: "2",
+              price: "2500"
+            }
+          ]
+        : [],
     showTypePicker: false,
     showEditor: true
   };
@@ -177,7 +180,7 @@ function makeChain(): DocumentChainDto {
   };
 }
 
-function setDocumentsState(selectedIds: string[] = [], items = true) {
+function setDocumentsState(selectedIds: string[] = [], items: boolean | DocumentEditorDto["items"] = true) {
   mocks.documentsState.set({
     list: makeList(),
     editor: makeEditor(items),
@@ -187,6 +190,7 @@ function setDocumentsState(selectedIds: string[] = [], items = true) {
       counterpartyName: "ТОВ Ромашка"
     },
     selectedIds,
+    initialLoading: false,
     loading: false,
     error: null,
     message: "Готово",
@@ -201,6 +205,7 @@ function setDocumentsStateWithoutDraftContext() {
     chain: makeChain(),
     draftContext: null,
     selectedIds: [],
+    initialLoading: false,
     loading: false,
     error: null,
     message: "Готово",
@@ -340,6 +345,33 @@ describe("DocumentsScreen component", () => {
     component.$destroy();
   });
 
+  it("does not overwrite manual counterparty selection on unrelated store updates", async () => {
+    const { component, target } = renderDocuments();
+
+    const select = target.querySelector(".create-strip select") as HTMLSelectElement;
+    select.value = "counterparty-2";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await tick();
+
+    setDocumentsState();
+    await tick();
+
+    expect(select.value).toBe("counterparty-2");
+    expect(target.textContent).toContain("ФОП Тест");
+
+    component.$destroy();
+  });
+
+  it("keeps checkbox outside of the row open button", () => {
+    const { component, target } = renderDocuments();
+
+    expect(target.querySelector('[data-testid="documents-row-doc-1"] button input[type="checkbox"]')).toBeNull();
+    expect(target.querySelector('[data-testid="documents-row-doc-1"] .doc-row-open')).toBeTruthy();
+    expect(target.querySelector('[data-testid="documents-row-doc-1"] .doc-row-checkbox input[type="checkbox"]')).toBeTruthy();
+
+    component.$destroy();
+  });
+
   it("uses canonical date input with explicit non-ambiguous guidance", () => {
     const { component, target } = renderDocuments();
 
@@ -353,6 +385,31 @@ describe("DocumentsScreen component", () => {
     component.$destroy();
   });
 
+  it("calculates fractional item totals with decimal-safe rounding", () => {
+    setDocumentsState([], [
+      {
+        description: "Точний рядок",
+        unit: "шт",
+        quantity: "1",
+        price: "1,005"
+      },
+      {
+        description: "Другий рядок",
+        unit: "шт",
+        quantity: "2",
+        price: "0,335"
+      }
+    ]);
+
+    const { component, target } = renderDocuments();
+
+    expect(target.textContent).toContain("Сума позиції 1,01 грн");
+    expect(target.textContent).toContain("Сума позиції 0,67 грн");
+    expect(target.textContent).toContain("1,68 грн");
+
+    component.$destroy();
+  });
+
   it("shows chain panel as flow navigation with current and next document cards", () => {
     const { component, target } = renderDocuments();
 
@@ -361,6 +418,54 @@ describe("DocumentsScreen component", () => {
     expect(target.textContent).toContain("Далі");
     expect(target.textContent).toContain("Очікує дії");
     expect(target.textContent).toContain("Після рахунку зазвичай готуємо акт або накладну");
+
+    component.$destroy();
+  });
+
+  it("shows skeletons only during initial loading", () => {
+    mocks.documentsState.set({
+      list: null,
+      editor: null,
+      chain: null,
+      draftContext: null,
+      selectedIds: [],
+      initialLoading: true,
+      loading: false,
+      error: null,
+      message: null,
+      query: ""
+    });
+
+    const { component, target } = renderDocuments();
+
+    expect(target.querySelector('[data-testid="skeleton-card-grid"]')).toBeTruthy();
+    expect(target.querySelectorAll('[data-testid="skeleton-row-item"]')).toHaveLength(5);
+    expect(target.querySelector('[data-testid="documents-list"]')).toBeNull();
+
+    component.$destroy();
+  });
+
+  it("does not replace content with skeleton during save-like loading", () => {
+    mocks.documentsState.set({
+      list: makeList(),
+      editor: makeEditor(),
+      chain: makeChain(),
+      draftContext: {
+        counterpartyId: "counterparty-1",
+        counterpartyName: "ТОВ Ромашка"
+      },
+      selectedIds: [],
+      initialLoading: false,
+      loading: true,
+      error: null,
+      message: null,
+      query: ""
+    });
+
+    const { component, target } = renderDocuments();
+
+    expect(target.querySelector('[data-testid="documents-list"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="skeleton-card-grid"]')).toBeNull();
 
     component.$destroy();
   });
@@ -393,6 +498,7 @@ describe("DocumentsScreen component", () => {
       chain: null,
       draftContext: null,
       selectedIds: [],
+      initialLoading: false,
       loading: false,
       error: null,
       message: null,

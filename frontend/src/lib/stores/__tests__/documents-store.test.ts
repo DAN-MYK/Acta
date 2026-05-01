@@ -148,6 +148,8 @@ describe("documents store smoke", () => {
 
     await documentsStore.load();
     expect(snapshot(documentsStore).list?.totalCount).toBe(2);
+    expect(snapshot(documentsStore).initialLoading).toBe(false);
+    expect(snapshot(documentsStore).loading).toBe(false);
 
     documentsStore.toggleSelected("doc-1");
     expect(snapshot(documentsStore).selectedIds).toEqual(["doc-1"]);

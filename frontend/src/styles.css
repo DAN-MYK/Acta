@@ -552,6 +552,82 @@ textarea {
   gap: 0.5rem;
 }
 
+.currency,
+.dashboard-kpi-card strong,
+.documents-focus-card strong,
+.reports-focus-card strong,
+.chain-summary-block strong,
+.editor-item-total strong,
+.cashflow-net,
+.cashflow-income,
+.cashflow-expense {
+  font-variant-numeric: tabular-nums;
+}
+
+.tabs-pill {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px;
+  border-radius: var(--radius-xl);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-hairline);
+}
+
+.tabs-pill > button {
+  border: 0;
+  background: transparent;
+  border-radius: var(--radius-lg);
+  padding: 8px 14px;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.tabs-pill > button.active {
+  background: var(--bg-elevated);
+  color: var(--text);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.tabs-pill > button:hover:not(.active):not(:disabled) {
+  color: var(--text);
+}
+
+.segmented {
+  display: inline-flex;
+  padding: 4px;
+  border-radius: var(--radius-xl);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-hairline);
+  gap: 0;
+}
+
+.segmented > button {
+  border: 0;
+  background: transparent;
+  border-radius: var(--radius-lg);
+  padding: 8px 18px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-weight: 500;
+  min-width: 96px;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.segmented > button:hover:not(.active):not(:disabled) {
+  color: var(--text);
+}
+
+.segmented > button.active {
+  background: var(--bg-elevated);
+  color: var(--text);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.segmented > button:disabled {
+  cursor: not-allowed;
+}
+
 /* --- Відсутні класи (аудит 2026-04-30) --- */
 
 .doc-row-title {

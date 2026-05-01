@@ -58,8 +58,20 @@ function makeReportsScreen(): ReportsScreenDto {
       scope: "active",
       dateFrom: "2026-02-01",
       dateTo: "2026-05-01",
-      query: ""
+      query: "",
+      selectedCounterpartyId: null
     },
+    selectedCounterparty: null,
+    topCounterparties: [
+      {
+        counterpartyId: "cp-1",
+        counterpartyName: "ТОВ Ромашка",
+        primaryAmountStr: "48 200,00 грн",
+        secondaryLabel: "Чистий рух",
+        secondaryValue: "29 200,00 грн",
+        sharePercent: 100
+      }
+    ],
     summary: {
       openingBalanceStr: "125 000,00 грн",
       incomeStr: "48 200,00 грн",

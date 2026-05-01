@@ -1,6 +1,8 @@
 /**
  * @vitest-environment jsdom
  */
+// @ts-ignore Node typings are not included in the frontend test tsconfig.
+import { readFileSync } from "fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { tick } from "svelte";
 import App from "../App.svelte";
@@ -178,6 +180,33 @@ const mocks = vi.hoisted(() => {
     }),
     navigationGo: vi.fn((screen: ScreenId) => navigationState.set(screen))
   };
+});
+
+describe("design-system tokens", () => {
+  const tokens = readFileSync("frontend/src/lib/styles/tokens.css", "utf8");
+  const styles = readFileSync("frontend/src/styles.css", "utf8");
+
+  it("--font-body is 14px", () => {
+    expect(tokens).toMatch(/--font-body:\s*14px/);
+  });
+
+  it("--control-height is 38px", () => {
+    expect(tokens).toMatch(/--control-height:\s*38px/);
+  });
+
+  it("--font-serif is removed", () => {
+    expect(tokens).not.toMatch(/--font-serif:/);
+  });
+
+  it("declares the missing CSS variable aliases", () => {
+    for (const name of ["--font-base", "--accent-strong", "--text-primary", "--success-text", "--line"]) {
+      expect(tokens).toMatch(new RegExp(`${name}:\\s*[^;]+;`));
+    }
+  });
+
+  it(".currency utility uses tabular numbers", () => {
+    expect(styles).toMatch(/\.currency\s*,?[\s\S]*font-variant-numeric:\s*tabular-nums/);
+  });
 });
 
 vi.mock("../lib/stores/app-shell", () => ({

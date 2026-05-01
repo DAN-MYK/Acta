@@ -1,12 +1,11 @@
 /* Канонічні web-токени, перенесені з Slint AppTheme. */
 :root {
   --font-sans: "Geist", "Segoe UI", sans-serif;
-  --font-serif: "Source Serif 4", Georgia, serif;
   --font-mono: "JetBrains Mono", "Cascadia Code", monospace;
 
   --font-xs: 10px;
   --font-sm: 11px;
-  --font-body: 13px;
+  --font-body: 14px;
   --font-md: 15px;
   --font-lg: 20px;
   --font-xl: 26px;
@@ -29,10 +28,10 @@
   --radius-2xl: 16px;
   --radius-3xl: 24px;
 
-  --control-height: 46px;
-  --control-height-multiline: 110px;
-  --control-padding-x: 14px;
-  --control-padding-y: 12px;
+  --control-height: 38px;
+  --control-height-multiline: 96px;
+  --control-padding-x: 12px;
+  --control-padding-y: 8px;
   --control-gap: 10px;
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;
@@ -63,10 +62,12 @@
   --accent-hover: #2448ba;
   --accent-soft: #e1e9ff;
   --accent-text: #2748b8;
+  --accent-strong: var(--accent-hover);
 
   --success: #1eb16e;
   --success-soft: #e4f5ec;
   --success-border: color-mix(in srgb, var(--success) 30%, var(--border));
+  --success-text: color-mix(in srgb, var(--success) 78%, var(--text));
   --warning: #c77a1c;
   --warning-soft: #f7ecd9;
   --danger: #c0433b;
@@ -82,6 +83,9 @@
   --control-disabled-bg: color-mix(in srgb, var(--bg-subtle) 72%, var(--bg-card));
   --control-disabled-text: color-mix(in srgb, var(--text-muted) 88%, transparent);
   --control-shadow: inset 0 1px 0 color-mix(in srgb, var(--bg-hover) 72%, transparent);
+  --text-primary: var(--text);
+  --line: var(--border);
+  --font-base: var(--font-body);
 
   --button-shadow: 0 10px 24px rgba(20, 35, 45, 0.08);
   --button-shadow-strong: 0 14px 28px rgba(20, 35, 45, 0.14);
@@ -121,10 +125,12 @@ body[data-theme="dark"] {
   --accent-hover: #abc0ff;
   --accent-soft: #2f4063;
   --accent-text: #afc5ff;
+  --accent-strong: var(--accent-hover);
 
   --success: #5de0a6;
   --success-soft: #1f4633;
   --success-border: color-mix(in srgb, var(--success) 38%, var(--border));
+  --success-text: color-mix(in srgb, var(--success) 70%, var(--text));
   --warning: #efb267;
   --warning-soft: #4a3b22;
   --danger: #ef8880;
@@ -140,6 +146,9 @@ body[data-theme="dark"] {
   --control-disabled-bg: color-mix(in srgb, var(--bg-subtle) 84%, var(--bg-card));
   --control-disabled-text: color-mix(in srgb, var(--text-muted) 90%, transparent);
   --control-shadow: inset 0 1px 0 color-mix(in srgb, black 32%, transparent);
+  --text-primary: var(--text);
+  --line: var(--border);
+  --font-base: var(--font-body);
 
   --button-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
   --button-shadow-strong: 0 14px 30px rgba(0, 0, 0, 0.24);
@@ -149,4 +158,33 @@ body[data-theme="dark"] {
   --page-bg:
     radial-gradient(circle at top left, rgba(143, 171, 255, 0.18), transparent 24%),
     linear-gradient(160deg, var(--bg) 0%, var(--bg-sidebar) 42%, #222c2d 100%);
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -600px 0;
+  }
+
+  100% {
+    background-position: 600px 0;
+  }
+}
+
+.sk {
+  border-radius: var(--radius-md);
+  background: linear-gradient(
+    90deg,
+    var(--bg-subtle) 25%,
+    var(--bg) 50%,
+    var(--bg-subtle) 75%
+  );
+  background-size: 1200px 100%;
+  animation: shimmer 1.5s infinite linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sk {
+    animation: none;
+    background-position: 0 0;
+  }
 }

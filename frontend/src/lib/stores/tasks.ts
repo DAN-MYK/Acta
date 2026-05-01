@@ -7,6 +7,7 @@ export type TaskTab = "open" | "done" | "all";
 interface TasksState {
   screen: TasksScreenDto | null;
   editor: TaskEditorDto | null;
+  initialLoading: boolean;
   loading: boolean;
   error: string | null;
   message: string | null;
@@ -17,6 +18,7 @@ interface TasksState {
 const initialState: TasksState = {
   screen: null,
   editor: null,
+  initialLoading: true,
   loading: false,
   error: null,
   message: null,
@@ -34,7 +36,7 @@ function createTasksStore() {
 
       try {
         const screen = await tasksList(query);
-        update((state) => ({ ...state, screen, loading: false }));
+        update((state) => ({ ...state, screen, initialLoading: false, loading: false }));
       } catch (error) {
         update((state) => ({ ...state, loading: false, error: String(error) }));
       }

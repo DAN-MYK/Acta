@@ -4,6 +4,7 @@ import type { ReportsFilterDto, ReportsScreenDto } from "../types";
 
 interface ReportsState {
   screen: ReportsScreenDto | null;
+  initialLoading: boolean;
   loading: boolean;
   error: string | null;
   message: string | null;
@@ -25,6 +26,7 @@ const defaultFilter: ReportsFilterDto = {
 
 const initialState: ReportsState = {
   screen: null,
+  initialLoading: true,
   loading: false,
   error: null,
   message: null
@@ -45,7 +47,7 @@ function createReportsStore() {
 
       try {
         const screen = await reportsLoad(filter);
-        update((state) => ({ ...state, screen, loading: false }));
+        update((state) => ({ ...state, screen, initialLoading: false, loading: false }));
       } catch (error) {
         update((state) => ({ ...state, loading: false, error: String(error) }));
       }

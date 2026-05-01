@@ -20,6 +20,7 @@ interface DocumentsState {
   chain: DocumentChainDto | null;
   draftContext: { counterpartyId: string; counterpartyName: string } | null;
   selectedIds: string[];
+  initialLoading: boolean;
   loading: boolean;
   error: string | null;
   message: string | null;
@@ -32,6 +33,7 @@ const initialState: DocumentsState = {
   chain: null,
   draftContext: null,
   selectedIds: [],
+  initialLoading: true,
   loading: false,
   error: null,
   message: null,
@@ -66,6 +68,7 @@ function createDocumentsStore() {
           ...state,
           list,
           selectedIds: state.selectedIds.filter((id) => list.items.some((item) => item.id === id)),
+          initialLoading: false,
           loading: false
         }));
       } catch (error) {

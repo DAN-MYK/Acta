@@ -19,13 +19,14 @@
 .settings-nav-button {
   justify-content: flex-start;
   text-align: left;
+  border-radius: var(--radius-xl);
 }
 
 .settings-nav button.active {
-  background: var(--accent);
-  color: var(--text-on-accent);
-  border-color: transparent;
-  box-shadow: var(--button-shadow);
+  background: var(--bg-card);
+  color: var(--text);
+  border-color: var(--border-hairline);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
 .settings-card {

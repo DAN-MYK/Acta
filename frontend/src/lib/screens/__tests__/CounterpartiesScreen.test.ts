@@ -35,6 +35,7 @@ const mocks = vi.hoisted(() => {
     detail: null as CounterpartyDetailScreenDto | null,
     editor: null as CounterpartyEditorDto | null,
     selectedId: null as string | null,
+    initialLoading: false,
     loading: false,
     error: null as string | null,
     message: null as string | null,
@@ -168,6 +169,7 @@ function setCounterpartiesState(
     detail,
     editor: null,
     selectedId: detail?.info.id ?? null,
+    initialLoading: false,
     loading: false,
     error: null,
     message: null,
@@ -215,24 +217,46 @@ describe("CounterpartiesScreen component", () => {
     document.body.innerHTML = "";
   });
 
-  it("renders the counterparty as an operational risk card with context and CTA hierarchy", () => {
+  it("renders the counterparty as an operational risk card with scenario sections and CTA hierarchy", () => {
     const { component, target } = renderCounterparties();
 
     expect(target.textContent).toContain("Контрагенти");
     expect(target.textContent).toContain("ФОП Петренко");
     expect(target.textContent).toContain("Потребує уваги: прострочено 1 документ");
-    expect(target.textContent).toContain("Баланс");
-    expect(target.textContent).toContain("Прострочка");
-    expect(target.textContent).toContain("Останній контакт");
+    expect(target.textContent).toContain("Хто це");
+    expect(target.textContent).toContain("Фінансовий стан");
+    expect(target.textContent).toContain("Документи");
+    expect(target.textContent).toContain("Платежі");
+    expect(target.textContent).toContain("Наступна дія");
+    expect(target.textContent).toContain("Останній контакт 2026-04-25");
     expect(target.textContent).toContain("Директор");
     expect(target.textContent).toContain("Банк");
     expect(target.textContent).toContain("VAT");
     expect(target.textContent).toContain("Петренко П.П.");
     expect(target.textContent).toContain("19 000,00 грн");
+    expect(target.textContent).toContain("INV-2026-0042");
+    expect(target.textContent).toContain("mono");
 
     expect(buttonByText(target, "Створити документ").className).toContain("btn-primary");
     expect(buttonByText(target, "Редагувати").className).toContain("btn-secondary");
     expect(buttonByText(target, "Архівувати").className).toContain("btn-danger");
+
+    component.$destroy();
+  });
+
+  it("wires key CTA actions and opens detail from the list row", async () => {
+    const { component, target } = renderCounterparties();
+
+    buttonByText(target, "ТОВ Ромашка").click();
+    buttonByText(target, "Редагувати").click();
+    buttonByText(target, "Створити документ").click();
+    buttonByText(target, "Архівувати").click();
+    await tick();
+
+    expect(mocks.open).toHaveBeenCalledWith("cp-1");
+    expect(mocks.openEditor).toHaveBeenCalledWith("cp-2");
+    expect(mocks.createDocument).toHaveBeenCalled();
+    expect(mocks.archiveCurrent).toHaveBeenCalled();
 
     component.$destroy();
   });
@@ -249,13 +273,21 @@ describe("CounterpartiesScreen component", () => {
     component.$destroy();
   });
 
-  it("shows an explicit empty state for the detail panel", () => {
+  it("shows an explicit empty state with a useful next step", async () => {
     setCounterpartiesState(null);
     const { component, target } = renderCounterparties();
 
     expect(target.textContent).toContain("Оберіть контрагента");
-    expect(target.textContent).toContain("Побачите баланс, прострочки, останній контакт і пов'язані документи");
+    expect(target.textContent).toContain("Оберіть зліва вже відомого контрагента");
+    expect(target.textContent).toContain("або створіть нового, щоб одразу побачити");
+    expect(target.textContent).toContain("баланс");
+    expect(target.textContent).toContain("прострочки");
+    expect(target.textContent).toContain("наступного кроку");
     expect(buttonByText(target, "Новий контрагент").className).toContain("btn-primary");
+    buttonByText(target, "Новий контрагент").click();
+    await tick();
+
+    expect(mocks.openEditor).toHaveBeenCalledWith();
 
     component.$destroy();
   });
@@ -267,6 +299,31 @@ describe("CounterpartiesScreen component", () => {
     expect(target.querySelector('[data-testid="counterparties-list"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="counterparty-detail"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="counterparty-overview"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="counterparty-scenario"]')).toBeTruthy();
+
+    component.$destroy();
+  });
+
+  it("shows list skeletons during initial loading while chrome stays visible", () => {
+    mocks.counterpartiesState.set({
+      screen: null,
+      detail: null,
+      editor: null,
+      selectedId: null,
+      initialLoading: true,
+      loading: false,
+      error: null,
+      message: null,
+      query: ""
+    });
+
+    const { component, target } = renderCounterparties();
+
+    expect(target.textContent).toContain("Контрагенти");
+    expect(target.textContent).toContain("Новий контрагент");
+    expect(target.querySelectorAll('[data-testid="skeleton-row-item"]')).toHaveLength(6);
+    expect(target.querySelector('[data-testid="counterparties-list"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="counterparties-empty-state"]')).toBeNull();
 
     component.$destroy();
   });

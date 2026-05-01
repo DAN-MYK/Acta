@@ -21,6 +21,7 @@ interface CounterpartiesState {
   detail: CounterpartyDetailScreenDto | null;
   editor: CounterpartyEditorDto | null;
   selectedId: string | null;
+  initialLoading: boolean;
   loading: boolean;
   error: string | null;
   message: string | null;
@@ -32,6 +33,7 @@ const initialState: CounterpartiesState = {
   detail: null,
   editor: null,
   selectedId: null,
+  initialLoading: true,
   loading: false,
   error: null,
   message: null,
@@ -59,6 +61,7 @@ function createCounterpartiesStore() {
           screen,
           detail,
           selectedId,
+          initialLoading: false,
           loading: false
         }));
       } catch (error) {

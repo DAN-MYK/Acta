@@ -4,12 +4,14 @@ import type { DashboardScreenDto } from "../types";
 
 interface DashboardState {
   screen: DashboardScreenDto | null;
+  initialLoading: boolean;
   loading: boolean;
   error: string | null;
 }
 
 const initialState: DashboardState = {
   screen: null,
+  initialLoading: true,
   loading: false,
   error: null
 };
@@ -27,7 +29,7 @@ function createDashboardStore() {
       try {
         const screen = await dashboardLoad();
         if (requestId === latestRequestId) {
-          update((state) => ({ ...state, screen, loading: false }));
+          update((state) => ({ ...state, screen, initialLoading: false, loading: false }));
         }
         return screen;
       } catch (error) {
