@@ -504,3 +504,30 @@
 ## Примітка для наступного кроку
 
 Після цього roadmap логічний наступний рівень деталізації — окремий implementation plan з задачами по файлах, командами перевірки та тестовим чеклістом для кожної фази.
+
+## Статус реалізації станом на 2026-05-01
+
+### Реалізовано
+
+- Shell / App frame:
+  глобальний loading-indicator, блокування ризикових дій під час reload, `Esc` для command palette, deterministic reset palette state.
+- System foundation:
+  канонічна ієрархія `primary / secondary / ghost / danger`, уніфіковані `loading/disabled` стани, date controls, cleaner form controls.
+- Settings:
+  уніфіковані action rows, українські density labels, cleaner BAS/settings actions.
+- Documents:
+  scenario-first create strip, canonical editor actions, status-flow chain panel, item editor з line summaries та stronger empty state.
+- Payments:
+  scenario header навколо імпорту і звірки, matched/unmatched row states, stronger reconcile CTA, scenario-first payment editor, loading/empty states.
+- Counterparties:
+  detail panel як операційна risk card, stronger CTA hierarchy, linked documents/payments context, scenario-first empty state.
+
+### У роботі
+
+- Reports:
+  scenario-first header, stronger filter semantics, KPI context by active tab, overdue emphasis у wide rows.
+
+### Ще не реалізовано
+
+- Tasks:
+  toolbar/editor unification, stronger priority and deadline presentation, more useful `Сьогодні` empty state.

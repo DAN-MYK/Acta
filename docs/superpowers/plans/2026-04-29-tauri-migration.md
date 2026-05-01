@@ -1,6 +1,6 @@
 # Tauri + Svelte + TypeScript Migration Plan
 
-> **Archived/pre-cutover:** execution plan збережено як історія Tauri cutover. Після `2026-04-30` не використовуй його Slint mapping або deletion checklist як live backlog; актуальний стан у `docs/planning/tauri-migration-roadmap-2026-04-29.md` і `docs/planning/tauri-migration-contract-matrix-2026-04-29.md`.
+> **Archived/pre-cutover:** execution plan збережено як історія Tauri cutover. Після `2026-04-30` не використовуй його Slint mapping або deletion checklist як live backlog; актуальний стан у `docs/architecture/tauri-runtime.md` і `docs/architecture/tauri-command-surface.md`.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
