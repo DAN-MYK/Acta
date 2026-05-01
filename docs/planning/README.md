@@ -7,10 +7,10 @@
 ## Актуальне
 
 - [ui-ux-roadmap-2026-05-01.md](/C:/Users/MykhailoDan/apps/Acta/docs/planning/ui-ux-roadmap-2026-05-01.md) - живий backlog для post-cutover UI/UX polish.
-- [bas-import-cli-2026-05-01.md](/C:/Users/MykhailoDan/apps/Acta/docs/planning/bas-import-cli-2026-05-01.md) - актуальний план по BAS import CLI та Excel-підтримці актів.
 
 ## Архівне
 
+- `bas-import-cli-*`
 - `next-sprint-*`
 - `remediation-*`
 - `slint-*`
