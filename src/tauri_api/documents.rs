@@ -390,6 +390,65 @@ fn counterparty_to_pdf_company(cp: &Counterparty) -> PdfCompany {
     }
 }
 
+fn build_act_pdf_data(
+    act: &Act,
+    items: &[ActItem],
+    company: &Company,
+    client: &Counterparty,
+) -> PdfActData {
+    PdfActData {
+        number: act.number.clone(),
+        date: act.date.format("%d.%m.%Y").to_string(),
+        company: to_pdf_company(company),
+        client: counterparty_to_pdf_company(client),
+        items: items
+            .iter()
+            .enumerate()
+            .map(|(i, item)| PdfActItem {
+                num: (i + 1) as u32,
+                name: item.description.clone(),
+                qty: format!("{:.4}", item.quantity),
+                unit: item.unit.clone(),
+                price: format!("{:.2}", item.unit_price),
+                amount: format!("{:.2}", item.amount),
+            })
+            .collect(),
+        total: format!("{:.2}", act.total_amount),
+        total_words: amount_to_words(&act.total_amount),
+        notes: act.notes.clone().unwrap_or_default(),
+    }
+}
+
+fn build_invoice_pdf_data(
+    invoice: &Invoice,
+    items: &[InvoiceItem],
+    company: &Company,
+    client: &Counterparty,
+) -> PdfInvoiceData {
+    PdfInvoiceData {
+        number: invoice.number.clone(),
+        date: invoice.date.format("%d.%m.%Y").to_string(),
+        company: to_pdf_company(company),
+        client: counterparty_to_pdf_company(client),
+        items: items
+            .iter()
+            .enumerate()
+            .map(|(i, item)| PdfInvoiceItem {
+                num: (i + 1) as u32,
+                name: item.description.clone(),
+                qty: format!("{:.4}", item.quantity),
+                unit: item.unit.clone().unwrap_or_default(),
+                price: format!("{:.2}", item.price),
+                amount: format!("{:.2}", item.amount),
+            })
+            .collect(),
+        total: format!("{:.2}", invoice.total_amount),
+        vat_amount: format!("{:.2}", invoice.vat_amount),
+        total_words: amount_to_words(&invoice.total_amount),
+        notes: invoice.notes.clone().unwrap_or_default(),
+    }
+}
+
 fn chain_kind_rank(kind: &str) -> Option<u8> {
     match normalize_chain_kind(kind) {
         Some("invoice") => Some(0),
@@ -1515,6 +1574,7 @@ pub async fn documents_bulk_advance_status_live(
 mod pdf_tests {
     use super::*;
     use chrono::Utc;
+    use rust_decimal_macros::dec;
 
     fn sample_company() -> crate::models::company::Company {
         crate::models::company::Company {
@@ -1565,5 +1625,150 @@ mod pdf_tests {
         company.legal_address = None;
         let pdf = to_pdf_company(&company);
         assert_eq!(pdf.address, "");
+    }
+
+    fn sample_counterparty() -> crate::models::counterparty::Counterparty {
+        crate::models::counterparty::Counterparty {
+            id: uuid::Uuid::nil(),
+            name: "ТОВ Замовник".into(),
+            edrpou: Some("9876543210".into()),
+            ipn: None,
+            iban: Some("UA987654321098765432109876543".into()),
+            address: Some("вул. Замовника, 5".into()),
+            phone: None,
+            email: None,
+            notes: None,
+            is_archived: false,
+            bas_id: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    fn sample_act() -> crate::models::act::Act {
+        use crate::models::act::ActStatus;
+        use crate::models::DocumentDirection;
+        crate::models::act::Act {
+            id: uuid::Uuid::nil(),
+            number: "АКТ-2026-001".into(),
+            counterparty_id: uuid::Uuid::nil(),
+            contract_id: None,
+            category_id: None,
+            direction: DocumentDirection::Outgoing,
+            date: chrono::NaiveDate::from_ymd_opt(2026, 4, 15).unwrap(),
+            expected_payment_date: None,
+            total_amount: dec!(45000.00),
+            status: ActStatus::Draft,
+            notes: Some("Примітка".into()),
+            bas_id: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    fn sample_act_items() -> Vec<crate::models::act::ActItem> {
+        vec![crate::models::act::ActItem {
+            id: uuid::Uuid::nil(),
+            act_id: uuid::Uuid::nil(),
+            description: "Розробка ПЗ".into(),
+            quantity: dec!(1),
+            unit: "послуга".into(),
+            unit_price: dec!(45000.00),
+            amount: dec!(45000.00),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }]
+    }
+
+    #[test]
+    fn build_act_pdf_data_maps_fields_correctly() {
+        let act = sample_act();
+        let items = sample_act_items();
+        let company = sample_company();
+        let client = sample_counterparty();
+
+        let data = build_act_pdf_data(&act, &items, &company, &client);
+
+        assert_eq!(data.number, "АКТ-2026-001");
+        assert_eq!(data.date, "15.04.2026");
+        assert_eq!(data.total, "45000.00");
+        assert_eq!(data.notes, "Примітка");
+        assert_eq!(data.items.len(), 1);
+
+        let item = &data.items[0];
+        assert_eq!(item.num, 1);
+        assert_eq!(item.name, "Розробка ПЗ");
+        assert_eq!(item.unit, "послуга");
+        assert_eq!(item.price, "45000.00");  // unit_price → price у PdfActItem
+        assert_eq!(item.amount, "45000.00");
+    }
+
+    fn sample_invoice() -> crate::models::invoice::Invoice {
+        use crate::models::invoice::InvoiceStatus;
+        use crate::models::DocumentDirection;
+        crate::models::invoice::Invoice {
+            id: uuid::Uuid::nil(),
+            company_id: uuid::Uuid::nil(),
+            number: "РАХ-2026-001".into(),
+            counterparty_id: uuid::Uuid::nil(),
+            contract_id: None,
+            category_id: None,
+            direction: DocumentDirection::Outgoing,
+            date: chrono::NaiveDate::from_ymd_opt(2026, 4, 15).unwrap(),
+            expected_payment_date: None,
+            total_amount: dec!(1000.00),
+            vat_amount: dec!(0.00),
+            status: InvoiceStatus::Draft,
+            notes: None,
+            pdf_path: None,
+            bas_id: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    fn sample_invoice_items() -> Vec<crate::models::invoice::InvoiceItem> {
+        vec![crate::models::invoice::InvoiceItem {
+            id: uuid::Uuid::nil(),
+            invoice_id: uuid::Uuid::nil(),
+            position: 1,
+            description: "Товар".into(),
+            unit: Some("шт".into()),
+            quantity: dec!(2),
+            price: dec!(500.00),
+            amount: dec!(1000.00),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }]
+    }
+
+    #[test]
+    fn build_invoice_pdf_data_maps_fields_correctly() {
+        let invoice = sample_invoice();
+        let items = sample_invoice_items();
+        let company = sample_company();
+        let client = sample_counterparty();
+
+        let data = build_invoice_pdf_data(&invoice, &items, &company, &client);
+
+        assert_eq!(data.number, "РАХ-2026-001");
+        assert_eq!(data.date, "15.04.2026");
+        assert_eq!(data.total, "1000.00");
+        assert_eq!(data.vat_amount, "0.00");
+        assert_eq!(data.items.len(), 1);
+
+        let item = &data.items[0];
+        assert_eq!(item.unit, "шт");   // Option<String> → String
+        assert_eq!(item.price, "500.00");  // InvoiceItem.price (not unit_price)
+        assert_eq!(item.amount, "1000.00");
+    }
+
+    #[test]
+    fn build_invoice_pdf_data_handles_none_unit() {
+        let invoice = sample_invoice();
+        let mut items = sample_invoice_items();
+        items[0].unit = None;  // Option<String> = None
+        let data = build_invoice_pdf_data(&invoice, &items, &sample_company(), &sample_counterparty());
+        assert_eq!(data.items[0].unit, "");  // unwrap_or_default
     }
 }
