@@ -57,7 +57,7 @@
   <div class="panel-header">
     <div>
       <h2>Налаштування</h2>
-      <p>Tauri vertical slice для appearance, company, integrations, team та backup</p>
+      <p>Зовнішній вигляд, компанія, інтеграції, команда та резервні копії</p>
     </div>
   </div>
 

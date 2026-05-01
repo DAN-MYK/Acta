@@ -964,6 +964,73 @@ textarea:focus-visible {
   outline-offset: 2px;
 }
 
+/* --- Form controls --- */
+
+.topbar-actions select,
+.panel-header input,
+.editor-grid input,
+.editor-grid select,
+.editor-grid textarea,
+.palette input,
+.reports-filter-grid select,
+.reports-filter-grid input,
+.settings-actions-row select,
+.create-strip input,
+.create-strip select,
+.editor-item input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 46px;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-xl);
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--bg-card) 90%, white 10%);
+  color: inherit;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bg-hover) 72%, transparent);
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.editor-grid textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.topbar-actions select:hover,
+.panel-header input:hover,
+.editor-grid input:hover,
+.editor-grid select:hover,
+.editor-grid textarea:hover,
+.palette input:hover,
+.reports-filter-grid select:hover,
+.reports-filter-grid input:hover,
+.settings-actions-row select:hover,
+.create-strip input:hover,
+.create-strip select:hover,
+.editor-item input:hover {
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
+  background: color-mix(in srgb, var(--bg-card) 94%, white 6%);
+}
+
+.topbar-actions select::placeholder,
+.panel-header input::placeholder,
+.editor-grid input::placeholder,
+.editor-grid textarea::placeholder,
+.palette input::placeholder,
+.reports-filter-grid input::placeholder,
+.create-strip input::placeholder,
+.editor-item input::placeholder {
+  color: color-mix(in srgb, var(--text-muted) 78%, transparent);
+}
+
+.editor-grid label {
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
 /* --- Button hierarchy --- */
 
 .btn-primary {
