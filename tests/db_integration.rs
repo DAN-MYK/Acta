@@ -5263,6 +5263,7 @@ async fn load_bank_rows_groups_payments_by_counterparty() -> Result<()> {
     assert_eq!(rows[0].income, dec!(3000));
     assert_eq!(rows[0].expense, dec!(1000));
     assert!(rows[0].label.contains(&suffix));
+    assert_eq!(rows[0].key, cp.id.to_string());
 
     sqlx::query("DELETE FROM payments WHERE id IN ($1, $2)").bind(p1).bind(p2).execute(&pool).await?;
     sqlx::query("DELETE FROM counterparties WHERE id = $1").bind(cp.id).execute(&pool).await?;
