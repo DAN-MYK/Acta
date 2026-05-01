@@ -131,6 +131,16 @@ describe("ReportsScreen", () => {
     component.$destroy();
   });
 
+  it("exposes stable smoke markers for the shell and native e2e layer", () => {
+    const { component, target } = renderReports();
+
+    expect(target.querySelector('[data-testid="reports-screen"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="reports-focus-primary"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="reports-table-card"]')).toBeTruthy();
+
+    component.$destroy();
+  });
+
   it("adapts KPI context and overdue emphasis to the active report tab", () => {
     mocks.reportsState.set({
       screen: {

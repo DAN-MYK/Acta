@@ -54,7 +54,7 @@
   }
 </script>
 
-<section class="panel">
+<section class="panel" data-testid="tasks-screen">
   <div class="panel-header">
     <div>
       <h2>Завдання</h2>
@@ -95,7 +95,7 @@
 
   <div class="tasks-layout">
     <div class="tasks-main">
-      <div class="task-focus-card">
+      <div class="task-focus-card" data-testid="tasks-focus-primary">
         <strong>У фокусі</strong>
         <p>Потребують уваги зараз: прострочені, високопріоритетні або прив'язані до грошових рішень завдання.</p>
       </div>
@@ -106,7 +106,7 @@
         <button class:active={$tasks.tab === "all"} on:click={() => tasks.setTab("all")}>Усі</button>
       </div>
 
-      <div class="tasks-list">
+      <div class="tasks-list" data-testid="tasks-list">
         {#each focusTaskItems($tasks.screen?.items ?? [], $tasks.tab) as item}
           <div class="task-row">
             <button class="task-row-main" on:click={() => tasks.openEditor(item.id)}>
@@ -134,7 +134,7 @@
       </div>
     </div>
 
-    <aside class="tasks-side-panel task-today-panel">
+    <aside class="tasks-side-panel task-today-panel" data-testid="tasks-today-panel">
       <strong>На сьогодні</strong>
       <p>Швидкий список задач, які спливають сьогодні або мають нагадування на поточну дату.</p>
       <div class="linked-list">

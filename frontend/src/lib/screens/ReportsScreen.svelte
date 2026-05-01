@@ -105,7 +105,7 @@
   }
 </script>
 
-<section class="panel">
+<section class="panel" data-testid="reports-screen">
   <div class="panel-header">
     <div>
       <h2>Звіти</h2>
@@ -132,7 +132,7 @@
   </div>
 
   <div class="reports-focus-grid">
-    <div class="reports-focus-card">
+    <div class="reports-focus-card" data-testid="reports-focus-primary">
       <span class="reports-focus-label">{getFocusTitle($reports.screen?.filter.tab)}</span>
       <strong>{getFocusValue($reports.screen?.filter.tab)}</strong>
       <p>{getFocusDescription($reports.screen?.filter.tab)}</p>
@@ -220,12 +220,12 @@
   {/if}
 
   {#if !hasActiveRows($reports.screen?.filter.tab)}
-    <div class="empty-state-card reports-empty-state">
+    <div class="empty-state-card reports-empty-state" data-testid="reports-empty-state">
       <strong>На цей період немає записів</strong>
       <p>Змініть період, scope або сценарій звіту, щоб знайти дані для аналізу.</p>
     </div>
   {:else if $reports.screen?.filter.tab === "bank"}
-    <div class="reports-table reports-table-card">
+    <div class="reports-table reports-table-card" data-testid="reports-table-card">
       <div class="reports-table-row reports-table-head">
         <span>Група</span>
         <span>Надходження</span>
@@ -242,7 +242,7 @@
       {/each}
     </div>
   {:else if $reports.screen?.filter.tab === "receivables"}
-    <div class="reports-table reports-table-card">
+    <div class="reports-table reports-table-card" data-testid="reports-table-card">
       <div class="reports-table-row reports-table-head reports-table-wide">
         <span>Документ</span>
         <span>Дата</span>
@@ -265,7 +265,7 @@
       {/each}
     </div>
   {:else}
-    <div class="reports-table reports-table-card">
+    <div class="reports-table reports-table-card" data-testid="reports-table-card">
       <div class="reports-table-row reports-table-head reports-table-wide">
         <span>Назва</span>
         <span>Компанія</span>

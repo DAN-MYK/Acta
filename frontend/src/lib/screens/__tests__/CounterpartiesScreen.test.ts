@@ -259,4 +259,15 @@ describe("CounterpartiesScreen component", () => {
 
     component.$destroy();
   });
+
+  it("exposes stable smoke markers for list and detail states", () => {
+    const { component, target } = renderCounterparties();
+
+    expect(target.querySelector('[data-testid="counterparties-screen"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="counterparties-list"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="counterparty-detail"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="counterparty-overview"]')).toBeTruthy();
+
+    component.$destroy();
+  });
 });

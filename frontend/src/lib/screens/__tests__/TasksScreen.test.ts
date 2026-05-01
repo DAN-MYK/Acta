@@ -216,4 +216,15 @@ describe("TasksScreen component", () => {
 
     component.$destroy();
   });
+
+  it("exposes stable smoke markers for focus workflow and today panel", () => {
+    const { component, target } = renderTasks();
+
+    expect(target.querySelector('[data-testid="tasks-screen"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="tasks-focus-primary"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="tasks-today-panel"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="tasks-list"]')).toBeTruthy();
+
+    component.$destroy();
+  });
 });

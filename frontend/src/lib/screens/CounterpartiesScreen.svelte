@@ -51,7 +51,7 @@
   }
 </script>
 
-<section class="panel">
+<section class="panel" data-testid="counterparties-screen">
   <div class="panel-header">
     <div>
       <h2>Контрагенти</h2>
@@ -76,7 +76,7 @@
   {/if}
 
   <div class="counterparties-layout">
-    <div class="counterparties-list">
+    <div class="counterparties-list" data-testid="counterparties-list">
       {#each $counterparties.screen?.items ?? [] as item}
         <button
           class:active={$counterparties.selectedId === item.id}
@@ -100,6 +100,7 @@
 
     <div class="counterparty-detail">
       {#if $counterparties.detail}
+        <div data-testid="counterparty-detail">
         <div class="counterparty-detail-header">
           <div>
             <h3>{$counterparties.detail.info.name}</h3>
@@ -128,7 +129,7 @@
           </div>
         </div>
 
-        <div class="chain-panel counterparty-overview-panel">
+        <div class="chain-panel counterparty-overview-panel" data-testid="counterparty-overview">
           <div class="chain-panel-header">
             <div>
               <strong>Фінансовий стан</strong>
@@ -233,8 +234,9 @@
             {/each}
           </div>
         </div>
+        </div>
       {:else}
-        <div class="empty-screen empty-state-card compact">
+        <div class="empty-screen empty-state-card compact" data-testid="counterparties-empty-state">
           <strong>Оберіть контрагента</strong>
           <p>Побачите баланс, прострочки, останній контакт і пов'язані документи без переходів між екранами.</p>
           <button class="btn-primary" on:click={() => counterparties.openEditor()}>Новий контрагент</button>

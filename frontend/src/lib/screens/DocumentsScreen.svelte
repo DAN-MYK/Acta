@@ -216,7 +216,7 @@
   }
 </script>
 
-<section class="panel">
+<section class="panel" data-testid="documents-screen">
   <div class="panel-header">
     <div>
       <h2>Документи</h2>
@@ -225,7 +225,7 @@
     <input placeholder="Пошук документів" on:input={onDocumentSearch} />
   </div>
 
-  <div class="create-strip-card">
+  <div class="create-strip-card" data-testid="documents-create-strip">
     <div class="create-strip-header">
       <div>
         <strong>Новий документ</strong>
@@ -267,7 +267,7 @@
   </div>
 
   <div class="documents-focus-grid">
-    <div class="documents-focus-card">
+    <div class="documents-focus-card" data-testid="documents-focus-primary">
       <span class="reports-focus-label">Що потребує уваги</span>
       <strong>{draftCount($documents.list?.items ?? [])}</strong>
       <p>Чернетки, які ще не пройшли далі по сценарію й можуть затримати оплату або відвантаження.</p>
@@ -312,12 +312,12 @@
   {/if}
 
   {#if ($documents.list?.items.length ?? 0) === 0}
-    <div class="empty-state-card">
+    <div class="empty-state-card" data-testid="documents-empty-state">
       <strong>Поки що документів немає</strong>
       <p>Створіть першу чернетку, щоб запустити сценарій рахунку, акту або накладної.</p>
     </div>
   {:else}
-    <div class="documents-list">
+    <div class="documents-list" data-testid="documents-list">
       {#each $documents.list?.items ?? [] as item}
         <button class="doc-row doc-row-rich" on:click={() => documents.open(item.id)}>
           <label class="doc-row-checkbox" aria-label={`Вибрати ${item.number}`}>

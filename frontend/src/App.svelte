@@ -177,6 +177,7 @@
     <nav class="nav">
       {#each sidebarScreens as item}
         <button
+          data-testid={`nav-${item.screen}`}
           class:active={currentScreen === item.screen}
           disabled={isShellBusy}
           on:click={() => navigation.go(item.screen)}
@@ -217,7 +218,7 @@
           {/each}
         </select>
 
-        <button disabled={isShellBusy} on:click={() => palette.toggle()}>
+        <button data-testid="palette-toggle" disabled={isShellBusy} on:click={() => palette.toggle()}>
           <AppIcon name="palette" surface={true} />
           <span>Ctrl+K</span>
         </button>
@@ -254,12 +255,13 @@
 
   {#if $palette.open}
     <button type="button" class="palette-backdrop" aria-label="Закрити палітру команд" on:click={() => palette.close()}></button>
-    <section class="palette">
+    <section class="palette" data-testid="palette">
       <input bind:this={paletteInput} placeholder="Пошук команд, екранів і документів" on:input={onPaletteInput} />
 
-      <div class="palette-items">
-        {#each $palette.items as item}
+      <div class="palette-items" data-testid="palette-items">
+        {#each $palette.items as item, index}
           <button
+            data-testid={`palette-item-${index}`}
             class="palette-item"
             on:click={async () => {
               await palette.activate(item.payload);

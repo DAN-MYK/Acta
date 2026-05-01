@@ -363,6 +363,17 @@ describe("DocumentsScreen component", () => {
     component.$destroy();
   });
 
+  it("exposes stable smoke markers for the shell and native e2e layer", () => {
+    const { component, target } = renderDocuments();
+
+    expect(target.querySelector('[data-testid="documents-screen"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="documents-create-strip"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="documents-focus-primary"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="documents-list"]')).toBeTruthy();
+
+    component.$destroy();
+  });
+
   it("shows a useful empty state when there are no documents yet", () => {
     mocks.documentsState.set({
       list: {
