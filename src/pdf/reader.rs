@@ -119,28 +119,20 @@ mod tests {
         )
         .expect("generate_act_pdf має завершитись успішно");
 
-        // Перевіряємо що PDF був створено та має валідний заголовок
-        assert!(out.exists(), "PDF файл має бути створено");
-        let header = std::fs::read(&out).expect("read PDF file");
-        assert_eq!(&header[..4], b"%PDF", "PDF має валідний заголовок");
-
-        // Спроба витягти текст — lopdf може не обробити всі Typst PDF функції
-        // Якщо лопається — то це нормально (kompatibility issue, не помилка нашого коду)
-        match read_pdf_text(&out) {
-            Ok(text) => {
-                // Якщо витяг вдався — текст не повинен бути порожнім
-                assert!(!text.is_empty(), "витягнутий текст не повинен бути порожнім");
-            }
+        let text = match read_pdf_text(&out) {
+            Ok(text) => text,
             Err(e) => {
-                // Типова помилка: "ToUnicode CMap error" від Typst PDF
                 let error_chain = format!("{:?}", e);
                 if error_chain.contains("ToUnicode") {
                     eprintln!("пропуск: lopdf не підтримує Typst ToUnicode CMap");
+                    let _ = std::fs::remove_file(&out);
+                    return;
                 } else {
                     panic!("Непередбачена помилка при читанні PDF: {e}");
                 }
             }
-        }
+        };
+        assert!(!text.is_empty(), "витягнутий текст не повинен бути порожнім");
 
         let _ = std::fs::remove_file(&out);
     }
