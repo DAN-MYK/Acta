@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => {
   const tasksState = createMockStore({
     screen: null as TasksScreenDto | null,
     editor: null as TaskEditorDto | null,
+    initialLoading: false,
     loading: false,
     error: null as string | null,
     message: null as string | null,
@@ -116,6 +117,7 @@ function setTasksState(items: TaskItemDto[], overrides: Partial<{ tab: TasksTab 
   mocks.tasksState.set({
     screen: makeScreen(items),
     editor: makeEditor(),
+    initialLoading: false,
     loading: false,
     error: null,
     message: null,
@@ -224,6 +226,31 @@ describe("TasksScreen component", () => {
     expect(target.querySelector('[data-testid="tasks-focus-primary"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="tasks-today-panel"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="tasks-list"]')).toBeTruthy();
+
+    component.$destroy();
+  });
+
+  it("shows compact skeleton rows during initial loading while chrome stays visible", () => {
+    mocks.tasksState.set({
+      screen: null,
+      editor: null,
+      initialLoading: true,
+      loading: false,
+      error: null,
+      message: null,
+      query: "",
+      tab: "open"
+    });
+
+    const { component, target } = renderTasks();
+
+    expect(target.textContent).toContain("Завдання");
+    expect(target.querySelector('[data-testid="tasks-focus-primary"]')).toBeTruthy();
+    expect(target.querySelector('.task-kpis')).toBeTruthy();
+    expect(target.querySelector('.task-tabs')).toBeTruthy();
+    expect(target.querySelector('[data-testid="tasks-today-panel"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="tasks-list"]')).toBeTruthy();
+    expect(target.querySelectorAll('[data-testid="skeleton-row-item"]')).toHaveLength(5);
 
     component.$destroy();
   });

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SkeletonRow from "../components/SkeletonRow.svelte";
   import { tasksStore } from "../stores/tasks";
   import type { TaskDraftFormDto, TaskItemDto, TaskStatus } from "../types";
 
@@ -107,30 +108,34 @@
       </div>
 
       <div class="tasks-list" data-testid="tasks-list">
-        {#each focusTaskItems($tasks.screen?.items ?? [], $tasks.tab) as item}
-          <div class="task-row">
-            <button class="task-row-main" on:click={() => tasks.openEditor(item.id)}>
-              <div>
-                <strong>{item.title}</strong>
-                <p>{item.description || item.priorityLabel}</p>
-              </div>
-              <div class="task-row-meta">
-                <span class="task-pill">{item.priorityLabel}</span>
-                <span>{item.dueDate || "Без дедлайну"}</span>
-                <span>{item.statusLabel}</span>
-              </div>
-              <div class="task-row-context">
-                <span>{linkLabel(item)}</span>
-                {#if item.reminderAt}
-                  <span>Нагадування {item.reminderAt}</span>
-                {/if}
-              </div>
-            </button>
-            <button class="btn-secondary task-row-status" on:click={() => toggleTaskStatus(item)}>
-              {item.status === "done" ? "Повернути" : "Готово"}
-            </button>
-          </div>
-        {/each}
+        {#if $tasks.initialLoading}
+          <SkeletonRow count={5} variant="compact" />
+        {:else}
+          {#each focusTaskItems($tasks.screen?.items ?? [], $tasks.tab) as item}
+            <div class="task-row">
+              <button class="task-row-main" on:click={() => tasks.openEditor(item.id)}>
+                <div>
+                  <strong>{item.title}</strong>
+                  <p>{item.description || item.priorityLabel}</p>
+                </div>
+                <div class="task-row-meta">
+                  <span class="task-pill">{item.priorityLabel}</span>
+                  <span>{item.dueDate || "Без дедлайну"}</span>
+                  <span>{item.statusLabel}</span>
+                </div>
+                <div class="task-row-context">
+                  <span>{linkLabel(item)}</span>
+                  {#if item.reminderAt}
+                    <span>Нагадування {item.reminderAt}</span>
+                  {/if}
+                </div>
+              </button>
+              <button class="btn-secondary task-row-status" on:click={() => toggleTaskStatus(item)}>
+                {item.status === "done" ? "Повернути" : "Готово"}
+              </button>
+            </div>
+          {/each}
+        {/if}
       </div>
     </div>
 
