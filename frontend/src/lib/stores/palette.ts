@@ -20,6 +20,8 @@ function createPaletteStore() {
     error: null
   });
 
+  let searchToken = 0;
+
   function buildClosedState() {
     return {
       open: false,
@@ -30,41 +32,85 @@ function createPaletteStore() {
     };
   }
 
+  function primeDefaultResults() {
+    void search("");
+  }
+
+  async function search(query: string) {
+    const currentToken = ++searchToken;
+    update((state) => ({ ...state, query, loading: true, error: null }));
+
+    try {
+      const counterparties = getCounterpartiesSnapshot();
+      const result = await shellPaletteSearch(query, counterparties.selectedId ?? undefined);
+
+      update((state) => {
+        if (currentToken !== searchToken) {
+          return {
+            ...state,
+            loading: false
+          };
+        }
+
+        return {
+          ...state,
+          items: result.items,
+          loading: false
+        };
+      });
+    } catch (error) {
+      update((state) => {
+        if (currentToken !== searchToken) {
+          return {
+            ...state,
+            loading: false
+          };
+        }
+
+        return {
+          ...state,
+          loading: false,
+          error: String(error)
+        };
+      });
+    }
+  }
+
   return {
     subscribe,
     open() {
+      searchToken += 1;
       set({
         ...buildClosedState(),
         open: true
       });
+      primeDefaultResults();
     },
     toggle() {
-      update((state) =>
-        state.open
-          ? buildClosedState()
-          : {
-              ...buildClosedState(),
-              open: true
-            }
-      );
-    },
-    close() {
-      set(buildClosedState());
-    },
-    async search(query: string) {
-      update((state) => ({ ...state, query, loading: true, error: null }));
-      try {
-        const counterparties = getCounterpartiesSnapshot();
-        const result = await shellPaletteSearch(query, counterparties.selectedId ?? undefined);
-        update((state) => ({
-          ...state,
-          items: result.items,
-          loading: false
-        }));
-      } catch (error) {
-        update((state) => ({ ...state, loading: false, error: String(error) }));
+      let shouldPrime = false;
+
+      update((state) => {
+        if (state.open) {
+          searchToken += 1;
+          return buildClosedState();
+        }
+
+        shouldPrime = true;
+        return {
+          ...buildClosedState(),
+          open: true
+        };
+      });
+
+      if (shouldPrime) {
+        primeDefaultResults();
       }
     },
+    close() {
+      searchToken += 1;
+      set(buildClosedState());
+    },
+    search,
     async activate(payload: string) {
       const counterparties = getCounterpartiesSnapshot();
       const result = await shellPaletteActivate(payload, counterparties.selectedId ?? undefined);
@@ -72,6 +118,7 @@ function createPaletteStore() {
       return result;
     },
     reset() {
+      searchToken += 1;
       set(buildClosedState());
     }
   };

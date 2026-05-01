@@ -521,13 +521,7 @@
   scenario header навколо імпорту і звірки, matched/unmatched row states, stronger reconcile CTA, scenario-first payment editor, loading/empty states.
 - Counterparties:
   detail panel як операційна risk card, stronger CTA hierarchy, linked documents/payments context, scenario-first empty state.
-
-### У роботі
-
 - Reports:
-  scenario-first header, stronger filter semantics, KPI context by active tab, overdue emphasis у wide rows.
-
-### Ще не реалізовано
-
+  scenario-first header, clearer filter semantics, KPI context by active tab, overdue emphasis у wide rows.
 - Tasks:
-  toolbar/editor unification, stronger priority and deadline presentation, more useful `Сьогодні` empty state.
+  unified toolbar/editor, stronger priority and deadline presentation, more useful `Сьогодні` empty state.

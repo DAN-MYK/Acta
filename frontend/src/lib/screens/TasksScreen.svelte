@@ -24,6 +24,21 @@
     return items.filter((item) => item.status === "open" || item.status === "in_progress");
   }
 
+  function focusTaskItems(items: TaskItemDto[], tab: "open" | "done" | "all") {
+    const scopedItems = taskItemsForTab(items, tab);
+
+    return scopedItems.sort((left, right) => {
+      const leftWeight = left.priority === "critical" ? 0 : left.priority === "high" ? 1 : 2;
+      const rightWeight = right.priority === "critical" ? 0 : right.priority === "high" ? 1 : 2;
+
+      if (leftWeight !== rightWeight) {
+        return leftWeight - rightWeight;
+      }
+
+      return (left.dueDate || "9999-99-99").localeCompare(right.dueDate || "9999-99-99");
+    });
+  }
+
   function todayTaskItems(items: TaskItemDto[]) {
     const today = new Date().toISOString().slice(0, 10);
     return items.filter((item) => item.dueDate === today || item.reminderAt.startsWith(today));
@@ -32,6 +47,10 @@
   function toggleTaskStatus(task: TaskItemDto) {
     const nextStatus: TaskStatus = task.status === "done" ? "open" : "done";
     void tasks.setStatus(task.id, nextStatus);
+  }
+
+  function linkLabel(item: TaskItemDto) {
+    return item.linkLabel ? `Пов'язано з ${item.linkLabel}` : "Без прив'язки";
   }
 </script>
 
@@ -43,7 +62,7 @@
     </div>
     <div class="panel-actions">
       <input placeholder="Пошук завдань" on:input={onTaskSearch} />
-      <button on:click={() => tasks.openEditor()}>Нове завдання</button>
+      <button class="btn-primary" on:click={() => tasks.openEditor()}>Нове завдання</button>
     </div>
   </div>
 
@@ -76,14 +95,19 @@
 
   <div class="tasks-layout">
     <div class="tasks-main">
+      <div class="task-focus-card">
+        <strong>У фокусі</strong>
+        <p>Потребують уваги зараз: прострочені, високопріоритетні або прив'язані до грошових рішень завдання.</p>
+      </div>
+
       <div class="task-tabs">
-        <button class:active={$tasks.tab === "open"} on:click={() => tasks.setTab("open")}>Активні</button>
+        <button class:active={$tasks.tab === "open"} on:click={() => tasks.setTab("open")}>У фокусі</button>
         <button class:active={$tasks.tab === "done"} on:click={() => tasks.setTab("done")}>Завершені</button>
         <button class:active={$tasks.tab === "all"} on:click={() => tasks.setTab("all")}>Усі</button>
       </div>
 
       <div class="tasks-list">
-        {#each taskItemsForTab($tasks.screen?.items ?? [], $tasks.tab) as item}
+        {#each focusTaskItems($tasks.screen?.items ?? [], $tasks.tab) as item}
           <div class="task-row">
             <button class="task-row-main" on:click={() => tasks.openEditor(item.id)}>
               <div>
@@ -95,8 +119,14 @@
                 <span>{item.dueDate || "Без дедлайну"}</span>
                 <span>{item.statusLabel}</span>
               </div>
+              <div class="task-row-context">
+                <span>{linkLabel(item)}</span>
+                {#if item.reminderAt}
+                  <span>Нагадування {item.reminderAt}</span>
+                {/if}
+              </div>
             </button>
-            <button on:click={() => toggleTaskStatus(item)}>
+            <button class="btn-secondary task-row-status" on:click={() => toggleTaskStatus(item)}>
               {item.status === "done" ? "Повернути" : "Готово"}
             </button>
           </div>
@@ -104,14 +134,20 @@
       </div>
     </div>
 
-    <aside class="tasks-side-panel">
-      <strong>Сьогодні</strong>
+    <aside class="tasks-side-panel task-today-panel">
+      <strong>На сьогодні</strong>
+      <p>Швидкий список задач, які спливають сьогодні або мають нагадування на поточну дату.</p>
       <div class="linked-list">
         {#each todayTaskItems($tasks.screen?.items ?? []) as item}
           <button class="linked-row" on:click={() => tasks.openEditor(item.id)}>
             <span>{item.title}</span>
             <span>{item.reminderAt || item.dueDate}</span>
           </button>
+        {:else}
+          <div class="empty-state-card compact">
+            <strong>Сьогодні немає нагадувань</strong>
+            <p>Можна спокійно планувати нові задачі або закрити хвости з попередніх днів.</p>
+          </div>
         {/each}
       </div>
     </aside>
@@ -123,14 +159,14 @@
     <div class="editor-header">
       <div>
         <h3>{$tasks.editor.title}</h3>
-        <p>{$tasks.editor.form.linkLabel || "Без прив'язки"}</p>
+        <p>{$tasks.editor.form.linkLabel ? `Пов'язано з ${$tasks.editor.form.linkLabel}` : "Без прив'язки"}</p>
       </div>
       <div class="editor-actions">
-        <button on:click={() => tasks.save()}>Зберегти</button>
+        <button class="btn-primary" on:click={() => tasks.save()}>Зберегти</button>
         {#if $tasks.editor.form.id}
-          <button class="ghost-danger" on:click={() => tasks.deleteCurrent()}>Видалити</button>
+          <button class="btn-danger" on:click={() => tasks.deleteCurrent()}>Видалити</button>
         {/if}
-        <button on:click={() => tasks.closeEditor()}>Закрити</button>
+        <button class="btn-ghost" on:click={() => tasks.closeEditor()}>Закрити</button>
       </div>
     </div>
 
