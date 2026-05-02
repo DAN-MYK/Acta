@@ -175,21 +175,6 @@ fn parse_reminder_at(value: &str) -> Result<Option<DateTime<Utc>>> {
     parse_local_datetime(parsed, "Нагадування").map(Some)
 }
 
-fn matches_query(task: &Task, query: Option<&str>) -> bool {
-    let Some(query) = query.map(str::trim).filter(|value| !value.is_empty()) else {
-        return true;
-    };
-
-    let query = query.to_lowercase();
-    task.title.to_lowercase().contains(&query)
-        || task
-            .description
-            .as_deref()
-            .unwrap_or_default()
-            .to_lowercase()
-            .contains(&query)
-}
-
 async fn resolve_link_label(ctx: &AppCtx, task: &Task) -> Result<(String, String)> {
     if let Some(act_id) = task.act_id {
         if let Some((act, _)) = db::acts::get_by_id(ctx.pool(), act_id).await? {
@@ -227,27 +212,23 @@ async fn task_to_item(ctx: &AppCtx, task: &Task) -> Result<TaskItemDto> {
 }
 
 async fn load_tasks_screen(ctx: &AppCtx, query: Option<&str>) -> Result<TasksScreenDto> {
-    let tasks = db::tasks::list_all(ctx.pool(), ctx.company_id()).await?;
+    let query = query.map(str::trim).unwrap_or_default();
+    let tasks = db::tasks::list_all(ctx.pool(), ctx.company_id(), query).await?;
     let today = Local::now().date_naive();
 
-    let filtered = tasks
-        .into_iter()
-        .filter(|task| matches_query(task, query))
-        .collect::<Vec<_>>();
-
-    let open_count = filtered
+    let open_count = tasks
         .iter()
         .filter(|task| matches!(task.status, TaskStatus::Open | TaskStatus::InProgress))
         .count() as i32;
-    let done_count = filtered
+    let done_count = tasks
         .iter()
         .filter(|task| matches!(task.status, TaskStatus::Done | TaskStatus::Cancelled))
         .count() as i32;
-    let high_count = filtered
+    let high_count = tasks
         .iter()
         .filter(|task| matches!(task.priority, TaskPriority::High | TaskPriority::Critical))
         .count() as i32;
-    let today_count = filtered
+    let today_count = tasks
         .iter()
         .filter(|task| {
             task.due_date
@@ -260,8 +241,8 @@ async fn load_tasks_screen(ctx: &AppCtx, query: Option<&str>) -> Result<TasksScr
         })
         .count() as i32;
 
-    let mut items = Vec::with_capacity(filtered.len());
-    for task in &filtered {
+    let mut items = Vec::with_capacity(tasks.len());
+    for task in &tasks {
         items.push(task_to_item(ctx, task).await?);
     }
 
