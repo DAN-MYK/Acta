@@ -5,6 +5,7 @@ import {
   paymentMatchManualCandidates,
   paymentMatchPreview,
   paymentReconcile,
+  paymentReconcileSplit,
   paymentsImportLatestCsv,
   paymentsList,
   paymentsOpenManualTemplate,
@@ -19,6 +20,7 @@ import type {
   PaymentManualMatchCandidatesDto,
   PaymentMatchCandidateDto,
   PaymentMatchPreviewDto,
+  PaymentReconcileSplitResultDto,
   PaymentsScreenDto
 } from "../types";
 
@@ -722,53 +724,63 @@ function createPaymentsStore() {
       }
     },
 
-    async confirmSplitDraft(): Promise<MutationResultDto> {
+    async confirmSplitDraft(): Promise<PaymentReconcileSplitResultDto> {
       const { splitDraft } = get({ subscribe });
+
+      const errorResult = (message: string): PaymentReconcileSplitResultDto => ({
+        ok: false,
+        message,
+        paymentId: splitDraft?.paymentId ?? "",
+        allocationCount: 0,
+        totalAllocatedStr: "0",
+        allocations: []
+      });
 
       if (!splitDraft) {
         const message = "Немає чернетки розподілу для підтвердження.";
         update((state) => ({ ...state, message, error: message }));
-        return { ok: false, message };
+        return errorResult(message);
       }
 
       if (splitDraft.allocations.length === 0) {
         const message = "Додайте хоча б один документ до розподілу.";
         update((state) => ({ ...state, message, error: message }));
-        return { ok: false, message };
+        return errorResult(message);
       }
 
       if (parseMoneyValue(splitDraft.remainingAmountStr) > 0) {
         const message = "Розподіл ще не завершено. Закрийте залишок платежу або зменште суму.";
         update((state) => ({ ...state, message, error: message }));
-        return { ok: false, message };
+        return errorResult(message);
       }
 
       beginAction("confirm-split", splitDraft.paymentId);
       try {
-        for (const allocation of splitDraft.allocations) {
-          const result = await paymentReconcile({
-            paymentId: splitDraft.paymentId,
+        const result = await paymentReconcileSplit({
+          paymentId: splitDraft.paymentId,
+          allocations: splitDraft.allocations.map((allocation) => ({
             documentKind: allocation.documentKind,
             documentId: allocation.documentId,
             amount: allocation.amount
-          });
+          }))
+        });
 
-          if (!result.ok) {
-            update((state) => ({ ...state, message: result.message, error: result.message }));
-            return result;
-          }
+        if (!result.ok) {
+          update((state) => ({ ...state, message: result.message, error: result.message }));
+          return result;
         }
 
-        const message = "Розподіл платежу підтверджено";
         update((state) =>
-          clearSplitDraft(clearManualPicker(clearPreview({ ...state, message, error: null })))
+          clearSplitDraft(
+            clearManualPicker(clearPreview({ ...state, message: result.message, error: null }))
+          )
         );
         await loadPayments();
-        return { ok: true, message };
+        return result;
       } catch (error) {
         const message = String(error);
         update((state) => ({ ...state, message, error: message }));
-        return { ok: false, message };
+        return { ok: false, message, paymentId: "", allocationCount: 0, totalAllocatedStr: "0", allocations: [] };
       } finally {
         finishAction();
       }
