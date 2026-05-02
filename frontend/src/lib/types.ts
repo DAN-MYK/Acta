@@ -291,6 +291,98 @@ export interface PaymentDraftFormDto {
   description: string;
 }
 
+export interface PaymentReconcileRequest {
+  paymentId: string;
+  documentKind: "act" | "invoice";
+  documentId: string;
+  amount: string;
+}
+
+export interface PaymentReconcileSplitAllocationRequest {
+  documentKind: "act" | "invoice";
+  documentId: string;
+  amount: string;
+}
+
+export interface PaymentReconcileSplitRequest {
+  paymentId: string;
+  allocations: PaymentReconcileSplitAllocationRequest[];
+}
+
+export interface PaymentReconcileSplitAllocationResultDto {
+  documentId: string;
+  documentKind: "act" | "invoice";
+  title: string;
+  amountStr: string;
+}
+
+export interface PaymentReconcileSplitResultDto {
+  ok: boolean;
+  message: string;
+  paymentId: string;
+  allocationCount: number;
+  totalAllocatedStr: string;
+  allocations: PaymentReconcileSplitAllocationResultDto[];
+}
+
+export interface PaymentUnreconcileRequest {
+  paymentId: string;
+  documentKind: "act" | "invoice";
+  documentId: string;
+}
+
+export interface PaymentUnreconcileAllRequest {
+  paymentId: string;
+}
+
+export type PaymentMatchDecisionKind = "exact" | "ambiguous" | "split" | "none";
+
+export interface PaymentMatchPreviewRequest {
+  paymentId: string;
+}
+
+export interface PaymentMatchApplyAutoRequest {
+  paymentId: string;
+}
+
+export interface PaymentMatchManualCandidatesRequest {
+  paymentId: string;
+  query: string;
+}
+
+export interface PaymentMatchCandidateDto {
+  documentId: string;
+  documentKind: "act" | "invoice";
+  title: string;
+  openAmountStr: string;
+  totalScore: number;
+  sameIban: boolean;
+  referenceHit: boolean;
+  textHits: number;
+  daysDistance: number;
+}
+
+export interface PaymentAutoMatchDto {
+  documentId: string;
+  documentKind: "act" | "invoice";
+  title: string;
+  amountStr: string;
+}
+
+export interface PaymentMatchPreviewDto {
+  paymentId: string;
+  isReconciled: boolean;
+  decisionKind: PaymentMatchDecisionKind;
+  candidates: PaymentMatchCandidateDto[];
+  autoMatch: PaymentAutoMatchDto | null;
+}
+
+export interface PaymentManualMatchCandidatesDto {
+  paymentId: string;
+  query: string;
+  candidates: PaymentMatchCandidateDto[];
+}
+
 export type TaskStatus = "open" | "in_progress" | "done" | "cancelled";
 export type TaskPriority = "low" | "normal" | "high" | "critical";
 
@@ -350,7 +442,7 @@ export interface TaskMutationResultDto {
   message: string;
 }
 
-export type ReportsTab = "bank" | "receivables" | "payables";
+export type ReportsTab = "bank" | "pnl" | "receivables" | "payables";
 export type ReportsScope = "active" | "all";
 export type SettingsSection =
   | "appearance"
@@ -366,6 +458,7 @@ export interface ReportsFilterDto {
   dateFrom: string;
   dateTo: string;
   query: string;
+  selectedCounterpartyId: string | null;
 }
 
 export interface ReportsSummaryDto {
@@ -375,6 +468,9 @@ export interface ReportsSummaryDto {
   closingBalanceStr: string;
   receivablesTotalStr: string;
   payablesTotalStr: string;
+  pnlIncomeStr?: string;
+  pnlExpenseStr?: string;
+  pnlNetResultStr?: string;
 }
 
 export interface BankReportRowDto {
@@ -409,10 +505,27 @@ export interface PayableRowDto {
   recurrence: string;
 }
 
+export interface SelectedCounterpartyDto {
+  id: string;
+  name: string;
+}
+
+export interface TopCounterpartyRowDto {
+  counterpartyId: string;
+  counterpartyName: string;
+  primaryAmountStr: string;
+  secondaryLabel: string;
+  secondaryValue: string;
+  sharePercent: number;
+}
+
 export interface ReportsScreenDto {
   filter: ReportsFilterDto;
+  selectedCounterparty: SelectedCounterpartyDto | null;
+  topCounterparties: TopCounterpartyRowDto[];
   summary: ReportsSummaryDto;
   bankRows: BankReportRowDto[];
+  pnlRows?: BankReportRowDto[];
   receivablesRows: ReceivableRowDto[];
   payablesRows: PayableRowDto[];
 }
@@ -459,7 +572,6 @@ export interface SettingsNumberingRowDto {
 
 export interface SettingsPreferencesDto {
   darkMode: boolean;
-  density: number;
 }
 
 export interface SettingsBackupDto {

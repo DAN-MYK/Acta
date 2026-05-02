@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Result};
@@ -13,6 +14,10 @@ use crate::import::bas_payments::{
     bank_import_dir, import_payments_from_csv, newest_payments_csv_path,
 };
 use crate::models::payment::{NewPayment, PaymentDirection, UpdatePayment};
+use crate::services::payment_matching::{
+    choose_best_match, score_match_candidates, MatchDecision, MatchDocumentKind, MatchKind,
+    PaymentMatchInput, ScoredMatchCandidate,
+};
 
 // ─── DTOs ────────────────────────────────────────────────────────────────────
 
@@ -83,6 +88,124 @@ pub struct PaymentCreateOrUpdateRequest {
     pub bank_name: String,
     pub reference: String,
     pub description: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentReconcileRequest {
+    pub payment_id: String,
+    pub document_kind: String,
+    pub document_id: String,
+    pub amount: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentReconcileSplitAllocationRequest {
+    pub document_kind: String,
+    pub document_id: String,
+    pub amount: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentReconcileSplitRequest {
+    pub payment_id: String,
+    pub allocations: Vec<PaymentReconcileSplitAllocationRequest>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentReconcileSplitAllocationResultDto {
+    pub document_id: String,
+    pub document_kind: String,
+    pub title: String,
+    pub amount_str: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentReconcileSplitResultDto {
+    pub ok: bool,
+    pub message: String,
+    pub payment_id: String,
+    pub allocation_count: usize,
+    pub total_allocated_str: String,
+    pub allocations: Vec<PaymentReconcileSplitAllocationResultDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentUnreconcileRequest {
+    pub payment_id: String,
+    pub document_kind: String,
+    pub document_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentUnreconcileAllRequest {
+    pub payment_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentMatchPreviewRequest {
+    pub payment_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentMatchApplyAutoRequest {
+    pub payment_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentMatchManualCandidatesRequest {
+    pub payment_id: String,
+    pub query: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentMatchCandidateDto {
+    pub document_id: String,
+    pub document_kind: String,
+    pub title: String,
+    pub open_amount_str: String,
+    pub total_score: i32,
+    pub same_iban: bool,
+    pub reference_hit: bool,
+    pub text_hits: i32,
+    pub days_distance: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentAutoMatchDto {
+    pub document_id: String,
+    pub document_kind: String,
+    pub title: String,
+    pub amount_str: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentMatchPreviewDto {
+    pub payment_id: String,
+    pub is_reconciled: bool,
+    pub decision_kind: String,
+    pub candidates: Vec<PaymentMatchCandidateDto>,
+    pub auto_match: Option<PaymentAutoMatchDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentManualMatchCandidatesDto {
+    pub payment_id: String,
+    pub query: String,
+    pub candidates: Vec<PaymentMatchCandidateDto>,
 }
 
 // ─── Private helpers ──────────────────────────────────────────────────────────
@@ -171,6 +294,160 @@ fn trimmed_option(value: &str) -> Option<String> {
     } else {
         Some(trimmed.to_string())
     }
+}
+
+fn parse_payment_uuid(value: &str) -> Result<Uuid> {
+    Uuid::parse_str(value.trim()).map_err(|_| anyhow!("Невалідний ідентифікатор платежу"))
+}
+
+fn match_document_kind_to_str(kind: MatchDocumentKind) -> &'static str {
+    match kind {
+        MatchDocumentKind::Act => "act",
+        MatchDocumentKind::Invoice => "invoice",
+    }
+}
+
+fn match_kind_to_str(kind: MatchKind) -> &'static str {
+    match kind {
+        MatchKind::Exact => "exact",
+        MatchKind::Ambiguous => "ambiguous",
+        MatchKind::Split => "split",
+        MatchKind::None => "none",
+    }
+}
+
+async fn load_split_allocation_title(
+    ctx: &AppCtx,
+    document_kind: &str,
+    document_id: Uuid,
+) -> Result<String> {
+    match document_kind {
+        "act" => {
+            let (act, _) = db::acts::get_by_id(ctx.pool(), document_id)
+                .await?
+                .ok_or_else(|| anyhow!("Документ не знайдено в межах компанії"))?;
+            Ok(format!("Акт {}", act.number))
+        }
+        "invoice" => {
+            let (invoice, _) = db::invoices::get_by_id(ctx.pool(), document_id)
+                .await?
+                .ok_or_else(|| anyhow!("Документ не знайдено в межах компанії"))?;
+            Ok(format!("Накладна {}", invoice.number))
+        }
+        other => Err(anyhow!("Невідомий тип документу: {other}")),
+    }
+}
+
+async fn build_match_input(
+    ctx: &AppCtx,
+    payment_id: Uuid,
+) -> Result<(crate::models::payment::Payment, PaymentMatchInput)> {
+    let payment = db::payments::get_by_id_scoped(ctx.pool(), ctx.company_id(), payment_id)
+        .await?
+        .ok_or_else(|| anyhow!("Платіж не знайдено в межах компанії"))?;
+
+    let counterparty_iban = match payment.counterparty_id {
+        Some(counterparty_id) => db::counterparties::get_by_id(
+            ctx.pool(),
+            ctx.company_id(),
+            counterparty_id,
+        )
+        .await?
+        .and_then(|counterparty| counterparty.iban),
+        None => None,
+    };
+
+    Ok((
+        payment.clone(),
+        PaymentMatchInput {
+            amount: payment.amount,
+            date: payment.date,
+            counterparty_iban,
+            description: payment.description.unwrap_or_default(),
+            bank_ref: payment.bank_ref,
+        },
+    ))
+}
+
+async fn compute_match_preview(
+    ctx: &AppCtx,
+    payment_id: Uuid,
+) -> Result<(crate::models::payment::Payment, Vec<ScoredMatchCandidate>, MatchDecision)> {
+    let (payment, input) = build_match_input(ctx, payment_id).await?;
+    let candidates =
+        db::payments::list_open_document_candidates(ctx.pool(), ctx.company_id(), payment.direction.clone())
+            .await?;
+    let scored_candidates = score_match_candidates(&input, &candidates);
+    let decision = choose_best_match(&input, &candidates);
+    Ok((payment, scored_candidates, decision))
+}
+
+fn scored_candidate_to_dto(candidate: ScoredMatchCandidate) -> PaymentMatchCandidateDto {
+    PaymentMatchCandidateDto {
+        document_id: candidate.candidate.document_id.to_string(),
+        document_kind: match_document_kind_to_str(candidate.candidate.document_kind).to_string(),
+        title: candidate.candidate.title,
+        open_amount_str: format_decimal_ua(candidate.candidate.open_amount),
+        total_score: candidate.score.total,
+        same_iban: candidate.score.same_iban,
+        reference_hit: candidate.score.reference_hit,
+        text_hits: candidate.score.text_hits as i32,
+        days_distance: candidate.score.days_distance,
+    }
+}
+
+fn preview_candidates_for_decision(
+    decision: &MatchDecision,
+    scored_candidates: Vec<ScoredMatchCandidate>,
+) -> Vec<ScoredMatchCandidate> {
+    match decision {
+        MatchDecision::Split(candidates) => candidates.clone(),
+        MatchDecision::Exact(_) | MatchDecision::Ambiguous(_) | MatchDecision::None => scored_candidates,
+    }
+}
+
+fn exact_recommendation(decision: &MatchDecision) -> Option<PaymentAutoMatchDto> {
+    match decision {
+        MatchDecision::Exact(candidate) => Some(PaymentAutoMatchDto {
+            document_id: candidate.candidate.document_id.to_string(),
+            document_kind: match_document_kind_to_str(candidate.candidate.document_kind).to_string(),
+            title: candidate.candidate.title.clone(),
+            amount_str: format_decimal_ua(candidate.candidate.open_amount),
+        }),
+        MatchDecision::Ambiguous(_) | MatchDecision::Split(_) | MatchDecision::None => None,
+    }
+}
+
+fn normalize_search_text(value: &str) -> String {
+    value
+        .to_lowercase()
+        .chars()
+        .map(|ch| if ch.is_alphanumeric() { ch } else { ' ' })
+        .collect()
+}
+
+fn manual_candidate_matches_query(
+    candidate: &crate::services::payment_matching::MatchCandidate,
+    query: &str,
+) -> bool {
+    let normalized_query = normalize_search_text(query);
+    let tokens: Vec<_> = normalized_query
+        .split_whitespace()
+        .filter(|token| !token.is_empty())
+        .collect();
+
+    if tokens.is_empty() {
+        return true;
+    }
+
+    let haystack = normalize_search_text(&format!(
+        "{} {} {}",
+        candidate.title,
+        candidate.reference_text.clone().unwrap_or_default(),
+        candidate.match_text.clone().unwrap_or_default()
+    ));
+
+    tokens.iter().all(|token| haystack.contains(token))
 }
 
 async fn run_bank_import(ctx: &AppCtx) -> Result<(usize, PathBuf)> {
@@ -335,42 +612,261 @@ pub async fn payment_create_or_update(
     }
 }
 
-pub async fn payment_reconcile(ctx: &AppCtx, payment_id: String) -> Result<MutationResultDto> {
-    let id =
-        Uuid::parse_str(&payment_id).map_err(|_| anyhow!("Невалідний ідентифікатор платежу"))?;
-    let changed = db::payments::mark_reconciled_scoped(ctx.pool(), ctx.company_id(), id).await?;
-    if !changed {
-        return Err(anyhow!(
-            "Платіж не знайдено або він не належить поточній компанії"
-        ));
-    }
+pub async fn payment_reconcile(
+    ctx: &AppCtx,
+    req: PaymentReconcileRequest,
+) -> Result<MutationResultDto> {
+    let payment_id = Uuid::parse_str(&req.payment_id)
+        .map_err(|_| anyhow!("Невалідний ідентифікатор платежу"))?;
+    let doc_id = Uuid::parse_str(&req.document_id)
+        .map_err(|_| anyhow!("Невалідний ідентифікатор документу"))?;
+    let amount = parse_payment_amount(&req.amount)?;
+
+    db::payments::reconcile_document_scoped(
+        ctx.pool(),
+        ctx.company_id(),
+        payment_id,
+        &req.document_kind,
+        doc_id,
+        amount,
+    )
+    .await?;
+
     Ok(MutationResultDto {
         ok: true,
-        message: "Платіж позначено як звірений".to_string(),
+        message: "Платіж зведено з документом".to_string(),
     })
 }
 
-pub async fn payment_unreconcile(ctx: &AppCtx, payment_id: String) -> Result<MutationResultDto> {
-    let id =
-        Uuid::parse_str(&payment_id).map_err(|_| anyhow!("Невалідний ідентифікатор платежу"))?;
-    let changed = db::payments::mark_unreconciled_scoped(ctx.pool(), ctx.company_id(), id).await?;
-    if !changed {
-        return Err(anyhow!(
-            "Платіж не знайдено або він не належить поточній компанії"
-        ));
+pub async fn payment_reconcile_split(
+    ctx: &AppCtx,
+    req: PaymentReconcileSplitRequest,
+) -> Result<PaymentReconcileSplitResultDto> {
+    let payment_id = parse_payment_uuid(&req.payment_id)?;
+    anyhow::ensure!(
+        !req.allocations.is_empty(),
+        "Для розподілу платежу потрібен хоча б один документ"
+    );
+
+    let mut unique_documents = HashSet::new();
+    let mut allocation_results = Vec::new();
+    let mut total_allocated = Decimal::ZERO;
+    let allocations = req
+        .allocations
+        .into_iter()
+        .map(|allocation| {
+            let document_id = Uuid::parse_str(&allocation.document_id)
+                .map_err(|_| anyhow!("Невалідний ідентифікатор документу"))?;
+            let amount = parse_payment_amount(&allocation.amount)?;
+            anyhow::ensure!(
+                unique_documents.insert((allocation.document_kind.clone(), document_id)),
+                "Один і той самий документ не можна передати двічі в split reconcile"
+            );
+
+            total_allocated += amount;
+            allocation_results.push(PaymentReconcileSplitAllocationResultDto {
+                document_id: document_id.to_string(),
+                document_kind: allocation.document_kind.clone(),
+                title: String::new(),
+                amount_str: format_decimal_ua(amount),
+            });
+
+            Ok(db::payments::PaymentReconcileAllocation {
+                document_kind: allocation.document_kind,
+                document_id,
+                amount,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    db::payments::reconcile_split_scoped(ctx.pool(), ctx.company_id(), payment_id, &allocations)
+        .await?;
+
+    for allocation in &mut allocation_results {
+        allocation.title = load_split_allocation_title(
+            ctx,
+            &allocation.document_kind,
+            Uuid::parse_str(&allocation.document_id)
+                .map_err(|_| anyhow!("Невалідний ідентифікатор документу"))?,
+        )
+        .await?;
     }
+
+    Ok(PaymentReconcileSplitResultDto {
+        ok: true,
+        message: "Розподіл платежу підтверджено".to_string(),
+        payment_id: payment_id.to_string(),
+        allocation_count: allocation_results.len(),
+        total_allocated_str: format_decimal_ua(total_allocated),
+        allocations: allocation_results,
+    })
+}
+
+pub async fn payment_unreconcile(
+    ctx: &AppCtx,
+    req: PaymentUnreconcileRequest,
+) -> Result<MutationResultDto> {
+    let payment_id = Uuid::parse_str(&req.payment_id)
+        .map_err(|_| anyhow!("Невалідний ідентифікатор платежу"))?;
+    let doc_id = Uuid::parse_str(&req.document_id)
+        .map_err(|_| anyhow!("Невалідний ідентифікатор документу"))?;
+
+    db::payments::unreconcile_document_scoped(
+        ctx.pool(),
+        ctx.company_id(),
+        payment_id,
+        &req.document_kind,
+        doc_id,
+    )
+    .await?;
+
     Ok(MutationResultDto {
         ok: true,
-        message: "Звірку платежу скасовано".to_string(),
+        message: "Зведення платежу скасовано".to_string(),
+    })
+}
+
+pub async fn payment_unreconcile_all(
+    ctx: &AppCtx,
+    req: PaymentUnreconcileAllRequest,
+) -> Result<MutationResultDto> {
+    let payment_id = parse_payment_uuid(&req.payment_id)?;
+    db::payments::unreconcile_all_scoped(ctx.pool(), ctx.company_id(), payment_id).await?;
+
+    Ok(MutationResultDto {
+        ok: true,
+        message: "Зведення платежу скасовано".to_string(),
     })
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
+pub async fn payment_match_preview(
+    ctx: &AppCtx,
+    req: PaymentMatchPreviewRequest,
+) -> Result<PaymentMatchPreviewDto> {
+    let payment_id = parse_payment_uuid(&req.payment_id)?;
+    let (payment, scored_candidates, decision) = compute_match_preview(ctx, payment_id).await?;
+    let preview_candidates = preview_candidates_for_decision(&decision, scored_candidates);
+
+    Ok(PaymentMatchPreviewDto {
+        payment_id: payment.id.to_string(),
+        is_reconciled: payment.is_reconciled,
+        decision_kind: match_kind_to_str(decision.kind()).to_string(),
+        candidates: preview_candidates
+            .into_iter()
+            .map(scored_candidate_to_dto)
+            .collect(),
+        auto_match: exact_recommendation(&decision),
+    })
+}
+
+pub async fn payment_match_apply_auto(
+    ctx: &AppCtx,
+    req: PaymentMatchApplyAutoRequest,
+) -> Result<MutationResultDto> {
+    let payment_id = parse_payment_uuid(&req.payment_id)?;
+    let (payment, _scored_candidates, decision) = compute_match_preview(ctx, payment_id).await?;
+
+    anyhow::ensure!(
+        !payment.is_reconciled,
+        "Платіж уже звірено. Спершу скасуйте поточне звірення"
+    );
+
+    match decision {
+        MatchDecision::Exact(candidate) => {
+            db::payments::reconcile_document_scoped(
+                ctx.pool(),
+                ctx.company_id(),
+                payment.id,
+                match_document_kind_to_str(candidate.candidate.document_kind),
+                candidate.candidate.document_id,
+                payment.amount,
+            )
+            .await?;
+
+            Ok(MutationResultDto {
+                ok: true,
+                message: "Автозіставлення платежу застосовано".to_string(),
+            })
+        }
+        MatchDecision::Split(_) => Err(anyhow!(
+            "Автозіставлення неможливе: знайдено розподіл платежу між кількома документами"
+        )),
+        MatchDecision::Ambiguous(_) => Err(anyhow!(
+            "Автозіставлення неможливе: знайдено неоднозначне зіставлення з кількома рівноцінними кандидатами"
+        )),
+        MatchDecision::None => Err(anyhow!(
+            "Автозіставлення неможливе: точний кандидат для платежу не знайдено"
+        )),
+    }
+}
+
+pub async fn payment_match_manual_candidates(
+    ctx: &AppCtx,
+    req: PaymentMatchManualCandidatesRequest,
+) -> Result<PaymentManualMatchCandidatesDto> {
+    let payment_id = parse_payment_uuid(&req.payment_id)?;
+    let (payment, input) = build_match_input(ctx, payment_id).await?;
+    let candidates =
+        db::payments::list_open_document_candidates(ctx.pool(), ctx.company_id(), payment.direction)
+            .await?;
+
+    let mut exact_scores = std::collections::BTreeMap::new();
+    for scored in score_match_candidates(&input, &candidates) {
+        exact_scores.insert(scored.candidate.document_id, scored.score);
+    }
+
+    let mut filtered: Vec<_> = candidates
+        .into_iter()
+        .filter(|candidate| manual_candidate_matches_query(candidate, &req.query))
+        .collect();
+
+    filtered.sort_by(|left, right| {
+        let left_score = exact_scores
+            .get(&left.document_id)
+            .map(|score| score.total)
+            .unwrap_or_default();
+        let right_score = exact_scores
+            .get(&right.document_id)
+            .map(|score| score.total)
+            .unwrap_or_default();
+
+        right_score
+            .cmp(&left_score)
+            .then_with(|| left.title.cmp(&right.title))
+            .then_with(|| left.document_id.cmp(&right.document_id))
+    });
+
+    Ok(PaymentManualMatchCandidatesDto {
+        payment_id: payment_id.to_string(),
+        query: req.query.trim().to_string(),
+        candidates: filtered
+            .into_iter()
+            .take(25)
+            .map(|candidate| {
+                let score = exact_scores.get(&candidate.document_id);
+                PaymentMatchCandidateDto {
+                    document_id: candidate.document_id.to_string(),
+                    document_kind: match_document_kind_to_str(candidate.document_kind).to_string(),
+                    title: candidate.title,
+                    open_amount_str: format_decimal_ua(candidate.open_amount),
+                    total_score: score.map(|value| value.total).unwrap_or_default(),
+                    same_iban: score.map(|value| value.same_iban).unwrap_or(false),
+                    reference_hit: score.map(|value| value.reference_hit).unwrap_or(false),
+                    text_hits: score.map(|value| value.text_hits as i32).unwrap_or_default(),
+                    days_distance: score.map(|value| value.days_distance).unwrap_or(365),
+                }
+            })
+            .collect(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use rust_decimal_macros::dec;
+    use crate::services::payment_matching::{MatchCandidate, MatchScore};
 
     #[test]
     fn parse_payment_date_dd_mm_yyyy() {
@@ -517,6 +1013,95 @@ mod tests {
     }
 
     #[test]
+    fn payment_match_preview_helpers_map_exact_decision() {
+        let decision = MatchDecision::Exact(ScoredMatchCandidate {
+            candidate: MatchCandidate::act(
+                Uuid::new_v4(),
+                dec!(1250.00),
+                Some("UA123".to_string()),
+                "Акт №42",
+                "ACT-42",
+                "Оплата акту №42",
+                Some(NaiveDate::from_ymd_opt(2026, 5, 1).expect("валідна дата")),
+            ),
+            score: MatchScore {
+                total: 170,
+                amount_fits: true,
+                exact_amount: true,
+                same_iban: true,
+                reference_hit: true,
+                text_hits: 2,
+                days_distance: 0,
+            },
+        });
+
+        let recommendation =
+            exact_recommendation(&decision).expect("exact decision має повертати recommendation");
+
+        assert_eq!(match_kind_to_str(decision.kind()), "exact");
+        assert_eq!(recommendation.document_kind, "act");
+        assert_eq!(recommendation.title, "Акт №42");
+        assert_eq!(recommendation.amount_str, "1\u{00a0}250,00");
+    }
+
+    #[test]
+    fn payment_match_preview_helpers_map_candidate_scores() {
+        let dto = scored_candidate_to_dto(ScoredMatchCandidate {
+            candidate: MatchCandidate::invoice(
+                Uuid::new_v4(),
+                dec!(980.00),
+                None,
+                "Рахунок №7",
+                "INV-7",
+                "Оплата послуг",
+                Some(NaiveDate::from_ymd_opt(2026, 5, 3).expect("валідна дата")),
+            ),
+            score: MatchScore {
+                total: 130,
+                amount_fits: true,
+                exact_amount: true,
+                same_iban: false,
+                reference_hit: false,
+                text_hits: 1,
+                days_distance: 2,
+            },
+        });
+
+        assert_eq!(dto.document_kind, "invoice");
+        assert_eq!(dto.open_amount_str, "980,00");
+        assert_eq!(dto.total_score, 130);
+        assert_eq!(dto.text_hits, 1);
+        assert_eq!(dto.days_distance, 2);
+    }
+
+    #[test]
+    fn payment_match_preview_helpers_map_split_decision_kind() {
+        let decision = MatchDecision::Split(vec![ScoredMatchCandidate {
+            candidate: MatchCandidate::invoice(
+                Uuid::new_v4(),
+                dec!(1500.00),
+                None,
+                "Накладна INV-007",
+                "INV-7",
+                "Оплата накладної",
+                Some(NaiveDate::from_ymd_opt(2026, 5, 3).expect("валідна дата")),
+            ),
+            score: MatchScore {
+                total: 88,
+                amount_fits: true,
+                exact_amount: false,
+                same_iban: true,
+                reference_hit: false,
+                text_hits: 1,
+                days_distance: 2,
+            },
+        }]);
+
+        assert_eq!(match_kind_to_str(decision.kind()), "split");
+        assert!(exact_recommendation(&decision).is_none());
+    }
+
+    #[test]
     fn compile_check_public_function_signatures() {
         let _ = payments_list;
         let _ = payments_import_latest_csv;
@@ -524,6 +1109,9 @@ mod tests {
         let _ = payments_open_manual_template;
         let _ = payment_create_or_update;
         let _ = payment_reconcile;
+        let _ = payment_reconcile_split;
         let _ = payment_unreconcile;
+        let _ = payment_match_preview;
+        let _ = payment_match_apply_auto;
     }
 }

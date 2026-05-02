@@ -3,7 +3,7 @@
 // Використовує runtime-style sqlx::query_as::<_, T>() без compile-time макросів.
 
 use anyhow::Result;
-use sqlx::{PgPool, Row};
+use sqlx::{PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
 
 use crate::models::payment::{
@@ -17,6 +17,13 @@ pub struct PaymentKpi {
     pub incoming_month: rust_decimal::Decimal,
     pub outgoing_month: rust_decimal::Decimal,
     pub unmatched_count: i64,
+}
+
+/// Один allocation для атомарного split reconcile.
+pub struct PaymentReconcileAllocation {
+    pub document_kind: String,
+    pub document_id: Uuid,
+    pub amount: rust_decimal::Decimal,
 }
 
 impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Payment {
@@ -378,50 +385,6 @@ pub async fn update_scoped(
     Ok(row)
 }
 
-/// Позначити платіж як зведений (is_reconciled = true).
-pub async fn mark_reconciled(pool: &PgPool, id: Uuid) -> Result<()> {
-    sqlx::query("UPDATE payments SET is_reconciled = TRUE, updated_at = NOW() WHERE id = $1")
-        .bind(id)
-        .execute(pool)
-        .await?;
-    Ok(())
-}
-
-/// Позначити платіж як звірений лише в межах конкретної компанії.
-pub async fn mark_reconciled_scoped(pool: &PgPool, company_id: Uuid, id: Uuid) -> Result<bool> {
-    let affected = sqlx::query(
-        "UPDATE payments SET is_reconciled = TRUE, updated_at = NOW() WHERE id = $1 AND company_id = $2",
-    )
-    .bind(id)
-    .bind(company_id)
-    .execute(pool)
-    .await?
-    .rows_affected();
-    Ok(affected > 0)
-}
-
-/// Зняти позначку звірки з платежу (is_reconciled = false).
-pub async fn mark_unreconciled(pool: &PgPool, id: Uuid) -> Result<()> {
-    sqlx::query("UPDATE payments SET is_reconciled = FALSE, updated_at = NOW() WHERE id = $1")
-        .bind(id)
-        .execute(pool)
-        .await?;
-    Ok(())
-}
-
-/// Зняти позначку звірки лише в межах конкретної компанії.
-pub async fn mark_unreconciled_scoped(pool: &PgPool, company_id: Uuid, id: Uuid) -> Result<bool> {
-    let affected = sqlx::query(
-        "UPDATE payments SET is_reconciled = FALSE, updated_at = NOW() WHERE id = $1 AND company_id = $2",
-    )
-    .bind(id)
-    .bind(company_id)
-    .execute(pool)
-    .await?
-    .rows_affected();
-    Ok(affected > 0)
-}
-
 /// Видалити платіж.
 pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
     sqlx::query("DELETE FROM payments WHERE id = $1")
@@ -483,6 +446,457 @@ pub async fn link_invoice(
     .bind(amount)
     .execute(pool)
     .await?;
+    Ok(())
+}
+
+/// Прив'язати платіж до документа (акт або накладна) і позначити як звірений.
+async fn ensure_act_in_company(pool: &PgPool, company_id: Uuid, act_id: Uuid) -> Result<()> {
+    let exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM acts WHERE id = $1 AND company_id = $2)",
+    )
+    .bind(act_id)
+    .bind(company_id)
+    .fetch_one(pool)
+    .await?;
+    anyhow::ensure!(exists, "Документ не знайдено в межах компанії");
+    Ok(())
+}
+
+async fn ensure_act_in_company_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    company_id: Uuid,
+    act_id: Uuid,
+) -> Result<()> {
+    let exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM acts WHERE id = $1 AND company_id = $2)",
+    )
+    .bind(act_id)
+    .bind(company_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    anyhow::ensure!(exists, "Документ не знайдено в межах компанії");
+    Ok(())
+}
+
+async fn ensure_invoice_in_company(
+    pool: &PgPool,
+    company_id: Uuid,
+    invoice_id: Uuid,
+) -> Result<()> {
+    let exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM invoices WHERE id = $1 AND company_id = $2)",
+    )
+    .bind(invoice_id)
+    .bind(company_id)
+    .fetch_one(pool)
+    .await?;
+    anyhow::ensure!(exists, "Документ не знайдено в межах компанії");
+    Ok(())
+}
+
+async fn ensure_invoice_in_company_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    company_id: Uuid,
+    invoice_id: Uuid,
+) -> Result<()> {
+    let exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM invoices WHERE id = $1 AND company_id = $2)",
+    )
+    .bind(invoice_id)
+    .bind(company_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    anyhow::ensure!(exists, "Документ не знайдено в межах компанії");
+    Ok(())
+}
+
+async fn payment_amount_scoped(pool: &PgPool, company_id: Uuid, payment_id: Uuid) -> Result<rust_decimal::Decimal> {
+    let amount = sqlx::query_scalar::<_, rust_decimal::Decimal>(
+        "SELECT amount FROM payments WHERE id = $1 AND company_id = $2",
+    )
+    .bind(payment_id)
+    .bind(company_id)
+    .fetch_optional(pool)
+    .await?;
+    amount.ok_or_else(|| anyhow::anyhow!("Платіж не знайдено в межах компанії"))
+}
+
+/// Read payment amount within a transaction with `FOR UPDATE` to lock the row,
+/// preventing concurrent reconcile/split on the same payment.
+async fn payment_amount_scoped_tx_locked(
+    tx: &mut Transaction<'_, Postgres>,
+    company_id: Uuid,
+    payment_id: Uuid,
+) -> Result<rust_decimal::Decimal> {
+    let amount = sqlx::query_scalar::<_, rust_decimal::Decimal>(
+        "SELECT amount FROM payments WHERE id = $1 AND company_id = $2 FOR UPDATE",
+    )
+    .bind(payment_id)
+    .bind(company_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    amount.ok_or_else(|| anyhow::anyhow!("Платіж не знайдено в межах компанії"))
+}
+
+async fn act_available_amount_for_payment(
+    pool: &PgPool,
+    company_id: Uuid,
+    payment_id: Uuid,
+    act_id: Uuid,
+) -> Result<rust_decimal::Decimal> {
+    let amount = sqlx::query_scalar::<_, rust_decimal::Decimal>(
+        r#"
+        SELECT a.total_amount - COALESCE(SUM(pa.amount) FILTER (WHERE pa.payment_id <> $3), 0::numeric)
+        FROM acts a
+        LEFT JOIN payment_acts pa ON pa.act_id = a.id
+        WHERE a.id = $1 AND a.company_id = $2
+        GROUP BY a.id, a.total_amount
+        "#,
+    )
+    .bind(act_id)
+    .bind(company_id)
+    .bind(payment_id)
+    .fetch_optional(pool)
+    .await?;
+    amount.ok_or_else(|| anyhow::anyhow!("Документ не знайдено в межах компанії"))
+}
+
+async fn act_available_amount_for_payment_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    company_id: Uuid,
+    payment_id: Uuid,
+    act_id: Uuid,
+) -> Result<rust_decimal::Decimal> {
+    let amount = sqlx::query_scalar::<_, rust_decimal::Decimal>(
+        r#"
+        SELECT a.total_amount - COALESCE(SUM(pa.amount) FILTER (WHERE pa.payment_id <> $3), 0::numeric)
+        FROM acts a
+        LEFT JOIN payment_acts pa ON pa.act_id = a.id
+        WHERE a.id = $1 AND a.company_id = $2
+        GROUP BY a.id, a.total_amount
+        "#,
+    )
+    .bind(act_id)
+    .bind(company_id)
+    .bind(payment_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    amount.ok_or_else(|| anyhow::anyhow!("Документ не знайдено в межах компанії"))
+}
+
+async fn invoice_available_amount_for_payment(
+    pool: &PgPool,
+    company_id: Uuid,
+    payment_id: Uuid,
+    invoice_id: Uuid,
+) -> Result<rust_decimal::Decimal> {
+    let amount = sqlx::query_scalar::<_, rust_decimal::Decimal>(
+        r#"
+        SELECT i.total_amount - COALESCE(SUM(pi.amount) FILTER (WHERE pi.payment_id <> $3), 0::numeric)
+        FROM invoices i
+        LEFT JOIN payment_invoices pi ON pi.invoice_id = i.id
+        WHERE i.id = $1 AND i.company_id = $2
+        GROUP BY i.id, i.total_amount
+        "#,
+    )
+    .bind(invoice_id)
+    .bind(company_id)
+    .bind(payment_id)
+    .fetch_optional(pool)
+    .await?;
+    amount.ok_or_else(|| anyhow::anyhow!("Документ не знайдено в межах компанії"))
+}
+
+async fn invoice_available_amount_for_payment_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    company_id: Uuid,
+    payment_id: Uuid,
+    invoice_id: Uuid,
+) -> Result<rust_decimal::Decimal> {
+    let amount = sqlx::query_scalar::<_, rust_decimal::Decimal>(
+        r#"
+        SELECT i.total_amount - COALESCE(SUM(pi.amount) FILTER (WHERE pi.payment_id <> $3), 0::numeric)
+        FROM invoices i
+        LEFT JOIN payment_invoices pi ON pi.invoice_id = i.id
+        WHERE i.id = $1 AND i.company_id = $2
+        GROUP BY i.id, i.total_amount
+        "#,
+    )
+    .bind(invoice_id)
+    .bind(company_id)
+    .bind(payment_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    amount.ok_or_else(|| anyhow::anyhow!("Документ не знайдено в межах компанії"))
+}
+
+pub async fn reconcile_document_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    payment_id: Uuid,
+    doc_kind: &str,
+    doc_id: Uuid,
+    amount: rust_decimal::Decimal,
+) -> Result<()> {
+    let owns_payment = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM payments WHERE id = $1 AND company_id = $2)",
+    )
+    .bind(payment_id)
+    .bind(company_id)
+    .fetch_one(pool)
+    .await?;
+    anyhow::ensure!(owns_payment, "Платіж не знайдено в межах компанії");
+
+    match doc_kind {
+        "act" => {
+            ensure_act_in_company(pool, company_id, doc_id).await?;
+            sqlx::query(
+                r#"
+                INSERT INTO payment_acts (payment_id, act_id, amount)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (payment_id, act_id) DO UPDATE SET amount = $3
+                "#,
+            )
+            .bind(payment_id)
+            .bind(doc_id)
+            .bind(amount)
+            .execute(pool)
+            .await?;
+        }
+        "invoice" => {
+            ensure_invoice_in_company(pool, company_id, doc_id).await?;
+            sqlx::query(
+                r#"
+                INSERT INTO payment_invoices (payment_id, invoice_id, amount)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (payment_id, invoice_id) DO UPDATE SET amount = $3
+                "#,
+            )
+            .bind(payment_id)
+            .bind(doc_id)
+            .bind(amount)
+            .execute(pool)
+            .await?;
+        }
+        other => anyhow::bail!("Невідомий тип документу: {other}"),
+    }
+
+    refresh_reconciled_state(pool, payment_id).await?;
+
+    Ok(())
+}
+
+/// Від'єднати платіж від документа і перерахувати статус звірки.
+pub async fn unreconcile_document_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    payment_id: Uuid,
+    doc_kind: &str,
+    doc_id: Uuid,
+) -> Result<()> {
+    let owns_payment = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM payments WHERE id = $1 AND company_id = $2)",
+    )
+    .bind(payment_id)
+    .bind(company_id)
+    .fetch_one(pool)
+    .await?;
+    anyhow::ensure!(owns_payment, "Платіж не знайдено в межах компанії");
+
+    match doc_kind {
+        "act" => {
+            ensure_act_in_company(pool, company_id, doc_id).await?;
+            sqlx::query("DELETE FROM payment_acts WHERE payment_id = $1 AND act_id = $2")
+                .bind(payment_id)
+                .bind(doc_id)
+                .execute(pool)
+                .await?;
+        }
+        "invoice" => {
+            ensure_invoice_in_company(pool, company_id, doc_id).await?;
+            sqlx::query("DELETE FROM payment_invoices WHERE payment_id = $1 AND invoice_id = $2")
+                .bind(payment_id)
+                .bind(doc_id)
+                .execute(pool)
+                .await?;
+        }
+        other => anyhow::bail!("Невідомий тип документу: {other}"),
+    }
+
+    refresh_reconciled_state(pool, payment_id).await?;
+
+    Ok(())
+}
+
+/// Зняти всі зв'язки звірки з платежу в межах компанії та перерахувати derived state.
+pub async fn unreconcile_all_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    payment_id: Uuid,
+) -> Result<()> {
+    let owns_payment = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM payments WHERE id = $1 AND company_id = $2)",
+    )
+    .bind(payment_id)
+    .bind(company_id)
+    .fetch_one(pool)
+    .await?;
+    anyhow::ensure!(owns_payment, "Платіж не знайдено в межах компанії");
+
+    sqlx::query("DELETE FROM payment_acts WHERE payment_id = $1")
+        .bind(payment_id)
+        .execute(pool)
+        .await?;
+    sqlx::query("DELETE FROM payment_invoices WHERE payment_id = $1")
+        .bind(payment_id)
+        .execute(pool)
+        .await?;
+
+    refresh_reconciled_state(pool, payment_id).await?;
+
+    Ok(())
+}
+
+/// Атомарно замінити всі links платежу на новий набір allocation-ів.
+pub async fn reconcile_split_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    payment_id: Uuid,
+    allocations: &[PaymentReconcileAllocation],
+) -> Result<()> {
+    let payment_amount = payment_amount_scoped(pool, company_id, payment_id).await?;
+    anyhow::ensure!(
+        !allocations.is_empty(),
+        "Для split reconcile потрібен хоча б один allocation"
+    );
+    let total_allocated = allocations
+        .iter()
+        .fold(rust_decimal::Decimal::ZERO, |sum, allocation| sum + allocation.amount);
+    anyhow::ensure!(
+        total_allocated <= payment_amount,
+        "Сума звірки перевищує суму платежу"
+    );
+
+    for allocation in allocations {
+        match allocation.document_kind.as_str() {
+            "act" => {
+                ensure_act_in_company(pool, company_id, allocation.document_id).await?;
+                let available =
+                    act_available_amount_for_payment(pool, company_id, payment_id, allocation.document_id).await?;
+                anyhow::ensure!(
+                    allocation.amount <= available,
+                    "Сума звірки перевищує доступний залишок документа"
+                );
+            }
+            "invoice" => {
+                ensure_invoice_in_company(pool, company_id, allocation.document_id).await?;
+                let available = invoice_available_amount_for_payment(
+                    pool,
+                    company_id,
+                    payment_id,
+                    allocation.document_id,
+                )
+                .await?;
+                anyhow::ensure!(
+                    allocation.amount <= available,
+                    "Сума звірки перевищує доступний залишок документа"
+                );
+            }
+            other => anyhow::bail!("Невідомий тип документу: {other}"),
+        }
+    }
+
+    let mut tx = pool.begin().await?;
+
+    sqlx::query("DELETE FROM payment_acts WHERE payment_id = $1")
+        .bind(payment_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM payment_invoices WHERE payment_id = $1")
+        .bind(payment_id)
+        .execute(&mut *tx)
+        .await?;
+
+    for allocation in allocations {
+        match allocation.document_kind.as_str() {
+            "act" => {
+                ensure_act_in_company(pool, company_id, allocation.document_id).await?;
+                sqlx::query(
+                    r#"
+                    INSERT INTO payment_acts (payment_id, act_id, amount)
+                    VALUES ($1, $2, $3)
+                    ON CONFLICT (payment_id, act_id) DO UPDATE SET amount = $3
+                    "#,
+                )
+                .bind(payment_id)
+                .bind(allocation.document_id)
+                .bind(allocation.amount)
+                .execute(&mut *tx)
+                .await?;
+            }
+            "invoice" => {
+                ensure_invoice_in_company(pool, company_id, allocation.document_id).await?;
+                sqlx::query(
+                    r#"
+                    INSERT INTO payment_invoices (payment_id, invoice_id, amount)
+                    VALUES ($1, $2, $3)
+                    ON CONFLICT (payment_id, invoice_id) DO UPDATE SET amount = $3
+                    "#,
+                )
+                .bind(payment_id)
+                .bind(allocation.document_id)
+                .bind(allocation.amount)
+                .execute(&mut *tx)
+                .await?;
+            }
+            other => anyhow::bail!("Невідомий тип документу: {other}"),
+        }
+    }
+
+    refresh_reconciled_state_tx(&mut tx, payment_id).await?;
+    tx.commit().await?;
+
+    Ok(())
+}
+
+async fn refresh_reconciled_state(pool: &PgPool, payment_id: Uuid) -> Result<()> {
+    sqlx::query(
+        r#"
+        UPDATE payments
+        SET is_reconciled = (
+                EXISTS(SELECT 1 FROM payment_acts WHERE payment_id = $1)
+                OR EXISTS(SELECT 1 FROM payment_invoices WHERE payment_id = $1)
+            ),
+            updated_at = NOW()
+        WHERE id = $1
+        "#,
+    )
+    .bind(payment_id)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+async fn refresh_reconciled_state_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    payment_id: Uuid,
+) -> Result<()> {
+    sqlx::query(
+        r#"
+        UPDATE payments
+        SET is_reconciled = (
+                EXISTS(SELECT 1 FROM payment_acts WHERE payment_id = $1)
+                OR EXISTS(SELECT 1 FROM payment_invoices WHERE payment_id = $1)
+            ),
+            updated_at = NOW()
+        WHERE id = $1
+        "#,
+    )
+    .bind(payment_id)
+    .execute(&mut **tx)
+    .await?;
+
     Ok(())
 }
 
