@@ -1,7 +1,17 @@
 use std::path::PathBuf;
 
 use crate::app_ctx::AppCtx;
-use crate::models::payment::PaymentDirection;
+use crate::db::counterparties::get_name_by_id as get_counterparty_name_by_id;
+use crate::db::reports::{
+    compute_opening_balance, load_bank_rows, load_payables_rows, load_pnl_rows,
+    load_receivables_rows, load_top_counterparties_bank, load_top_counterparties_payables,
+    load_top_counterparties_pnl, load_top_counterparties_receivables,
+};
+use crate::models::reports::{
+    BankAggregateRow, PayableRow, ReceivableRow, ReportsScope, ResolvedReportsFilter,
+    TopCounterpartyRow,
+};
+use crate::tauri_api::reports_excel::export_excel_bytes;
 use anyhow::{anyhow, Context, Result};
 use chrono::{Local, NaiveDate};
 use rust_decimal::Decimal;
@@ -16,6 +26,7 @@ pub struct ReportsLoadRequest {
     pub date_from: Option<String>,
     pub date_to: Option<String>,
     pub query: Option<String>,
+    pub selected_counterparty_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -26,6 +37,25 @@ pub struct ReportsFilterDto {
     pub date_from: String,
     pub date_to: String,
     pub query: String,
+    pub selected_counterparty_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SelectedCounterpartyDto {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TopCounterpartyRowDto {
+    pub counterparty_id: String,
+    pub counterparty_name: String,
+    pub primary_amount_str: String,
+    pub secondary_label: String,
+    pub secondary_value: String,
+    pub share_percent: u8,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -37,6 +67,9 @@ pub struct ReportsSummaryDto {
     pub closing_balance_str: String,
     pub receivables_total_str: String,
     pub payables_total_str: String,
+    pub pnl_income_str: String,
+    pub pnl_expense_str: String,
+    pub pnl_net_result_str: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -81,8 +114,11 @@ pub struct PayableRowDto {
 #[serde(rename_all = "camelCase")]
 pub struct ReportsScreenDto {
     pub filter: ReportsFilterDto,
+    pub selected_counterparty: Option<SelectedCounterpartyDto>,
+    pub top_counterparties: Vec<TopCounterpartyRowDto>,
     pub summary: ReportsSummaryDto,
     pub bank_rows: Vec<BankReportRowDto>,
+    pub pnl_rows: Vec<BankReportRowDto>,
     pub receivables_rows: Vec<ReceivableRowDto>,
     pub payables_rows: Vec<PayableRowDto>,
 }
@@ -95,6 +131,7 @@ pub struct ReportsExportRequest {
     pub date_from: String,
     pub date_to: String,
     pub query: String,
+    pub selected_counterparty_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -103,50 +140,6 @@ pub struct ReportsExportResultDto {
     pub ok: bool,
     pub path: String,
     pub message: String,
-}
-
-#[derive(Clone, Copy)]
-enum ReportsScope {
-    Active,
-    All,
-}
-
-struct ResolvedFilter {
-    scope: ReportsScope,
-    date_from: NaiveDate,
-    date_to: NaiveDate,
-    query: String,
-}
-
-struct BankAggregateRow {
-    key: String,
-    label: String,
-    income: Decimal,
-    expense: Decimal,
-}
-
-struct ReceivableRow {
-    doc_id: String,
-    doc_type: String,
-    doc_number: String,
-    doc_date: NaiveDate,
-    company_name: String,
-    counterparty: String,
-    amount: Decimal,
-    expected_date: Option<NaiveDate>,
-    overdue_days: i32,
-    status: String,
-}
-
-struct PayableRow {
-    id: String,
-    title: String,
-    company_name: String,
-    counterparty: String,
-    amount: Decimal,
-    due_date: NaiveDate,
-    overdue_days: i32,
-    recurrence: String,
 }
 
 fn format_money_ua(value: Decimal) -> String {
@@ -180,17 +173,6 @@ fn parse_ui_date(value: Option<&str>, fallback: NaiveDate, field: &str) -> Resul
         .with_context(|| format!("Некоректна дата у полі {field}: {value}"))
 }
 
-fn query_matches(haystacks: &[&str], query: &str) -> bool {
-    if query.is_empty() {
-        return true;
-    }
-
-    let query = query.to_lowercase();
-    haystacks
-        .iter()
-        .any(|value| value.to_lowercase().contains(&query))
-}
-
 fn reports_dir() -> PathBuf {
     PathBuf::from("storage/reports")
 }
@@ -202,7 +184,7 @@ fn report_stamp() -> String {
 fn resolve_filter(
     request: ReportsLoadRequest,
     today: NaiveDate,
-) -> Result<(ResolvedFilter, ReportsFilterDto)> {
+) -> Result<(ResolvedReportsFilter, ReportsFilterDto)> {
     let date_to = parse_ui_date(request.date_to.as_deref(), today, "Дата до")?;
     let default_from = date_to - chrono::Days::new(89);
     let date_from = parse_ui_date(request.date_from.as_deref(), default_from, "Дата від")?;
@@ -211,6 +193,7 @@ fn resolve_filter(
     }
 
     let tab = match request.tab.as_deref() {
+        Some("pnl") => "pnl".to_string(),
         Some("receivables") => "receivables".to_string(),
         Some("payables") => "payables".to_string(),
         _ => "bank".to_string(),
@@ -222,13 +205,18 @@ fn resolve_filter(
     };
 
     let query = request.query.unwrap_or_default().trim().to_string();
+    let selected_counterparty_id = request
+        .selected_counterparty_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
 
     Ok((
-        ResolvedFilter {
+        ResolvedReportsFilter {
             scope,
             date_from,
             date_to,
             query: query.clone(),
+            selected_counterparty_id: selected_counterparty_id.clone(),
         },
         ReportsFilterDto {
             tab,
@@ -239,329 +227,9 @@ fn resolve_filter(
             date_from: date_from.format("%Y-%m-%d").to_string(),
             date_to: date_to.format("%Y-%m-%d").to_string(),
             query,
+            selected_counterparty_id,
         },
     ))
-}
-
-async fn load_bank_rows(ctx: &AppCtx, filter: &ResolvedFilter) -> Result<Vec<BankAggregateRow>> {
-    struct Row {
-        key: String,
-        label: String,
-        income: Decimal,
-        expense: Decimal,
-    }
-
-    impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Row {
-        fn from_row(row: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
-            use sqlx::Row as _;
-
-            Ok(Self {
-                key: row.try_get("key")?,
-                label: row.try_get("label")?,
-                income: row.try_get("income")?,
-                expense: row.try_get("expense")?,
-            })
-        }
-    }
-
-    let company_id = match filter.scope {
-        ReportsScope::Active => Some(ctx.company_id()),
-        ReportsScope::All => None,
-    };
-
-    let rows = if matches!(filter.scope, ReportsScope::All) {
-        sqlx::query_as::<_, Row>(
-            r#"
-            SELECT
-                c.id::text AS key,
-                c.name AS label,
-                COALESCE(SUM(CASE WHEN p.direction = 'income' THEN p.amount ELSE 0 END), 0) AS income,
-                COALESCE(SUM(CASE WHEN p.direction = 'expense' THEN p.amount ELSE 0 END), 0) AS expense
-            FROM companies c
-            LEFT JOIN payments p
-                ON p.company_id = c.id
-               AND p.date BETWEEN $1 AND $2
-            GROUP BY c.id, c.name
-            ORDER BY c.name
-            "#,
-        )
-        .bind(filter.date_from)
-        .bind(filter.date_to)
-        .fetch_all(ctx.pool())
-        .await?
-    } else {
-        sqlx::query_as::<_, Row>(
-            r#"
-            SELECT
-                COALESCE(cp.id::text, 'uncategorized') AS key,
-                COALESCE(cp.name, COALESCE(p.bank_name, 'Без контрагента')) AS label,
-                COALESCE(SUM(CASE WHEN p.direction = 'income' THEN p.amount ELSE 0 END), 0) AS income,
-                COALESCE(SUM(CASE WHEN p.direction = 'expense' THEN p.amount ELSE 0 END), 0) AS expense
-            FROM payments p
-            LEFT JOIN counterparties cp ON cp.id = p.counterparty_id
-            WHERE p.company_id = $1
-              AND p.date BETWEEN $2 AND $3
-            GROUP BY cp.id, cp.name, p.bank_name
-            ORDER BY label
-            "#,
-        )
-        .bind(company_id.expect("active company scope"))
-        .bind(filter.date_from)
-        .bind(filter.date_to)
-        .fetch_all(ctx.pool())
-        .await?
-    };
-
-    Ok(rows
-        .into_iter()
-        .filter(|row| query_matches(&[&row.label], &filter.query))
-        .map(|row| BankAggregateRow {
-            key: row.key,
-            label: row.label,
-            income: row.income,
-            expense: row.expense,
-        })
-        .collect())
-}
-
-async fn load_receivables_rows(
-    ctx: &AppCtx,
-    filter: &ResolvedFilter,
-) -> Result<Vec<ReceivableRow>> {
-    struct Row {
-        doc_id: String,
-        doc_type: String,
-        doc_number: String,
-        doc_date: NaiveDate,
-        company_name: String,
-        counterparty: String,
-        amount: Decimal,
-        expected_date: Option<NaiveDate>,
-        overdue_days: Option<i32>,
-        status: String,
-    }
-
-    impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Row {
-        fn from_row(row: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
-            use sqlx::Row as _;
-
-            Ok(Self {
-                doc_id: row.try_get("doc_id")?,
-                doc_type: row.try_get("doc_type")?,
-                doc_number: row.try_get("doc_number")?,
-                doc_date: row.try_get("doc_date")?,
-                company_name: row.try_get("company_name")?,
-                counterparty: row.try_get("counterparty")?,
-                amount: row.try_get("amount")?,
-                expected_date: row.try_get("expected_date")?,
-                overdue_days: row.try_get("overdue_days")?,
-                status: row.try_get("status")?,
-            })
-        }
-    }
-
-    let company_id = match filter.scope {
-        ReportsScope::Active => Some(ctx.company_id()),
-        ReportsScope::All => None,
-    };
-
-    let rows = sqlx::query_as::<_, Row>(
-        r#"
-        SELECT
-            a.id::TEXT AS doc_id,
-            'act'::TEXT AS doc_type,
-            a.number AS doc_number,
-            a.date AS doc_date,
-            c.name AS company_name,
-            cp.name AS counterparty,
-            a.total_amount AS amount,
-            a.expected_payment_date AS expected_date,
-            CASE
-                WHEN a.expected_payment_date IS NOT NULL
-                THEN GREATEST(0, ($2::date - a.expected_payment_date))
-                ELSE 0
-            END::int AS overdue_days,
-            a.status::TEXT AS status
-        FROM acts a
-        JOIN companies c ON c.id = a.company_id
-        JOIN counterparties cp ON cp.id = a.counterparty_id
-        WHERE ($1::uuid IS NULL OR a.company_id = $1::uuid)
-          AND a.date BETWEEN $3 AND $4
-          AND a.status NOT IN ('paid', 'draft')
-
-        UNION ALL
-
-        SELECT
-            i.id::TEXT AS doc_id,
-            'invoice'::TEXT AS doc_type,
-            i.number AS doc_number,
-            i.date AS doc_date,
-            c.name AS company_name,
-            cp.name AS counterparty,
-            i.total_amount AS amount,
-            i.expected_payment_date AS expected_date,
-            CASE
-                WHEN i.expected_payment_date IS NOT NULL
-                THEN GREATEST(0, ($2::date - i.expected_payment_date))
-                ELSE 0
-            END::int AS overdue_days,
-            i.status::TEXT AS status
-        FROM invoices i
-        JOIN companies c ON c.id = i.company_id
-        JOIN counterparties cp ON cp.id = i.counterparty_id
-        WHERE ($1::uuid IS NULL OR i.company_id = $1::uuid)
-          AND i.date BETWEEN $3 AND $4
-          AND i.status NOT IN ('paid', 'draft')
-
-        ORDER BY overdue_days DESC, doc_date ASC
-        "#,
-    )
-    .bind(company_id)
-    .bind(filter.date_to)
-    .bind(filter.date_from)
-    .bind(filter.date_to)
-    .fetch_all(ctx.pool())
-    .await?;
-
-    Ok(rows
-        .into_iter()
-        .filter(|row| {
-            query_matches(
-                &[
-                    &row.doc_number,
-                    &row.counterparty,
-                    &row.company_name,
-                    &row.status,
-                ],
-                &filter.query,
-            )
-        })
-        .map(|row| ReceivableRow {
-            doc_id: row.doc_id,
-            doc_type: row.doc_type,
-            doc_number: row.doc_number,
-            doc_date: row.doc_date,
-            company_name: row.company_name,
-            counterparty: row.counterparty,
-            amount: row.amount,
-            expected_date: row.expected_date,
-            overdue_days: row.overdue_days.unwrap_or(0),
-            status: row.status,
-        })
-        .collect())
-}
-
-async fn load_payables_rows(ctx: &AppCtx, filter: &ResolvedFilter) -> Result<Vec<PayableRow>> {
-    struct Row {
-        id: String,
-        title: String,
-        company_name: String,
-        counterparty: Option<String>,
-        amount: Option<Decimal>,
-        due_date: NaiveDate,
-        overdue_days: i32,
-        recurrence: String,
-    }
-
-    impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Row {
-        fn from_row(row: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
-            use sqlx::Row as _;
-
-            Ok(Self {
-                id: row.try_get("id")?,
-                title: row.try_get("title")?,
-                company_name: row.try_get("company_name")?,
-                counterparty: row.try_get("counterparty")?,
-                amount: row.try_get("amount")?,
-                due_date: row.try_get("due_date")?,
-                overdue_days: row.try_get("overdue_days")?,
-                recurrence: row.try_get("recurrence")?,
-            })
-        }
-    }
-
-    let company_id = match filter.scope {
-        ReportsScope::Active => Some(ctx.company_id()),
-        ReportsScope::All => None,
-    };
-
-    let rows = sqlx::query_as::<_, Row>(
-        r#"
-        SELECT
-            ps.id::TEXT AS id,
-            ps.title AS title,
-            c.name AS company_name,
-            cp.name AS counterparty,
-            ps.amount AS amount,
-            ps.scheduled_date AS due_date,
-            GREATEST(0, ($2::date - ps.scheduled_date))::int AS overdue_days,
-            ps.recurrence::TEXT AS recurrence
-        FROM payment_schedule ps
-        JOIN companies c ON c.id = ps.company_id
-        LEFT JOIN counterparties cp ON cp.id = ps.counterparty_id
-        WHERE ($1::uuid IS NULL OR ps.company_id = $1::uuid)
-          AND ps.direction = $3
-          AND ps.is_completed = FALSE
-          AND ps.scheduled_date BETWEEN $4 AND $5
-        ORDER BY ps.scheduled_date ASC
-        "#,
-    )
-    .bind(company_id)
-    .bind(filter.date_to)
-    .bind(PaymentDirection::Expense)
-    .bind(filter.date_from)
-    .bind(filter.date_to)
-    .fetch_all(ctx.pool())
-    .await?;
-
-    Ok(rows
-        .into_iter()
-        .filter(|row| {
-            query_matches(
-                &[
-                    &row.title,
-                    &row.company_name,
-                    row.counterparty.as_deref().unwrap_or(""),
-                ],
-                &filter.query,
-            )
-        })
-        .map(|row| PayableRow {
-            id: row.id,
-            title: row.title,
-            company_name: row.company_name,
-            counterparty: row.counterparty.unwrap_or_default(),
-            amount: row.amount.unwrap_or(Decimal::ZERO),
-            due_date: row.due_date,
-            overdue_days: row.overdue_days,
-            recurrence: row.recurrence,
-        })
-        .collect())
-}
-
-async fn compute_opening_balance(ctx: &AppCtx, filter: &ResolvedFilter) -> Result<Decimal> {
-    let company_id = match filter.scope {
-        ReportsScope::Active => Some(ctx.company_id()),
-        ReportsScope::All => None,
-    };
-
-    let value = sqlx::query_scalar::<_, Decimal>(
-        r#"
-        SELECT COALESCE(
-            SUM(CASE WHEN direction = 'income' THEN amount ELSE -amount END),
-            0
-        ) AS balance
-        FROM payments
-        WHERE ($1::uuid IS NULL OR company_id = $1::uuid)
-          AND date < $2
-        "#,
-    )
-    .bind(company_id)
-    .bind(filter.date_from)
-    .fetch_one(ctx.pool())
-    .await?;
-
-    Ok(value)
 }
 
 fn bank_rows_to_dto(rows: Vec<BankAggregateRow>) -> Vec<BankReportRowDto> {
@@ -611,6 +279,19 @@ fn payables_to_dto(rows: Vec<PayableRow>) -> Vec<PayableRowDto> {
         .collect()
 }
 
+fn top_counterparties_to_dto(rows: Vec<TopCounterpartyRow>) -> Vec<TopCounterpartyRowDto> {
+    rows.into_iter()
+        .map(|row| TopCounterpartyRowDto {
+            counterparty_id: row.counterparty_id,
+            counterparty_name: row.counterparty_name,
+            primary_amount_str: format_money_ua(row.primary_amount),
+            secondary_label: row.secondary_label,
+            secondary_value: format_money_ua(row.secondary_value),
+            share_percent: row.share_percent,
+        })
+        .collect()
+}
+
 fn sum_receivables(rows: &[ReceivableRow]) -> Decimal {
     rows.iter().fold(Decimal::ZERO, |acc, row| acc + row.amount)
 }
@@ -621,13 +302,53 @@ fn sum_payables(rows: &[PayableRow]) -> Decimal {
 
 async fn build_reports_screen(
     ctx: &AppCtx,
-    filter: ResolvedFilter,
+    filter: ResolvedReportsFilter,
     filter_dto: ReportsFilterDto,
 ) -> Result<ReportsScreenDto> {
-    let opening_balance = compute_opening_balance(ctx, &filter).await?;
-    let bank_rows = load_bank_rows(ctx, &filter).await?;
-    let receivables_rows = load_receivables_rows(ctx, &filter).await?;
-    let payables_rows = load_payables_rows(ctx, &filter).await?;
+    let (opening_balance, bank_rows, pnl_rows, receivables_rows, payables_rows) = tokio::try_join!(
+        compute_opening_balance(ctx, &filter),
+        load_bank_rows(ctx, &filter),
+        load_pnl_rows(ctx, &filter),
+        load_receivables_rows(ctx, &filter),
+        load_payables_rows(ctx, &filter),
+    )?;
+
+    let top_counterparties = match filter_dto.tab.as_str() {
+        "receivables" => load_top_counterparties_receivables(ctx, &filter).await?,
+        "payables" => load_top_counterparties_payables(ctx, &filter).await?,
+        "pnl" => load_top_counterparties_pnl(ctx, &filter).await?,
+        _ => load_top_counterparties_bank(ctx, &filter).await?,
+    };
+
+    let selected_counterparty = if let Some(id) = filter.selected_counterparty_id.as_ref() {
+        // Primary: find in already-loaded top_counterparties (avoids extra round-trip)
+        if let Some(found) = top_counterparties.iter().find(|r| &r.counterparty_id == id) {
+            Some(SelectedCounterpartyDto {
+                id: found.counterparty_id.clone(),
+                name: found.counterparty_name.clone(),
+            })
+        } else {
+            // Fallback: direct lookup when counterparty falls outside top-8
+            if let Ok(uuid) = uuid::Uuid::parse_str(id) {
+                get_counterparty_name_by_id(ctx.pool(), ctx.company_id(), uuid)
+                    .await?
+                    .map(|name| SelectedCounterpartyDto { id: id.clone(), name })
+            } else if let Some(name) = id
+                .strip_prefix("bank-name:")
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
+                Some(SelectedCounterpartyDto {
+                    id: id.clone(),
+                    name: name.to_string(),
+                })
+            } else {
+                None
+            }
+        }
+    } else {
+        None
+    };
 
     let income = bank_rows
         .iter()
@@ -636,11 +357,20 @@ async fn build_reports_screen(
         .iter()
         .fold(Decimal::ZERO, |acc, row| acc + row.expense);
     let closing_balance = opening_balance + income - expense;
+    let pnl_income = pnl_rows
+        .iter()
+        .fold(Decimal::ZERO, |acc, row| acc + row.income);
+    let pnl_expense = pnl_rows
+        .iter()
+        .fold(Decimal::ZERO, |acc, row| acc + row.expense);
+    let pnl_net_result = pnl_income - pnl_expense;
     let receivables_total = sum_receivables(&receivables_rows);
     let payables_total = sum_payables(&payables_rows);
 
     Ok(ReportsScreenDto {
         filter: filter_dto,
+        selected_counterparty,
+        top_counterparties: top_counterparties_to_dto(top_counterparties),
         summary: ReportsSummaryDto {
             opening_balance_str: format_money_ua(opening_balance),
             income_str: format_money_ua(income),
@@ -648,8 +378,12 @@ async fn build_reports_screen(
             closing_balance_str: format_money_ua(closing_balance),
             receivables_total_str: format_money_ua(receivables_total),
             payables_total_str: format_money_ua(payables_total),
+            pnl_income_str: format_money_ua(pnl_income),
+            pnl_expense_str: format_money_ua(pnl_expense),
+            pnl_net_result_str: format_money_ua(pnl_net_result),
         },
         bank_rows: bank_rows_to_dto(bank_rows),
+        pnl_rows: bank_rows_to_dto(pnl_rows),
         receivables_rows: receivables_to_dto(receivables_rows),
         payables_rows: payables_to_dto(payables_rows),
     })
@@ -681,7 +415,17 @@ fn export_csv_content(screen: &ReportsScreenDto) -> String {
         ));
     }
 
-    out.push_str("\nreceivables,number,type,date,company,counterparty,amount,expected_date,overdue_days,status\n");
+    out.push_str("\npnl,label,income,expense,net\n");
+    for row in &screen.pnl_rows {
+        out.push_str(&format!(
+            "pnl,{},{},{},{}\n",
+            row.label, row.income_str, row.expense_str, row.net_str
+        ));
+    }
+
+    out.push_str(
+        "\nreceivables,number,type,date,company,counterparty,amount,expected_date,overdue_days,status\n",
+    );
     for row in &screen.receivables_rows {
         out.push_str(&format!(
             "receivable,{},{},{},{},{},{},{},{},{}\n",
@@ -732,6 +476,7 @@ pub async fn reports_export_csv(
             date_from: Some(request.date_from),
             date_to: Some(request.date_to),
             query: Some(request.query),
+            selected_counterparty_id: request.selected_counterparty_id,
         },
     )
     .await?;
@@ -744,5 +489,50 @@ pub async fn reports_export_csv(
         ok: true,
         path: path.to_string_lossy().into_owned(),
         message: "Звіт експортовано у CSV".to_string(),
+    })
+}
+
+pub async fn reports_export_excel(
+    ctx: &AppCtx,
+    request: ReportsExportRequest,
+) -> Result<ReportsExportResultDto> {
+    let screen = reports_load(
+        ctx,
+        ReportsLoadRequest {
+            tab: Some(request.tab),
+            scope: Some(request.scope),
+            date_from: Some(request.date_from),
+            date_to: Some(request.date_to),
+            query: Some(request.query),
+            selected_counterparty_id: request.selected_counterparty_id,
+        },
+    )
+    .await?;
+
+    fs::create_dir_all(reports_dir()).await?;
+    let path = reports_dir().join(format!("reports-{}.xlsx", report_stamp()));
+    fs::write(&path, export_excel_bytes(&screen)?).await?;
+
+    Ok(ReportsExportResultDto {
+        ok: true,
+        path: path.to_string_lossy().into_owned(),
+        message: "Звіт експортовано у Excel".to_string(),
+    })
+}
+
+pub async fn reports_export_excel_and_open(
+    ctx: &AppCtx,
+    request: ReportsExportRequest,
+) -> Result<ReportsExportResultDto> {
+    let result = reports_export_excel(ctx, request).await?;
+    let open_path = PathBuf::from(&result.path);
+    if let Ok(Err(error)) = tokio::task::spawn_blocking(move || open::that(open_path)).await {
+        tracing::warn!("reports: не вдалося відкрити Excel: {error}");
+    }
+
+    Ok(ReportsExportResultDto {
+        ok: result.ok,
+        path: result.path,
+        message: "Звіт експортовано у Excel і відкрито".to_string(),
     })
 }

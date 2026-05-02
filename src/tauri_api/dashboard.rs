@@ -90,6 +90,7 @@ pub async fn dashboard_load(ctx: &AppCtx) -> Result<DashboardScreenDto> {
         date_from: None,
         date_to: None,
         query: None,
+        selected_counterparty_id: None,
     };
 
     let (reports, documents, payments, payment_rows, tasks) = tokio::try_join!(

@@ -4,6 +4,7 @@ pub mod documents;
 pub mod import;
 pub mod payments;
 pub mod reports;
+pub mod reports_excel;
 pub mod settings;
 pub mod shell;
 pub mod tasks;
