@@ -14,6 +14,8 @@
   let createKind: DocumentKind = "act";
   let selectedCounterpartyName = "";
   let lastDraftContextCounterpartyId = "";
+  let createButton: HTMLButtonElement | null = null;
+  let createCounterpartySelect: HTMLSelectElement | null = null;
 
   const documentKindLabels: Record<DocumentKind, string> = {
     invoice: "Рахунок",
@@ -70,6 +72,15 @@
     void documents.create(createCounterpartyId, createKind);
   }
 
+  function focusCreateButton() {
+    if (!createCounterpartyId) {
+      createCounterpartySelect?.focus();
+      return;
+    }
+
+    createButton?.focus();
+  }
+
   function onEditorNumberChange(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
     documents.updateFormField("number", input.value);
@@ -95,6 +106,10 @@
   }
 
   function onDeleteCurrent() {
+    if (!window.confirm("Видалити поточний документ? Цю дію не можна скасувати.")) {
+      return;
+    }
+
     void documents.deleteCurrent();
   }
 
@@ -115,6 +130,10 @@
   }
 
   function onBulkDelete() {
+    if (!window.confirm("Видалити вибрані документи? Цю дію не можна скасувати.")) {
+      return;
+    }
+
     void documents.bulkDelete();
   }
 
@@ -411,7 +430,7 @@
     <div class="create-strip">
       <label class="create-strip-field">
         <span>Контрагент</span>
-        <select bind:value={createCounterpartyId} disabled={$documents.loading}>
+        <select bind:this={createCounterpartySelect} bind:value={createCounterpartyId} disabled={$documents.loading}>
           <option value="">— Оберіть контрагента —</option>
           {#each $counterparties.screen?.items ?? [] as cp}
             <option value={cp.id}>{cp.name}</option>
@@ -429,8 +448,10 @@
       </label>
 
         <button
+          bind:this={createButton}
           class="btn-primary create-doc-button"
           data-testid="documents-create-button"
+          type="button"
           disabled={!createCounterpartyId || $documents.loading}
           on:click={onCreateDraft}
           aria-busy={$documents.loading ? "true" : "false"}
@@ -504,8 +525,19 @@
     <SkeletonRow count={5} />
   {:else if ($documents.list?.items.length ?? 0) === 0}
     <div class="empty-state-card" data-testid="documents-empty-state">
+      <span class="empty-state-eyebrow">Почніть зі сценарію</span>
       <strong>Поки що документів немає</strong>
       <p>Почніть зі створення першого рахунку, акта або накладної, щоб запустити повний сценарій документа.</p>
+      <div class="empty-state-actions">
+        <button
+          class="btn-primary"
+          type="button"
+          data-testid="documents-empty-primary-action"
+          on:click={focusCreateButton}
+        >
+          РЎС‚РІРѕСЂРёС‚Рё РїРµСЂС€РёР№ РґРѕРєСѓРјРµРЅС‚
+        </button>
+      </div>
     </div>
   {:else}
     <div class="documents-list" data-testid="documents-list">
@@ -536,7 +568,7 @@
               </div>
               <div class="doc-row-meta">
                 <span>{item.date}</span>
-                <span>{item.amountStr}</span>
+                <span class="money-value" data-negative={item.amountStr.trim().startsWith("-")}>{item.amountStr}</span>
                 <span class="doc-kind-badge">
                   <AppIcon name={getDocumentKindIcon(item.kind)} size={14} />
                   <span>{getDocumentKindLabel(item.kind)}</span>

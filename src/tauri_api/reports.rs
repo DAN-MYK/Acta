@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use crate::app_ctx::AppCtx;
+use crate::db::counterparties::get_name_by_id as get_counterparty_name_by_id;
 use crate::db::reports::{
     compute_opening_balance, load_bank_rows, load_payables_rows, load_pnl_rows,
     load_receivables_rows, load_top_counterparties_bank, load_top_counterparties_payables,
@@ -329,13 +330,18 @@ async fn build_reports_screen(
         } else {
             // Fallback: direct lookup when counterparty falls outside top-8
             if let Ok(uuid) = uuid::Uuid::parse_str(id) {
-                sqlx::query_scalar::<_, String>(
-                    "SELECT name FROM counterparties WHERE id = $1"
-                )
-                .bind(uuid)
-                .fetch_optional(ctx.pool())
-                .await?
-                .map(|name| SelectedCounterpartyDto { id: id.clone(), name })
+                get_counterparty_name_by_id(ctx.pool(), ctx.company_id(), uuid)
+                    .await?
+                    .map(|name| SelectedCounterpartyDto { id: id.clone(), name })
+            } else if let Some(name) = id
+                .strip_prefix("bank-name:")
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
+                Some(SelectedCounterpartyDto {
+                    id: id.clone(),
+                    name: name.to_string(),
+                })
             } else {
                 None
             }

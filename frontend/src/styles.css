@@ -466,6 +466,24 @@ textarea {
   margin: 0;
 }
 
+.empty-state-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-soft) 80%, var(--bg-card));
+  color: var(--accent-text);
+  font-size: var(--font-sm);
+  font-weight: 600;
+}
+
+.empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .message {
   color: var(--success);
 }
@@ -553,6 +571,7 @@ textarea {
 }
 
 .currency,
+.money-value,
 .dashboard-kpi-card strong,
 .documents-focus-card strong,
 .reports-focus-card strong,
@@ -562,6 +581,16 @@ textarea {
 .cashflow-income,
 .cashflow-expense {
   font-variant-numeric: tabular-nums;
+}
+
+.money-value {
+  font-feature-settings: "tnum" 1;
+  font-weight: 600;
+  color: var(--money-positive);
+}
+
+.money-value[data-negative="true"] {
+  color: var(--money-negative);
 }
 
 .tabs-pill {

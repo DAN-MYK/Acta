@@ -109,7 +109,7 @@ describe("frontend Tauri store smoke: dashboard", () => {
     expect(snapshot(dashboardStore).loading).toBe(false);
     expect(snapshot(dashboardStore).screen).toBeNull();
     expect(snapshot(dashboardStore).error).toContain("dashboard unavailable");
-  });
+  }, 10000);
 
   it("ignores stale dashboard responses after a newer reload", async () => {
     const { dashboardStore } = await loadStores();

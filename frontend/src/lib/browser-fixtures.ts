@@ -228,11 +228,14 @@ function reportsScreen(filter?: ReportsFilterDto): ReportsScreenDto {
     scope: filter?.scope ?? "active",
     dateFrom: filter?.dateFrom ?? "2026-02-01",
     dateTo: filter?.dateTo ?? "2026-05-01",
-    query: filter?.query ?? ""
+    query: filter?.query ?? "",
+    selectedCounterpartyId: filter?.selectedCounterpartyId ?? null
   };
 
   return {
     filter: resolvedFilter,
+    selectedCounterparty: null,
+    topCounterparties: [],
     summary: {
       openingBalanceStr: "125 000,00 грн",
       incomeStr: "48 200,00 грн",
@@ -605,6 +608,28 @@ export async function browserFixtureInvoke<T>(command: string, payload?: Record<
       return clone({ ok: true, message: "Платіж збережено" } satisfies MutationResultDto) as T;
     case "payment_reconcile":
       return clone({ ok: true, message: "Платіж зведено" } satisfies MutationResultDto) as T;
+    case "payment_reconcile_split":
+      return clone({
+        ok: true,
+        message: "Розподіл платежу підтверджено",
+        paymentId: "pay-2",
+        allocationCount: 2,
+        totalAllocatedStr: "3 000,00",
+        allocations: [
+          {
+            documentId: "inv-7",
+            documentKind: "invoice",
+            title: "Накладна INV-007",
+            amountStr: "1 500,00"
+          },
+          {
+            documentId: "act-9",
+            documentKind: "act",
+            title: "Акт ACT-009",
+            amountStr: "1 500,00"
+          }
+        ]
+      }) as T;
     case "payment_unreconcile":
       return clone({ ok: true, message: "Зведення скасовано" } satisfies MutationResultDto) as T;
     case "payment_unreconcile_all":

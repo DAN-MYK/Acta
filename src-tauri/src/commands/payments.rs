@@ -2,7 +2,8 @@ use acta::tauri_api::payments::{
     MutationResultDto, OpenTemplateResultDto, PaymentCreateOrUpdateRequest,
     PaymentManualMatchCandidatesDto, PaymentMatchApplyAutoRequest,
     PaymentMatchManualCandidatesRequest, PaymentMatchPreviewDto, PaymentMatchPreviewRequest,
-    PaymentReconcileRequest, PaymentUnreconcileAllRequest, PaymentUnreconcileRequest, PaymentsScreenDto,
+    PaymentReconcileRequest, PaymentReconcileSplitRequest, PaymentReconcileSplitResultDto,
+    PaymentUnreconcileAllRequest, PaymentUnreconcileRequest, PaymentsScreenDto,
 };
 use tauri::State;
 
@@ -58,6 +59,16 @@ pub async fn payment_reconcile(
     request: PaymentReconcileRequest,
 ) -> CommandResult<MutationResultDto> {
     acta::tauri_api::payments::payment_reconcile(&state.ctx, request)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn payment_reconcile_split(
+    state: State<'_, TauriState>,
+    request: PaymentReconcileSplitRequest,
+) -> CommandResult<PaymentReconcileSplitResultDto> {
+    acta::tauri_api::payments::payment_reconcile_split(&state.ctx, request)
         .await
         .map_err(|error| error.to_string())
 }

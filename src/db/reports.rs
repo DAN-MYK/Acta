@@ -10,11 +10,30 @@ use crate::models::reports::{
     TopCounterpartyRow,
 };
 
-fn selected_counterparty_uuid(filter: &ResolvedReportsFilter) -> Option<uuid::Uuid> {
-    filter
-        .selected_counterparty_id
-        .as_deref()
-        .and_then(|v| uuid::Uuid::parse_str(v).ok())
+const BANK_NAME_SELECTOR_PREFIX: &str = "bank-name:";
+
+enum SelectedCounterpartySelector {
+    CounterpartyUuid(uuid::Uuid),
+    BankName(String),
+}
+
+fn selected_counterparty_selector(
+    filter: &ResolvedReportsFilter,
+) -> Option<SelectedCounterpartySelector> {
+    let value = filter.selected_counterparty_id.as_deref()?.trim();
+    if value.is_empty() {
+        return None;
+    }
+
+    if let Ok(uuid) = uuid::Uuid::parse_str(value) {
+        return Some(SelectedCounterpartySelector::CounterpartyUuid(uuid));
+    }
+
+    value
+        .strip_prefix(BANK_NAME_SELECTOR_PREFIX)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| SelectedCounterpartySelector::BankName(value.to_string()))
 }
 
 fn query_matches(haystacks: &[&str], query: &str) -> bool {
@@ -26,6 +45,18 @@ fn query_matches(haystacks: &[&str], query: &str) -> bool {
     haystacks
         .iter()
         .any(|value| value.to_lowercase().contains(&query))
+}
+
+fn query_like_pattern(query: &str) -> String {
+    let mut escaped = String::new();
+    for ch in query.to_lowercase().chars() {
+        if matches!(ch, '%' | '_' | '\\') {
+            escaped.push('\\');
+        }
+        escaped.push(ch);
+    }
+
+    format!("%{escaped}%")
 }
 
 pub async fn load_bank_rows(
@@ -57,7 +88,15 @@ pub async fn load_bank_rows(
         ReportsScope::All => None,
     };
 
-    let selected_cp_id = selected_counterparty_uuid(filter);
+    let selected_selector = selected_counterparty_selector(filter);
+    let selected_cp_id = match &selected_selector {
+        Some(SelectedCounterpartySelector::CounterpartyUuid(uuid)) => Some(*uuid),
+        _ => None,
+    };
+    let selected_bank_name = match &selected_selector {
+        Some(SelectedCounterpartySelector::BankName(name)) => Some(name.as_str()),
+        _ => None,
+    };
 
     let rows = if matches!(filter.scope, ReportsScope::All) {
         sqlx::query_as::<_, Row>(
@@ -72,6 +111,7 @@ pub async fn load_bank_rows(
                 ON p.company_id = c.id
                AND p.date BETWEEN $1 AND $2
                AND ($3::uuid IS NULL OR p.counterparty_id = $3::uuid)
+               AND ($4::text IS NULL OR COALESCE(NULLIF(p.bank_name, ''), 'uncategorized') = $4)
             GROUP BY c.id, c.name
             ORDER BY c.name
             "#,
@@ -79,14 +119,15 @@ pub async fn load_bank_rows(
         .bind(filter.date_from)
         .bind(filter.date_to)
         .bind(selected_cp_id)
+        .bind(selected_bank_name)
         .fetch_all(ctx.pool())
         .await?
     } else {
         sqlx::query_as::<_, Row>(
             r#"
             SELECT
-                COALESCE(cp.id::text, 'uncategorized') AS key,
-                COALESCE(cp.name, COALESCE(p.bank_name, 'Без контрагента')) AS label,
+                COALESCE(cp.id::text, CONCAT('bank-name:', COALESCE(NULLIF(p.bank_name, ''), 'uncategorized'))) AS key,
+                COALESCE(cp.name, COALESCE(NULLIF(p.bank_name, ''), 'Без контрагента')) AS label,
                 COALESCE(SUM(CASE WHEN p.direction = 'income' THEN p.amount ELSE 0 END), 0) AS income,
                 COALESCE(SUM(CASE WHEN p.direction = 'expense' THEN p.amount ELSE 0 END), 0) AS expense
             FROM payments p
@@ -94,7 +135,8 @@ pub async fn load_bank_rows(
             WHERE p.company_id = $1
               AND p.date BETWEEN $2 AND $3
               AND ($4::uuid IS NULL OR p.counterparty_id = $4::uuid)
-            GROUP BY cp.id, cp.name, p.bank_name
+              AND ($5::text IS NULL OR COALESCE(NULLIF(p.bank_name, ''), 'uncategorized') = $5)
+            GROUP BY cp.id, cp.name, COALESCE(NULLIF(p.bank_name, ''), 'Без контрагента')
             ORDER BY label
             "#,
         )
@@ -102,6 +144,7 @@ pub async fn load_bank_rows(
         .bind(filter.date_from)
         .bind(filter.date_to)
         .bind(selected_cp_id)
+        .bind(selected_bank_name)
         .fetch_all(ctx.pool())
         .await?
     };
@@ -147,7 +190,10 @@ pub async fn load_pnl_rows(
         ReportsScope::All => None,
     };
 
-    let selected_cp_id = selected_counterparty_uuid(filter);
+    let selected_cp_id = match selected_counterparty_selector(filter) {
+        Some(SelectedCounterpartySelector::CounterpartyUuid(uuid)) => Some(uuid),
+        _ => None,
+    };
 
     let rows = sqlx::query_as::<_, Row>(
         r#"
@@ -248,7 +294,10 @@ pub async fn load_receivables_rows(
         ReportsScope::All => None,
     };
 
-    let selected_cp_id = selected_counterparty_uuid(filter);
+    let selected_cp_id = match selected_counterparty_selector(filter) {
+        Some(SelectedCounterpartySelector::CounterpartyUuid(uuid)) => Some(uuid),
+        _ => None,
+    };
 
     let rows = sqlx::query_as::<_, Row>(
         r#"
@@ -376,7 +425,10 @@ pub async fn load_payables_rows(
         ReportsScope::All => None,
     };
 
-    let selected_cp_id = selected_counterparty_uuid(filter);
+    let selected_cp_id = match selected_counterparty_selector(filter) {
+        Some(SelectedCounterpartySelector::CounterpartyUuid(uuid)) => Some(uuid),
+        _ => None,
+    };
 
     let rows = sqlx::query_as::<_, Row>(
         r#"
@@ -462,30 +514,60 @@ pub async fn load_top_counterparties_bank(
         ReportsScope::Active => Some(ctx.company_id()),
         ReportsScope::All => None,
     };
+    let query_pattern = query_like_pattern(&filter.query);
 
-    let rows = sqlx::query_as::<_, Row>(
-        r#"
-        SELECT
-            cp.id::text AS counterparty_id,
-            cp.name AS counterparty_name,
-            COALESCE(SUM(CASE WHEN p.direction = 'income' THEN p.amount ELSE 0 END), 0) AS income,
-            COALESCE(SUM(CASE WHEN p.direction = 'expense' THEN p.amount ELSE 0 END), 0) AS expense
-        FROM payments p
-        JOIN counterparties cp ON cp.id = p.counterparty_id
-        WHERE ($1::uuid IS NULL OR p.company_id = $1::uuid)
-          AND p.date BETWEEN $2 AND $3
-        GROUP BY cp.id, cp.name
-        ORDER BY (COALESCE(SUM(CASE WHEN p.direction = 'income' THEN p.amount ELSE 0 END), 0)
-                + COALESCE(SUM(CASE WHEN p.direction = 'expense' THEN p.amount ELSE 0 END), 0)) DESC,
-                 cp.name ASC
-        LIMIT 8
-        "#,
-    )
-    .bind(company_id)
-    .bind(filter.date_from)
-    .bind(filter.date_to)
-    .fetch_all(ctx.pool())
-    .await?;
+    let rows = if matches!(filter.scope, ReportsScope::All) {
+        sqlx::query_as::<_, Row>(
+            r#"
+            SELECT
+                COALESCE(cp.id::text, CONCAT('bank-name:', COALESCE(NULLIF(p.bank_name, ''), 'uncategorized'))) AS counterparty_id,
+                COALESCE(cp.name, COALESCE(NULLIF(p.bank_name, ''), 'Без контрагента')) AS counterparty_name,
+                COALESCE(SUM(CASE WHEN p.direction = 'income' THEN p.amount ELSE 0 END), 0) AS income,
+                COALESCE(SUM(CASE WHEN p.direction = 'expense' THEN p.amount ELSE 0 END), 0) AS expense
+            FROM payments p
+            JOIN companies c ON c.id = p.company_id
+            LEFT JOIN counterparties cp ON cp.id = p.counterparty_id
+            WHERE p.date BETWEEN $1 AND $2
+              AND LOWER(c.name) LIKE $3 ESCAPE '\'
+            GROUP BY cp.id, cp.name, COALESCE(NULLIF(p.bank_name, ''), 'Без контрагента')
+            ORDER BY (COALESCE(SUM(CASE WHEN p.direction = 'income' THEN p.amount ELSE 0 END), 0)
+                    + COALESCE(SUM(CASE WHEN p.direction = 'expense' THEN p.amount ELSE 0 END), 0)) DESC,
+                     counterparty_name ASC
+            LIMIT 8
+            "#,
+        )
+        .bind(filter.date_from)
+        .bind(filter.date_to)
+        .bind(&query_pattern)
+        .fetch_all(ctx.pool())
+        .await?
+    } else {
+        sqlx::query_as::<_, Row>(
+            r#"
+            SELECT
+                COALESCE(cp.id::text, CONCAT('bank-name:', COALESCE(NULLIF(p.bank_name, ''), 'uncategorized'))) AS counterparty_id,
+                COALESCE(cp.name, COALESCE(NULLIF(p.bank_name, ''), 'Без контрагента')) AS counterparty_name,
+                COALESCE(SUM(CASE WHEN p.direction = 'income' THEN p.amount ELSE 0 END), 0) AS income,
+                COALESCE(SUM(CASE WHEN p.direction = 'expense' THEN p.amount ELSE 0 END), 0) AS expense
+            FROM payments p
+            LEFT JOIN counterparties cp ON cp.id = p.counterparty_id
+            WHERE p.company_id = $1
+              AND p.date BETWEEN $2 AND $3
+            GROUP BY cp.id, cp.name, COALESCE(NULLIF(p.bank_name, ''), 'Без контрагента')
+            HAVING LOWER(COALESCE(cp.name, COALESCE(NULLIF(p.bank_name, ''), 'Без контрагента'))) LIKE $4 ESCAPE '\'
+            ORDER BY (COALESCE(SUM(CASE WHEN p.direction = 'income' THEN p.amount ELSE 0 END), 0)
+                    + COALESCE(SUM(CASE WHEN p.direction = 'expense' THEN p.amount ELSE 0 END), 0)) DESC,
+                     counterparty_name ASC
+            LIMIT 8
+            "#,
+        )
+        .bind(company_id.ok_or_else(|| anyhow::anyhow!("active scope потребує активної компанії"))?)
+        .bind(filter.date_from)
+        .bind(filter.date_to)
+        .bind(&query_pattern)
+        .fetch_all(ctx.pool())
+        .await?
+    };
 
     let max_primary = rows
         .iter()
@@ -543,21 +625,50 @@ pub async fn load_top_counterparties_receivables(
         ReportsScope::Active => Some(ctx.company_id()),
         ReportsScope::All => None,
     };
+    let query_pattern = query_like_pattern(&filter.query);
 
     let rows = sqlx::query_as::<_, Row>(
         r#"
         WITH docs AS (
-            SELECT a.counterparty_id, a.total_amount AS amount
+            SELECT
+                a.counterparty_id,
+                cp.name AS counterparty_name,
+                c.name AS company_name,
+                a.number AS doc_number,
+                a.status::text AS status,
+                a.total_amount AS amount
             FROM acts a
+            JOIN companies c ON c.id = a.company_id
+            JOIN counterparties cp ON cp.id = a.counterparty_id
             WHERE ($1::uuid IS NULL OR a.company_id = $1::uuid)
               AND a.date BETWEEN $2 AND $3
               AND a.status NOT IN ('paid', 'draft')
+              AND (
+                    LOWER(cp.name) LIKE $4 ESCAPE '\'
+                 OR LOWER(c.name) LIKE $4 ESCAPE '\'
+                 OR LOWER(a.number) LIKE $4 ESCAPE '\'
+                 OR LOWER(a.status::text) LIKE $4 ESCAPE '\'
+              )
             UNION ALL
-            SELECT i.counterparty_id, i.total_amount AS amount
+            SELECT
+                i.counterparty_id,
+                cp.name AS counterparty_name,
+                c.name AS company_name,
+                i.number AS doc_number,
+                i.status::text AS status,
+                i.total_amount AS amount
             FROM invoices i
+            JOIN companies c ON c.id = i.company_id
+            JOIN counterparties cp ON cp.id = i.counterparty_id
             WHERE ($1::uuid IS NULL OR i.company_id = $1::uuid)
               AND i.date BETWEEN $2 AND $3
               AND i.status NOT IN ('paid', 'draft')
+              AND (
+                    LOWER(cp.name) LIKE $4 ESCAPE '\'
+                 OR LOWER(c.name) LIKE $4 ESCAPE '\'
+                 OR LOWER(i.number) LIKE $4 ESCAPE '\'
+                 OR LOWER(i.status::text) LIKE $4 ESCAPE '\'
+              )
         )
         SELECT
             cp.id::text AS counterparty_id,
@@ -573,6 +684,7 @@ pub async fn load_top_counterparties_receivables(
     .bind(company_id)
     .bind(filter.date_from)
     .bind(filter.date_to)
+    .bind(query_pattern)
     .fetch_all(ctx.pool())
     .await?;
 
@@ -631,6 +743,7 @@ pub async fn load_top_counterparties_payables(
         ReportsScope::Active => Some(ctx.company_id()),
         ReportsScope::All => None,
     };
+    let query_pattern = query_like_pattern(&filter.query);
 
     let rows = sqlx::query_as::<_, Row>(
         r#"
@@ -640,10 +753,16 @@ pub async fn load_top_counterparties_payables(
             COALESCE(SUM(ps.amount), 0) AS total
         FROM payment_schedule ps
         JOIN counterparties cp ON cp.id = ps.counterparty_id
+        JOIN companies c ON c.id = ps.company_id
         WHERE ($1::uuid IS NULL OR ps.company_id = $1::uuid)
           AND ps.direction = 'expense'
           AND ps.is_completed = FALSE
           AND ps.scheduled_date BETWEEN $2 AND $3
+          AND (
+                LOWER(cp.name) LIKE $4 ESCAPE '\'
+             OR LOWER(c.name) LIKE $4 ESCAPE '\'
+             OR LOWER(ps.title) LIKE $4 ESCAPE '\'
+          )
         GROUP BY cp.id, cp.name
         ORDER BY total DESC, cp.name ASC
         LIMIT 8
@@ -652,6 +771,7 @@ pub async fn load_top_counterparties_payables(
     .bind(company_id)
     .bind(filter.date_from)
     .bind(filter.date_to)
+    .bind(query_pattern)
     .fetch_all(ctx.pool())
     .await?;
 
@@ -712,6 +832,7 @@ pub async fn load_top_counterparties_pnl(
         ReportsScope::Active => Some(ctx.company_id()),
         ReportsScope::All => None,
     };
+    let query_pattern = query_like_pattern(&filter.query);
 
     let rows = sqlx::query_as::<_, Row>(
         r#"
@@ -725,6 +846,7 @@ pub async fn load_top_counterparties_pnl(
             WHERE ($1::uuid IS NULL OR a.company_id = $1::uuid)
               AND a.date BETWEEN $2 AND $3
               AND a.status != 'draft'
+              AND LOWER(COALESCE(cat.name, 'Без категорії')) LIKE $4 ESCAPE '\'
 
             UNION ALL
 
@@ -737,6 +859,7 @@ pub async fn load_top_counterparties_pnl(
             WHERE ($1::uuid IS NULL OR i.company_id = $1::uuid)
               AND i.date BETWEEN $2 AND $3
               AND i.status != 'draft'
+              AND LOWER(COALESCE(cat.name, 'Без категорії')) LIKE $4 ESCAPE '\'
         )
         SELECT
             cp.id::text AS counterparty_id,
@@ -755,6 +878,7 @@ pub async fn load_top_counterparties_pnl(
     .bind(company_id)
     .bind(filter.date_from)
     .bind(filter.date_to)
+    .bind(query_pattern)
     .fetch_all(ctx.pool())
     .await?;
 
@@ -796,6 +920,15 @@ pub async fn compute_opening_balance(
         ReportsScope::Active => Some(ctx.company_id()),
         ReportsScope::All => None,
     };
+    let selected_selector = selected_counterparty_selector(filter);
+    let selected_cp_id = match &selected_selector {
+        Some(SelectedCounterpartySelector::CounterpartyUuid(uuid)) => Some(*uuid),
+        _ => None,
+    };
+    let selected_bank_name = match &selected_selector {
+        Some(SelectedCounterpartySelector::BankName(name)) => Some(name.as_str()),
+        _ => None,
+    };
 
     let value = sqlx::query_scalar::<_, Decimal>(
         r#"
@@ -806,10 +939,14 @@ pub async fn compute_opening_balance(
         FROM payments
         WHERE ($1::uuid IS NULL OR company_id = $1::uuid)
           AND date < $2
+          AND ($3::uuid IS NULL OR counterparty_id = $3::uuid)
+          AND ($4::text IS NULL OR COALESCE(NULLIF(bank_name, ''), 'uncategorized') = $4)
         "#,
     )
     .bind(company_id)
     .bind(filter.date_from)
+    .bind(selected_cp_id)
+    .bind(selected_bank_name)
     .fetch_one(ctx.pool())
     .await?;
 

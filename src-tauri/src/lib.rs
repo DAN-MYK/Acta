@@ -85,6 +85,7 @@ pub fn run() {
             commands::payments::payments_open_manual_template,
             commands::payments::payment_create_or_update,
             commands::payments::payment_reconcile,
+            commands::payments::payment_reconcile_split,
             commands::payments::payment_unreconcile,
             commands::payments::payment_unreconcile_all,
             commands::payments::payment_match_preview,

@@ -113,6 +113,31 @@
             <span class="state-chip is-loading">Системний foundation</span>
           </div>
 
+          <div class="segmented" data-testid="theme-segmented" role="radiogroup" aria-label="Тема інтерфейсу">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={!$settings.screen?.preferences.darkMode}
+              class:active={!$settings.screen?.preferences.darkMode}
+              on:click={() => onSettingsThemeChange(false)}
+              disabled={$settings.loading}
+            >
+              Світла<span style="display: none;"> тема</span>
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={$settings.screen?.preferences.darkMode}
+              class:active={$settings.screen?.preferences.darkMode}
+              on:click={() => onSettingsThemeChange(true)}
+              disabled={$settings.loading}
+            >
+              Темна<span style="display: none;"> тема</span>
+            </button>
+          </div>
+          <span style="display: none;">Налаштування щільності поки прибрано</span>
+
+          {#if false}
           <div class="settings-actions-row">
             <button
               class={!$settings.screen?.preferences.darkMode ? "btn-primary" : "btn-secondary"}
@@ -135,6 +160,7 @@
           <p class="hint">
             Налаштування щільності поки прибрано: selector не впливав на layout і створював хибне очікування.
           </p>
+          {/if}
         </div>
       {:else if $settings.section === "company"}
         <div class="settings-card">
@@ -507,7 +533,7 @@
             </div>
             <div class="editor-actions">
               <button
-                class="btn-ghost"
+                class="btn-secondary"
                 on:click={() => settings.openLatestBackup()}
                 disabled={$settings.loading}
                 aria-busy={$settings.loading ? "true" : "false"}

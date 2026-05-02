@@ -117,6 +117,19 @@ function renderReports() {
   return { component, target };
 }
 
+function makeReportsApiResponse(filter: ReportsScreenDto["filter"]): ReportsScreenDto {
+  return {
+    ...makeReportsScreen(),
+    filter,
+    selectedCounterparty: filter.selectedCounterpartyId
+      ? {
+          id: filter.selectedCounterpartyId,
+          name: "РўРћР’ Р РѕРјР°С€РєР°"
+        }
+      : null
+  };
+}
+
 describe("ReportsScreen", () => {
   beforeEach(() => {
     mocks.load.mockReset();
@@ -350,7 +363,7 @@ describe("ReportsScreen", () => {
 
   it("keeps chrome visible and skeletonizes only the reports table during initial loading", () => {
     mocks.reportsState.set({
-      screen: makeReportsScreen(),
+      screen: null,
       initialLoading: true,
       loading: false,
       error: null,
@@ -367,8 +380,12 @@ describe("ReportsScreen", () => {
     expect(target.querySelector(".reports-kpis")).toBeTruthy();
     expect(target.querySelector(".reports-filters")).toBeTruthy();
     expect(target.querySelector('[data-testid="reports-table-card"]')).toBeTruthy();
-    expect(target.querySelectorAll('[data-testid="skeleton-row-item"]')).toHaveLength(6);
+    expect(
+      target.querySelector('[data-testid="reports-table-card"]')?.querySelectorAll('[data-testid="skeleton-row-item"]')
+    ).toHaveLength(6);
     expect(target.querySelector('[data-testid="reports-empty-state"]')).toBeNull();
+    expect(target.textContent).not.toContain("Контрагентів немає у вибраному діапазоні.");
+    expect(target.querySelector('[data-testid="reports-top-counterparties-skeleton"]')).toBeTruthy();
 
     component.$destroy();
   });
@@ -469,6 +486,55 @@ describe("ReportsScreen", () => {
     component.$destroy();
   });
 
+  it("shows a local empty state when top counterparties ranking is empty", async () => {
+    mocks.reportsState.set({
+      screen: {
+        ...makeReportsScreen(),
+        topCounterparties: []
+      },
+      initialLoading: false,
+      loading: false,
+      error: null,
+      message: null
+    });
+
+    const { component, target } = renderReports();
+    await tick();
+
+    expect(target.textContent).toContain("Контрагентів немає у вибраному діапазоні.");
+
+    component.$destroy();
+  });
+
+  it("clears focus through toggleCounterparty when user clicks reset", async () => {
+    mocks.reportsState.set({
+      screen: {
+        ...makeReportsScreen(),
+        filter: { ...makeReportsScreen().filter, selectedCounterpartyId: "cp-1" },
+        selectedCounterparty: { id: "cp-1", name: "ТОВ Ромашка" }
+      },
+      initialLoading: false,
+      loading: false,
+      error: null,
+      message: null
+    });
+
+    const { component, target } = renderReports();
+    await tick();
+
+    const resetButton = Array.from(target.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Скинути")
+    ) as HTMLButtonElement | undefined;
+
+    expect(resetButton).toBeTruthy();
+    resetButton!.click();
+    await tick();
+
+    expect(mocks.toggleCounterparty).toHaveBeenCalledWith("cp-1");
+
+    component.$destroy();
+  });
+
   it("resets selectedCounterpartyId to null when tab changes", async () => {
     mocks.reportsState.set({
       screen: {
@@ -495,5 +561,91 @@ describe("ReportsScreen", () => {
     expect(mocks.load).toHaveBeenCalledWith({ tab: "pnl" });
 
     component.$destroy();
+  });
+});
+
+describe("reportsStore", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it("loads drill-down filter when selecting a top counterparty", async () => {
+    const reportsLoad = vi
+      .fn<(filter: ReportsScreenDto["filter"]) => Promise<ReportsScreenDto>>()
+      .mockImplementation(async (filter) => makeReportsApiResponse(filter));
+
+    vi.doMock("../../api", () => ({
+      reportsLoad,
+      reportsExportCsv: vi.fn(),
+      reportsExportExcel: vi.fn(),
+      reportsExportExcelAndOpen: vi.fn()
+    }));
+
+    const { createReportsStore } = await vi.importActual<typeof import("../../stores/reports")>("../../stores/reports");
+    const store = createReportsStore();
+    let latestState: ReportsScreenDto | null = null;
+    const unsubscribe = store.subscribe((state) => {
+      latestState = state.screen;
+    });
+
+    await store.load();
+    await store.toggleCounterparty("cp-1");
+
+    expect(reportsLoad).toHaveBeenCalledTimes(2);
+    expect(reportsLoad).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        selectedCounterpartyId: "cp-1"
+      })
+    );
+    if (!latestState) {
+      throw new Error("Очікували стан звіту після перемикання контрагента");
+    }
+    const stateAfterToggle = latestState as unknown as ReportsScreenDto;
+    expect(stateAfterToggle.filter.selectedCounterpartyId).toBe("cp-1");
+    unsubscribe();
+  });
+
+  it("resets selectedCounterpartyId to null when tab changes", async () => {
+    const reportsLoad = vi
+      .fn<(filter: ReportsScreenDto["filter"]) => Promise<ReportsScreenDto>>()
+      .mockImplementation(async (filter) => makeReportsApiResponse(filter));
+
+    vi.doMock("../../api", () => ({
+      reportsLoad,
+      reportsExportCsv: vi.fn(),
+      reportsExportExcel: vi.fn(),
+      reportsExportExcelAndOpen: vi.fn()
+    }));
+
+    const { createReportsStore } = await vi.importActual<typeof import("../../stores/reports")>("../../stores/reports");
+    const store = createReportsStore();
+    let latestState: ReportsScreenDto | null = null;
+    const unsubscribe = store.subscribe((state) => {
+      latestState = state.screen;
+    });
+
+    await store.load({ selectedCounterpartyId: "cp-1" });
+    if (!latestState) {
+      throw new Error("Очікували стан звіту перед зміною вкладки");
+    }
+    const stateBeforeTabReset = latestState as unknown as ReportsScreenDto;
+    expect(stateBeforeTabReset.filter.selectedCounterpartyId).toBe("cp-1");
+    await store.load({ tab: "pnl" });
+
+    expect(reportsLoad).toHaveBeenCalledTimes(2);
+    expect(reportsLoad).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        tab: "pnl",
+        selectedCounterpartyId: null
+      })
+    );
+    if (!latestState) {
+      throw new Error("Очікували стан звіту після зміни вкладки");
+    }
+    const stateAfterTabReset = latestState as unknown as ReportsScreenDto;
+    expect(stateAfterTabReset.filter.selectedCounterpartyId).toBeNull();
+    unsubscribe();
   });
 });

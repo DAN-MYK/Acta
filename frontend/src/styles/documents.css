@@ -135,10 +135,37 @@
 .doc-row-open {
   display: block;
   width: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 92%, white 8%), var(--bg-card));
+  box-shadow: var(--shadow-sm);
   text-align: left;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+
+.doc-row-open:hover {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--line));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 26%, var(--bg-card)), var(--bg-card));
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.doc-row-open:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 36%, transparent);
+  outline-offset: 2px;
+}
+
+.doc-row-open:disabled {
+  cursor: default;
+  transform: none;
+  border-color: color-mix(in srgb, var(--line) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-subtle) 84%, var(--bg-card));
+  box-shadow: none;
 }
 
 .doc-row-body {

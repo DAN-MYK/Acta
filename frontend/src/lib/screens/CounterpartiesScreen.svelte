@@ -113,6 +113,13 @@
 
     return "Баланс під контролем, критичних сигналів немає.";
   }
+  function onArchiveCurrent() {
+    if (!window.confirm("Архівувати поточного контрагента? Повернення потребуватиме окремої дії.")) {
+      return;
+    }
+
+    counterparties.archiveCurrent();
+  }
 </script>
 
 <section class="panel" data-testid="counterparties-screen">
@@ -156,7 +163,7 @@
             </div>
             <div class="counterparty-row-meta">
               <span class="task-pill">{item.kind}</span>
-              <span>{item.balanceStr}</span>
+              <span class="money-value" data-negative={item.balanceStr.trim().startsWith("-")}>{item.balanceStr}</span>
               {#if item.overdueCount > 0}
                 <span class="risk-chip risk-chip-danger">Прострочка {item.overdueCount}</span>
               {/if}
@@ -196,7 +203,7 @@
               <button class="btn-primary" on:click={() => counterparties.createDocument()}>
                 Створити документ
               </button>
-              <button class="btn-danger" on:click={() => counterparties.archiveCurrent()}>
+              <button class="btn-danger" type="button" on:click={onArchiveCurrent}>
                 Архівувати
               </button>
             </div>

@@ -298,6 +298,44 @@ export interface PaymentReconcileRequest {
   amount: string;
 }
 
+export interface PaymentReconcileSplitAllocationRequest {
+  documentKind: "act" | "invoice";
+  documentId: string;
+  amount: string;
+}
+
+export interface PaymentReconcileSplitRequest {
+  paymentId: string;
+  allocations: PaymentReconcileSplitAllocationRequest[];
+}
+
+export interface PaymentReconcileSplitAllocationRequest {
+  documentKind: "act" | "invoice";
+  documentId: string;
+  amount: string;
+}
+
+export interface PaymentReconcileSplitRequest {
+  paymentId: string;
+  allocations: PaymentReconcileSplitAllocationRequest[];
+}
+
+export interface PaymentReconcileSplitAllocationResultDto {
+  documentId: string;
+  documentKind: "act" | "invoice";
+  title: string;
+  amountStr: string;
+}
+
+export interface PaymentReconcileSplitResultDto {
+  ok: boolean;
+  message: string;
+  paymentId: string;
+  allocationCount: number;
+  totalAllocatedStr: string;
+  allocations: PaymentReconcileSplitAllocationResultDto[];
+}
+
 export interface PaymentUnreconcileRequest {
   paymentId: string;
   documentKind: "act" | "invoice";
@@ -354,6 +392,22 @@ export interface PaymentManualMatchCandidatesDto {
   paymentId: string;
   query: string;
   candidates: PaymentMatchCandidateDto[];
+}
+
+export interface PaymentReconcileSplitAllocationDto {
+  documentId: string;
+  documentKind: "act" | "invoice";
+  title: string;
+  amountStr: string;
+}
+
+export interface PaymentReconcileSplitResultDto {
+  ok: boolean;
+  message: string;
+  paymentId: string;
+  allocationCount: number;
+  totalAllocatedStr: string;
+  allocations: PaymentReconcileSplitAllocationDto[];
 }
 
 export type TaskStatus = "open" | "in_progress" | "done" | "cancelled";

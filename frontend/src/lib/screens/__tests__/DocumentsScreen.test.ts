@@ -70,6 +70,10 @@ const mocks = vi.hoisted(() => {
     updateFormField: vi.fn(),
     updateItemField: vi.fn()
   };
+  /*
+    buttonByText(target, "Р’РёРґР°Р»РёС‚Рё РІРёР±СЂР°РЅС–").click();
+    buttonByText(target, "Р’РёРґР°Р»РёС‚Рё").click();
+*/
 });
 
 vi.mock("../../stores/documents", () => ({
@@ -315,6 +319,27 @@ describe("DocumentsScreen component", () => {
     expect(target.textContent).toContain("Спочатку оберіть контрагента");
     expect(createButton.disabled).toBe(true);
 
+    component.$destroy();
+  });
+
+  it("asks for confirmation before destructive document actions", async () => {
+    setDocumentsState(["doc-1"]);
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const { component, target } = renderDocuments();
+
+    buttonByText(target, "Видалити вибрані").click();
+    const deleteCurrentButton = Array.from(target.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Видалити"
+    ) as HTMLButtonElement | undefined;
+    expect(deleteCurrentButton).toBeTruthy();
+    deleteCurrentButton?.click();
+    await tick();
+
+    expect(confirmSpy).toHaveBeenCalledTimes(2);
+    expect(mocks.bulkDelete).not.toHaveBeenCalled();
+    expect(mocks.deleteCurrent).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
     component.$destroy();
   });
 

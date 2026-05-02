@@ -469,11 +469,6 @@ async fn tauri_vertical_slice_shell_and_documents_smoke() -> Result<()> {
             &ctx,
             acta::tauri_api::settings::SettingsPreferencesRequest {
                 dark_mode: !original_settings.preferences.dark_mode,
-                density: if original_settings.preferences.density >= 2 {
-                    0
-                } else {
-                    original_settings.preferences.density + 1
-                },
             },
         )
         .await?;
@@ -540,7 +535,6 @@ async fn tauri_vertical_slice_shell_and_documents_smoke() -> Result<()> {
         &ctx,
         acta::tauri_api::settings::SettingsPreferencesRequest {
             dark_mode: original_config.dark_mode,
-            density: i32::from(original_config.density),
         },
     )
     .await;
@@ -1221,6 +1215,197 @@ async fn tauri_vertical_slice_payment_match_preview_ambiguous_refuses_auto_apply
     assert!(!has_act_link && !has_invoice_link);
 
     acta::db::payments::delete_scoped(ctx.pool(), ctx.company_id(), payment_id).await?;
+    let _ = acta::db::invoices::delete(ctx.pool(), invoice.id).await;
+    let _ = acta::db::acts::delete(ctx.pool(), act.id).await;
+    let _ = sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(counterparty.id)
+        .execute(ctx.pool())
+        .await;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn tauri_vertical_slice_payment_reconcile_split_is_atomic() -> Result<()> {
+    let _guard = tauri_vertical_slice_lock().lock().await;
+    let _ = dotenvy::dotenv();
+    std::env::set_var("ACTA_CONFIG_DIR", "storage/test-config");
+
+    let pool = acta::runtime::connect_pool().await?;
+    let company_id = acta::runtime::get_first_company_id(&pool).await;
+    let ctx = Arc::new(acta::app_ctx::AppCtx::new(pool, company_id));
+
+    let suffix = Uuid::new_v4().simple().to_string();
+    let counterparty = acta::db::counterparties::create(
+        ctx.pool(),
+        ctx.company_id(),
+        &acta::models::NewCounterparty {
+            name: format!("Vertical Split Counterparty {suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("vertical-split-cp-{suffix}")),
+        },
+    )
+    .await?;
+
+    let today = Utc::now().date_naive();
+    let act = acta::db::acts::create(
+        ctx.pool(),
+        ctx.company_id(),
+        &acta::models::NewAct {
+            number: format!("VERT-SPLIT-ACT-{suffix}"),
+            counterparty_id: counterparty.id,
+            contract_id: None,
+            category_id: None,
+            direction: acta::models::DocumentDirection::Outgoing,
+            date: today,
+            expected_payment_date: None,
+            status: acta::models::ActStatus::Issued,
+            notes: None,
+            bas_id: None,
+            items: vec![acta::models::NewActItem {
+                description: "Послуга".to_string(),
+                quantity: dec!(1.0000),
+                unit: "шт".to_string(),
+                unit_price: dec!(1500.00),
+            }],
+        },
+    )
+    .await?;
+
+    let invoice = acta::db::invoices::create(
+        ctx.pool(),
+        ctx.company_id(),
+        &acta::models::NewInvoice {
+            number: format!("VERT-SPLIT-INV-{suffix}"),
+            counterparty_id: counterparty.id,
+            contract_id: None,
+            category_id: None,
+            direction: acta::models::DocumentDirection::Outgoing,
+            date: today,
+            expected_payment_date: None,
+            notes: None,
+            bas_id: None,
+            items: vec![acta::models::NewInvoiceItem {
+                position: 1,
+                description: "Товар".to_string(),
+                unit: Some("шт".to_string()),
+                quantity: dec!(1.0000),
+                price: dec!(1500.00),
+            }],
+        },
+    )
+    .await?;
+
+    let payment = acta::db::payments::create(
+        ctx.pool(),
+        acta::models::payment::NewPayment {
+            company_id: ctx.company_id(),
+            date: today,
+            amount: dec!(3000.00),
+            direction: acta::models::payment::PaymentDirection::Income,
+            counterparty_id: Some(counterparty.id),
+            bank_name: Some("Тест Банк".to_string()),
+            bank_ref: Some(format!("VERT-SPLIT-{suffix}")),
+            description: Some("Тест vertical split reconcile".to_string()),
+        },
+    )
+    .await?;
+
+    let ok_result = acta::tauri_api::payments::payment_reconcile_split(
+        &ctx,
+        acta::tauri_api::payments::PaymentReconcileSplitRequest {
+            payment_id: payment.id.to_string(),
+            allocations: vec![
+                acta::tauri_api::payments::PaymentReconcileSplitAllocationRequest {
+                    document_kind: "invoice".to_string(),
+                    document_id: invoice.id.to_string(),
+                    amount: "1 500,00".to_string(),
+                },
+                acta::tauri_api::payments::PaymentReconcileSplitAllocationRequest {
+                    document_kind: "act".to_string(),
+                    document_id: act.id.to_string(),
+                    amount: "1 500,00".to_string(),
+                },
+            ],
+        },
+    )
+    .await?;
+    assert!(ok_result.ok);
+    assert_eq!(ok_result.message, "Розподіл платежу підтверджено");
+    assert_eq!(ok_result.payment_id, payment.id.to_string());
+    assert_eq!(ok_result.allocation_count, 2);
+    assert_eq!(ok_result.total_allocated_str, "3\u{00a0}000,00");
+    let allocation_titles = ok_result
+        .allocations
+        .iter()
+        .map(|allocation| allocation.title.clone())
+        .collect::<Vec<_>>();
+    assert!(allocation_titles.contains(&format!("Накладна VERT-SPLIT-INV-{suffix}")));
+    assert!(allocation_titles.contains(&format!("Акт VERT-SPLIT-ACT-{suffix}")));
+
+    let act_amount = sqlx::query_scalar::<_, rust_decimal::Decimal>(
+        "SELECT amount FROM payment_acts WHERE payment_id = $1 AND act_id = $2",
+    )
+    .bind(payment.id)
+    .bind(act.id)
+    .fetch_one(ctx.pool())
+    .await?;
+    let invoice_amount = sqlx::query_scalar::<_, rust_decimal::Decimal>(
+        "SELECT amount FROM payment_invoices WHERE payment_id = $1 AND invoice_id = $2",
+    )
+    .bind(payment.id)
+    .bind(invoice.id)
+    .fetch_one(ctx.pool())
+    .await?;
+    assert_eq!(act_amount, dec!(1500.00));
+    assert_eq!(invoice_amount, dec!(1500.00));
+
+    let failed_result = acta::tauri_api::payments::payment_reconcile_split(
+        &ctx,
+        acta::tauri_api::payments::PaymentReconcileSplitRequest {
+            payment_id: payment.id.to_string(),
+            allocations: vec![
+                acta::tauri_api::payments::PaymentReconcileSplitAllocationRequest {
+                    document_kind: "invoice".to_string(),
+                    document_id: invoice.id.to_string(),
+                    amount: "1 400,00".to_string(),
+                },
+                acta::tauri_api::payments::PaymentReconcileSplitAllocationRequest {
+                    document_kind: "act".to_string(),
+                    document_id: act.id.to_string(),
+                    amount: "1 600,00".to_string(),
+                },
+            ],
+        },
+    )
+    .await
+    .expect_err("невалідний allocation має відхиляти весь split request");
+    assert!(failed_result.to_string().contains("документа"));
+
+    let act_amount_after_error = sqlx::query_scalar::<_, rust_decimal::Decimal>(
+        "SELECT amount FROM payment_acts WHERE payment_id = $1 AND act_id = $2",
+    )
+    .bind(payment.id)
+    .bind(act.id)
+    .fetch_one(ctx.pool())
+    .await?;
+    let invoice_amount_after_error = sqlx::query_scalar::<_, rust_decimal::Decimal>(
+        "SELECT amount FROM payment_invoices WHERE payment_id = $1 AND invoice_id = $2",
+    )
+    .bind(payment.id)
+    .bind(invoice.id)
+    .fetch_one(ctx.pool())
+    .await?;
+    assert_eq!(act_amount_after_error, dec!(1500.00));
+    assert_eq!(invoice_amount_after_error, dec!(1500.00));
+
+    acta::db::payments::delete_scoped(ctx.pool(), ctx.company_id(), payment.id).await?;
     let _ = acta::db::invoices::delete(ctx.pool(), invoice.id).await;
     let _ = acta::db::acts::delete(ctx.pool(), act.id).await;
     let _ = sqlx::query("DELETE FROM counterparties WHERE id = $1")

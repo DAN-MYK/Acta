@@ -127,7 +127,7 @@ function shouldResetCounterparty(partial?: Partial<ReportsFilterDto>): boolean {
   );
 }
 
-function createReportsStore() {
+export function createReportsStore() {
   const { subscribe, update } = writable<ReportsState>(initialState);
   let latestLoadRequestId = 0;
 

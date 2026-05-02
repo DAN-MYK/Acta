@@ -3797,6 +3797,171 @@ async fn payments_reconcile_supports_split_and_rejects_overallocation() -> Resul
 }
 
 #[tokio::test]
+async fn payments_reconcile_split_is_atomic_on_failure() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let suffix = unique_suffix();
+    let cp = db::counterparties::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewCounterparty {
+            name: format!("ІТ Atomic Split Контрагент {suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("it-atomic-split-cp-{suffix}")),
+        },
+    )
+    .await?;
+
+    let act = db::acts::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewAct {
+            number: format!("IT-ATOMIC-SPLIT-ACT-{suffix}"),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: models::DocumentDirection::Outgoing,
+            date: Utc::now().date_naive(),
+            expected_payment_date: None,
+            status: models::ActStatus::Issued,
+            notes: None,
+            bas_id: None,
+            items: vec![models::NewActItem {
+                description: "Послуга".to_string(),
+                quantity: dec!(1.0000),
+                unit: "шт".to_string(),
+                unit_price: dec!(1500.00),
+            }],
+        },
+    )
+    .await?;
+
+    let invoice = db::invoices::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewInvoice {
+            number: format!("IT-ATOMIC-SPLIT-INV-{suffix}"),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: models::DocumentDirection::Outgoing,
+            date: Utc::now().date_naive(),
+            expected_payment_date: None,
+            notes: None,
+            bas_id: None,
+            items: vec![models::NewInvoiceItem {
+                position: 1,
+                description: "Товар".to_string(),
+                unit: Some("шт".to_string()),
+                quantity: dec!(1.0000),
+                price: dec!(2000.00),
+            }],
+        },
+    )
+    .await?;
+
+    let payment = db::payments::create(
+        &pool,
+        models::payment::NewPayment {
+            company_id: DEFAULT_COMPANY_ID,
+            date: Utc::now().date_naive(),
+            amount: dec!(3000.00),
+            direction: models::payment::PaymentDirection::Income,
+            counterparty_id: Some(cp.id),
+            bank_name: Some("Тест Банк".to_string()),
+            bank_ref: Some(format!("ATOMIC-SPLIT-{suffix}")),
+            description: Some("Перевірка атомарного розподілу".to_string()),
+        },
+    )
+    .await?;
+
+    db::payments::reconcile_document_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        payment.id,
+        "act",
+        act.id,
+        dec!(1500.00),
+    )
+    .await?;
+
+    let err = db::payments::reconcile_split_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        payment.id,
+        &[
+            db::payments::PaymentReconcileAllocation {
+                document_kind: "invoice".to_string(),
+                document_id: invoice.id,
+                amount: dec!(1500.00),
+            },
+            db::payments::PaymentReconcileAllocation {
+                document_kind: "act".to_string(),
+                document_id: act.id,
+                amount: dec!(1600.00),
+            },
+        ],
+    )
+    .await
+    .expect_err("split reconcile має відкотити всю транзакцію, якщо один allocation невалідний");
+    assert!(err.to_string().contains("документа"));
+
+    let act_amount_after_error = sqlx::query_scalar::<_, rust_decimal::Decimal>(
+        "SELECT amount FROM payment_acts WHERE payment_id = $1 AND act_id = $2",
+    )
+    .bind(payment.id)
+    .bind(act.id)
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(
+        act_amount_after_error,
+        dec!(1500.00),
+        "попередній act link має лишитися після rollback"
+    );
+
+    let invoice_link_exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM payment_invoices WHERE payment_id = $1 AND invoice_id = $2)",
+    )
+    .bind(payment.id)
+    .bind(invoice.id)
+    .fetch_one(&pool)
+    .await?;
+    assert!(
+        !invoice_link_exists,
+        "новий invoice link не має частково записатися після rollback"
+    );
+
+    let payment_after_error = db::payments::get_by_id_scoped(&pool, DEFAULT_COMPANY_ID, payment.id)
+        .await?
+        .expect("payment exists after failed atomic split");
+    assert!(payment_after_error.is_reconciled);
+
+    db::payments::delete(&pool, payment.id).await?;
+    sqlx::query("DELETE FROM acts WHERE id = $1")
+        .bind(act.id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM invoices WHERE id = $1")
+        .bind(invoice.id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn payments_schedule_create_complete_and_list_upcoming_in_db() -> Result<()> {
     let Some(pool) = test_pool().await? else {
         return Ok(());
@@ -5441,6 +5606,61 @@ async fn compute_opening_balance_sums_payments_before_period() -> Result<()> {
 }
 
 #[tokio::test]
+async fn compute_opening_balance_respects_selected_counterparty_id() -> Result<()> {
+    use acta::app_ctx::AppCtx;
+    use acta::db::reports::compute_opening_balance;
+    use acta::models::reports::{ReportsScope, ResolvedReportsFilter};
+
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+    let suffix = unique_suffix();
+    let today = chrono::Utc::now().date_naive();
+    let period_start = today - Duration::days(10);
+    let before_period = today - Duration::days(20);
+
+    let cp_a = create_test_counterparty(&pool, &suffix, &format!("ІТ Opening A {suffix}"), None, None).await?;
+    let cp_b = create_test_counterparty(&pool, &suffix, &format!("ІТ Opening B {suffix}"), None, None).await?;
+
+    let p1 = create_test_payment(&pool, DEFAULT_COMPANY_ID, Some(cp_a.id), dec!(5000), "income", before_period).await?;
+    let p2 = create_test_payment(&pool, DEFAULT_COMPANY_ID, Some(cp_b.id), dec!(1200), "income", before_period).await?;
+
+    let ctx = AppCtx::new(pool.clone(), DEFAULT_COMPANY_ID);
+    let filter = ResolvedReportsFilter {
+        scope: ReportsScope::Active,
+        date_from: period_start,
+        date_to: today,
+        query: String::new(),
+        selected_counterparty_id: Some(cp_a.id.to_string()),
+    };
+
+    let balance_with_cp_a = compute_opening_balance(&ctx, &filter).await?;
+
+    sqlx::query("DELETE FROM payments WHERE id = $1")
+        .bind(p1)
+        .execute(&pool)
+        .await?;
+    let balance_without_cp_a_payment = compute_opening_balance(&ctx, &filter).await?;
+    assert_eq!(
+        balance_with_cp_a - balance_without_cp_a_payment,
+        dec!(5000),
+        "opening balance має враховувати лише платежі вибраного контрагента"
+    );
+
+    sqlx::query("DELETE FROM payments WHERE id = $1")
+        .bind(p2)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM counterparties WHERE id IN ($1, $2)")
+        .bind(cp_a.id)
+        .bind(cp_b.id)
+        .execute(&pool)
+        .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn load_bank_rows_groups_payments_by_counterparty() -> Result<()> {
     use acta::app_ctx::AppCtx;
     use acta::db::reports::load_bank_rows;
@@ -5647,6 +5867,126 @@ async fn load_top_counterparties_bank_ranks_counterparties_by_flow() -> Result<(
 }
 
 #[tokio::test]
+async fn load_top_counterparties_bank_respects_bank_name_query_in_active_scope() -> Result<()> {
+    use acta::app_ctx::AppCtx;
+    use acta::db::reports::load_top_counterparties_bank;
+    use acta::models::reports::{ReportsScope, ResolvedReportsFilter};
+
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+    let suffix = unique_suffix();
+    let today = chrono::Utc::now().date_naive();
+    let period_start = today - Duration::days(30);
+    let bank_name = format!("Mono fallback {suffix}");
+
+    let payment = db::payments::create(
+        &pool,
+        models::payment::NewPayment {
+            company_id: DEFAULT_COMPANY_ID,
+            date: today,
+            amount: dec!(4200.00),
+            direction: models::payment::PaymentDirection::Income,
+            counterparty_id: None,
+            bank_name: Some(bank_name.clone()),
+            bank_ref: Some(format!("bank-fallback-{suffix}")),
+            description: Some("Платіж без контрагента".to_string()),
+        },
+    )
+    .await?;
+
+    let ctx = AppCtx::new(pool.clone(), DEFAULT_COMPANY_ID);
+    let filter = ResolvedReportsFilter {
+        scope: ReportsScope::Active,
+        date_from: period_start,
+        date_to: today,
+        query: bank_name.clone(),
+        selected_counterparty_id: None,
+    };
+
+    let rows = load_top_counterparties_bank(&ctx, &filter).await?;
+
+    assert_eq!(rows.len(), 1, "fallback bank-name рядок має входити в рейтинг для активної компанії");
+    assert_eq!(rows[0].counterparty_name, bank_name);
+    assert_eq!(rows[0].primary_amount, dec!(4200.00));
+
+    sqlx::query("DELETE FROM payments WHERE id = $1")
+        .bind(payment.id)
+        .execute(&pool)
+        .await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn load_top_counterparties_receivables_respects_query_slice() -> Result<()> {
+    use acta::app_ctx::AppCtx;
+    use acta::db::reports::load_top_counterparties_receivables;
+    use acta::models::reports::{ReportsScope, ResolvedReportsFilter};
+
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+    let suffix = unique_suffix();
+    let today = chrono::Utc::now().date_naive();
+    let period_start = today - Duration::days(30);
+
+    let cp_a = create_test_counterparty(&pool, &suffix, &format!("ТОВ Receivable A {suffix}"), None, None).await?;
+    let cp_b = create_test_counterparty(&pool, &suffix, &format!("ТОВ Receivable B {suffix}"), None, None).await?;
+
+    let doc_number_a = format!("INV-QA-{suffix}");
+    let doc_number_b = format!("INV-QB-{suffix}");
+    let inv_a = create_test_invoice(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        cp_a.id,
+        &doc_number_a,
+        dec!(8000),
+        "issued",
+        None,
+        today,
+    )
+    .await?;
+    let inv_b = create_test_invoice(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        cp_b.id,
+        &doc_number_b,
+        dec!(12000),
+        "issued",
+        None,
+        today,
+    )
+    .await?;
+
+    let ctx = AppCtx::new(pool.clone(), DEFAULT_COMPANY_ID);
+    let filter = ResolvedReportsFilter {
+        scope: ReportsScope::Active,
+        date_from: period_start,
+        date_to: today,
+        query: doc_number_a.clone(),
+        selected_counterparty_id: None,
+    };
+
+    let rows = load_top_counterparties_receivables(&ctx, &filter).await?;
+
+    assert_eq!(rows.len(), 1, "рейтинг має відображати лише slice, що збігся по query");
+    assert_eq!(rows[0].counterparty_id, cp_a.id.to_string());
+    assert_eq!(rows[0].primary_amount, dec!(8000));
+
+    sqlx::query("DELETE FROM invoices WHERE id IN ($1, $2)")
+        .bind(inv_a)
+        .bind(inv_b)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM counterparties WHERE id IN ($1, $2)")
+        .bind(cp_a.id)
+        .bind(cp_b.id)
+        .execute(&pool)
+        .await?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn load_bank_rows_respects_selected_counterparty_id() -> Result<()> {
     use acta::app_ctx::AppCtx;
     use acta::db::reports::load_bank_rows;
@@ -5680,5 +6020,306 @@ async fn load_bank_rows_respects_selected_counterparty_id() -> Result<()> {
 
     sqlx::query("DELETE FROM payments WHERE id IN ($1, $2)").bind(p1).bind(p2).execute(&pool).await?;
     sqlx::query("DELETE FROM counterparties WHERE id IN ($1, $2)").bind(cp_a.id).bind(cp_b.id).execute(&pool).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn load_bank_rows_respects_bank_name_selector() -> Result<()> {
+    use acta::app_ctx::AppCtx;
+    use acta::db::reports::load_bank_rows;
+    use acta::models::reports::{ReportsScope, ResolvedReportsFilter};
+
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+    let suffix = unique_suffix();
+    let today = chrono::Utc::now().date_naive();
+    let period_start = today - Duration::days(30);
+    let selected_bank_name = format!("Mono direct {suffix}");
+    let selected_id = format!("bank-name:{selected_bank_name}");
+
+    let selected_payment = db::payments::create(
+        &pool,
+        models::payment::NewPayment {
+            company_id: DEFAULT_COMPANY_ID,
+            date: today,
+            amount: dec!(3100.00),
+            direction: models::payment::PaymentDirection::Income,
+            counterparty_id: None,
+            bank_name: Some(selected_bank_name.clone()),
+            bank_ref: Some(format!("selected-direct-{suffix}")),
+            description: Some("selected direct".to_string()),
+        },
+    )
+    .await?;
+    let other_payment = db::payments::create(
+        &pool,
+        models::payment::NewPayment {
+            company_id: DEFAULT_COMPANY_ID,
+            date: today,
+            amount: dec!(700.00),
+            direction: models::payment::PaymentDirection::Income,
+            counterparty_id: None,
+            bank_name: Some(format!("Other direct {suffix}")),
+            bank_ref: Some(format!("other-direct-{suffix}")),
+            description: Some("other direct".to_string()),
+        },
+    )
+    .await?;
+
+    let ctx = AppCtx::new(pool.clone(), DEFAULT_COMPANY_ID);
+    let filter = ResolvedReportsFilter {
+        scope: ReportsScope::Active,
+        date_from: period_start,
+        date_to: today,
+        query: String::new(),
+        selected_counterparty_id: Some(selected_id.clone()),
+    };
+
+    let rows = load_bank_rows(&ctx, &filter).await?;
+
+    assert_eq!(rows.len(), 1, "bank-name selector має лишати лише один fallback рядок");
+    assert_eq!(rows[0].key, selected_id);
+    assert_eq!(rows[0].label, selected_bank_name);
+    assert_eq!(rows[0].income, dec!(3100.00));
+
+    for payment_id in [selected_payment.id, other_payment.id] {
+        sqlx::query("DELETE FROM payments WHERE id = $1")
+            .bind(payment_id)
+            .execute(&pool)
+            .await?;
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn reports_load_keeps_selected_counterparty_when_it_is_outside_top_counterparties() -> Result<()> {
+    use acta::app_ctx::AppCtx;
+    use acta::tauri_api::reports::{reports_load, ReportsLoadRequest};
+
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+    let suffix = unique_suffix();
+    let today = chrono::Utc::now().date_naive();
+    let period_start = today - Duration::days(30);
+
+    let mut counterparty_ids = Vec::new();
+    let mut payment_ids = Vec::new();
+
+    for index in 0..9 {
+        let cp = create_test_counterparty(
+            &pool,
+            &suffix,
+            &format!("ТОВ Reports Pick {} {suffix}", index + 1),
+            None,
+            Some(format!("reports-pick-{suffix}-{index}")),
+        )
+        .await?;
+        let payment_id = create_test_payment(
+            &pool,
+            DEFAULT_COMPANY_ID,
+            Some(cp.id),
+            dec!(1000) * Decimal::from(9 - index),
+            "income",
+            today,
+        )
+        .await?;
+
+        counterparty_ids.push((cp.id, cp.name));
+        payment_ids.push(payment_id);
+    }
+
+    let selected_counterparty = counterparty_ids
+        .last()
+        .cloned()
+        .expect("має бути створений дев'ятий контрагент");
+    let ctx = AppCtx::new(pool.clone(), DEFAULT_COMPANY_ID);
+
+    let screen = reports_load(
+        &ctx,
+        ReportsLoadRequest {
+            tab: Some("bank".to_string()),
+            scope: Some("active".to_string()),
+            date_from: Some(period_start.format("%Y-%m-%d").to_string()),
+            date_to: Some(today.format("%Y-%m-%d").to_string()),
+            query: Some(String::new()),
+            selected_counterparty_id: Some(selected_counterparty.0.to_string()),
+        },
+    )
+    .await?;
+
+    assert_eq!(screen.top_counterparties.len(), 8, "топ має обмежуватись 8 рядками");
+    assert!(
+        screen
+            .top_counterparties
+            .iter()
+            .all(|row| row.counterparty_id != selected_counterparty.0.to_string()),
+        "обраний контрагент має лишитись поза топ-8 у цьому сценарії"
+    );
+    assert_eq!(
+        screen.selected_counterparty,
+        Some(acta::tauri_api::reports::SelectedCounterpartyDto {
+            id: selected_counterparty.0.to_string(),
+            name: selected_counterparty.1.clone(),
+        })
+    );
+    assert!(
+        !screen.bank_rows.is_empty(),
+        "drill-down не має повертати порожній bank_rows для вибраного контрагента"
+    );
+    assert!(
+        screen
+            .bank_rows
+            .iter()
+            .all(|row| row.key == selected_counterparty.0.to_string()),
+        "drill-down має залишити у bank_rows лише вибраного контрагента"
+    );
+
+    for payment_id in payment_ids {
+        sqlx::query("DELETE FROM payments WHERE id = $1")
+            .bind(payment_id)
+            .execute(&pool)
+            .await?;
+    }
+    for (counterparty_id, _) in counterparty_ids {
+        sqlx::query("DELETE FROM counterparties WHERE id = $1")
+            .bind(counterparty_id)
+            .execute(&pool)
+            .await?;
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn reports_load_filters_bank_fallback_selector_end_to_end() -> Result<()> {
+    use acta::app_ctx::AppCtx;
+    use acta::tauri_api::reports::{reports_load, ReportsLoadRequest};
+
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+    let suffix = unique_suffix();
+    let today = chrono::Utc::now().date_naive();
+    let period_start = today - Duration::days(30);
+    let before_period = today - Duration::days(45);
+    let selected_bank_name = format!("Mono fallback {suffix}");
+    let other_bank_name = format!("Other fallback {suffix}");
+    let selected_id = format!("bank-name:{selected_bank_name}");
+
+    let selected_before = db::payments::create(
+        &pool,
+        models::payment::NewPayment {
+            company_id: DEFAULT_COMPANY_ID,
+            date: before_period,
+            amount: dec!(1000.00),
+            direction: models::payment::PaymentDirection::Income,
+            counterparty_id: None,
+            bank_name: Some(selected_bank_name.clone()),
+            bank_ref: Some(format!("selected-before-{suffix}")),
+            description: Some("opening selected".to_string()),
+        },
+    )
+    .await?;
+    let other_before = db::payments::create(
+        &pool,
+        models::payment::NewPayment {
+            company_id: DEFAULT_COMPANY_ID,
+            date: before_period,
+            amount: dec!(2500.00),
+            direction: models::payment::PaymentDirection::Income,
+            counterparty_id: None,
+            bank_name: Some(other_bank_name.clone()),
+            bank_ref: Some(format!("other-before-{suffix}")),
+            description: Some("opening other".to_string()),
+        },
+    )
+    .await?;
+    let selected_income = db::payments::create(
+        &pool,
+        models::payment::NewPayment {
+            company_id: DEFAULT_COMPANY_ID,
+            date: today,
+            amount: dec!(4200.00),
+            direction: models::payment::PaymentDirection::Income,
+            counterparty_id: None,
+            bank_name: Some(selected_bank_name.clone()),
+            bank_ref: Some(format!("selected-income-{suffix}")),
+            description: Some("period selected income".to_string()),
+        },
+    )
+    .await?;
+    let selected_expense = db::payments::create(
+        &pool,
+        models::payment::NewPayment {
+            company_id: DEFAULT_COMPANY_ID,
+            date: today,
+            amount: dec!(200.00),
+            direction: models::payment::PaymentDirection::Expense,
+            counterparty_id: None,
+            bank_name: Some(selected_bank_name.clone()),
+            bank_ref: Some(format!("selected-expense-{suffix}")),
+            description: Some("period selected expense".to_string()),
+        },
+    )
+    .await?;
+    let other_income = db::payments::create(
+        &pool,
+        models::payment::NewPayment {
+            company_id: DEFAULT_COMPANY_ID,
+            date: today,
+            amount: dec!(999.00),
+            direction: models::payment::PaymentDirection::Income,
+            counterparty_id: None,
+            bank_name: Some(other_bank_name.clone()),
+            bank_ref: Some(format!("other-income-{suffix}")),
+            description: Some("period other income".to_string()),
+        },
+    )
+    .await?;
+
+    let ctx = AppCtx::new(pool.clone(), DEFAULT_COMPANY_ID);
+    let screen = reports_load(
+        &ctx,
+        ReportsLoadRequest {
+            tab: Some("bank".to_string()),
+            scope: Some("active".to_string()),
+            date_from: Some(period_start.format("%Y-%m-%d").to_string()),
+            date_to: Some(today.format("%Y-%m-%d").to_string()),
+            query: Some(String::new()),
+            selected_counterparty_id: Some(selected_id.clone()),
+        },
+    )
+    .await?;
+
+    assert_eq!(
+        screen.selected_counterparty,
+        Some(acta::tauri_api::reports::SelectedCounterpartyDto {
+            id: selected_id.clone(),
+            name: selected_bank_name.clone(),
+        })
+    );
+    assert_eq!(screen.summary.opening_balance_str, "1 000,00 грн");
+    assert_eq!(screen.bank_rows.len(), 1, "fallback drill-down має лишити один bank row");
+    assert_eq!(screen.bank_rows[0].key, selected_id);
+    assert_eq!(screen.bank_rows[0].label, selected_bank_name);
+    assert_eq!(screen.bank_rows[0].income_str, "4 200,00 грн");
+    assert_eq!(screen.bank_rows[0].expense_str, "200,00 грн");
+
+    for payment_id in [
+        selected_before.id,
+        other_before.id,
+        selected_income.id,
+        selected_expense.id,
+        other_income.id,
+    ] {
+        sqlx::query("DELETE FROM payments WHERE id = $1")
+            .bind(payment_id)
+            .execute(&pool)
+            .await?;
+    }
+
     Ok(())
 }

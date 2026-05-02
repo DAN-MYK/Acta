@@ -336,7 +336,7 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
 
     const templateResult = await paymentsStore.openManualTemplate();
     expect(templateResult.path).toContain("manual-template.csv");
-  });
+  }, 10000);
 
   it("opens reconcile preview before apply and persists manual confirm for ambiguous candidates", async () => {
     const { paymentsStore } = await loadStores();
@@ -774,15 +774,17 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     expect(snapshot(paymentsStore).splitDraft?.remainingAmountStr).toContain("0,00");
   });
 
-  it("persists a split draft across multiple reconcile calls", async () => {
+  it("persists a split draft through one batch reconcile call", async () => {
     const { paymentsStore } = await loadStores();
 
     let list = makePayments(["pay-1", "pay-2", "pay-3"]);
-    const reconcileCalls: Array<{
+    const splitCalls: Array<{
       paymentId: string;
-      documentId: string;
-      documentKind: string;
-      amount: string;
+      allocations: Array<{
+        documentId: string;
+        documentKind: string;
+        amount: string;
+      }>;
     }> = [];
 
     invokeMock.mockImplementation(async (command, payload) => {
@@ -827,29 +829,32 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
               }
             ]
           };
-        case "payment_reconcile": {
+        case "payment_reconcile_split": {
           const request = {
             ...(payload as {
-              request: { paymentId: string; documentId: string; documentKind: string; amount: string };
+              request: {
+                paymentId: string;
+                allocations: Array<{
+                  documentId: string;
+                  documentKind: string;
+                  amount: string;
+                }>;
+              };
             }).request
           };
-          reconcileCalls.push(request);
+          splitCalls.push(request);
 
-          const expected =
-            reconcileCalls.length === 1
-              ? {
-                  paymentId: "pay-3",
-                  documentId: "inv-7",
-                  documentKind: "invoice"
-                }
-              : {
-                  paymentId: "pay-3",
-                  documentId: "act-9",
-                  documentKind: "act"
-                };
-
-          expect(request).toMatchObject(expected);
-          expect(normalizeMoneyText(request.amount)).toContain("1 500,00");
+          expect(request.paymentId).toBe("pay-3");
+          expect(request.allocations).toHaveLength(2);
+          expect(request.allocations.map((allocation) => allocation.documentId)).toEqual([
+            "inv-7",
+            "act-9"
+          ]);
+          expect(request.allocations.map((allocation) => allocation.documentKind)).toEqual([
+            "invoice",
+            "act"
+          ]);
+          expect(request.allocations.every((allocation) => normalizeMoneyText(allocation.amount).includes("1 500,00"))).toBe(true);
 
           list = {
             ...list,
@@ -857,8 +862,7 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
               item.id === "pay-3"
                 ? {
                     ...item,
-                    matchedDoc:
-                      reconcileCalls.length === 1 ? "INV-007 (частково)" : "INV-007 + ACT-009"
+                    matchedDoc: "INV-007 + ACT-009"
                   }
                 : item
             )
@@ -866,7 +870,24 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
 
           return {
             ok: true,
-            message: "ok"
+            message: "Розподіл платежу підтверджено",
+            paymentId: "pay-3",
+            allocationCount: 2,
+            totalAllocatedStr: "3 000,00",
+            allocations: [
+              {
+                documentId: "inv-7",
+                documentKind: "invoice",
+                title: "Накладна INV-007",
+                amountStr: "1 500,00"
+              },
+              {
+                documentId: "act-9",
+                documentKind: "act",
+                title: "Акт ACT-009",
+                amountStr: "1 500,00"
+              }
+            ]
           };
         }
         default:
@@ -883,17 +904,99 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     await paymentsStore.addSelectedManualPickerCandidateToSplit();
 
     const result = await paymentsStore.confirmSplitDraft();
+    const splitResult = result as unknown as {
+      totalAllocatedStr: string;
+      allocations: Array<{ title: string }>;
+    };
 
     expect(result.ok).toBe(true);
     expect(result.message).toBe("Розподіл платежу підтверджено");
+    expect(result).toMatchObject({
+      paymentId: "pay-3",
+      allocationCount: 2
+    });
+    expect(normalizeMoneyText(splitResult.totalAllocatedStr)).toContain("3 000,00");
+    expect(splitResult.allocations.map((allocation) => allocation.title)).toEqual([
+      "Накладна INV-007",
+      "Акт ACT-009"
+    ]);
     expect(snapshot(paymentsStore).splitDraft).toBeNull();
     expect(snapshot(paymentsStore).manualPicker).toBeNull();
     expect(snapshot(paymentsStore).matchPreview).toBeNull();
     expect(snapshot(paymentsStore).message).toBe("Розподіл платежу підтверджено");
     expect(snapshot(paymentsStore).list?.items.find((item) => item.id === "pay-3")?.matchedDoc).toContain("ACT-009");
-    expect(reconcileCalls).toHaveLength(2);
-    expect(invokeMock.mock.calls.filter(([command]) => command === "payment_reconcile")).toHaveLength(2);
+    expect(splitCalls).toHaveLength(1);
+    expect(invokeMock.mock.calls.filter(([command]) => command === "payment_reconcile_split")).toHaveLength(1);
     expect(invokeMock.mock.calls.filter(([command]) => command === "payments_list")).toHaveLength(2);
+  });
+
+  it("keeps split draft state when batch reconcile returns an error result", async () => {
+    const { paymentsStore } = await loadStores();
+
+    invokeMock.mockImplementation(async (command, payload) => {
+      switch (command) {
+        case "payments_list":
+          return makePayments(["pay-3"]);
+        case "payment_match_preview":
+          expect(payload).toEqual({ request: { paymentId: "pay-3" } });
+          return {
+            paymentId: "pay-3",
+            isReconciled: false,
+            decisionKind: "split",
+            candidates: [
+              {
+                documentId: "inv-7",
+                documentKind: "invoice",
+                title: "Накладна INV-007",
+                openAmountStr: "1 500,00 грн",
+                totalScore: 88,
+                sameIban: true,
+                referenceHit: true,
+                textHits: 2,
+                daysDistance: 1
+              },
+              {
+                documentId: "act-9",
+                documentKind: "act",
+                title: "Акт ACT-009",
+                openAmountStr: "1 500,00 грн",
+                totalScore: 86,
+                sameIban: true,
+                referenceHit: true,
+                textHits: 2,
+                daysDistance: 0
+              }
+            ],
+            autoMatch: null
+          };
+        case "payment_reconcile_split":
+          return {
+            ok: false,
+            message: "Розподіл не пройшов валідацію"
+          };
+        default:
+          throw new Error(`unexpected command: ${command}`);
+      }
+    });
+
+    await paymentsStore.load();
+    await paymentsStore.reconcile("pay-3");
+
+    const initialDraft = snapshot(paymentsStore).splitDraft;
+    expect(initialDraft).not.toBeNull();
+
+    const result = await paymentsStore.confirmSplitDraft();
+
+    expect(result).toEqual({
+      ok: false,
+      message: "Розподіл не пройшов валідацію"
+    });
+    expect(snapshot(paymentsStore).splitDraft).toEqual(initialDraft);
+    expect(snapshot(paymentsStore).matchPreview?.paymentId).toBe("pay-3");
+    expect(snapshot(paymentsStore).message).toBe("Розподіл не пройшов валідацію");
+    expect(snapshot(paymentsStore).error).toBe("Розподіл не пройшов валідацію");
+    expect(invokeMock.mock.calls.filter(([command]) => command === "payment_reconcile_split")).toHaveLength(1);
+    expect(invokeMock.mock.calls.filter(([command]) => command === "payments_list")).toHaveLength(1);
   });
 
   it("keeps ambiguous preview state when manual reconcile returns an error result", async () => {

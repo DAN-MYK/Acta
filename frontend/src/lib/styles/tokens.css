@@ -73,6 +73,8 @@
   --danger: #c0433b;
   --danger-soft: #f6e3e0;
   --danger-border: color-mix(in srgb, var(--danger) 30%, var(--border));
+  --money-positive: var(--text);
+  --money-negative: color-mix(in srgb, var(--danger) 86%, var(--text));
   --info: #4a6fa5;
   --info-soft: #e6ebf2;
 
@@ -136,6 +138,8 @@ body[data-theme="dark"] {
   --danger: #ef8880;
   --danger-soft: #4a2c29;
   --danger-border: color-mix(in srgb, var(--danger) 38%, var(--border));
+  --money-positive: var(--text);
+  --money-negative: color-mix(in srgb, var(--danger) 92%, white 8%);
   --info: #9ab4e1;
   --info-soft: #2a3a56;
 

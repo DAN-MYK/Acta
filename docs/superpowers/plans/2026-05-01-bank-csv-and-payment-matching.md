@@ -97,7 +97,7 @@
 ## Наступна таска
 
 ### Task 9. Amount-aware split preview + hardening
-Статус: `in_progress`
+Статус: `completed`
 
 Ціль:
 - навчити matcher повертати recommendation для partial/split cases, де один exact candidate не закриває весь платіж;
@@ -109,7 +109,26 @@
 - додаткові frontend component tests;
 - ширші backend/integration перевірки для split matching.
 
-Поточний прогрес:
+Зроблено:
 - matcher уже повертає `decisionKind = split`, якщо сильного exact-match немає, але є релевантна комбінація документів, що покриває суму платежу;
 - payments store уже автозаповнює `splitDraft` із preview-рекомендації без старту з manual picker;
-- додано backend unit tests і frontend store regression на split preview flow.
+- `PaymentsScreen.svelte` показує split-specific preview copy і рекомендованих кандидатів окремим сценарієм;
+- додано backend unit tests, frontend store regression і screen-level tests на split preview flow.
+
+### Task 10. Atomic batch reconcile для split confirm
+Статус: `completed`
+
+Зроблено:
+- додано окремий backend contract `payment_reconcile_split` для підтвердження всього split draft одним request;
+- split reconcile тепер виконується атомарно в одній транзакції з повною заміною payment links;
+- store більше не викликає серію `payment_reconcile`, а переходить на один batch confirm;
+- `payment_reconcile_split` повертає audit-friendly summary з canonical allocation details і total allocated amount;
+- додано DB integration test на rollback при невалідному allocation;
+- додано frontend regression tests на успішний batch confirm і на `ok: false` без втрати split state;
+- додано Tauri vertical-slice test для `payment_reconcile_split` і browser fallback test для dev-mode fixture.
+
+### Next
+Статус: `pending`
+
+Ціль:
+- за потреби винести split summary у окремий audit/event log або activity feed.

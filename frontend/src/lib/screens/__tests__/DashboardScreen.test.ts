@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => {
 
   const dashboardState = createMockStore({
     screen: null as DashboardScreenDto | null,
+    initialLoading: false,
     loading: false,
     error: null as string | null
   });
@@ -151,7 +152,7 @@ function buttonByText(target: HTMLElement, text: string): HTMLButtonElement {
 
 describe("DashboardScreen component", () => {
   beforeEach(() => {
-    mocks.dashboardState.set({ screen: makeDashboard(), loading: false, error: null });
+    mocks.dashboardState.set({ screen: makeDashboard(), initialLoading: false, loading: false, error: null });
     mocks.dashboardLoad.mockReset();
     mocks.documentOpen.mockReset();
     mocks.navigationGo.mockReset();
@@ -200,6 +201,7 @@ describe("DashboardScreen component", () => {
   it("keeps an explicit empty state for upcoming payments", () => {
     mocks.dashboardState.set({
       screen: { ...makeDashboard(), upcomingPayments: [] },
+      initialLoading: false,
       loading: false,
       error: null
     });
@@ -207,6 +209,28 @@ describe("DashboardScreen component", () => {
     const { component, target } = renderDashboard();
 
     expect(target.textContent).toContain("Очікуваних платежів поки немає.");
+
+    component.$destroy();
+  });
+
+  it("keeps header visible and skeletonizes each dashboard section during initial loading", () => {
+    mocks.dashboardState.set({
+      screen: null,
+      initialLoading: true,
+      loading: false,
+      error: null
+    });
+
+    const { component, target } = renderDashboard();
+
+    expect(target.textContent).toContain("Дашборд");
+    expect(buttonByText(target, "Оновити")).toBeTruthy();
+    expect(target.querySelector('[data-testid="dashboard-kpis"] [data-testid="skeleton-card-grid"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="dashboard-cashflow"] [data-testid="skeleton-row-item"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="dashboard-recent-documents"] [data-testid="skeleton-row-item"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="dashboard-upcoming-payments"] [data-testid="skeleton-row-item"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="dashboard-urgent-tasks"] [data-testid="skeleton-row-item"]')).toBeTruthy();
+    expect(target.textContent).not.toContain("Очікуваних платежів поки немає.");
 
     component.$destroy();
   });

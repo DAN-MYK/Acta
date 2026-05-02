@@ -35,7 +35,8 @@ describe("browser fallback API", () => {
       scope: "all",
       dateFrom: "2026-02-01",
       dateTo: "2026-05-01",
-      query: "ромашка"
+      query: "ромашка",
+      selectedCounterpartyId: null
     });
 
     expect(screen.filter).toEqual({
@@ -43,9 +44,12 @@ describe("browser fallback API", () => {
       scope: "all",
       dateFrom: "2026-02-01",
       dateTo: "2026-05-01",
-      query: "ромашка"
+      query: "ромашка",
+      selectedCounterpartyId: null
     });
     expect(screen.receivablesRows.length).toBeGreaterThan(0);
+    expect(screen.selectedCounterparty).toBeNull();
+    expect(screen.topCounterparties).toEqual([]);
   });
 
   it("supports palette search without crashing outside Tauri runtime", async () => {
@@ -54,5 +58,31 @@ describe("browser fallback API", () => {
     const result = await shellPaletteSearch("звіт");
 
     expect(result.items.some((item) => item.title.includes("Звіти"))).toBe(true);
+  });
+
+  it("supports batch split reconcile in browser-dev mode", async () => {
+    const { paymentReconcileSplit } = await import("../../api");
+
+    const result = await paymentReconcileSplit({
+      paymentId: "pay-2",
+      allocations: [
+        {
+          documentKind: "invoice",
+          documentId: "inv-7",
+          amount: "1 500,00"
+        },
+        {
+          documentKind: "act",
+          documentId: "act-9",
+          amount: "1 500,00"
+        }
+      ]
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.message).toBe("Розподіл платежу підтверджено");
+    expect(result.paymentId).toBe("pay-2");
+    expect(result.allocationCount).toBe(2);
+    expect(result.allocations.map((allocation) => allocation.documentId)).toEqual(["inv-7", "act-9"]);
   });
 });

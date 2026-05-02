@@ -274,14 +274,17 @@ describe("SettingsScreen", () => {
     component.$destroy();
   });
 
-  it("використовує канонічну ієрархію кнопок і прибирає selector density", () => {
+  it("використовує segmented-вибір теми без density copy", () => {
     const { component, target } = renderSettings();
 
-    expect(buttonByText(target, "Світла тема").disabled).toBe(false);
-    expect(buttonByText(target, "Темна тема").disabled).toBe(false);
+    const segmented = target.querySelector('[data-testid="theme-segmented"]');
+
+    expect(segmented?.getAttribute("role")).toBe("radiogroup");
+    expect(buttonByText(target, "Світла").disabled).toBe(false);
+    expect(buttonByText(target, "Темна").disabled).toBe(false);
     expect(target.textContent).not.toContain("Компактно");
     expect(target.textContent).not.toContain("Щільно");
-    expect(target.textContent).toContain("Налаштування щільності поки прибрано");
+    expect(target.textContent).not.toContain("selector не впливав");
 
     component.$destroy();
   });
@@ -289,7 +292,7 @@ describe("SettingsScreen", () => {
   it("перемикає тему через themeStore і reload shell chrome", async () => {
     const { component, target } = renderSettings();
 
-    buttonByText(target, "Темна тема").click();
+    buttonByText(target, "Темна").click();
     await tick();
 
     expect(mocks.themeSetMode).toHaveBeenCalledWith("dark");

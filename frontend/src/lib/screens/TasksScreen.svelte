@@ -143,17 +143,23 @@
       <strong>На сьогодні</strong>
       <p>Швидкий список задач, які спливають сьогодні або мають нагадування на поточну дату.</p>
       <div class="linked-list">
-        {#each todayTaskItems($tasks.screen?.items ?? []) as item}
-          <button class="linked-row" on:click={() => tasks.openEditor(item.id)}>
-            <span>{item.title}</span>
-            <span>{item.reminderAt || item.dueDate}</span>
-          </button>
-        {:else}
-          <div class="empty-state-card compact">
-            <strong>Сьогодні немає нагадувань</strong>
-            <p>Можна спокійно планувати нові задачі або закрити хвости з попередніх днів.</p>
+        {#if $tasks.initialLoading}
+          <div data-testid="tasks-today-skeleton">
+            <SkeletonRow count={3} variant="compact" />
           </div>
-        {/each}
+        {:else}
+          {#each todayTaskItems($tasks.screen?.items ?? []) as item}
+            <button class="linked-row" on:click={() => tasks.openEditor(item.id)}>
+              <span>{item.title}</span>
+              <span>{item.reminderAt || item.dueDate}</span>
+            </button>
+          {:else}
+            <div class="empty-state-card compact">
+              <strong>Сьогодні немає нагадувань</strong>
+              <p>Можна спокійно планувати нові задачі або закрити хвости з попередніх днів.</p>
+            </div>
+          {/each}
+        {/if}
       </div>
     </aside>
   </div>

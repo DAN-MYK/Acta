@@ -21,6 +21,8 @@ import type {
   PaymentMatchPreviewDto,
   PaymentMatchPreviewRequest,
   PaymentReconcileRequest,
+  PaymentReconcileSplitRequest,
+  PaymentReconcileSplitResultDto,
   PaymentDraftFormDto,
   PaymentManualMatchCandidatesDto,
   PaymentsScreenDto,
@@ -236,7 +238,8 @@ export function reportsExportCsv(filter: ReportsFilterDto): Promise<ReportsExpor
       scope: filter.scope,
       dateFrom: filter.dateFrom,
       dateTo: filter.dateTo,
-      query: filter.query
+      query: filter.query,
+      selectedCounterpartyId: filter.selectedCounterpartyId ?? null
     }
   });
 }
@@ -248,7 +251,8 @@ export function reportsExportExcel(filter: ReportsFilterDto): Promise<ReportsExp
       scope: filter.scope,
       dateFrom: filter.dateFrom,
       dateTo: filter.dateTo,
-      query: filter.query
+      query: filter.query,
+      selectedCounterpartyId: filter.selectedCounterpartyId ?? null
     }
   });
 }
@@ -262,7 +266,8 @@ export function reportsExportExcelAndOpen(
       scope: filter.scope,
       dateFrom: filter.dateFrom,
       dateTo: filter.dateTo,
-      query: filter.query
+      query: filter.query,
+      selectedCounterpartyId: filter.selectedCounterpartyId ?? null
     }
   });
 }
@@ -329,6 +334,12 @@ export function paymentCreateOrUpdate(form: PaymentDraftFormDto): Promise<Mutati
 
 export function paymentReconcile(request: PaymentReconcileRequest): Promise<MutationResultDto> {
   return appInvoke("payment_reconcile", { request });
+}
+
+export function paymentReconcileSplit(
+  request: PaymentReconcileSplitRequest
+): Promise<PaymentReconcileSplitResultDto> {
+  return appInvoke("payment_reconcile_split", { request });
 }
 
 export function paymentUnreconcile(request: PaymentUnreconcileRequest): Promise<MutationResultDto> {

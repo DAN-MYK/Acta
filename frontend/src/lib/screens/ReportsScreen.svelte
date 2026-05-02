@@ -324,6 +324,15 @@
     void reports.toggleCounterparty(row.counterpartyId);
   }
 
+  function onResetCounterpartyFocus() {
+    const counterpartyId = $reports.screen?.selectedCounterparty?.id;
+    if (!counterpartyId) {
+      return;
+    }
+
+    void reports.toggleCounterparty(counterpartyId);
+  }
+
   function getTopCounterpartiesSubtitle(tab: string | undefined): string {
     if (tab === "receivables") return "Хто формує найбільшу дебіторку у вибраному періоді.";
     if (tab === "payables") return "Кому зараз найбільше винні або скоро маємо платити.";
@@ -492,7 +501,7 @@
           <button
             class="btn-secondary reports-top-counterparties-reset"
             type="button"
-            on:click={() => reports.load({ selectedCounterpartyId: null })}
+            on:click={onResetCounterpartyFocus}
           >
             Скинути
           </button>
@@ -500,7 +509,11 @@
       {/if}
     </div>
 
-    {#if ($reports.screen?.topCounterparties?.length ?? 0) === 0}
+    {#if $reports.initialLoading}
+      <div data-testid="reports-top-counterparties-skeleton">
+        <SkeletonRow count={3} />
+      </div>
+    {:else if ($reports.screen?.topCounterparties?.length ?? 0) === 0}
       <p class="reports-top-counterparties-empty">Контрагентів немає у вибраному діапазоні.</p>
     {:else}
       {#each $reports.screen?.topCounterparties ?? [] as row}
@@ -512,7 +525,7 @@
           type="button"
         >
           <span class="reports-top-cp-name">{row.counterpartyName}</span>
-          <span class="reports-top-cp-amount">{row.primaryAmountStr}</span>
+          <span class="reports-top-cp-amount money-value" data-negative={row.primaryAmountStr.trim().startsWith("-")}>{row.primaryAmountStr}</span>
           <span class="reports-top-cp-share">{row.sharePercent}%</span>
           <span class="reports-top-cp-secondary">{row.secondaryLabel}: {row.secondaryValue}</span>
           <div
@@ -554,7 +567,7 @@
           data-testid="reports-empty-primary-action"
           on:click={focusReportsDateRange}
         >
-          Р—РјС–РЅРёС‚Рё РїРµСЂС–РѕРґ
+          Змінити період
         </button>
       </div>
     </div>
@@ -571,9 +584,9 @@
           {#each $reports.screen?.bankRows ?? [] as row}
             <div class="reports-table-row reports-table-row-bank">
               <span class="reports-cell-title">{row.label}</span>
-              <span class="reports-cell-money">{row.incomeStr}</span>
-              <span class="reports-cell-money">{row.expenseStr}</span>
-              <span class="reports-cell-money">{row.netStr}</span>
+              <span class="reports-cell-money money-value" data-negative={row.incomeStr.trim().startsWith("-")}>{row.incomeStr}</span>
+              <span class="reports-cell-money money-value" data-negative={row.expenseStr.trim().startsWith("-")}>{row.expenseStr}</span>
+              <span class="reports-cell-money money-value" data-negative={row.netStr.trim().startsWith("-")}>{row.netStr}</span>
             </div>
           {/each}
         </div>
@@ -592,9 +605,9 @@
           {#each $reports.screen?.pnlRows ?? [] as row}
             <div class="reports-table-row reports-table-row-bank">
               <span class="reports-cell-title">{row.label}</span>
-              <span class="reports-cell-money">{row.incomeStr}</span>
-              <span class="reports-cell-money">{row.expenseStr}</span>
-              <span class="reports-cell-money">{row.netStr}</span>
+              <span class="reports-cell-money money-value" data-negative={row.incomeStr.trim().startsWith("-")}>{row.incomeStr}</span>
+              <span class="reports-cell-money money-value" data-negative={row.expenseStr.trim().startsWith("-")}>{row.expenseStr}</span>
+              <span class="reports-cell-money money-value" data-negative={row.netStr.trim().startsWith("-")}>{row.netStr}</span>
             </div>
           {/each}
         </div>
@@ -622,7 +635,7 @@
               <span class="reports-cell-date">{row.docDate}</span>
               <span class="reports-cell-company">{row.companyName}</span>
               <span class="reports-cell-company">{row.counterparty}</span>
-              <span class="reports-cell-money">{row.amountStr}</span>
+              <span class="reports-cell-money money-value" data-negative={row.amountStr.trim().startsWith("-")}>{row.amountStr}</span>
               <span class="reports-cell-date">{row.expectedDate || "—"}</span>
               <span class="reports-cell-status">
                 {row.overdueDays > 0 ? `Прострочено ${row.overdueDays} дн.` : "Без прострочки"}
@@ -653,7 +666,7 @@
               <span class="reports-cell-title">{row.title}</span>
               <span class="reports-cell-company">{row.companyName}</span>
               <span class="reports-cell-company">{row.counterparty || "—"}</span>
-              <span class="reports-cell-money">{row.amountStr}</span>
+              <span class="reports-cell-money money-value" data-negative={row.amountStr.trim().startsWith("-")}>{row.amountStr}</span>
               <span class="reports-cell-date">{row.dueDate}</span>
               <span class="reports-cell-status">
                 {row.overdueDays > 0 ? `Прострочено ${row.overdueDays} дн.` : "Без прострочки"}

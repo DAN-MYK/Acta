@@ -250,7 +250,11 @@ describe("TasksScreen component", () => {
     expect(target.querySelector('.task-tabs')).toBeTruthy();
     expect(target.querySelector('[data-testid="tasks-today-panel"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="tasks-list"]')).toBeTruthy();
-    expect(target.querySelectorAll('[data-testid="skeleton-row-item"]')).toHaveLength(5);
+    expect(
+      target.querySelector('[data-testid="tasks-list"]')?.querySelectorAll('[data-testid="skeleton-row-item"]')
+    ).toHaveLength(5);
+    expect(target.textContent).not.toContain("Сьогодні немає нагадувань");
+    expect(target.querySelector('[data-testid="tasks-today-skeleton"]')).toBeTruthy();
 
     component.$destroy();
   });

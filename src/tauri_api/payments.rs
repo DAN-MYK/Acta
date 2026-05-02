@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Result};
@@ -96,6 +97,41 @@ pub struct PaymentReconcileRequest {
     pub document_kind: String,
     pub document_id: String,
     pub amount: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentReconcileSplitAllocationRequest {
+    pub document_kind: String,
+    pub document_id: String,
+    pub amount: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentReconcileSplitRequest {
+    pub payment_id: String,
+    pub allocations: Vec<PaymentReconcileSplitAllocationRequest>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentReconcileSplitAllocationResultDto {
+    pub document_id: String,
+    pub document_kind: String,
+    pub title: String,
+    pub amount_str: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentReconcileSplitResultDto {
+    pub ok: bool,
+    pub message: String,
+    pub payment_id: String,
+    pub allocation_count: usize,
+    pub total_allocated_str: String,
+    pub allocations: Vec<PaymentReconcileSplitAllocationResultDto>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -277,6 +313,28 @@ fn match_kind_to_str(kind: MatchKind) -> &'static str {
         MatchKind::Ambiguous => "ambiguous",
         MatchKind::Split => "split",
         MatchKind::None => "none",
+    }
+}
+
+async fn load_split_allocation_title(
+    ctx: &AppCtx,
+    document_kind: &str,
+    document_id: Uuid,
+) -> Result<String> {
+    match document_kind {
+        "act" => {
+            let (act, _) = db::acts::get_by_id(ctx.pool(), document_id)
+                .await?
+                .ok_or_else(|| anyhow!("Документ не знайдено в межах компанії"))?;
+            Ok(format!("Акт {}", act.number))
+        }
+        "invoice" => {
+            let (invoice, _) = db::invoices::get_by_id(ctx.pool(), document_id)
+                .await?
+                .ok_or_else(|| anyhow!("Документ не знайдено в межах компанії"))?;
+            Ok(format!("Накладна {}", invoice.number))
+        }
+        other => Err(anyhow!("Невідомий тип документу: {other}")),
     }
 }
 
@@ -577,6 +635,70 @@ pub async fn payment_reconcile(
     Ok(MutationResultDto {
         ok: true,
         message: "Платіж зведено з документом".to_string(),
+    })
+}
+
+pub async fn payment_reconcile_split(
+    ctx: &AppCtx,
+    req: PaymentReconcileSplitRequest,
+) -> Result<PaymentReconcileSplitResultDto> {
+    let payment_id = parse_payment_uuid(&req.payment_id)?;
+    anyhow::ensure!(
+        !req.allocations.is_empty(),
+        "Для розподілу платежу потрібен хоча б один документ"
+    );
+
+    let mut unique_documents = HashSet::new();
+    let mut allocation_results = Vec::new();
+    let mut total_allocated = Decimal::ZERO;
+    let allocations = req
+        .allocations
+        .into_iter()
+        .map(|allocation| {
+            let document_id = Uuid::parse_str(&allocation.document_id)
+                .map_err(|_| anyhow!("Невалідний ідентифікатор документу"))?;
+            let amount = parse_payment_amount(&allocation.amount)?;
+            anyhow::ensure!(
+                unique_documents.insert((allocation.document_kind.clone(), document_id)),
+                "Один і той самий документ не можна передати двічі в split reconcile"
+            );
+
+            total_allocated += amount;
+            allocation_results.push(PaymentReconcileSplitAllocationResultDto {
+                document_id: document_id.to_string(),
+                document_kind: allocation.document_kind.clone(),
+                title: String::new(),
+                amount_str: format_decimal_ua(amount),
+            });
+
+            Ok(db::payments::PaymentReconcileAllocation {
+                document_kind: allocation.document_kind,
+                document_id,
+                amount,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    db::payments::reconcile_split_scoped(ctx.pool(), ctx.company_id(), payment_id, &allocations)
+        .await?;
+
+    for allocation in &mut allocation_results {
+        allocation.title = load_split_allocation_title(
+            ctx,
+            &allocation.document_kind,
+            Uuid::parse_str(&allocation.document_id)
+                .map_err(|_| anyhow!("Невалідний ідентифікатор документу"))?,
+        )
+        .await?;
+    }
+
+    Ok(PaymentReconcileSplitResultDto {
+        ok: true,
+        message: "Розподіл платежу підтверджено".to_string(),
+        payment_id: payment_id.to_string(),
+        allocation_count: allocation_results.len(),
+        total_allocated_str: format_decimal_ua(total_allocated),
+        allocations: allocation_results,
     })
 }
 
@@ -987,6 +1109,7 @@ mod tests {
         let _ = payments_open_manual_template;
         let _ = payment_create_or_update;
         let _ = payment_reconcile;
+        let _ = payment_reconcile_split;
         let _ = payment_unreconcile;
         let _ = payment_match_preview;
         let _ = payment_match_apply_auto;
