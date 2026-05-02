@@ -4,6 +4,15 @@
 
   const tasks = tasksStore;
 
+  function todayIso() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  }
+
   function onTaskSearch(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
     void tasks.load(input.value);
@@ -12,6 +21,14 @@
   function onTaskFieldChange(field: keyof TaskDraftFormDto, event: Event) {
     const input = event.currentTarget as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
     tasks.updateFormField(field, input.value);
+  }
+
+  function isTaskClosed(item: TaskItemDto) {
+    return item.status === "done" || item.status === "cancelled";
+  }
+
+  function isTaskOverdue(item: TaskItemDto) {
+    return Boolean(item.dueDate && item.dueDate < todayIso() && !isTaskClosed(item));
   }
 
   function taskItemsForTab(items: TaskItemDto[], tab: "open" | "done" | "all") {
@@ -28,8 +45,20 @@
     const scopedItems = taskItemsForTab(items, tab);
 
     return scopedItems.sort((left, right) => {
-      const leftWeight = left.priority === "critical" ? 0 : left.priority === "high" ? 1 : 2;
-      const rightWeight = right.priority === "critical" ? 0 : right.priority === "high" ? 1 : 2;
+      const leftWeight = isTaskOverdue(left)
+        ? -1
+        : left.priority === "critical"
+          ? 0
+          : left.priority === "high"
+            ? 1
+            : 2;
+      const rightWeight = isTaskOverdue(right)
+        ? -1
+        : right.priority === "critical"
+          ? 0
+          : right.priority === "high"
+            ? 1
+            : 2;
 
       if (leftWeight !== rightWeight) {
         return leftWeight - rightWeight;
@@ -40,7 +69,7 @@
   }
 
   function todayTaskItems(items: TaskItemDto[]) {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayIso();
     return items.filter((item) => item.dueDate === today || item.reminderAt.startsWith(today));
   }
 
@@ -51,6 +80,18 @@
 
   function linkLabel(item: TaskItemDto) {
     return item.linkLabel ? `Пов'язано з ${item.linkLabel}` : "Без прив'язки";
+  }
+
+  function dueLabel(item: TaskItemDto) {
+    if (!item.dueDate) {
+      return "Без дедлайну";
+    }
+
+    return isTaskOverdue(item) ? `Прострочено · ${item.dueDate}` : item.dueDate;
+  }
+
+  function priorityPillClass(item: TaskItemDto) {
+    return `task-pill task-pill-${item.priority}`;
   }
 </script>
 
@@ -108,18 +149,21 @@
 
       <div class="tasks-list" data-testid="tasks-list">
         {#each focusTaskItems($tasks.screen?.items ?? [], $tasks.tab) as item}
-          <div class="task-row">
+          <div class="task-row" class:task-row-overdue={isTaskOverdue(item)} class:task-row-critical={item.priority === "critical"}>
             <button class="task-row-main" on:click={() => tasks.openEditor(item.id)}>
               <div>
                 <strong>{item.title}</strong>
                 <p>{item.description || item.priorityLabel}</p>
               </div>
               <div class="task-row-meta">
-                <span class="task-pill">{item.priorityLabel}</span>
-                <span>{item.dueDate || "Без дедлайну"}</span>
+                <span class={priorityPillClass(item)}>{item.priorityLabel}</span>
+                <span>{dueLabel(item)}</span>
                 <span>{item.statusLabel}</span>
               </div>
               <div class="task-row-context">
+                {#if isTaskOverdue(item)}
+                  <span class="task-context-alert">Прострочено</span>
+                {/if}
                 <span>{linkLabel(item)}</span>
                 {#if item.reminderAt}
                   <span>Нагадування {item.reminderAt}</span>
@@ -144,9 +188,9 @@
             <span>{item.reminderAt || item.dueDate}</span>
           </button>
         {:else}
-          <div class="empty-state-card compact">
+          <div class="empty-state-card compact task-empty-guidance">
             <strong>Сьогодні немає нагадувань</strong>
-            <p>Можна спокійно планувати нові задачі або закрити хвости з попередніх днів.</p>
+            <p>Створіть нове завдання або закрийте хвости, які вже давно чекають на рішення.</p>
           </div>
         {/each}
       </div>

@@ -1,15 +1,10 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
-  import { counterpartiesStore } from "./lib/stores/counterparties";
-  import { dashboardStore } from "./lib/stores/dashboard";
-  import { documentsStore } from "./lib/stores/documents";
+  import { appShellStore } from "./lib/stores/app-shell";
   import { navigationStore } from "./lib/stores/navigation";
   import { paletteStore } from "./lib/stores/palette";
-  import { reportsStore } from "./lib/stores/reports";
   import { settingsStore } from "./lib/stores/settings";
   import { shellStore } from "./lib/stores/shell";
-  import { tasksStore } from "./lib/stores/tasks";
-  import { paymentsStore } from "./lib/stores/payments";
   import { themeStore } from "./lib/stores/theme";
   import CounterpartiesScreen from "./lib/screens/CounterpartiesScreen.svelte";
   import DashboardScreen from "./lib/screens/DashboardScreen.svelte";
@@ -22,19 +17,19 @@
   import type { ScreenId } from "./lib/types";
 
   const navigation = navigationStore;
+  const appShell = appShellStore;
   const shell = shellStore;
   const palette = paletteStore;
   const theme = themeStore;
-  const dashboard = dashboardStore;
-  const documents = documentsStore;
-  const counterparties = counterpartiesStore;
-  const tasks = tasksStore;
-  const reports = reportsStore;
-  const payments = paymentsStore;
   const settings = settingsStore;
+  const paletteInputAriaLabel = "Пошук у командній палітрі";
+  const paletteInputPlaceholder = "Пошук команд, екранів або документів";
 
   let paletteInput: HTMLInputElement | null = null;
-  let isCompanyReloading = false;
+  let paletteDialog: HTMLElement | null = null;
+  let paletteToggleButton: HTMLButtonElement | null = null;
+  let paletteReturnFocusTarget: HTMLElement | null = null;
+  let wasPaletteOpen = false;
 
   const sidebarScreens: Array<{
     screen: ScreenId;
@@ -51,61 +46,88 @@
   ];
 
   onMount(async () => {
-    await shell.load();
-    const settingsScreen = await settings.load();
-    if (settingsScreen) {
-      theme.setMode(settingsScreen.preferences.darkMode ? "dark" : "light");
-    }
-    await Promise.all([
-      dashboard.load(),
-      documents.load(),
-      counterparties.load(),
-      tasks.load(),
-      reports.load(),
-      payments.load()
-    ]);
+    await appShell.bootstrap();
   });
 
-  $: if ($palette.open) {
-    void tick().then(() => paletteInput?.focus());
+  $: {
+    const paletteOpen = $palette.open;
+    if (paletteOpen && !wasPaletteOpen) {
+      paletteReturnFocusTarget = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      void tick().then(() => paletteInput?.focus());
+    }
+
+    if (!paletteOpen && wasPaletteOpen) {
+      const focusTarget =
+        paletteReturnFocusTarget && document.contains(paletteReturnFocusTarget)
+          ? paletteReturnFocusTarget
+          : paletteToggleButton;
+      void tick().then(() => focusTarget?.focus());
+      paletteReturnFocusTarget = null;
+    }
+
+    wasPaletteOpen = paletteOpen;
   }
 
   $: document.body.dataset.theme = $theme;
   $: currentScreen = $navigation;
+  $: appShellState = $appShell;
   $: shellState = $shell.state;
-  $: isShellBusy = $shell.loading || isCompanyReloading;
+  $: isShellBusy = $shell.loading || appShellState.loading;
   $: themeLabel = $theme === "dark" ? "темна" : "світла";
+  $: shellProgressLabel = appShellState.progressLabel ?? $shell.progressLabel;
 
   function onPaletteInput(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
     void palette.search(input.value);
   }
 
-  async function onCompanyChange(event: Event) {
-    const select = event.currentTarget as HTMLSelectElement;
-    if (isShellBusy) {
+  function getPaletteFocusableElements() {
+    if (!paletteDialog) {
+      return [];
+    }
+
+    return Array.from(
+      paletteDialog.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+      )
+    ).filter((element) => element.getAttribute("aria-hidden") !== "true" && !element.hasAttribute("disabled"));
+  }
+
+  function handlePaletteKeydown(event: KeyboardEvent) {
+    if (event.key !== "Tab") {
       return;
     }
 
-    isCompanyReloading = true;
-
-    try {
-      await shell.setActiveCompany(select.value);
-      const settingsScreen = await settings.load();
-      if (settingsScreen) {
-        theme.setMode(settingsScreen.preferences.darkMode ? "dark" : "light");
-      }
-      await Promise.all([
-        dashboard.load(),
-        documents.load(),
-        counterparties.load(),
-        tasks.load(),
-        reports.load(),
-        payments.load()
-      ]);
-    } finally {
-      isCompanyReloading = false;
+    const focusableElements = getPaletteFocusableElements();
+    if (focusableElements.length === 0) {
+      event.preventDefault();
+      paletteDialog?.focus();
+      return;
     }
+
+    const firstElement = focusableElements[0];
+    const lastElement = focusableElements[focusableElements.length - 1];
+    const activeElement = document.activeElement;
+
+    if (event.shiftKey && activeElement === firstElement) {
+      event.preventDefault();
+      lastElement?.focus();
+      return;
+    }
+
+    if (!event.shiftKey && activeElement === lastElement) {
+      event.preventDefault();
+      firstElement?.focus();
+    }
+  }
+
+  async function onCompanyChange(event: Event) {
+    const select = event.currentTarget as HTMLSelectElement;
+    if (isShellBusy || shellState?.activeCompanyId === select.value) {
+      return;
+    }
+
+    await appShell.switchActiveCompany(select.value);
   }
 
   async function onQuickThemeToggle() {
@@ -116,22 +138,31 @@
 
     const saved = await settings.savePreferences();
     if (saved) {
-      theme.setMode(saved.screen.preferences.darkMode ? "dark" : "light");
+      appShell.syncThemeFromSettings(saved.screen);
     } else {
       const settingsScreen = await settings.load();
-      theme.setMode(settingsScreen?.preferences.darkMode ? "dark" : previousMode);
+      if (settingsScreen) {
+        appShell.syncThemeFromSettings(settingsScreen);
+      } else {
+        theme.setMode(previousMode);
+      }
     }
 
-    const shellState = await shell.load();
-    if (shellState) {
-      theme.setMode(shellState.isDark ? "dark" : "light");
-    }
+    await appShell.reloadShellChrome();
+  }
+
+  function closePalette() {
+    palette.close();
   }
 
   function handleKeydown(event: KeyboardEvent) {
+    if (event.key === "Tab" && $palette.open) {
+      handlePaletteKeydown(event);
+    }
+
     if (event.key === "Escape" && $palette.open) {
       event.preventDefault();
-      palette.close();
+      closePalette();
       return;
     }
 
@@ -189,7 +220,7 @@
     </nav>
 
     <div class="theme-switcher">
-      <button disabled={isShellBusy} on:click={onQuickThemeToggle}>
+      <button data-testid="theme-toggle" disabled={isShellBusy} on:click={onQuickThemeToggle}>
         <AppIcon name="theme" surface={true} />
         <span>Тема: {themeLabel}</span>
       </button>
@@ -200,15 +231,7 @@
     <header class:busy={isShellBusy} class="topbar">
       <div>
         <h1>{shellState?.chrome.companyName ?? "Acta"}</h1>
-        <p>
-          {#if isCompanyReloading}
-            Оновлюємо дані активної компанії...
-          {:else if $shell.loading}
-            Завантажуємо shell...
-          {:else}
-            {shellState?.chrome.userRole ?? "Завантаження shell..."}
-          {/if}
-        </p>
+        <p>{shellProgressLabel ?? shellState?.chrome.userRole ?? "Завантаження shell..."}</p>
       </div>
 
       <div class="topbar-actions">
@@ -218,7 +241,15 @@
           {/each}
         </select>
 
-        <button data-testid="palette-toggle" disabled={isShellBusy} on:click={() => palette.toggle()}>
+        <button
+          bind:this={paletteToggleButton}
+          data-testid="palette-toggle"
+          disabled={isShellBusy}
+          aria-haspopup="dialog"
+          aria-expanded={$palette.open}
+          aria-controls="command-palette-dialog"
+          on:click={() => palette.toggle()}
+        >
           <AppIcon name="palette" surface={true} />
           <span>Ctrl+K</span>
         </button>
@@ -226,7 +257,7 @@
     </header>
 
     {#if isShellBusy}
-      <div class="shell-progress" aria-live="polite" aria-label="Виконується оновлення shell">
+      <div class="shell-progress" aria-live="polite" aria-label={shellProgressLabel ?? "Виконується оновлення shell"}>
         <span></span>
       </div>
     {/if}
@@ -254,9 +285,28 @@
   </main>
 
   {#if $palette.open}
-    <button type="button" class="palette-backdrop" aria-label="Закрити палітру команд" on:click={() => palette.close()}></button>
-    <section class="palette" data-testid="palette">
-      <input bind:this={paletteInput} placeholder="Пошук команд, екранів і документів" on:input={onPaletteInput} />
+    <button
+      type="button"
+      class="palette-backdrop"
+      aria-label="Закрити палітру команд"
+      on:click={closePalette}
+    ></button>
+    <section
+      id="command-palette-dialog"
+      class="palette"
+      data-testid="palette"
+      bind:this={paletteDialog}
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
+      aria-label="Командна палітра навігації та швидких дій"
+    >
+      <input
+        bind:this={paletteInput}
+        aria-label={paletteInputAriaLabel}
+        placeholder={paletteInputPlaceholder}
+        on:input={onPaletteInput}
+      />
 
       <div class="palette-items" data-testid="palette-items">
         {#each $palette.items as item, index}
@@ -265,7 +315,7 @@
             class="palette-item"
             on:click={async () => {
               await palette.activate(item.payload);
-              palette.close();
+              closePalette();
             }}
           >
             <div>

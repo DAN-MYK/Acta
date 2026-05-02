@@ -135,7 +135,7 @@ function makeList(): DocumentsListDto {
   };
 }
 
-function makeEditor(): DocumentEditorDto {
+function makeEditor(items = true): DocumentEditorDto {
   return {
     form: {
       id: "doc-1",
@@ -147,14 +147,16 @@ function makeEditor(): DocumentEditorDto {
       date: "2026-04-30",
       notes: "Початковий коментар"
     },
-    items: [
-      {
-        description: "Консультація",
-        unit: "год",
-        quantity: "2",
-        price: "2500"
-      }
-    ],
+    items: items
+      ? [
+          {
+            description: "Консультація",
+            unit: "год",
+            quantity: "2",
+            price: "2500"
+          }
+        ]
+      : [],
     showTypePicker: false,
     showEditor: true
   };
@@ -175,10 +177,10 @@ function makeChain(): DocumentChainDto {
   };
 }
 
-function setDocumentsState(selectedIds: string[] = []) {
+function setDocumentsState(selectedIds: string[] = [], items = true) {
   mocks.documentsState.set({
     list: makeList(),
-    editor: makeEditor(),
+    editor: makeEditor(items),
     chain: makeChain(),
     draftContext: {
       counterpartyId: "counterparty-1",
@@ -263,19 +265,20 @@ describe("DocumentsScreen component", () => {
     document.body.innerHTML = "";
   });
 
-  it("renders document rows, attention summary and scenario guidance", () => {
+  it("renders scenario-first create flow, chain guidance and item summary", () => {
     const { component, target } = renderDocuments();
 
     expect(target.textContent).toContain("Документи");
-    expect(target.textContent).toContain("INV-7");
+    expect(target.textContent).toContain("Створити документ по сценарію");
+    expect(target.textContent).toContain("Крок 1");
     expect(target.textContent).toContain("ТОВ Ромашка");
-    expect(target.textContent).toContain("Що потребує уваги");
-    expect(target.textContent).toContain("Рахунок INV-7");
-    expect(target.textContent).toContain("Новий документ");
-    expect(target.textContent).toContain("Що далі");
+    expect(target.textContent).toContain("Статус і навігація по сценарію");
+    expect(target.textContent).toContain("Поточний документ");
+    expect(target.textContent).toContain("Наступний крок");
     expect(target.textContent).toContain("Позиції документа");
-    expect(target.textContent).toContain("Створити Акт");
-    expect(target.textContent).toContain("Створити Накладну");
+    expect(target.textContent).toContain("5 000,00 грн");
+    expect(target.textContent).toContain("Створити акт");
+    expect(target.textContent).toContain("Створити накладну");
 
     component.$destroy();
   });
@@ -283,27 +286,27 @@ describe("DocumentsScreen component", () => {
   it("uses canonical button hierarchy in create strip and editor header", () => {
     const { component, target } = renderDocuments();
 
-    expect(buttonByText(target, "Створити чернетку").className).toContain("btn-primary");
-    expect(buttonByText(target, "Додати позицію").className).toContain("btn-ghost");
+    expect((target.querySelector('[data-testid="documents-create-button"]') as HTMLButtonElement).className).toContain(
+      "btn-primary"
+    );
     expect(buttonByText(target, "Зберегти").className).toContain("btn-primary");
     expect(buttonByText(target, "Наступний статус").className).toContain("btn-secondary");
     expect(buttonByText(target, "Видалити").className).toContain("btn-danger");
-    expect(buttonByText(target, "Видалити позицію").className).toContain("btn-danger");
     expect(buttonByText(target, "Закрити").className).toContain("btn-ghost");
+    expect(buttonByText(target, "PDF").className).toContain("btn-ghost");
+    expect(buttonByText(target, "Додати позицію").className).toContain("btn-secondary");
 
     component.$destroy();
   });
 
-  it("shows create-strip as a guided flow and disables draft creation without counterparty", () => {
+  it("disables scenario creation without counterparty and explains why", () => {
     setDocumentsStateWithoutDraftContext();
     const { component, target } = renderDocuments();
 
-    const createButton = buttonByText(target, "Створити чернетку");
+    const createButton = target.querySelector('[data-testid="documents-create-button"]') as HTMLButtonElement;
 
-    expect(target.textContent).toContain("Новий документ");
-    expect(target.textContent).toContain("1. Оберіть контрагента");
-    expect(target.textContent).toContain("2. Вкажіть тип документа");
-    expect(target.textContent).toContain("3. Створіть чернетку");
+    expect(target.textContent).toContain("Ще не обрано");
+    expect(target.textContent).toContain("Потрібен контрагент");
     expect(target.textContent).toContain("Спочатку оберіть контрагента");
     expect(createButton.disabled).toBe(true);
 
@@ -319,14 +322,14 @@ describe("DocumentsScreen component", () => {
     await tick();
     expect(mocks.load).toHaveBeenCalledWith("ромашка");
 
-    buttonByText(target, "Створити чернетку").click();
+    (target.querySelector('[data-testid="documents-create-button"]') as HTMLButtonElement).click();
     await tick();
     expect(mocks.create).toHaveBeenCalledWith("counterparty-1", "act");
 
     buttonByText(target, "Додати позицію").click();
     buttonByText(target, "Зберегти").click();
     buttonByText(target, "Наступний статус").click();
-    buttonByText(target, "Створити Акт").click();
+    (target.querySelector('[data-testid="documents-chain-create-act"]') as HTMLButtonElement).click();
     await tick();
 
     expect(mocks.addItem).toHaveBeenCalled();
@@ -337,39 +340,41 @@ describe("DocumentsScreen component", () => {
     component.$destroy();
   });
 
-  it("uses canonical date input and primary action hierarchy in the editor", () => {
+  it("uses canonical date input with explicit non-ambiguous guidance", () => {
     const { component, target } = renderDocuments();
 
-    const dateInput = Array.from(target.querySelectorAll("input")).find((input) =>
-      (input as HTMLInputElement).value === "2026-04-30"
-    ) as HTMLInputElement | undefined;
-    const saveButton = buttonByText(target, "Зберегти");
+    const dateInput = target.querySelector('input[type="date"]') as HTMLInputElement | null;
 
     expect(dateInput).toBeTruthy();
-    expect(dateInput?.type).toBe("date");
-    expect(saveButton.className).toContain("btn-primary");
+    expect(dateInput?.value).toBe("2026-04-30");
+    expect(target.textContent).toContain("Календар без ручного неоднозначного формату");
+    expect(target.textContent).toContain("30.04.2026");
 
     component.$destroy();
   });
 
-  it("shows chain panel as next-step guidance instead of only technical links", () => {
+  it("shows chain panel as flow navigation with current and next document cards", () => {
     const { component, target } = renderDocuments();
 
-    expect(target.textContent).toContain("Що далі");
-    expect(target.textContent).toContain("Поточний документ");
-    expect(target.textContent).toContain("Наступний крок");
-    expect(target.textContent).toContain("На основі рахунку можна одразу підготувати акт або накладну.");
+    expect(target.querySelector('[data-testid="documents-chain-flow"]')).toBeTruthy();
+    expect(target.textContent).toContain("Крок 1");
+    expect(target.textContent).toContain("Далі");
+    expect(target.textContent).toContain("Очікує дії");
+    expect(target.textContent).toContain("Після рахунку зазвичай готуємо акт або накладну");
 
     component.$destroy();
   });
 
-  it("exposes stable smoke markers for the shell and native e2e layer", () => {
+  it("exposes stable smoke markers for shell and item editor empty state", () => {
+    setDocumentsState([], false);
     const { component, target } = renderDocuments();
 
     expect(target.querySelector('[data-testid="documents-screen"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="documents-create-strip"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="documents-focus-primary"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="documents-list"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="documents-items-empty"]')).toBeTruthy();
+    expect(target.textContent).toContain("Додати першу позицію");
 
     component.$destroy();
   });
@@ -397,7 +402,7 @@ describe("DocumentsScreen component", () => {
     const { component, target } = renderDocuments();
 
     expect(target.textContent).toContain("Поки що документів немає");
-    expect(target.textContent).toContain("Створіть першу чернетку");
+    expect(target.textContent).toContain("Почніть зі створення першого рахунку, акта або накладної");
 
     component.$destroy();
   });

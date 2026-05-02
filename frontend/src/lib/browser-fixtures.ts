@@ -19,6 +19,7 @@ import type {
   PaletteItemDto,
   PaletteSearchResultDto,
   PaymentItemDto,
+  PaymentMatchPreviewDto,
   ReportsExportResultDto,
   ReportsFilterDto,
   ReportsScreenDto,
@@ -36,8 +37,7 @@ import type {
 
 const state = {
   activeCompanyId: "company-act",
-  darkMode: false,
-  density: 1
+  darkMode: false
 };
 
 const companies = [
@@ -318,8 +318,7 @@ function settingsScreen(): SettingsScreenDto {
       }
     ],
     preferences: {
-      darkMode: state.darkMode,
-      density: state.density
+      darkMode: state.darkMode
     },
     backup: {
       label: "Остання резервна копія",
@@ -583,7 +582,6 @@ export async function browserFixtureInvoke<T>(command: string, payload?: Record<
       return clone(settingsScreen()) as T;
     case "settings_save_preferences":
       state.darkMode = Boolean((payload?.request as { darkMode?: boolean } | undefined)?.darkMode);
-      state.density = Number((payload?.request as { density?: number } | undefined)?.density ?? state.density);
       return clone({ ok: true, message: "Налаштування вигляду збережено", screen: settingsScreen() } satisfies SettingsScreenMutationResultDto) as T;
     case "settings_save_company":
       return clone({ ok: true, message: "Дані компанії збережено", screen: settingsScreen() } satisfies SettingsScreenMutationResultDto) as T;
@@ -609,6 +607,35 @@ export async function browserFixtureInvoke<T>(command: string, payload?: Record<
       return clone({ ok: true, message: "Платіж зведено" } satisfies MutationResultDto) as T;
     case "payment_unreconcile":
       return clone({ ok: true, message: "Зведення скасовано" } satisfies MutationResultDto) as T;
+    case "payment_unreconcile_all":
+      return clone({ ok: true, message: "Зведення скасовано" } satisfies MutationResultDto) as T;
+    case "payment_match_preview":
+      return clone({
+        paymentId: "pay-1",
+        isReconciled: false,
+        decisionKind: "exact",
+        candidates: [
+          {
+            documentId: "doc-1",
+            documentKind: "invoice",
+            title: "INV-2026-0042 ТОВ Ромашка",
+            openAmountStr: "48 200,00 грн",
+            totalScore: 160,
+            sameIban: true,
+            referenceHit: true,
+            textHits: 2,
+            daysDistance: 0
+          }
+        ],
+        autoMatch: {
+          documentId: "doc-1",
+          documentKind: "invoice",
+          title: "INV-2026-0042 ТОВ Ромашка",
+          amountStr: "48 200,00 грн"
+        }
+      } satisfies PaymentMatchPreviewDto) as T;
+    case "payment_match_apply_auto":
+      return clone({ ok: true, message: "Автозіставлення платежу застосовано" } satisfies MutationResultDto) as T;
     case "import_bas_pick_directory":
       return "C:\\tmp\\bas-export" as T;
     case "import_bas_plan":

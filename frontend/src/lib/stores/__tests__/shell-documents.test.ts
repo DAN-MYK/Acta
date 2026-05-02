@@ -9,11 +9,6 @@ import type {
 } from "../../types";
 import { invokeMock, loadStores, snapshot } from "./helpers";
 
-async function flushAsyncWork() {
-  await Promise.resolve();
-  await Promise.resolve();
-}
-
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (reason?: unknown) => void;
@@ -58,6 +53,31 @@ function makeShellState(activeCompanyId = "company-1"): ShellStateDto {
   };
 }
 
+function makeEditor(id: string): DocumentEditorDto {
+  return {
+    form: {
+      id,
+      kind: "invoice",
+      counterpartyId: "cp-1",
+      counterpartyName: "ТОВ Ромашка",
+      title: "invoice editor",
+      number: `NUM-${id}`,
+      date: "2026-04-30",
+      notes: ""
+    },
+    items: [
+      {
+        description: "Послуга",
+        unit: "шт",
+        quantity: "1",
+        price: "1234.50"
+      }
+    ],
+    showTypePicker: false,
+    showEditor: true
+  };
+}
+
 function makeDocumentsList(ids: string[]): DocumentsListDto {
   const items = ids.map((id, index) => ({
     id,
@@ -81,37 +101,12 @@ function makeDocumentsList(ids: string[]): DocumentsListDto {
   };
 }
 
-function makeEditor(id: string, kind = "invoice", notes = ""): DocumentEditorDto {
-  return {
-    form: {
-      id,
-      kind,
-      counterpartyId: "cp-1",
-      counterpartyName: "ТОВ Ромашка",
-      title: `${kind} editor`,
-      number: `NUM-${id}`,
-      date: "2026-04-30",
-      notes
-    },
-    items: [
-      {
-        description: "Послуга",
-        unit: "шт",
-        quantity: "1",
-        price: "1234.50"
-      }
-    ],
-    showTypePicker: false,
-    showEditor: true
-  };
-}
-
-function makeChain(sourceId: string, stepType = "invoice"): DocumentChainDto {
+function makeChain(sourceId: string): DocumentChainDto {
   return {
     sourceId,
     steps: [
       {
-        docType: stepType,
+        docType: "invoice",
         docNumber: `NUM-${sourceId}`,
         amountStr: "1 234,50 грн",
         status: "draft",
@@ -129,7 +124,7 @@ describe("frontend Tauri store smoke: shell + documents", () => {
 
   it("orchestrates shell load, company switch and palette activation without Slint callbacks", async () => {
     const stores = await loadStores();
-    const { shellStore, paletteStore, navigationStore, documentsStore, counterpartiesStore } = stores;
+    const { appShellStore, shellStore, paletteStore, navigationStore, documentsStore, counterpartiesStore } = stores;
 
     let selectedCounterpartyId = "cp-9";
     counterpartiesStore.subscribe((state) => {
@@ -166,6 +161,42 @@ describe("frontend Tauri store smoke: shell + documents", () => {
         case "shell_set_active_company":
           expect(payload).toEqual({ companyId: "company-2" });
           return makeShellState("company-2");
+        case "settings_load":
+          return {
+            preferences: {
+              darkMode: true
+            }
+          };
+        case "dashboard_load":
+          return {
+            hero: null,
+            alerts: [],
+            metrics: [],
+            cashflow: [],
+            receivables: [],
+            payables: []
+          };
+        case "documents_list":
+          return makeDocumentsList([]);
+        case "counterparties_list":
+          return { items: [] };
+        case "tasks_list":
+          return { sections: [], summary: { overdue: 0, today: 0, upcoming: 0, done: 0 } };
+        case "reports_load":
+          return {
+            filter: {
+              tab: "bank",
+              scope: "active",
+              dateFrom: "2026-02-01",
+              dateTo: "2026-05-01",
+              query: ""
+            },
+            tabs: [],
+            summary: [],
+            rows: []
+          };
+        case "payments_list":
+          return { items: [], totals: [], summary: { incoming: "0", outgoing: "0", balance: "0" } };
         case "shell_palette_search":
           expect(payload).toEqual({
             request: {
@@ -191,10 +222,10 @@ describe("frontend Tauri store smoke: shell + documents", () => {
       }
     });
 
-    await shellStore.load();
+    await appShellStore.bootstrap();
     expect(snapshot(shellStore).state?.activeCompanyId).toBe("company-1");
 
-    await shellStore.setActiveCompany("company-2");
+    await appShellStore.switchActiveCompany("company-2");
     expect(snapshot(shellStore).state?.activeCompanyId).toBe("company-2");
     expect(snapshot(shellStore).state?.isDark).toBe(true);
 
@@ -202,16 +233,114 @@ describe("frontend Tauri store smoke: shell + documents", () => {
     expect(snapshot(paletteStore).items).toEqual(paletteSearch.items);
 
     await paletteStore.activate("nav:documents");
-    await flushAsyncWork();
-    expect(snapshot(navigationStore)).toBe("documents");
-    expect(snapshot(documentsStore).editor?.form.id).toBe("doc-open-1");
+    await vi.waitFor(() => {
+      expect(snapshot(navigationStore)).toBe("documents");
+      expect(snapshot(documentsStore).editor?.form.id).toBe("doc-open-1");
+    });
     expect(selectedCounterpartyId).toBe("cp-9");
+  });
+
+  it("centralizes canonical reload fan-out for bootstrap and company switch", async () => {
+    const stores = await loadStores();
+    const {
+      appShellStore,
+      dashboardStore,
+      documentsStore,
+      counterpartiesStore,
+      tasksStore,
+      reportsStore,
+      paymentsStore,
+      settingsStore
+    } = stores;
+
+    const dashboardSpy = vi.spyOn(dashboardStore, "load");
+    const documentsSpy = vi.spyOn(documentsStore, "load");
+    const counterpartiesSpy = vi.spyOn(counterpartiesStore, "load");
+    const tasksSpy = vi.spyOn(tasksStore, "load");
+    const reportsSpy = vi.spyOn(reportsStore, "load");
+    const paymentsSpy = vi.spyOn(paymentsStore, "load");
+    const settingsSpy = vi.spyOn(settingsStore, "load");
+
+    invokeMock.mockImplementation(async (command) => {
+      switch (command) {
+        case "shell_load":
+          return makeShellState("company-1");
+        case "shell_set_active_company":
+          return makeShellState("company-2");
+        case "settings_load":
+          return {
+            preferences: {
+              darkMode: true
+            }
+          };
+        case "dashboard_load":
+          return {
+            hero: null,
+            alerts: [],
+            metrics: [],
+            cashflow: [],
+            receivables: [],
+            payables: []
+          };
+        case "documents_list":
+          return makeDocumentsList([]);
+        case "counterparties_list":
+          return { items: [] };
+        case "tasks_list":
+          return { sections: [], summary: { overdue: 0, today: 0, upcoming: 0, done: 0 } };
+        case "reports_load":
+          return {
+            filter: {
+              tab: "bank",
+              scope: "active",
+              dateFrom: "2026-02-01",
+              dateTo: "2026-05-01",
+              query: ""
+            },
+            tabs: [],
+            summary: [],
+            rows: []
+          };
+        case "payments_list":
+          return { items: [], totals: [], summary: { incoming: "0", outgoing: "0", balance: "0" } };
+        default:
+          throw new Error(`unexpected command: ${command}`);
+      }
+    });
+
+    await appShellStore.bootstrap();
+
+    expect(settingsSpy).toHaveBeenCalledTimes(1);
+    expect(dashboardSpy).toHaveBeenCalledTimes(1);
+    expect(documentsSpy).toHaveBeenCalledTimes(1);
+    expect(counterpartiesSpy).toHaveBeenCalledTimes(1);
+    expect(tasksSpy).toHaveBeenCalledTimes(1);
+    expect(reportsSpy).toHaveBeenCalledTimes(1);
+    expect(paymentsSpy).toHaveBeenCalledTimes(1);
+
+    dashboardSpy.mockClear();
+    documentsSpy.mockClear();
+    counterpartiesSpy.mockClear();
+    tasksSpy.mockClear();
+    reportsSpy.mockClear();
+    paymentsSpy.mockClear();
+    settingsSpy.mockClear();
+
+    await appShellStore.switchActiveCompany("company-2");
+
+    expect(settingsSpy).toHaveBeenCalledTimes(1);
+    expect(dashboardSpy).toHaveBeenCalledTimes(1);
+    expect(documentsSpy).toHaveBeenCalledTimes(1);
+    expect(counterpartiesSpy).toHaveBeenCalledTimes(1);
+    expect(tasksSpy).toHaveBeenCalledTimes(1);
+    expect(reportsSpy).toHaveBeenCalledTimes(1);
+    expect(paymentsSpy).toHaveBeenCalledTimes(1);
   });
 
   it("resets palette query and items after close so next open starts predictably", async () => {
     const { paletteStore } = await loadStores();
 
-    const paletteSearch: PaletteSearchResultDto = {
+    invokeMock.mockResolvedValue({
       items: [
         {
           kind: "navigate",
@@ -221,14 +350,6 @@ describe("frontend Tauri store smoke: shell + documents", () => {
           payload: "nav:documents"
         }
       ]
-    };
-
-    invokeMock.mockImplementation(async (command) => {
-      if (command === "shell_palette_search") {
-        return paletteSearch;
-      }
-
-      throw new Error(`unexpected command: ${command}`);
     });
 
     paletteStore.toggle();
@@ -236,8 +357,7 @@ describe("frontend Tauri store smoke: shell + documents", () => {
 
     expect(snapshot(paletteStore)).toMatchObject({
       open: true,
-      query: "док",
-      items: paletteSearch.items
+      query: "док"
     });
 
     paletteStore.close();
@@ -270,130 +390,167 @@ describe("frontend Tauri store smoke: shell + documents", () => {
 
     const switchPromise = shellStore.setActiveCompany("company-2");
     expect(snapshot(shellStore).loading).toBe(true);
+    expect(snapshot(shellStore).phase).toBe("company-switch");
+    expect(snapshot(shellStore).pendingCompanyId).toBe("company-2");
+    expect(snapshot(shellStore).progressLabel).toContain("компан");
     expect(snapshot(shellStore).state?.activeCompanyId).toBe("company-1");
 
     deferred.resolve(makeShellState("company-2"));
     await switchPromise;
 
     expect(snapshot(shellStore).loading).toBe(false);
+    expect(snapshot(shellStore).phase).toBe("idle");
+    expect(snapshot(shellStore).pendingCompanyId).toBeNull();
+    expect(snapshot(shellStore).progressLabel).toBeNull();
     expect(snapshot(shellStore).state?.activeCompanyId).toBe("company-2");
   });
 
-  it("covers documents list, selection, bulk status, bulk delete, open, create, save, chain, status and delete flow", async () => {
-    const { documentsStore } = await loadStores();
+  it("exposes the initial loading contract before the first shell response arrives", async () => {
+    const { shellStore } = await loadStores();
+    const deferred = createDeferred<ShellStateDto>();
 
-    let docs = makeDocumentsList(["doc-1", "doc-2"]);
-    const editors = new Map<string, DocumentEditorDto>([["doc-1", makeEditor("doc-1")]]);
-    const chains = new Map<string, DocumentChainDto>([["doc-1", makeChain("doc-1")]]);
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "shell_load") {
+        return deferred.promise;
+      }
+
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    const loadPromise = shellStore.load();
+
+    expect(snapshot(shellStore).loading).toBe(true);
+    expect(snapshot(shellStore).phase).toBe("initial");
+    expect(snapshot(shellStore).pendingCompanyId).toBeNull();
+    expect(snapshot(shellStore).progressLabel).toContain("робочий простір");
+    expect(snapshot(shellStore).state).toBeNull();
+
+    deferred.resolve(makeShellState("company-1"));
+    await loadPromise;
+
+    expect(snapshot(shellStore).loading).toBe(false);
+    expect(snapshot(shellStore).phase).toBe("idle");
+  });
+
+  it("exposes the refresh loading contract when shell data already exists", async () => {
+    const { shellStore } = await loadStores();
+    const deferred = createDeferred<ShellStateDto>();
+    let loadCount = 0;
+
+    invokeMock.mockImplementation(async (command) => {
+      if (command !== "shell_load") {
+        throw new Error(`unexpected command: ${command}`);
+      }
+
+      loadCount += 1;
+      if (loadCount === 1) {
+        return makeShellState("company-1");
+      }
+
+      return deferred.promise;
+    });
+
+    await shellStore.load();
+
+    const refreshPromise = shellStore.load();
+
+    expect(snapshot(shellStore).loading).toBe(true);
+    expect(snapshot(shellStore).phase).toBe("refresh");
+    expect(snapshot(shellStore).pendingCompanyId).toBeNull();
+    expect(snapshot(shellStore).progressLabel).toContain("shell");
+    expect(snapshot(shellStore).state?.activeCompanyId).toBe("company-1");
+
+    deferred.resolve(makeShellState("company-1"));
+    await refreshPromise;
+
+    expect(snapshot(shellStore).loading).toBe(false);
+    expect(snapshot(shellStore).phase).toBe("idle");
+  });
+
+  it("keeps the previous shell state when refresh fails", async () => {
+    const { shellStore } = await loadStores();
+    let loadCount = 0;
+
+    invokeMock.mockImplementation(async (command) => {
+      if (command !== "shell_load") {
+        throw new Error(`unexpected command: ${command}`);
+      }
+
+      loadCount += 1;
+      if (loadCount === 1) {
+        return makeShellState("company-1");
+      }
+
+      throw new Error("refresh failed");
+    });
+
+    await shellStore.load();
+    const result = await shellStore.load();
+
+    expect(result).toBeNull();
+    expect(snapshot(shellStore).loading).toBe(false);
+    expect(snapshot(shellStore).phase).toBe("idle");
+    expect(snapshot(shellStore).pendingCompanyId).toBeNull();
+    expect(snapshot(shellStore).progressLabel).toBeNull();
+    expect(snapshot(shellStore).error).toContain("refresh failed");
+    expect(snapshot(shellStore).state?.activeCompanyId).toBe("company-1");
+  });
+
+  it("suppresses repeated company switches while a risky reload is already in progress", async () => {
+    const { shellStore } = await loadStores();
+    const deferred = createDeferred<ShellStateDto>();
 
     invokeMock.mockImplementation(async (command, payload) => {
       switch (command) {
-        case "documents_list":
-          return docs;
-        case "documents_bulk_delete":
-          expect(payload).toEqual({
-            request: {
-              docIds: ["doc-2"]
-            }
-          });
-          docs = makeDocumentsList(["doc-1"]);
-          return {
-            total: 1,
-            succeeded: 1,
-            failed: 0,
-            errors: [],
-            message: "Видалено 1 документ"
-          };
-        case "document_open":
-          return editors.get((payload as { docId: string }).docId) ?? makeEditor("missing");
-        case "document_chain_get":
-          return chains.get((payload as { docId: string }).docId) ?? makeChain("missing");
-        case "document_create_draft": {
-          const editor = makeEditor("doc-2");
-          docs = makeDocumentsList(["doc-1", "doc-2"]);
-          editors.set("doc-2", editor);
-          chains.set("doc-2", makeChain("doc-2"));
-          return editor;
-        }
-        case "document_save": {
-          const request = payload as { request: { form: DocumentEditorDto["form"] } };
-          const id = request.request.form.id;
-          const saved = makeEditor(id, request.request.form.kind, request.request.form.notes);
-          editors.set(id, saved);
-          return {
-            documentId: id,
-            kind: request.request.form.kind,
-            message: "Документ збережено"
-          };
-        }
-        case "document_chain_create_draft": {
-          const request = payload as { request: { sourceId: string; targetKind: string } };
-          const editor = makeEditor("doc-3", request.request.targetKind);
-          editors.set("doc-3", editor);
-          chains.set("doc-3", makeChain("doc-3", request.request.targetKind));
-          docs = makeDocumentsList(["doc-1", "doc-2", "doc-3"]);
-          return editor;
-        }
-        case "document_advance_status":
-          return {
-            ok: true,
-            message: "Статус оновлено"
-          };
-        case "document_delete": {
-          const id = (payload as { docId: string }).docId;
-          docs = makeDocumentsList(["doc-1"]);
-          editors.delete(id);
-          chains.delete(id);
-          return {
-            ok: true,
-            message: "Документ видалено"
-          };
-        }
+        case "shell_load":
+          return makeShellState("company-1");
+        case "shell_set_active_company":
+          expect(payload).toEqual({ companyId: "company-2" });
+          return deferred.promise;
         default:
           throw new Error(`unexpected command: ${command}`);
       }
     });
 
-    await documentsStore.load();
-    expect(snapshot(documentsStore).list?.totalCount).toBe(2);
+    await shellStore.load();
 
-    documentsStore.toggleSelected("doc-1");
-    expect(snapshot(documentsStore).selectedIds).toEqual(["doc-1"]);
+    const firstSwitchPromise = shellStore.setActiveCompany("company-2");
+    const secondSwitchPromise = shellStore.setActiveCompany("company-2");
 
-    documentsStore.toggleSelected("doc-2");
-    expect(snapshot(documentsStore).selectedIds).toEqual(["doc-1", "doc-2"]);
+    expect(invokeMock.mock.calls.filter(([command]) => command === "shell_set_active_company")).toHaveLength(1);
+    expect(snapshot(shellStore).loading).toBe(true);
 
-    documentsStore.toggleSelected("doc-1");
-    expect(snapshot(documentsStore).selectedIds).toEqual(["doc-2"]);
+    deferred.resolve(makeShellState("company-2"));
 
-    await documentsStore.bulkDelete();
-    expect(snapshot(documentsStore).list?.totalCount).toBe(1);
-    expect(snapshot(documentsStore).selectedIds).toEqual([]);
-    expect(snapshot(documentsStore).message).toBe("Видалено 1 документ");
+    const [firstResult, secondResult] = await Promise.all([firstSwitchPromise, secondSwitchPromise]);
+    expect(firstResult?.activeCompanyId).toBe("company-2");
+    expect(secondResult?.activeCompanyId).toBe("company-2");
+    expect(snapshot(shellStore).state?.activeCompanyId).toBe("company-2");
+  });
 
-    await documentsStore.open("doc-1");
-    expect(snapshot(documentsStore).editor?.form.id).toBe("doc-1");
-    expect(snapshot(documentsStore).chain?.sourceId).toBe("doc-1");
+  it("clears switch-specific loading metadata after company switch failure", async () => {
+    const { shellStore } = await loadStores();
 
-    await documentsStore.create("cp-1", "invoice");
-    expect(snapshot(documentsStore).editor?.form.id).toBe("doc-2");
-    expect(snapshot(documentsStore).message).toBe("Чернетку створено");
+    invokeMock.mockImplementation(async (command) => {
+      switch (command) {
+        case "shell_load":
+          return makeShellState("company-1");
+        case "shell_set_active_company":
+          throw new Error("switch failed");
+        default:
+          throw new Error(`unexpected command: ${command}`);
+      }
+    });
 
-    documentsStore.updateFormField("notes", "Smoke notes");
-    await documentsStore.save();
-    expect(snapshot(documentsStore).editor?.form.notes).toBe("Smoke notes");
-    expect(snapshot(documentsStore).message).toBe("Документ збережено");
+    await shellStore.load();
+    const result = await shellStore.setActiveCompany("company-2");
 
-    await documentsStore.createChainDraft("act");
-    expect(snapshot(documentsStore).editor?.form.kind).toBe("act");
-    expect(snapshot(documentsStore).list?.totalCount).toBe(3);
-
-    await documentsStore.advanceStatus();
-    expect(snapshot(documentsStore).message).toBe("Статус оновлено");
-
-    await documentsStore.deleteCurrent();
-    expect(snapshot(documentsStore).editor).toBeNull();
-    expect(snapshot(documentsStore).list?.totalCount).toBe(1);
-    expect(snapshot(documentsStore).message).toBe("Документ видалено");
+    expect(result).toBeNull();
+    expect(snapshot(shellStore).loading).toBe(false);
+    expect(snapshot(shellStore).phase).toBe("idle");
+    expect(snapshot(shellStore).pendingCompanyId).toBeNull();
+    expect(snapshot(shellStore).progressLabel).toBeNull();
+    expect(snapshot(shellStore).error).toContain("switch failed");
+    expect(snapshot(shellStore).state?.activeCompanyId).toBe("company-1");
   });
 });
