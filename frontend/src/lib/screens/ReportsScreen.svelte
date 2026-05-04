@@ -15,7 +15,15 @@
   });
 
   const reports = reportsStore;
+  const reportsTabPanelId = "reports-tabpanel";
+  const reportTabs: Array<{ id: ReportsTab; label: string }> = [
+    { id: "bank", label: "Гроші на рахунках і в русі" },
+    { id: "pnl", label: "Дохід, витрати і результат" },
+    { id: "receivables", label: "Нам мають заплатити" },
+    { id: "payables", label: "Ми маємо заплатити" }
+  ];
   let dateFromInput: HTMLInputElement | null = null;
+  let reportTabButtons: Array<HTMLButtonElement | null> = [];
 
   function onReportsSearch(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
@@ -24,6 +32,47 @@
 
   function onReportsTabChange(tab: ReportsTab) {
     void reports.load({ tab });
+  }
+
+  function getTabId(tab: ReportsTab): string {
+    return `reports-tab-${tab}`;
+  }
+
+  function focusReportTab(index: number) {
+    const normalizedIndex = ((index % reportTabs.length) + reportTabs.length) % reportTabs.length;
+    reportTabButtons[normalizedIndex]?.focus();
+  }
+
+  function handleReportTabKeydown(event: KeyboardEvent, index: number) {
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+      event.preventDefault();
+      const nextIndex = (index + 1) % reportTabs.length;
+      onReportsTabChange(reportTabs[nextIndex].id);
+      focusReportTab(nextIndex);
+      return;
+    }
+
+    if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const nextIndex = (index - 1 + reportTabs.length) % reportTabs.length;
+      onReportsTabChange(reportTabs[nextIndex].id);
+      focusReportTab(nextIndex);
+      return;
+    }
+
+    if (event.key === "Home") {
+      event.preventDefault();
+      onReportsTabChange(reportTabs[0].id);
+      focusReportTab(0);
+      return;
+    }
+
+    if (event.key === "End") {
+      event.preventDefault();
+      const nextIndex = reportTabs.length - 1;
+      onReportsTabChange(reportTabs[nextIndex].id);
+      focusReportTab(nextIndex);
+    }
   }
 
   function onReportsScopeChange(event: Event) {
@@ -415,38 +464,54 @@
   <div class="reports-filters">
     <div class="task-tabs" role="tablist" aria-label="Режими звіту">
       <button
+        bind:this={reportTabButtons[0]}
         class:active={$reports.screen?.filter.tab === "bank"}
+        id={getTabId("bank")}
         role="tab"
         aria-selected={$reports.screen?.filter.tab === "bank"}
+        aria-controls={reportsTabPanelId}
         tabindex={$reports.screen?.filter.tab === "bank" ? 0 : -1}
         on:click={() => onReportsTabChange("bank")}
+        on:keydown={(event) => handleReportTabKeydown(event, 0)}
       >
         Гроші на рахунках і в русі
       </button>
       <button
+        bind:this={reportTabButtons[1]}
         class:active={$reports.screen?.filter.tab === "pnl"}
+        id={getTabId("pnl")}
         role="tab"
         aria-selected={$reports.screen?.filter.tab === "pnl"}
+        aria-controls={reportsTabPanelId}
         tabindex={$reports.screen?.filter.tab === "pnl" ? 0 : -1}
         on:click={() => onReportsTabChange("pnl")}
+        on:keydown={(event) => handleReportTabKeydown(event, 1)}
       >
         Дохід, витрати і результат
       </button>
       <button
+        bind:this={reportTabButtons[2]}
         class:active={$reports.screen?.filter.tab === "receivables"}
+        id={getTabId("receivables")}
         role="tab"
         aria-selected={$reports.screen?.filter.tab === "receivables"}
+        aria-controls={reportsTabPanelId}
         tabindex={$reports.screen?.filter.tab === "receivables" ? 0 : -1}
         on:click={() => onReportsTabChange("receivables")}
+        on:keydown={(event) => handleReportTabKeydown(event, 2)}
       >
         Нам мають заплатити
       </button>
       <button
+        bind:this={reportTabButtons[3]}
         class:active={$reports.screen?.filter.tab === "payables"}
+        id={getTabId("payables")}
         role="tab"
         aria-selected={$reports.screen?.filter.tab === "payables"}
+        aria-controls={reportsTabPanelId}
         tabindex={$reports.screen?.filter.tab === "payables" ? 0 : -1}
         on:click={() => onReportsTabChange("payables")}
+        on:keydown={(event) => handleReportTabKeydown(event, 3)}
       >
         Ми маємо заплатити
       </button>
@@ -544,19 +609,41 @@
   <p class="reports-context-text">{getContextText($reports.screen)}</p>
 
   {#if $reports.message}
-    <p class="message">{$reports.message}</p>
+    <div class="status-banner is-success" role="status" aria-live="polite">
+      <div>
+        <strong>Дію виконано</strong>
+        <p>{$reports.message}</p>
+      </div>
+    </div>
   {/if}
 
   {#if $reports.error}
-    <p class="error">{$reports.error}</p>
+    <div class="status-banner is-error" role="alert" aria-live="assertive">
+      <div>
+        <strong>Потрібна увага</strong>
+        <p>{$reports.error}</p>
+      </div>
+    </div>
   {/if}
 
   {#if $reports.initialLoading}
-    <div class="reports-table-card" data-testid="reports-table-card">
+    <div
+      class="reports-table-card"
+      data-testid="reports-table-card"
+      id={reportsTabPanelId}
+      role="tabpanel"
+      aria-labelledby={getTabId($reports.screen?.filter.tab ?? "bank")}
+    >
       <SkeletonRow count={6} />
     </div>
   {:else if !hasActiveRows($reports.screen?.filter.tab)}
-    <div class="empty-state-card reports-empty-state" data-testid="reports-empty-state">
+    <div
+      class="empty-state-card reports-empty-state"
+      data-testid="reports-empty-state"
+      id={reportsTabPanelId}
+      role="tabpanel"
+      aria-labelledby={getTabId($reports.screen?.filter.tab ?? "bank")}
+    >
       <span class="empty-state-eyebrow">Уточніть зріз</span>
       <strong>На цей період немає записів</strong>
       <p>Змініть період, коло компаній або сценарій звіту, щоб знайти дані для аналізу.</p>

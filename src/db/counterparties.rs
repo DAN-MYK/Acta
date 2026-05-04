@@ -57,6 +57,18 @@ pub async fn get_name_by_id(
     Ok(name)
 }
 
+/// Отримати тільки назву контрагента за UUID без обмеження по компанії.
+/// Використовується в глобальних зрізах, де focus може посилатися на контрагента
+/// поза межами активної компанії.
+pub async fn get_name_by_id_any_company(pool: &PgPool, id: Uuid) -> Result<Option<String>> {
+    let name = sqlx::query_scalar::<_, String>("SELECT name FROM counterparties WHERE id = $1")
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
+
+    Ok(name)
+}
+
 /// Список контрагентів компанії з опціональним текстовим пошуком та показом архіву.
 ///
 /// Всі 4 гілки фільтрують за `company_id` — ізоляція даних між компаніями.

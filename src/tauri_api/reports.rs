@@ -1,7 +1,9 @@
 use std::path::PathBuf;
 
 use crate::app_ctx::AppCtx;
-use crate::db::counterparties::get_name_by_id as get_counterparty_name_by_id;
+use crate::db::counterparties::{
+    get_name_by_id as get_counterparty_name_by_id, get_name_by_id_any_company,
+};
 use crate::db::reports::{
     compute_opening_balance, load_bank_rows, load_payables_rows, load_pnl_rows,
     load_receivables_rows, load_top_counterparties_bank, load_top_counterparties_payables,
@@ -330,9 +332,13 @@ async fn build_reports_screen(
         } else {
             // Fallback: direct lookup when counterparty falls outside top-8
             if let Ok(uuid) = uuid::Uuid::parse_str(id) {
-                get_counterparty_name_by_id(ctx.pool(), ctx.company_id(), uuid)
-                    .await?
-                    .map(|name| SelectedCounterpartyDto { id: id.clone(), name })
+                let maybe_name = match filter.scope {
+                    ReportsScope::All => get_name_by_id_any_company(ctx.pool(), uuid).await?,
+                    ReportsScope::Active => {
+                        get_counterparty_name_by_id(ctx.pool(), ctx.company_id(), uuid).await?
+                    }
+                };
+                maybe_name.map(|name| SelectedCounterpartyDto { id: id.clone(), name })
             } else if let Some(name) = id
                 .strip_prefix("bank-name:")
                 .map(str::trim)

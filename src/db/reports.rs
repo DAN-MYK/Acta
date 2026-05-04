@@ -525,10 +525,9 @@ pub async fn load_top_counterparties_bank(
                 COALESCE(SUM(CASE WHEN p.direction = 'income' THEN p.amount ELSE 0 END), 0) AS income,
                 COALESCE(SUM(CASE WHEN p.direction = 'expense' THEN p.amount ELSE 0 END), 0) AS expense
             FROM payments p
-            JOIN companies c ON c.id = p.company_id
             LEFT JOIN counterparties cp ON cp.id = p.counterparty_id
             WHERE p.date BETWEEN $1 AND $2
-              AND LOWER(c.name) LIKE $3 ESCAPE '\'
+              AND LOWER(COALESCE(cp.name, COALESCE(NULLIF(p.bank_name, ''), 'Р‘РµР· РєРѕРЅС‚СЂР°РіРµРЅС‚Р°'))) LIKE $3 ESCAPE '\'
             GROUP BY cp.id, cp.name, COALESCE(NULLIF(p.bank_name, ''), 'Без контрагента')
             ORDER BY (COALESCE(SUM(CASE WHEN p.direction = 'income' THEN p.amount ELSE 0 END), 0)
                     + COALESCE(SUM(CASE WHEN p.direction = 'expense' THEN p.amount ELSE 0 END), 0)) DESC,

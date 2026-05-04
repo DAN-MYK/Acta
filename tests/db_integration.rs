@@ -6094,6 +6094,62 @@ async fn load_bank_rows_respects_bank_name_selector() -> Result<()> {
 }
 
 #[tokio::test]
+async fn load_top_counterparties_bank_respects_counterparty_query_in_all_scope() -> Result<()> {
+    use acta::app_ctx::AppCtx;
+    use acta::db::reports::load_top_counterparties_bank;
+    use acta::models::reports::{ReportsScope, ResolvedReportsFilter};
+
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+    let suffix = unique_suffix();
+    let today = chrono::Utc::now().date_naive();
+    let period_start = today - Duration::days(30);
+    let counterparty_name = format!("Scope All CP {suffix}");
+    let cp = create_test_counterparty(&pool, &suffix, &counterparty_name, None, None).await?;
+
+    let payment_id = create_test_payment(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        Some(cp.id),
+        dec!(6100),
+        "income",
+        today,
+    )
+    .await?;
+
+    let ctx = AppCtx::new(pool.clone(), DEFAULT_COMPANY_ID);
+    let filter = ResolvedReportsFilter {
+        scope: ReportsScope::All,
+        date_from: period_start,
+        date_to: today,
+        query: counterparty_name.clone(),
+        selected_counterparty_id: None,
+    };
+
+    let rows = load_top_counterparties_bank(&ctx, &filter).await?;
+
+    assert_eq!(
+        rows.len(),
+        1,
+        "у scope=all query по назві контрагента має лишати рівно один рядок рейтингу"
+    );
+    assert_eq!(rows[0].counterparty_id, cp.id.to_string());
+    assert_eq!(rows[0].counterparty_name, counterparty_name);
+
+    sqlx::query("DELETE FROM payments WHERE id = $1")
+        .bind(payment_id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn reports_load_keeps_selected_counterparty_when_it_is_outside_top_counterparties() -> Result<()> {
     use acta::app_ctx::AppCtx;
     use acta::tauri_api::reports::{reports_load, ReportsLoadRequest};
@@ -6189,6 +6245,144 @@ async fn reports_load_keeps_selected_counterparty_when_it_is_outside_top_counter
             .execute(&pool)
             .await?;
     }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn reports_load_keeps_selected_counterparty_from_other_company_in_all_scope() -> Result<()> {
+    use acta::app_ctx::AppCtx;
+    use acta::models::company::NewCompany;
+    use acta::tauri_api::reports::{reports_load, ReportsLoadRequest, SelectedCounterpartyDto};
+
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+    let suffix = unique_suffix();
+    let today = chrono::Utc::now().date_naive();
+    let period_start = today - Duration::days(30);
+
+    let foreign_company = db::companies::create(
+        &pool,
+        &NewCompany {
+            name: format!("ІТ Foreign Reports {suffix}"),
+            short_name: Some(format!("FR {suffix}")),
+            edrpou: None,
+            ipn: None,
+            iban: None,
+            legal_address: None,
+            director_name: None,
+            tax_system: None,
+            is_vat_payer: false,
+        },
+    )
+    .await?;
+
+    let selected_counterparty = db::counterparties::create(
+        &pool,
+        foreign_company.id,
+        &models::NewCounterparty {
+            name: format!("ІТ Cross Company Selected {suffix}"),
+            edrpou: None,
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("cross-company-selected-{suffix}")),
+        },
+    )
+    .await?;
+
+    let selected_payment = create_test_payment(
+        &pool,
+        foreign_company.id,
+        Some(selected_counterparty.id),
+        dec!(500),
+        "income",
+        today,
+    )
+    .await?;
+
+    let mut default_counterparty_ids = Vec::new();
+    let mut default_payment_ids = Vec::new();
+    for index in 0..8 {
+        let cp = create_test_counterparty(
+            &pool,
+            &format!("{suffix}-{index}"),
+            &format!("ІТ Local Top {index} {suffix}"),
+            None,
+            None,
+        )
+        .await?;
+        let payment_id = create_test_payment(
+            &pool,
+            DEFAULT_COMPANY_ID,
+            Some(cp.id),
+            dec!(1000) * Decimal::from(9 - index),
+            "income",
+            today,
+        )
+        .await?;
+        default_counterparty_ids.push(cp.id);
+        default_payment_ids.push(payment_id);
+    }
+
+    let ctx = AppCtx::new(pool.clone(), DEFAULT_COMPANY_ID);
+    let screen = reports_load(
+        &ctx,
+        ReportsLoadRequest {
+            tab: Some("bank".to_string()),
+            scope: Some("all".to_string()),
+            date_from: Some(period_start.format("%Y-%m-%d").to_string()),
+            date_to: Some(today.format("%Y-%m-%d").to_string()),
+            query: Some(String::new()),
+            selected_counterparty_id: Some(selected_counterparty.id.to_string()),
+        },
+    )
+    .await?;
+
+    assert_eq!(screen.top_counterparties.len(), 8, "топ має лишатись обмеженим 8 рядками");
+    assert!(
+        screen
+            .top_counterparties
+            .iter()
+            .all(|row| row.counterparty_id != selected_counterparty.id.to_string()),
+        "обраний контрагент з іншої компанії має лишатись поза top-8 у цьому сценарії"
+    );
+    assert_eq!(
+        screen.selected_counterparty,
+        Some(SelectedCounterpartyDto {
+            id: selected_counterparty.id.to_string(),
+            name: selected_counterparty.name.clone(),
+        })
+    );
+
+    sqlx::query("DELETE FROM payments WHERE id = $1")
+        .bind(selected_payment)
+        .execute(&pool)
+        .await?;
+    for payment_id in default_payment_ids {
+        sqlx::query("DELETE FROM payments WHERE id = $1")
+            .bind(payment_id)
+            .execute(&pool)
+            .await?;
+    }
+    for counterparty_id in default_counterparty_ids {
+        sqlx::query("DELETE FROM counterparties WHERE id = $1")
+            .bind(counterparty_id)
+            .execute(&pool)
+            .await?;
+    }
+    sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(selected_counterparty.id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM companies WHERE id = $1")
+        .bind(foreign_company.id)
+        .execute(&pool)
+        .await?;
 
     Ok(())
 }

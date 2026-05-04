@@ -23,9 +23,14 @@
   const theme = themeStore;
   const settings = settingsStore;
 
+  const paletteTitleId = "command-palette-title";
+  const paletteListId = "command-palette-items";
+
   let paletteInput: HTMLInputElement | null = null;
   let paletteToggleButton: HTMLButtonElement | null = null;
   let paletteReturnFocusTarget: HTMLElement | null = null;
+  let paletteItemButtons: Array<HTMLButtonElement | null> = [];
+  let activePaletteIndex = -1;
   let wasPaletteOpen = false;
 
   const sidebarScreens: Array<{
@@ -50,6 +55,7 @@
     const paletteOpen = $palette.open;
     if (paletteOpen && !wasPaletteOpen) {
       paletteReturnFocusTarget = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      activePaletteIndex = -1;
       void tick().then(() => paletteInput?.focus());
     }
 
@@ -65,6 +71,15 @@
     wasPaletteOpen = paletteOpen;
   }
 
+  $: {
+    const itemsCount = $palette.items.length;
+    if (itemsCount === 0) {
+      activePaletteIndex = -1;
+    } else if (activePaletteIndex >= itemsCount) {
+      activePaletteIndex = itemsCount - 1;
+    }
+  }
+
   $: document.body.dataset.theme = $theme;
   $: currentScreen = $navigation;
   $: appShellState = $appShell;
@@ -75,6 +90,7 @@
 
   function onPaletteInput(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
+    activePaletteIndex = -1;
     void palette.search(input.value);
   }
 
@@ -110,6 +126,105 @@
 
   function closePalette() {
     palette.close();
+  }
+
+  function focusPaletteItem(index: number) {
+    const itemsCount = $palette.items.length;
+    if (itemsCount === 0) {
+      return;
+    }
+
+    const normalizedIndex = ((index % itemsCount) + itemsCount) % itemsCount;
+    activePaletteIndex = normalizedIndex;
+    void tick().then(() => paletteItemButtons[normalizedIndex]?.focus());
+  }
+
+  function activatePaletteItem(index: number) {
+    const item = $palette.items[index];
+    if (!item) {
+      return;
+    }
+
+    void palette.activate(item.payload).then(() => {
+      closePalette();
+    });
+  }
+
+  function focusPaletteBoundary(direction: "forward" | "backward") {
+    const focusableElements = [
+      paletteInput,
+      ...paletteItemButtons.filter((button): button is HTMLButtonElement => button !== null)
+    ];
+
+    if (focusableElements.length === 0) {
+      return;
+    }
+
+    if (direction === "forward") {
+      focusableElements[0]?.focus();
+      activePaletteIndex = -1;
+      return;
+    }
+
+    const lastElement = focusableElements[focusableElements.length - 1];
+    lastElement?.focus();
+    activePaletteIndex = focusableElements.length > 1 ? focusableElements.length - 2 : -1;
+  }
+
+  function handlePaletteInputKeydown(event: KeyboardEvent) {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      focusPaletteItem(0);
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      focusPaletteItem($palette.items.length - 1);
+      return;
+    }
+
+    if (event.key === "Tab" && event.shiftKey) {
+      event.preventDefault();
+      focusPaletteBoundary("backward");
+    }
+  }
+
+  function handlePaletteItemKeydown(event: KeyboardEvent, index: number) {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      focusPaletteItem(index + 1);
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      if (index === 0) {
+        activePaletteIndex = -1;
+        paletteInput?.focus();
+        return;
+      }
+
+      focusPaletteItem(index - 1);
+      return;
+    }
+
+    if (event.key === "Home") {
+      event.preventDefault();
+      focusPaletteItem(0);
+      return;
+    }
+
+    if (event.key === "End") {
+      event.preventDefault();
+      focusPaletteItem($palette.items.length - 1);
+      return;
+    }
+
+    if (event.key === "Tab") {
+      event.preventDefault();
+      focusPaletteBoundary(event.shiftKey ? "backward" : "forward");
+    }
   }
 
   function handleKeydown(event: KeyboardEvent) {
@@ -188,7 +303,12 @@
       </div>
 
       <div class="topbar-actions">
-        <select disabled={isShellBusy} value={shellState?.activeCompanyId} on:change={onCompanyChange}>
+        <select
+          aria-label="Активна компанія"
+          disabled={isShellBusy}
+          value={shellState?.activeCompanyId}
+          on:change={onCompanyChange}
+        >
           {#each shellState?.companyItems ?? [] as company}
             <option value={company.id}>{company.name}</option>
           {/each}
@@ -198,6 +318,10 @@
           bind:this={paletteToggleButton}
           data-testid="palette-toggle"
           disabled={isShellBusy}
+          aria-label="Відкрити палітру команд"
+          aria-haspopup="dialog"
+          aria-expanded={$palette.open}
+          aria-controls={$palette.open ? paletteListId : undefined}
           on:click={() => palette.toggle()}
         >
           <AppIcon name="palette" surface={true} />
@@ -241,22 +365,31 @@
       aria-label="Закрити палітру команд"
       on:click={closePalette}
     ></button>
-    <section class="palette" data-testid="palette">
+    <section class="palette" data-testid="palette" role="dialog" aria-modal="true" aria-labelledby={paletteTitleId}>
+      <h2 id={paletteTitleId} class="sr-only">Палітра команд</h2>
       <input
         bind:this={paletteInput}
+        type="search"
         placeholder="Пошук команд, екранів і документів"
+        aria-label="Пошук команд, екранів і документів"
+        aria-controls={paletteListId}
         on:input={onPaletteInput}
+        on:keydown={handlePaletteInputKeydown}
       />
 
-      <div class="palette-items" data-testid="palette-items">
+      <div class="palette-items" data-testid="palette-items" id={paletteListId}>
         {#each $palette.items as item, index}
           <button
+            bind:this={paletteItemButtons[index]}
             data-testid={`palette-item-${index}`}
             class="palette-item"
-            on:click={async () => {
-              await palette.activate(item.payload);
-              closePalette();
+            class:active={activePaletteIndex === index}
+            aria-current={activePaletteIndex === index ? "true" : undefined}
+            on:click={() => activatePaletteItem(index)}
+            on:focus={() => {
+              activePaletteIndex = index;
             }}
+            on:keydown={(event) => handlePaletteItemKeydown(event, index)}
           >
             <div>
               <strong>{item.title}</strong>
