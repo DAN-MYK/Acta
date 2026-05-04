@@ -2,17 +2,13 @@
   import SkeletonRow from "../components/SkeletonRow.svelte";
   import { reportsStore } from "../stores/reports";
   import type { PayableRowDto, ReceivableRowDto, ReportsScope, ReportsScreenDto, ReportsTab, TopCounterpartyRowDto } from "../types";
+  import { parseMoneyValue, sortPayables, sortReceivables } from "../utils/reports-sorting";
 
   interface ReportKpiCard {
     label: string;
     value: string;
     tone?: "default" | "accent" | "warning" | "danger";
   }
-
-  const sortCollator = new Intl.Collator("uk", {
-    numeric: true,
-    sensitivity: "base"
-  });
 
   const reports = reportsStore;
   let dateFromInput: HTMLInputElement | null = null;
@@ -74,69 +70,8 @@
     return rows.filter((row) => row.overdueDays > 0);
   }
 
-  function compareStrings(left: string, right: string): number {
-    return sortCollator.compare(left || "", right || "");
-  }
-
-  function compareDates(left: string, right: string): number {
-    return compareStrings(left || "9999-12-31", right || "9999-12-31");
-  }
-
-  function parseMoneyValue(value: string): number {
-    const normalized = value.replace(/\s+/g, "").replace("грн", "").replace(",", ".").trim();
-    const parsed = Number.parseFloat(normalized);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-
-  function stableSortRows<T>(rows: T[], compare: (left: T, right: T) => number): T[] {
-    return rows
-      .map((row, index) => ({ row, index }))
-      .sort((left, right) => {
-        const result = compare(left.row, right.row);
-        return result !== 0 ? result : left.index - right.index;
-      })
-      .map(({ row }) => row);
-  }
-
-  function sortedReceivables(rows: ReceivableRowDto[]): ReceivableRowDto[] {
-    return stableSortRows(rows, (left, right) => {
-      if (left.overdueDays !== right.overdueDays) {
-        return right.overdueDays - left.overdueDays;
-      }
-
-      const dueDateOrder = compareDates(left.expectedDate, right.expectedDate);
-      if (dueDateOrder !== 0) {
-        return dueDateOrder;
-      }
-
-      const amountOrder = parseMoneyValue(right.amountStr) - parseMoneyValue(left.amountStr);
-      if (amountOrder !== 0) {
-        return amountOrder;
-      }
-
-      return compareStrings(left.docNumber, right.docNumber);
-    });
-  }
-
-  function sortedPayables(rows: PayableRowDto[]): PayableRowDto[] {
-    return stableSortRows(rows, (left, right) => {
-      if (left.overdueDays !== right.overdueDays) {
-        return right.overdueDays - left.overdueDays;
-      }
-
-      const dueDateOrder = compareDates(left.dueDate, right.dueDate);
-      if (dueDateOrder !== 0) {
-        return dueDateOrder;
-      }
-
-      const amountOrder = parseMoneyValue(right.amountStr) - parseMoneyValue(left.amountStr);
-      if (amountOrder !== 0) {
-        return amountOrder;
-      }
-
-      return compareStrings(left.title, right.title);
-    });
-  }
+  const sortedReceivables = sortReceivables;
+  const sortedPayables = sortPayables;
 
   function daysUntil(dateValue: string): number | null {
     if (!dateValue) {
@@ -169,155 +104,113 @@
     return new Set(rows.map((row) => row.counterparty || "—")).size;
   }
 
+  interface ReportTabContent {
+    focusTitle: string;
+    focusDescription: string;
+    getFocusValue: (screen: ReportsScreenDto | null) => string;
+    getFocusMeta: (screen: ReportsScreenDto | null) => string;
+    getKpiCards: (screen: ReportsScreenDto | null) => ReportKpiCard[];
+  }
+
+  const FALLBACK_MONEY = "0,00 грн";
+
+  const reportTabContent: Record<ReportsTab, ReportTabContent> = {
+    bank: {
+      focusTitle: "Ключовий фокус",
+      focusDescription: "Звідси видно, як змінився залишок грошей і чи не з'явився ризик нестачі ліквідності.",
+      getFocusValue: (screen) => screen?.summary.closingBalanceStr ?? FALLBACK_MONEY,
+      getFocusMeta: (screen) => {
+        const first = screen?.bankRows?.[0];
+        return first ? `Найбільший рух: ${first.label} · ${first.netStr}` : "Дані з'являться після вибору періоду.";
+      },
+      getKpiCards: (screen) => [
+        { label: "Залишок на початок", value: screen?.summary.openingBalanceStr ?? FALLBACK_MONEY },
+        { label: "Надходження за період", value: screen?.summary.incomeStr ?? FALLBACK_MONEY, tone: "accent" },
+        { label: "Виплати за період", value: screen?.summary.expenseStr ?? FALLBACK_MONEY },
+        { label: "Залишок на кінець", value: screen?.summary.closingBalanceStr ?? FALLBACK_MONEY, tone: "warning" }
+      ]
+    },
+    pnl: {
+      focusTitle: "Фінансовий результат",
+      focusDescription: "Орієнтир для керівника: чи перекриває дохід витрати і яка категорія найбільше впливає на результат.",
+      getFocusValue: (screen) => screen?.summary.pnlNetResultStr ?? FALLBACK_MONEY,
+      getFocusMeta: (screen) => {
+        const first = screen?.pnlRows?.[0];
+        return first ? `Найсильніше впливає: ${first.label} · ${first.netStr}` : "Категорії з'являться після вибору періоду.";
+      },
+      getKpiCards: (screen) => [
+        { label: "Дохід за період", value: screen?.summary.pnlIncomeStr ?? FALLBACK_MONEY, tone: "accent" },
+        { label: "Витрати за період", value: screen?.summary.pnlExpenseStr ?? FALLBACK_MONEY },
+        { label: "Фінансовий результат за період", value: screen?.summary.pnlNetResultStr ?? FALLBACK_MONEY, tone: "warning" },
+        { label: "Категорій у звіті", value: `${screen?.pnlRows?.length ?? 0}` }
+      ]
+    },
+    receivables: {
+      focusTitle: "Уваги сьогодні",
+      focusDescription: "Починайте з прострочених оплат, а далі переходьте до документів, де строк наближається протягом тижня.",
+      getFocusValue: (screen) => `${overdueReceivables(screen?.receivablesRows ?? []).length}`,
+      getFocusMeta: (screen) => {
+        const first = overdueReceivables(sortedReceivables(screen?.receivablesRows ?? []))[0];
+        return first
+          ? `Перший у списку: ${first.docNumber} · ${first.counterparty}`
+          : "Прострочених оплат зараз немає.";
+      },
+      getKpiCards: (screen) => {
+        const rows = sortedReceivables(screen?.receivablesRows ?? []);
+        const overdueCount = overdueReceivables(rows).length;
+        const dueSoonCount = dueSoonReceivables(rows);
+        return [
+          { label: "Очікуємо отримати", value: screen?.summary.receivablesTotalStr ?? FALLBACK_MONEY, tone: "accent" },
+          { label: "Прострочені оплати", value: `${overdueCount}`, tone: overdueCount > 0 ? "danger" : "default" },
+          { label: "Оплати цього тижня", value: `${dueSoonCount}`, tone: dueSoonCount > 0 ? "warning" : "default" },
+          { label: "Контрагентів у роботі", value: `${uniqueCounterpartiesCount(rows)}` }
+        ];
+      }
+    },
+    payables: {
+      focusTitle: "Уваги сьогодні",
+      focusDescription: "Першими перевіряйте прострочені та найближчі виплати, щоб не втратити контроль над календарем платежів.",
+      getFocusValue: (screen) => `${overduePayables(screen?.payablesRows ?? []).length}`,
+      getFocusMeta: (screen) => {
+        const first = overduePayables(sortedPayables(screen?.payablesRows ?? []))[0];
+        return first ? `Перший ризик: ${first.counterparty || first.title} · ${first.dueDate}` : "Прострочених виплат зараз немає.";
+      },
+      getKpiCards: (screen) => {
+        const rows = sortedPayables(screen?.payablesRows ?? []);
+        const overdueCount = overduePayables(rows).length;
+        const dueSoonCount = dueSoonPayables(rows);
+        return [
+          { label: "Заплановано до оплати", value: screen?.summary.payablesTotalStr ?? FALLBACK_MONEY, tone: "accent" },
+          { label: "Прострочені виплати", value: `${overdueCount}`, tone: overdueCount > 0 ? "danger" : "default" },
+          { label: "Виплати цього тижня", value: `${dueSoonCount}`, tone: dueSoonCount > 0 ? "warning" : "default" },
+          { label: "Регулярних платежів", value: `${rows.filter((row) => row.recurrence && row.recurrence !== "—").length}` }
+        ];
+      }
+    }
+  };
+
+  function tabContent(tab: ReportsTab | undefined): ReportTabContent {
+    return reportTabContent[tab ?? "bank"];
+  }
+
   function getFocusTitle(tab: ReportsTab | undefined): string {
-    if (tab === "pnl") {
-      return "Фінансовий результат";
-    }
-    if (tab === "receivables" || tab === "payables") {
-      return "Уваги сьогодні";
-    }
-    return "Ключовий фокус";
+    return tabContent(tab).focusTitle;
   }
 
   function getFocusDescription(tab: ReportsTab | undefined): string {
-    if (tab === "pnl") {
-      return "Орієнтир для керівника: чи перекриває дохід витрати і яка категорія найбільше впливає на результат.";
-    }
-    if (tab === "receivables") {
-      return "Починайте з прострочених оплат, а далі переходьте до документів, де строк наближається протягом тижня.";
-    }
-    if (tab === "payables") {
-      return "Першими перевіряйте прострочені та найближчі виплати, щоб не втратити контроль над календарем платежів.";
-    }
-    return "Звідси видно, як змінився залишок грошей і чи не з'явився ризик нестачі ліквідності.";
+    return tabContent(tab).focusDescription;
   }
 
   function getFocusValue(tab: ReportsTab | undefined): string {
-    if (tab === "pnl") {
-      return $reports.screen?.summary.pnlNetResultStr ?? "0,00 грн";
-    }
-    if (tab === "receivables") {
-      return `${overdueReceivables($reports.screen?.receivablesRows ?? []).length}`;
-    }
-    if (tab === "payables") {
-      return `${overduePayables($reports.screen?.payablesRows ?? []).length}`;
-    }
-    return $reports.screen?.summary.closingBalanceStr ?? "0,00 грн";
+    return tabContent(tab).getFocusValue($reports.screen);
   }
 
   function getFocusMeta(tab: ReportsTab | undefined): string {
-    if (tab === "pnl") {
-      const first = $reports.screen?.pnlRows?.[0];
-      return first ? `Найсильніше впливає: ${first.label} · ${first.netStr}` : "Категорії з'являться після вибору періоду.";
-    }
-    if (tab === "receivables") {
-      const first = overdueReceivables(sortedReceivables($reports.screen?.receivablesRows ?? []))[0];
-      return first
-        ? `Перший у списку: ${first.docNumber} · ${first.counterparty}`
-        : "Прострочених оплат зараз немає.";
-    }
-    if (tab === "payables") {
-      const first = overduePayables(sortedPayables($reports.screen?.payablesRows ?? []))[0];
-      return first ? `Перший ризик: ${first.counterparty || first.title} · ${first.dueDate}` : "Прострочених виплат зараз немає.";
-    }
-    const first = $reports.screen?.bankRows?.[0];
-    return first ? `Найбільший рух: ${first.label} · ${first.netStr}` : "Дані з'являться після вибору періоду.";
+    return tabContent(tab).getFocusMeta($reports.screen);
   }
 
   function getKpiCards(tab: ReportsTab | undefined): ReportKpiCard[] {
-    if (tab === "pnl") {
-      return [
-        {
-          label: "Дохід за період",
-          value: $reports.screen?.summary.pnlIncomeStr ?? "0,00 грн",
-          tone: "accent"
-        },
-        {
-          label: "Витрати за період",
-          value: $reports.screen?.summary.pnlExpenseStr ?? "0,00 грн"
-        },
-        {
-          label: "Фінансовий результат за період",
-          value: $reports.screen?.summary.pnlNetResultStr ?? "0,00 грн",
-          tone: "warning"
-        },
-        {
-          label: "Категорій у звіті",
-          value: `${$reports.screen?.pnlRows?.length ?? 0}`
-        }
-      ];
-    }
-
-    if (tab === "receivables") {
-      const rows = sortedReceivables($reports.screen?.receivablesRows ?? []);
-      return [
-        {
-          label: "Очікуємо отримати",
-          value: $reports.screen?.summary.receivablesTotalStr ?? "0,00 грн",
-          tone: "accent"
-        },
-        {
-          label: "Прострочені оплати",
-          value: `${overdueReceivables(rows).length}`,
-          tone: overdueReceivables(rows).length > 0 ? "danger" : "default"
-        },
-        {
-          label: "Оплати цього тижня",
-          value: `${dueSoonReceivables(rows)}`,
-          tone: dueSoonReceivables(rows) > 0 ? "warning" : "default"
-        },
-        {
-          label: "Контрагентів у роботі",
-          value: `${uniqueCounterpartiesCount(rows)}`
-        }
-      ];
-    }
-
-    if (tab === "payables") {
-      const rows = sortedPayables($reports.screen?.payablesRows ?? []);
-      return [
-        {
-          label: "Заплановано до оплати",
-          value: $reports.screen?.summary.payablesTotalStr ?? "0,00 грн",
-          tone: "accent"
-        },
-        {
-          label: "Прострочені виплати",
-          value: `${overduePayables(rows).length}`,
-          tone: overduePayables(rows).length > 0 ? "danger" : "default"
-        },
-        {
-          label: "Виплати цього тижня",
-          value: `${dueSoonPayables(rows)}`,
-          tone: dueSoonPayables(rows) > 0 ? "warning" : "default"
-        },
-        {
-          label: "Регулярних платежів",
-          value: `${rows.filter((row) => row.recurrence && row.recurrence !== "—").length}`
-        }
-      ];
-    }
-
-    return [
-      {
-        label: "Залишок на початок",
-        value: $reports.screen?.summary.openingBalanceStr ?? "0,00 грн"
-      },
-      {
-        label: "Надходження за період",
-        value: $reports.screen?.summary.incomeStr ?? "0,00 грн",
-        tone: "accent"
-      },
-      {
-        label: "Виплати за період",
-        value: $reports.screen?.summary.expenseStr ?? "0,00 грн"
-      },
-      {
-        label: "Залишок на кінець",
-        value: $reports.screen?.summary.closingBalanceStr ?? "0,00 грн",
-        tone: "warning"
-      }
-    ];
+    return tabContent(tab).getKpiCards($reports.screen);
   }
 
   function onToggleCounterparty(row: TopCounterpartyRowDto) {

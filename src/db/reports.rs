@@ -382,6 +382,8 @@ pub async fn load_receivables_rows(
             counterparty: row.counterparty,
             amount: row.amount,
             expected_date: row.expected_date,
+            // SQL завжди повертає 0 через GREATEST(0, ...) і ELSE 0, тож NULL не очікується;
+            // 0 — безпечний fallback (немає прострочення), якщо план зміниться.
             overdue_days: row.overdue_days.unwrap_or(0),
             status: row.status,
         })
