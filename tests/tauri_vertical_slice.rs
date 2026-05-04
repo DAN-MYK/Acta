@@ -672,17 +672,46 @@ async fn tauri_vertical_slice_payments_smoke() -> Result<()> {
 
     // Виконати решту кроків з гарантованим cleanup
     let payment_result: Result<()> = async {
+        let candidate = acta::db::payments::list_open_document_candidates(
+            ctx.pool(),
+            ctx.company_id(),
+            acta::models::payment::PaymentDirection::Income,
+        )
+        .await?
+        .into_iter()
+        .find(|candidate| candidate.open_amount >= rust_decimal::Decimal::new(100, 0))
+        .ok_or_else(|| anyhow!("не знайдено документа-кандидата для smoke reconcile"))?;
+        let document_kind = match candidate.document_kind {
+            acta::services::payment_matching::MatchDocumentKind::Act => "act",
+            acta::services::payment_matching::MatchDocumentKind::Invoice => "invoice",
+        };
+
         // 4. Позначити як зведений
-        let reconcile_result =
-            acta::tauri_api::payments::payment_reconcile(&ctx, new_payment_id.clone()).await?;
+        let reconcile_result = acta::tauri_api::payments::payment_reconcile(
+            &ctx,
+            acta::tauri_api::payments::PaymentReconcileRequest {
+                payment_id: new_payment_id.clone(),
+                document_kind: document_kind.to_string(),
+                document_id: candidate.document_id.to_string(),
+                amount: "100.00".to_string(),
+            },
+        )
+        .await?;
         assert!(
             reconcile_result.ok,
             "payment_reconcile має повернути ok=true"
         );
 
         // 5. Зняти позначку зведення
-        let unreconcile_result =
-            acta::tauri_api::payments::payment_unreconcile(&ctx, new_payment_id.clone()).await?;
+        let unreconcile_result = acta::tauri_api::payments::payment_unreconcile(
+            &ctx,
+            acta::tauri_api::payments::PaymentUnreconcileRequest {
+                payment_id: new_payment_id.clone(),
+                document_kind: document_kind.to_string(),
+                document_id: candidate.document_id.to_string(),
+            },
+        )
+        .await?;
         assert!(
             unreconcile_result.ok,
             "payment_unreconcile має повернути ok=true"

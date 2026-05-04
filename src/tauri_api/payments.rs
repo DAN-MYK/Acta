@@ -311,7 +311,6 @@ fn match_kind_to_str(kind: MatchKind) -> &'static str {
     match kind {
         MatchKind::Exact => "exact",
         MatchKind::Ambiguous => "ambiguous",
-        MatchKind::Split => "split",
         MatchKind::None => "none",
     }
 }
@@ -361,6 +360,7 @@ async fn build_match_input(
         payment.clone(),
         PaymentMatchInput {
             amount: payment.amount,
+            direction: payment.direction.clone(),
             date: payment.date,
             counterparty_iban,
             description: payment.description.unwrap_or_default(),
@@ -401,8 +401,9 @@ fn preview_candidates_for_decision(
     scored_candidates: Vec<ScoredMatchCandidate>,
 ) -> Vec<ScoredMatchCandidate> {
     match decision {
-        MatchDecision::Split(candidates) => candidates.clone(),
-        MatchDecision::Exact(_) | MatchDecision::Ambiguous(_) | MatchDecision::None => scored_candidates,
+        MatchDecision::Exact(candidate) => vec![candidate.clone()],
+        MatchDecision::Ambiguous(candidates) => candidates.clone(),
+        MatchDecision::None => scored_candidates,
     }
 }
 
@@ -414,7 +415,7 @@ fn exact_recommendation(decision: &MatchDecision) -> Option<PaymentAutoMatchDto>
             title: candidate.candidate.title.clone(),
             amount_str: format_decimal_ua(candidate.candidate.open_amount),
         }),
-        MatchDecision::Ambiguous(_) | MatchDecision::Split(_) | MatchDecision::None => None,
+        MatchDecision::Ambiguous(_) | MatchDecision::None => None,
     }
 }
 
@@ -441,10 +442,9 @@ fn manual_candidate_matches_query(
     }
 
     let haystack = normalize_search_text(&format!(
-        "{} {} {}",
+        "{} {}",
         candidate.title,
-        candidate.reference_text.clone().unwrap_or_default(),
-        candidate.match_text.clone().unwrap_or_default()
+        match_document_kind_to_str(candidate.document_kind)
     ));
 
     tokens.iter().all(|token| haystack.contains(token))
@@ -790,9 +790,6 @@ pub async fn payment_match_apply_auto(
                 message: "Автозіставлення платежу застосовано".to_string(),
             })
         }
-        MatchDecision::Split(_) => Err(anyhow!(
-            "Автозіставлення неможливе: знайдено розподіл платежу між кількома документами"
-        )),
         MatchDecision::Ambiguous(_) => Err(anyhow!(
             "Автозіставлення неможливе: знайдено неоднозначне зіставлення з кількома рівноцінними кандидатами"
         )),
@@ -1019,14 +1016,11 @@ mod tests {
                 Uuid::new_v4(),
                 dec!(1250.00),
                 Some("UA123".to_string()),
-                "Акт №42",
-                "ACT-42",
-                "Оплата акту №42",
-                Some(NaiveDate::from_ymd_opt(2026, 5, 1).expect("валідна дата")),
+                "??? ?42",
+                Some(NaiveDate::from_ymd_opt(2026, 5, 1).expect("??????? ????")),
             ),
             score: MatchScore {
                 total: 170,
-                amount_fits: true,
                 exact_amount: true,
                 same_iban: true,
                 reference_hit: true,
@@ -1036,12 +1030,12 @@ mod tests {
         });
 
         let recommendation =
-            exact_recommendation(&decision).expect("exact decision має повертати recommendation");
+            exact_recommendation(&decision).expect("exact decision ??? ????????? recommendation");
 
         assert_eq!(match_kind_to_str(decision.kind()), "exact");
         assert_eq!(recommendation.document_kind, "act");
-        assert_eq!(recommendation.title, "Акт №42");
-        assert_eq!(recommendation.amount_str, "1\u{00a0}250,00");
+        assert_eq!(recommendation.title, "??? ?42");
+        assert_eq!(recommendation.amount_str, "1 250,00");
     }
 
     #[test]
@@ -1051,14 +1045,11 @@ mod tests {
                 Uuid::new_v4(),
                 dec!(980.00),
                 None,
-                "Рахунок №7",
-                "INV-7",
-                "Оплата послуг",
-                Some(NaiveDate::from_ymd_opt(2026, 5, 3).expect("валідна дата")),
+                "??????? ?7",
+                Some(NaiveDate::from_ymd_opt(2026, 5, 3).expect("??????? ????")),
             ),
             score: MatchScore {
                 total: 130,
-                amount_fits: true,
                 exact_amount: true,
                 same_iban: false,
                 reference_hit: false,
@@ -1075,29 +1066,10 @@ mod tests {
     }
 
     #[test]
-    fn payment_match_preview_helpers_map_split_decision_kind() {
-        let decision = MatchDecision::Split(vec![ScoredMatchCandidate {
-            candidate: MatchCandidate::invoice(
-                Uuid::new_v4(),
-                dec!(1500.00),
-                None,
-                "Накладна INV-007",
-                "INV-7",
-                "Оплата накладної",
-                Some(NaiveDate::from_ymd_opt(2026, 5, 3).expect("валідна дата")),
-            ),
-            score: MatchScore {
-                total: 88,
-                amount_fits: true,
-                exact_amount: false,
-                same_iban: true,
-                reference_hit: false,
-                text_hits: 1,
-                days_distance: 2,
-            },
-        }]);
+    fn payment_match_preview_helpers_map_none_decision_kind() {
+        let decision = MatchDecision::None;
 
-        assert_eq!(match_kind_to_str(decision.kind()), "split");
+        assert_eq!(match_kind_to_str(decision.kind()), "none");
         assert!(exact_recommendation(&decision).is_none());
     }
 

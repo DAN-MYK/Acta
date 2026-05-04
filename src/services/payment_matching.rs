@@ -134,26 +134,11 @@ pub fn choose_best_match(
     input: &PaymentMatchInput,
     candidates: &[MatchCandidate],
 ) -> MatchDecision {
-    let mut scored: Vec<_> = candidates
-        .iter()
-        .cloned()
-        .map(|candidate| score_candidate(input, candidate))
-        .filter(|candidate| candidate.score.exact_amount)
-        .collect();
+    let scored = score_match_candidates(input, candidates);
 
     if scored.is_empty() {
         return MatchDecision::None;
     }
-
-    scored.sort_by(|left, right| {
-        right
-            .score
-            .total
-            .cmp(&left.score.total)
-            .then_with(|| left.score.days_distance.cmp(&right.score.days_distance))
-            .then_with(|| left.candidate.title.cmp(&right.candidate.title))
-            .then_with(|| left.candidate.document_id.cmp(&right.candidate.document_id))
-    });
 
     let top_score = scored[0].score.total;
     let tied: Vec<_> = scored
@@ -169,6 +154,31 @@ pub fn choose_best_match(
     } else {
         MatchDecision::Ambiguous(tied)
     }
+}
+
+/// Повернути exact-amount кандидатів із прозорим скорингом у стабільному порядку.
+pub fn score_match_candidates(
+    input: &PaymentMatchInput,
+    candidates: &[MatchCandidate],
+) -> Vec<ScoredMatchCandidate> {
+    let mut scored: Vec<_> = candidates
+        .iter()
+        .cloned()
+        .map(|candidate| score_candidate(input, candidate))
+        .filter(|candidate| candidate.score.exact_amount)
+        .collect();
+
+    scored.sort_by(|left, right| {
+        right
+            .score
+            .total
+            .cmp(&left.score.total)
+            .then_with(|| left.score.days_distance.cmp(&right.score.days_distance))
+            .then_with(|| left.candidate.title.cmp(&right.candidate.title))
+            .then_with(|| left.candidate.document_id.cmp(&right.candidate.document_id))
+    });
+
+    scored
 }
 
 fn score_candidate(input: &PaymentMatchInput, candidate: MatchCandidate) -> ScoredMatchCandidate {
