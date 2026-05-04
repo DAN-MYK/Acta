@@ -179,7 +179,6 @@ describe("TasksScreen component", () => {
     expect(target.textContent).toContain("Завдання");
     expect(target.textContent).toContain("У фокусі");
     expect(target.textContent).toContain("На сьогодні");
-    expect(target.textContent).toContain("Потребують уваги зараз");
     expect(target.textContent).toContain("Пов'язано з INV-2026-0042");
 
     expect(buttonByText(target, "Нове завдання").className).toContain("btn-primary");

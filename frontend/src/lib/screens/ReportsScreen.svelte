@@ -112,19 +112,6 @@
     return "Гроші на рахунках і в русі";
   }
 
-  function getReportHint(tab: ReportsTab | undefined): string {
-    if (tab === "pnl") {
-      return "Показуємо, які категорії заробляють, де зростають витрати і який фінансовий результат ви отримали за період.";
-    }
-    if (tab === "receivables") {
-      return "Швидко видно, хто вже затримує оплату, які документи потребують нагадування і де ризик касового розриву.";
-    }
-    if (tab === "payables") {
-      return "Тут легко зрозуміти, кому платити першими, що вже прострочено і які регулярні виплати підходять.";
-    }
-    return "Огляд залишку, надходжень і виплат без переходу в окремі реєстри або Excel.";
-  }
-
   function overdueReceivables(rows: ReceivableRowDto[]): ReceivableRowDto[] {
     return rows.filter((row) => row.overdueDays > 0);
   }
@@ -226,61 +213,6 @@
 
   function uniqueCounterpartiesCount(rows: Array<{ counterparty: string }>): number {
     return new Set(rows.map((row) => row.counterparty || "—")).size;
-  }
-
-  function getFocusTitle(tab: ReportsTab | undefined): string {
-    if (tab === "pnl") {
-      return "Фінансовий результат";
-    }
-    if (tab === "receivables" || tab === "payables") {
-      return "Уваги сьогодні";
-    }
-    return "Ключовий фокус";
-  }
-
-  function getFocusDescription(tab: ReportsTab | undefined): string {
-    if (tab === "pnl") {
-      return "Орієнтир для керівника: чи перекриває дохід витрати і яка категорія найбільше впливає на результат.";
-    }
-    if (tab === "receivables") {
-      return "Починайте з прострочених оплат, а далі переходьте до документів, де строк наближається протягом тижня.";
-    }
-    if (tab === "payables") {
-      return "Першими перевіряйте прострочені та найближчі виплати, щоб не втратити контроль над календарем платежів.";
-    }
-    return "Звідси видно, як змінився залишок грошей і чи не з'явився ризик нестачі ліквідності.";
-  }
-
-  function getFocusValue(tab: ReportsTab | undefined): string {
-    if (tab === "pnl") {
-      return $reports.screen?.summary.pnlNetResultStr ?? "0,00 грн";
-    }
-    if (tab === "receivables") {
-      return `${overdueReceivables($reports.screen?.receivablesRows ?? []).length}`;
-    }
-    if (tab === "payables") {
-      return `${overduePayables($reports.screen?.payablesRows ?? []).length}`;
-    }
-    return $reports.screen?.summary.closingBalanceStr ?? "0,00 грн";
-  }
-
-  function getFocusMeta(tab: ReportsTab | undefined): string {
-    if (tab === "pnl") {
-      const first = $reports.screen?.pnlRows?.[0];
-      return first ? `Найсильніше впливає: ${first.label} · ${first.netStr}` : "Категорії з'являться після вибору періоду.";
-    }
-    if (tab === "receivables") {
-      const first = overdueReceivables(sortedReceivables($reports.screen?.receivablesRows ?? []))[0];
-      return first
-        ? `Перший у списку: ${first.docNumber} · ${first.counterparty}`
-        : "Прострочених оплат зараз немає.";
-    }
-    if (tab === "payables") {
-      const first = overduePayables(sortedPayables($reports.screen?.payablesRows ?? []))[0];
-      return first ? `Перший ризик: ${first.counterparty || first.title} · ${first.dueDate}` : "Прострочених виплат зараз немає.";
-    }
-    const first = $reports.screen?.bankRows?.[0];
-    return first ? `Найбільший рух: ${first.label} · ${first.netStr}` : "Дані з'являться після вибору періоду.";
   }
 
   function getKpiCards(tab: ReportsTab | undefined): ReportKpiCard[] {
@@ -499,31 +431,6 @@
     </div>
   </div>
 
-  <div class="create-strip-card">
-    <div class="create-strip-header">
-      <div>
-        <strong>Що перевіряємо</strong>
-        <p>{getReportHint($reports.screen?.filter.tab)}</p>
-      </div>
-      <span class="doc-kind-badge">Сценарний звіт</span>
-    </div>
-  </div>
-
-  <div class="reports-focus-grid">
-    <div class="reports-focus-card reports-focus-card-primary" data-testid="reports-focus-primary">
-      <span class="reports-focus-label">{getFocusTitle($reports.screen?.filter.tab)}</span>
-      <strong>{getFocusValue($reports.screen?.filter.tab)}</strong>
-      <p>{getFocusDescription($reports.screen?.filter.tab)}</p>
-      <small>{getFocusMeta($reports.screen?.filter.tab)}</small>
-    </div>
-    <div class="reports-focus-card reports-focus-card-muted">
-      <span class="reports-focus-label">Параметри зрізу</span>
-      <strong>{$reports.screen?.filter.dateFrom ?? "—"} → {$reports.screen?.filter.dateTo ?? "—"}</strong>
-      <p>Змініть період або коло компаній, якщо хочете переглянути інший сценарій або уточнити причину відхилень.</p>
-      <small>{$reports.screen?.filter.scope === "all" ? "Усі компанії" : "Активна компанія"}</small>
-    </div>
-  </div>
-
   <div class="reports-filters">
     <div class="task-tabs" role="tablist" aria-label="Режими звіту">
       <button
@@ -618,7 +525,7 @@
     </label>
   </div>
 
-  <div class="reports-kpis">
+  <div class="reports-kpis" data-testid="reports-focus-primary">
     {#each getKpiCards($reports.screen?.filter.tab) as card}
       <div class="task-kpi-card reports-kpi-card" data-tone={card.tone ?? "default"}>
         <strong>{card.value}</strong>

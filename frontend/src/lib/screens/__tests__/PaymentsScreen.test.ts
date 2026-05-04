@@ -495,10 +495,9 @@ describe("PaymentsScreen component", () => {
     const { component, target } = renderPayments();
 
     expect(target.textContent).toContain("Платежі");
-    expect(target.textContent).toContain("Контроль руху грошей");
-    expect(target.textContent).toContain("Імпорт");
-    expect(target.textContent).toContain("Звірка");
-    expect(target.textContent).toContain("Ручний платіж");
+    expect(target.textContent).toContain("Імпортувати виписку");
+    expect(target.textContent).toContain("Запустити звірку");
+    expect(target.textContent).toContain("Створити платіж");
     expect(target.textContent).toContain("Потребують звірки");
     expect(target.textContent).toContain("Вже зведені");
     expect(target.textContent).toContain("8 450,00 грн");
@@ -599,10 +598,9 @@ describe("PaymentsScreen component", () => {
     });
 
     const { component, target } = renderPayments();
-    const importButton = buttonByText(target, "Імпортуємо виписку");
+    const importButton = buttonByText(target, "Імпортуємо...");
 
     expect(target.textContent).toContain("Імпорт триває");
-    expect(target.textContent).toContain("Імпортуємо виписку");
     expect(target.textContent).toContain("Ще немає жодного платежу");
     expect(target.textContent).toContain("Імпортуйте виписку");
     expect(importButton.disabled).toBe(true);
@@ -696,8 +694,8 @@ describe("PaymentsScreen component", () => {
 
     const { component, target } = renderPayments();
 
-    expect(target.textContent).toContain("Імпорт");
-    expect(target.textContent).toContain("Звірка");
+    expect(target.textContent).toContain("Імпортувати виписку");
+    expect(target.textContent).toContain("Запустити звірку");
     expect(target.textContent).toContain("Створити платіж");
     expect(target.querySelector('[data-testid="payments-kpis"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="payments-kpis"] [data-testid="skeleton-card-grid"]')).toBeTruthy();

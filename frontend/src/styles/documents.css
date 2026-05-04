@@ -1,14 +1,16 @@
-.create-strip-card {
+.documents-create-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
   margin-top: 18px;
-  padding: 20px;
-  border-radius: var(--radius-3xl);
-  border: 1px solid var(--border-hairline);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 44%, transparent), transparent 64%),
-    var(--bg-card);
+  align-items: center;
 }
 
-.create-strip-header,
+.documents-create-bar select {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
 .editor-header,
 .chain-panel-header,
 .editor-items-header {
@@ -18,97 +20,24 @@
   align-items: flex-start;
 }
 
-.create-strip-header p,
-.create-strip-hint,
-.documents-focus-card p,
-.documents-focus-card small,
-.field-note,
 .chain-panel-header p,
 .editor-items-header p {
   margin: 6px 0 0;
   color: var(--text-muted);
 }
 
-.create-strip-flow {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 18px;
-}
-
-.create-strip-step {
-  display: grid;
-  gap: 4px;
-  padding: 14px 16px;
-  border-radius: var(--radius-2xl);
-  border: 1px solid var(--border-hairline);
-  background: color-mix(in srgb, var(--bg-subtle) 76%, var(--bg-card));
-}
-
-.create-strip-step.complete {
-  border-color: color-mix(in srgb, var(--accent) 22%, var(--border-hairline));
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 38%, transparent), transparent 80%),
-    var(--bg-card);
-}
-
-.create-strip-step span,
-.create-strip-step small,
-.create-strip-field span,
 .editor-date-field small,
 .chain-summary-block span,
-.chain-step-index,
 .editor-item-field span,
 .editor-item-total span {
   font-size: var(--font-sm);
   color: var(--text-muted);
 }
 
-.create-strip {
-  display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(180px, 220px) minmax(220px, 260px);
-  gap: 12px;
-  margin-top: 18px;
-  align-items: end;
-}
-
-.create-strip-field,
 .editor-item-field,
 .editor-date-field {
   display: grid;
   gap: 8px;
-}
-
-.create-doc-button {
-  min-width: 220px;
-}
-
-.documents-focus-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  margin-top: 18px;
-}
-
-.documents-focus-card {
-  display: grid;
-  gap: 8px;
-  padding: 18px;
-  border-radius: var(--radius-3xl);
-  border: 1px solid var(--border-hairline);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 36%, transparent), transparent 68%),
-    var(--bg-card);
-}
-
-.documents-focus-card-muted {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--bg-subtle) 78%, transparent), transparent 72%),
-    var(--bg-card);
-}
-
-.documents-focus-card strong {
-  font-size: clamp(1.2rem, 2vw, 1.8rem);
 }
 
 .documents-list {
@@ -176,8 +105,7 @@
   align-items: center;
 }
 
-.doc-row-title,
-.chain-doc-title {
+.doc-row-title {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -229,17 +157,12 @@
   flex-wrap: wrap;
 }
 
-.editor-actions,
-.chain-actions {
+.editor-actions {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
   justify-content: flex-end;
-}
-
-.field-note {
-  line-height: 1.4;
 }
 
 .chain-panel {
@@ -268,42 +191,6 @@
 
 .chain-summary-block-wide strong {
   line-height: 1.45;
-}
-
-.chain-flow {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
-}
-
-.chain-step-card {
-  display: grid;
-  gap: 10px;
-  padding: 16px;
-  border-radius: var(--radius-2xl);
-  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border-hairline));
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 34%, transparent), transparent 82%),
-    var(--bg-card);
-}
-
-.chain-step-card.missing,
-.chain-step-card-target {
-  border-style: dashed;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--bg-subtle) 80%, transparent), transparent 82%),
-    var(--bg-card);
-}
-
-.chain-step-card p {
-  margin: 0;
-}
-
-.chain-step-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  color: var(--text-muted);
 }
 
 .editor-items-card {
@@ -433,9 +320,6 @@
 }
 
 @media (max-width: 1080px) {
-  .create-strip,
-  .create-strip-flow,
-  .documents-focus-grid,
   .chain-summary,
   .editor-item-head,
   .editor-item,
@@ -444,8 +328,7 @@
   }
 
   .editor-items-summary,
-  .editor-actions,
-  .chain-actions {
+  .editor-actions {
     justify-content: flex-start;
   }
 

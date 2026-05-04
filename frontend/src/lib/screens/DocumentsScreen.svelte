@@ -1,11 +1,10 @@
 <script lang="ts">
   import AppIcon from "../components/AppIcon.svelte";
-  import SkeletonCard from "../components/SkeletonCard.svelte";
   import SkeletonRow from "../components/SkeletonRow.svelte";
   import type { AppIconName } from "../icons";
   import { documentsStore } from "../stores/documents";
   import { counterpartiesStore } from "../stores/counterparties";
-  import type { DocumentDraftItemDto, DocumentKind, DocumentItemDto } from "../types";
+  import type { DocumentDraftItemDto, DocumentKind } from "../types";
 
   const documents = documentsStore;
   const counterparties = counterpartiesStore;
@@ -129,10 +128,6 @@
     void documents.createChainDraft(kind);
   }
 
-  function onReloadChain() {
-    void documents.reloadCurrent();
-  }
-
   function onAttachExistingPdf() {
     void documents.attachExistingPdf();
   }
@@ -231,28 +226,6 @@
       return "Створити накладну";
     }
     return "Створити акт";
-  }
-
-  function getCreateHint(counterpartyId: string, kind: DocumentKind): string {
-    if (!counterpartyId) {
-      return "Спочатку оберіть контрагента, щоб ми відкрили чернетку в правильному робочому контексті.";
-    }
-
-    return `Чернетка типу "${documentKindLabels[kind]}" відкриється одразу для ${selectedCounterpartyName || "вибраного контрагента"} з готовим сценарієм подальших кроків.`;
-  }
-
-  function getNextStepMessage(kind: string): string {
-    if (kind === "invoice") {
-      return "Після рахунку зазвичай готуємо акт або накладну, щоб сценарій не зупинився на виставленні.";
-    }
-    if (kind === "act") {
-      return "Після акта найчастіше залишилось або створити накладну, або перевести документ у наступний статус.";
-    }
-    if (kind === "waybill") {
-      return "Накладна зазвичай закриває операційний сценарій, тому далі достатньо лише перевірити статус і суму.";
-    }
-
-    return "Перевірте, який похідний документ потрібен далі, і створіть його звідси.";
   }
 
   function getItemsCountLabel(count: number): string {
@@ -356,32 +329,6 @@
     return total ? formatScaledMoney(total) : "—";
   }
 
-  function formatEditorDateValue(value: string): string {
-    if (!value) {
-      return "Оберіть дату через календар, щоб уникнути неоднозначного формату.";
-    }
-
-    const [year, month, day] = value.split("-");
-    if (!year || !month || !day) {
-      return "Оберіть дату через календар, щоб уникнути неоднозначного формату.";
-    }
-
-    return `${day}.${month}.${year}`;
-  }
-
-  function draftCount(items: DocumentItemDto[]): number {
-    return items.filter((item) => item.status === "draft").length;
-  }
-
-  function issuedCount(items: DocumentItemDto[]): number {
-    return items.filter((item) => item.status !== "draft").length;
-  }
-
-  function nextAttentionLabel(items: DocumentItemDto[]): string {
-    const draft = items.find((item) => item.status === "draft");
-    return draft ? `${draft.number} · ${draft.counterparty}` : "Усі документи вже просунуті по сценарію";
-  }
-
   function totalDraftAmount(items: DocumentDraftItemDto[]): string {
     let total: DecimalValue = { value: 0n, scale: 0 };
 
@@ -425,90 +372,35 @@
     />
   </div>
 
-  <div class="create-strip-card" data-testid="documents-create-strip">
-    <div class="create-strip-header">
-      <div>
-        <strong>Створити документ по сценарію</strong>
-        <p>Оберіть контрагента, визначте тип документа й одразу відкрийте чернетку з правильним наступним кроком.</p>
-      </div>
-      <span class="doc-kind-badge">
-        <AppIcon name={documentKindIcons[createKind]} size={14} />
-        <span>{documentKindLabels[createKind]}</span>
-      </span>
-    </div>
-
-    <div class="create-strip-flow" aria-label="Сценарій створення документа">
-      <div class:complete={!!createCounterpartyId} class="create-strip-step">
-        <span>Крок 1</span>
-        <strong>Контрагент</strong>
-        <small>{selectedCounterpartyName || "Ще не обрано"}</small>
-      </div>
-      <div class="create-strip-step complete">
-        <span>Крок 2</span>
-        <strong>Тип документа</strong>
-        <small>{documentKindLabels[createKind]}</small>
-      </div>
-      <div class:complete={!!createCounterpartyId} class="create-strip-step">
-        <span>Крок 3</span>
-        <strong>Чернетка</strong>
-        <small>{createCounterpartyId ? "Можна відкривати редактор" : "Потрібен контрагент"}</small>
-      </div>
-    </div>
-
-    <div class="create-strip">
-      <label class="create-strip-field">
-        <span>Контрагент</span>
-        <select bind:this={createCounterpartySelect} bind:value={createCounterpartyId} disabled={$documents.loading}>
-          <option value="">— Оберіть контрагента —</option>
-          {#each $counterparties.screen?.items ?? [] as cp}
-            <option value={cp.id}>{cp.name}</option>
-          {/each}
-        </select>
-      </label>
-
-      <label class="create-strip-field">
-        <span>Тип документа</span>
-        <select bind:value={createKind} disabled={$documents.loading}>
-          <option value="act">Акт</option>
-          <option value="invoice">Рахунок</option>
-          <option value="waybill">Накладна</option>
-        </select>
-      </label>
-
-        <button
-          bind:this={createButton}
-          class="btn-primary create-doc-button"
-          data-testid="documents-create-button"
-          type="button"
-          disabled={!createCounterpartyId || $documents.loading}
-          on:click={onCreateDraft}
-          aria-busy={$documents.loading ? "true" : "false"}
-      >
-        <AppIcon name={documentKindIcons[createKind]} surface={true} />
-        <span>{getCreateButtonLabel(createKind)}</span>
-      </button>
-    </div>
-
-    <p class="create-strip-hint">{getCreateHint(createCounterpartyId, createKind)}</p>
-  </div>
-
-  <div class="documents-focus-grid">
-    {#if $documents.initialLoading}
-      <SkeletonCard count={2} />
-    {:else}
-      <div class="documents-focus-card" data-testid="documents-focus-primary">
-        <span class="reports-focus-label">Що потребує уваги</span>
-        <strong>{draftCount($documents.list?.items ?? [])}</strong>
-        <p>Чернетки, які ще не пройшли далі по сценарію й можуть затримати оплату або відвантаження.</p>
-        <small>{nextAttentionLabel($documents.list?.items ?? [])}</small>
-      </div>
-      <div class="documents-focus-card documents-focus-card-muted">
-        <span class="reports-focus-label">В роботі</span>
-        <strong>{issuedCount($documents.list?.items ?? [])}</strong>
-        <p>Документи, які вже виставлені або рухаються далі по ланцюжку.</p>
-        <small>Виберіть рядок, щоб одразу перейти до редактора та наступної дії.</small>
-      </div>
-    {/if}
+  <div class="documents-create-bar" data-testid="documents-create-strip">
+    <select
+      bind:this={createCounterpartySelect}
+      bind:value={createCounterpartyId}
+      disabled={$documents.loading}
+      aria-label="Контрагент"
+    >
+      <option value="">— Оберіть контрагента —</option>
+      {#each $counterparties.screen?.items ?? [] as cp}
+        <option value={cp.id}>{cp.name}</option>
+      {/each}
+    </select>
+    <select bind:value={createKind} disabled={$documents.loading} aria-label="Тип документа">
+      <option value="act">Акт</option>
+      <option value="invoice">Рахунок</option>
+      <option value="waybill">Накладна</option>
+    </select>
+    <button
+      bind:this={createButton}
+      class="btn-primary"
+      data-testid="documents-create-button"
+      type="button"
+      disabled={!createCounterpartyId || $documents.loading}
+      on:click={onCreateDraft}
+      aria-busy={$documents.loading ? "true" : "false"}
+    >
+      <AppIcon name={documentKindIcons[createKind]} surface={true} />
+      <span>{getCreateButtonLabel(createKind)}</span>
+    </button>
   </div>
 
   <div class="bulk-actions">
@@ -542,12 +434,7 @@
   </div>
 
   {#if $documents.message}
-    <div class="status-banner is-success" role="status" aria-live="polite">
-      <div>
-        <strong>Дію виконано</strong>
-        <p>{$documents.message}</p>
-      </div>
-    </div>
+    <p class="message" role="status" aria-live="polite">{$documents.message}</p>
   {/if}
 
   {#if $documents.error}
@@ -647,6 +534,17 @@
         <button class="btn-secondary" on:click={() => documents.advanceStatus()} disabled={$documents.loading}>
           Наступний статус
         </button>
+        {#each getChainTargets($documents.editor.form.kind) as targetKind}
+          <button
+            class="btn-secondary"
+            data-testid={`documents-chain-create-${targetKind}`}
+            on:click={() => onCreateChainDraft(targetKind)}
+            disabled={$documents.loading}
+          >
+            <AppIcon name={documentKindIcons[targetKind]} size={16} />
+            <span>Створити {documentKindActionLabels[targetKind]}</span>
+          </button>
+        {/each}
         {#if ["act", "invoice"].includes($documents.editor.form.kind)}
           <button class="btn-ghost" on:click={() => documents.generatePdf()} disabled={$documents.loading}>
             PDF
@@ -674,7 +572,6 @@
           on:input={onEditorDateChange}
           disabled={$documents.loading}
         />
-        <small class="field-note">Календар без ручного неоднозначного формату. Зараз: {formatEditorDateValue($documents.editor.form.date)}</small>
       </label>
       <label class="editor-grid-span">
         Примітки
@@ -687,80 +584,9 @@
       </label>
     </div>
 
-    <div class="chain-panel">
-      <div class="chain-panel-header">
-        <div>
-          <strong>Статус і навігація по сценарію</strong>
-          <p>Тут видно, де ви зараз у ланцюжку документа і який наступний крок можна зробити без переходів по інших екранах.</p>
-        </div>
-        <div class="chain-actions">
-          <button class="btn-ghost" on:click={onReloadChain} disabled={$documents.loading}>Оновити</button>
-          {#each getChainTargets($documents.editor.form.kind) as targetKind}
-            <button
-              class="btn-secondary chain-action-button"
-              data-testid={`documents-chain-create-${targetKind}`}
-              on:click={() => onCreateChainDraft(targetKind)}
-              disabled={$documents.loading}
-            >
-              <AppIcon name={documentKindIcons[targetKind]} size={16} />
-              <span>Створити {documentKindActionLabels[targetKind]}</span>
-            </button>
-          {/each}
-        </div>
-      </div>
-
-      <div class="chain-summary">
-        <div class="chain-summary-block">
-          <span>Поточний документ</span>
-          <strong>{getDocumentKindLabel($documents.editor.form.kind)}</strong>
-        </div>
-        <div class="chain-summary-block chain-summary-block-wide">
-          <span>Наступний крок</span>
-          <strong>{getNextStepMessage($documents.editor.form.kind)}</strong>
-        </div>
-      </div>
-
-      {#if $documents.chain}
-        <div class="chain-flow" data-testid="documents-chain-flow">
-          {#each $documents.chain.steps as step, index}
-            <div class:missing={!step.exists} class="chain-step-card">
-              <span class="chain-step-index">Крок {index + 1}</span>
-              <strong class="chain-doc-title">
-                <AppIcon name={getDocumentKindIcon(step.docType)} surface={true} size={16} />
-                <span>{getDocumentKindLabel(step.docType)}</span>
-              </strong>
-              <p>{step.docNumber || "Ще не створено"}</p>
-              <div class="chain-step-meta">
-                <span>{step.amountStr || "Сума з’явиться після створення"}</span>
-                <span class="doc-status-chip">{step.status}</span>
-              </div>
-            </div>
-          {/each}
-
-          {#each getChainTargets($documents.editor.form.kind) as targetKind}
-            <div class="chain-step-card chain-step-card-target">
-              <span class="chain-step-index">Далі</span>
-              <strong class="chain-doc-title">
-                <AppIcon name={documentKindIcons[targetKind]} surface={true} size={16} />
-                <span>{getDocumentKindLabel(targetKind)}</span>
-              </strong>
-              <p>Ще не створено</p>
-              <div class="chain-step-meta">
-                <span>Підготуйте наступний документ прямо з цього блоку.</span>
-                <span class="doc-status-chip">Очікує дії</span>
-              </div>
-            </div>
-          {/each}
-        </div>
-      {/if}
-    </div>
-
     <div class="editor-items-card">
       <div class="editor-items-header">
-        <div>
-          <strong>Позиції документа</strong>
-          <p>Додавайте товари або послуги так, щоб сума й склад документа читалися з першого погляду.</p>
-        </div>
+        <strong>Позиції документа</strong>
         <div class="editor-items-summary">
           <span class="editor-items-count">{getItemsCountLabel($documents.editor.items.length)}</span>
           <strong>{totalDraftAmount($documents.editor.items)}</strong>

@@ -170,8 +170,6 @@ describe("ReportsScreen", () => {
 
     expect(target.textContent).toContain("Звіти");
     expect(target.textContent).toContain("Гроші на рахунках і в русі");
-    expect(target.textContent).toContain("Що перевіряємо");
-    expect(target.textContent).toContain("Ключовий фокус");
     expect(target.textContent).toContain("Що показати у звіті");
     expect(target.textContent).toContain("Період від");
     expect(target.textContent).not.toContain("Bank / receivables / payables");
@@ -266,7 +264,6 @@ describe("ReportsScreen", () => {
 
     expect(target.textContent).toContain("Нам мають заплатити");
     expect(target.textContent).toContain("Прострочені оплати");
-    expect(target.textContent).toContain("Уваги сьогодні");
     expect(target.textContent).toContain("Прострочено 4 дн.");
     expect(target.querySelector(".reports-table-row-overdue")).toBeTruthy();
     expect(activeTab?.textContent).toContain("заплатити");

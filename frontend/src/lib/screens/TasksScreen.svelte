@@ -96,12 +96,7 @@
 
   <div class="tasks-layout">
     <div class="tasks-main">
-      <div class="task-focus-card" data-testid="tasks-focus-primary">
-        <strong>У фокусі</strong>
-        <p>Потребують уваги зараз: прострочені, високопріоритетні або прив'язані до грошових рішень завдання.</p>
-      </div>
-
-      <div class="task-tabs">
+      <div class="task-tabs" data-testid="tasks-focus-primary">
         <button class:active={$tasks.tab === "open"} on:click={() => tasks.setTab("open")}>У фокусі</button>
         <button class:active={$tasks.tab === "done"} on:click={() => tasks.setTab("done")}>Завершені</button>
         <button class:active={$tasks.tab === "all"} on:click={() => tasks.setTab("all")}>Усі</button>
@@ -141,7 +136,6 @@
 
     <aside class="tasks-side-panel task-today-panel" data-testid="tasks-today-panel">
       <strong>На сьогодні</strong>
-      <p>Швидкий список задач, які спливають сьогодні або мають нагадування на поточну дату.</p>
       <div class="linked-list">
         {#if $tasks.initialLoading}
           <div data-testid="tasks-today-skeleton">

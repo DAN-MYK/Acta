@@ -299,7 +299,6 @@ describe("CounterpartiesScreen component", () => {
     expect(target.querySelector('[data-testid="counterparties-screen"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="counterparties-list"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="counterparty-detail"]')).toBeTruthy();
-    expect(target.querySelector('[data-testid="counterparty-overview"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="counterparty-scenario"]')).toBeTruthy();
 
     component.$destroy();

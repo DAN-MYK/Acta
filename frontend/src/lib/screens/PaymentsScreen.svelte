@@ -245,77 +245,38 @@
     </div>
   </div>
 
-  <div class="create-strip-card">
-    <div class="create-strip-header">
-      <div>
-        <strong>Контроль руху грошей</strong>
-        <p>Працюємо від імпорту до звірки, а ручний платіж додаємо лише коли його справді не вистачає.</p>
-      </div>
-      <span class="doc-kind-badge">Звірка в центрі уваги</span>
-    </div>
-
-    <div class="payment-actions-grid">
-      <article class="payment-action-card payment-action-card-primary">
-        <div class="payment-action-copy">
-          <span>Імпорт</span>
-          <strong>Завантажте виписку і відразу побачте нові рухи</strong>
-          <p>CSV-імпорт лишається головним входом у сценарій, а допоміжні дії не відволікають від нього.</p>
-        </div>
-        <div class="payment-action-buttons">
-          <button
-            bind:this={importButton}
-            class="btn-primary"
-            on:click={() => payments.pickAndPreviewImport()}
-            disabled={busyImportPick || busyImport || busyImportCommit}
-          >
-            {busyImportPick ? "Готуємо preview..." : "Імпортувати виписку"}
-          </button>
-          <button
-            class="btn-ghost"
-            on:click={() => payments.importCsv()}
-            disabled={busyImport || busyImportPick || busyImportCommit}
-          >
-            {busyImport ? "Імпортуємо виписку з storage..." : "Імпорт з storage/import/bank"}
-          </button>
-          <button class="btn-ghost" on:click={() => payments.syncBank()} disabled={busyImport || busySync || busyImportPick}>
-            {busySync ? "Оновлюємо з банку..." : "Оновити з банку"}
-          </button>
-          <button class="btn-ghost" on:click={() => payments.openManualTemplate()} disabled={busyImport || busySync}>
-            Шаблон CSV
-          </button>
-        </div>
-      </article>
-
-      <article class="payment-action-card">
-        <div class="payment-action-copy">
-          <span>Звірка</span>
-          <strong>Почніть із незведених платежів і проведіть їх по одному</strong>
-          <p>{unmatchedPayments.length} платежів чекають на зв'язок із документом або повторну перевірку реквізитів.</p>
-        </div>
-        <div class="payment-action-buttons">
-          <button
-            class="btn-secondary"
-            on:click={runHeaderReconciliation}
-            disabled={unmatchedPayments.length === 0 || $payments.loading}
-          >
-            Запустити звірку
-          </button>
-        </div>
-      </article>
-
-      <article class="payment-action-card">
-        <div class="payment-action-copy">
-          <span>Ручний платіж</span>
-          <strong>Додавайте винятки окремо від потоку імпорту</strong>
-          <p>Картка платежу вирівняна під звірку: напрям, сума, контрагент, референс і зв'язок із документом.</p>
-        </div>
-        <div class="payment-action-buttons">
-          <button class="btn-secondary" on:click={() => payments.openEditor()} disabled={$payments.loading}>
-            Створити платіж
-          </button>
-        </div>
-      </article>
-    </div>
+  <div class="payments-toolbar">
+    <button
+      bind:this={importButton}
+      class="btn-primary"
+      on:click={() => payments.pickAndPreviewImport()}
+      disabled={busyImportPick || busyImport || busyImportCommit}
+    >
+      {busyImportPick ? "Готуємо preview..." : "Імпортувати виписку"}
+    </button>
+    <button class="btn-secondary" on:click={() => payments.openEditor()} disabled={$payments.loading}>
+      Створити платіж
+    </button>
+    <button
+      class="btn-secondary"
+      on:click={runHeaderReconciliation}
+      disabled={unmatchedPayments.length === 0 || $payments.loading}
+    >
+      Запустити звірку{unmatchedPayments.length > 0 ? ` (${unmatchedPayments.length})` : ""}
+    </button>
+    <button
+      class="btn-ghost"
+      on:click={() => payments.importCsv()}
+      disabled={busyImport || busyImportPick || busyImportCommit}
+    >
+      {busyImport ? "Імпортуємо..." : "Імпорт з storage"}
+    </button>
+    <button class="btn-ghost" on:click={() => payments.syncBank()} disabled={busyImport || busySync || busyImportPick}>
+      {busySync ? "Оновлюємо..." : "Оновити з банку"}
+    </button>
+    <button class="btn-ghost" on:click={() => payments.openManualTemplate()} disabled={busyImport || busySync}>
+      Шаблон CSV
+    </button>
   </div>
 
   <div class="task-kpis" data-testid="payments-kpis">
@@ -847,7 +808,13 @@
 {/if}
 
 <style>
-  .create-strip-card,
+  .payments-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 18px;
+  }
+
   .payments-group,
   .flow-banner,
   .chain-panel,
@@ -859,7 +826,6 @@
     background: var(--bg-card);
   }
 
-  .create-strip-card,
   .flow-banner,
   .chain-panel {
     background:
@@ -867,7 +833,6 @@
       var(--bg-card);
   }
 
-  .create-strip-header,
   .payments-group-header,
   .chain-panel-header,
   .editor-header {
@@ -877,16 +842,13 @@
     align-items: flex-start;
   }
 
-  .create-strip-header p,
   .payments-group-header p,
   .chain-panel-header p,
-  .payment-action-copy p,
   .flow-banner p {
     margin: 6px 0 0;
     color: var(--text-muted);
   }
 
-  .payment-actions-grid,
   .payments-groups,
   .task-kpis,
   .documents-list,
@@ -895,15 +857,10 @@
     gap: 16px;
   }
 
-  .payment-actions-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
   .task-kpis {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
-  .payment-action-card,
   .task-kpi-card {
     display: grid;
     gap: 10px;
@@ -913,7 +870,6 @@
     background: color-mix(in srgb, var(--bg-subtle) 72%, var(--bg-card));
   }
 
-  .payment-action-card-primary,
   .task-kpi-card-alert,
   .payments-group-unmatched {
     border-color: color-mix(in srgb, var(--accent) 22%, var(--border-hairline));
@@ -922,7 +878,6 @@
       var(--bg-card);
   }
 
-  .payment-action-copy span,
   .payment-group-count,
   .task-kpi-card span,
   .chain-summary-block span {
@@ -930,7 +885,6 @@
     color: var(--text-muted);
   }
 
-  .payment-action-buttons,
   .payment-row-actions,
   .editor-actions,
   .task-row-meta {
@@ -1051,14 +1005,12 @@
   }
 
   @media (max-width: 1080px) {
-    .payment-actions-grid,
     .task-kpis,
     .editor-grid,
     .chain-summary {
       grid-template-columns: 1fr;
     }
 
-    .create-strip-header,
     .payments-group-header,
     .chain-panel-header,
     .editor-header,

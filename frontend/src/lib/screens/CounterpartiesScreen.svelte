@@ -209,47 +209,10 @@
             </div>
           </div>
 
-          <div class="chain-panel counterparty-overview-panel" data-testid="counterparty-overview">
-            <div class="chain-panel-header">
-              <div>
-                <strong>Операційна картка контрагента</strong>
-                <p>
-                  Праворуч зібрано не лише реквізити, а й поточний сценарій: хто це, який фінансовий стан,
-                  які документи й платежі в роботі та що робити далі.
-                </p>
-              </div>
-              <div class="chain-summary counterparty-overview">
-                <div class="chain-summary-block">
-                  <span>Баланс</span>
-                  <strong>{$counterparties.detail.info.balanceStr}</strong>
-                </div>
-                <div class="chain-summary-block">
-                  <span>Прострочка</span>
-                  <strong>{$counterparties.detail.info.overdueAmountStr}</strong>
-                </div>
-                <div class="chain-summary-block">
-                  <span>Останній контакт</span>
-                  <strong>{$counterparties.detail.info.lastContactDate}</strong>
-                </div>
-                <div class="chain-summary-block">
-                  <span>Наступна дія</span>
-                  <strong>{getScenarioTitle(
-                    $counterparties.detail.info.overdueCount,
-                    $counterparties.detail.info.lastContactDays,
-                    $counterparties.detail.info.docCount
-                  )}</strong>
-                </div>
-              </div>
-            </div>
-          </div>
-
           <div class="counterparty-scenario-grid" data-testid="counterparty-scenario">
             <article class="scenario-card">
               <span class="scenario-eyebrow">Хто це</span>
               <strong>{$counterparties.detail.info.kind} {$counterparties.detail.info.name}</strong>
-              <p>
-                Директор {$counterparties.detail.info.director || "не вказаний"}. VAT {$counterparties.detail.info.vat || "не вказано"}.
-              </p>
               <div class="scenario-facts">
                 <div>
                   <span>Директор</span>
@@ -300,7 +263,6 @@
             <article class="scenario-card">
               <span class="scenario-eyebrow">Документи</span>
               <strong>{$counterparties.detail.info.docCount} в роботі</strong>
-              <p>Відкрийте документ зі списку або створіть новий, якщо потрібно продовжити сценарій без переходів між екранами.</p>
               <div class="linked-list">
                 {#if $counterparties.detail.documents.length > 0}
                   {#each $counterparties.detail.documents as item}
@@ -324,7 +286,6 @@
             <article class="scenario-card">
               <span class="scenario-eyebrow">Платежі</span>
               <strong>{$counterparties.detail.payments.length} останніх рухів</strong>
-              <p>Перевірте, чи останні оплати підтримують поточний сценарій, і чи немає потреби відкривати додатковий документ.</p>
               <div class="linked-list">
                 {#if $counterparties.detail.payments.length > 0}
                   {#each $counterparties.detail.payments as payment}

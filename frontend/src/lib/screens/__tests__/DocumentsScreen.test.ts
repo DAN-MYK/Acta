@@ -291,12 +291,7 @@ describe("DocumentsScreen component", () => {
     const { component, target } = renderDocuments();
 
     expect(target.textContent).toContain("Документи");
-    expect(target.textContent).toContain("Створити документ по сценарію");
-    expect(target.textContent).toContain("Крок 1");
     expect(target.textContent).toContain("ТОВ Ромашка");
-    expect(target.textContent).toContain("Статус і навігація по сценарію");
-    expect(target.textContent).toContain("Поточний документ");
-    expect(target.textContent).toContain("Наступний крок");
     expect(target.textContent).toContain("Позиції документа");
     expect(target.textContent).toContain("5 000,00 грн");
     expect(target.textContent).toContain("Створити акт");
@@ -327,9 +322,6 @@ describe("DocumentsScreen component", () => {
 
     const createButton = target.querySelector('[data-testid="documents-create-button"]') as HTMLButtonElement;
 
-    expect(target.textContent).toContain("Ще не обрано");
-    expect(target.textContent).toContain("Потрібен контрагент");
-    expect(target.textContent).toContain("Спочатку оберіть контрагента");
     expect(createButton.disabled).toBe(true);
 
     component.$destroy();
@@ -388,7 +380,9 @@ describe("DocumentsScreen component", () => {
   it("does not overwrite manual counterparty selection on unrelated store updates", async () => {
     const { component, target } = renderDocuments();
 
-    const select = target.querySelector(".create-strip select") as HTMLSelectElement;
+    const select = target.querySelector(
+      '[data-testid="documents-create-strip"] select'
+    ) as HTMLSelectElement;
     select.value = "counterparty-2";
     select.dispatchEvent(new Event("change", { bubbles: true }));
     await tick();
@@ -419,8 +413,6 @@ describe("DocumentsScreen component", () => {
 
     expect(dateInput).toBeTruthy();
     expect(dateInput?.value).toBe("2026-04-30");
-    expect(target.textContent).toContain("Календар без ручного неоднозначного формату");
-    expect(target.textContent).toContain("30.04.2026");
 
     component.$destroy();
   });
@@ -450,14 +442,13 @@ describe("DocumentsScreen component", () => {
     component.$destroy();
   });
 
-  it("shows chain panel as flow navigation with current and next document cards", () => {
+  it("exposes chain-create actions in the editor header for the current document kind", () => {
     const { component, target } = renderDocuments();
 
-    expect(target.querySelector('[data-testid="documents-chain-flow"]')).toBeTruthy();
-    expect(target.textContent).toContain("Крок 1");
-    expect(target.textContent).toContain("Далі");
-    expect(target.textContent).toContain("Очікує дії");
-    expect(target.textContent).toContain("Після рахунку зазвичай готуємо акт або накладну");
+    expect(target.querySelector('[data-testid="documents-chain-create-act"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="documents-chain-create-waybill"]')).toBeTruthy();
+    expect(target.textContent).toContain("Створити акт");
+    expect(target.textContent).toContain("Створити накладну");
 
     component.$destroy();
   });
@@ -478,7 +469,6 @@ describe("DocumentsScreen component", () => {
 
     const { component, target } = renderDocuments();
 
-    expect(target.querySelector('[data-testid="skeleton-card-grid"]')).toBeTruthy();
     expect(target.querySelectorAll('[data-testid="skeleton-row-item"]')).toHaveLength(5);
     expect(target.querySelector('[data-testid="documents-list"]')).toBeNull();
 
@@ -505,7 +495,6 @@ describe("DocumentsScreen component", () => {
     const { component, target } = renderDocuments();
 
     expect(target.querySelector('[data-testid="documents-list"]')).toBeTruthy();
-    expect(target.querySelector('[data-testid="skeleton-card-grid"]')).toBeNull();
 
     component.$destroy();
   });
@@ -516,7 +505,6 @@ describe("DocumentsScreen component", () => {
 
     expect(target.querySelector('[data-testid="documents-screen"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="documents-create-strip"]')).toBeTruthy();
-    expect(target.querySelector('[data-testid="documents-focus-primary"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="documents-list"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="documents-items-empty"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="documents-existing-pdf"]')).toBeTruthy();
