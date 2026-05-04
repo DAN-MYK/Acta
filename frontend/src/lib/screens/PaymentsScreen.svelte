@@ -19,6 +19,22 @@
     payments.updateSplitAllocationAmount(documentId, input.value);
   }
 
+  function parseSplitAmount(value: string | null | undefined): number {
+    if (!value) {
+      return 0;
+    }
+    const normalized = value.replace(/\s+/g, "").replace("грн", "").replace(",", ".").trim();
+    const parsed = Number.parseFloat(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  $: canConfirmSplit =
+    !$payments.loading &&
+    $payments.splitDraft !== null &&
+    $payments.splitDraft !== undefined &&
+    $payments.splitDraft.allocations.length > 0 &&
+    parseSplitAmount($payments.splitDraft.remainingAmountStr) === 0;
+
   function getPaymentStateLabel(matchedDoc: string): string {
     return matchedDoc ? `Зв'язано з ${matchedDoc}` : "Не зведено";
   }
@@ -455,14 +471,14 @@
 
       {#if $payments.splitDraft}
         <section class="editor-items-empty" data-testid="payments-split-draft">
-          <strong>Р§РµСЂРЅРµС‚РєР° СЂРѕР·РїРѕРґС–Р»Сѓ</strong>
+          <strong>Чернетка розподілу</strong>
           <p>
-            РЎСѓРјР° РїР»Р°С‚РµР¶Сѓ: {$payments.splitDraft.paymentAmountStr}
-            вЂў Р—Р°Р»РёС€РѕРє: {$payments.splitDraft.remainingAmountStr}
+            Сума платежу: {$payments.splitDraft.paymentAmountStr}
+            • Залишок: {$payments.splitDraft.remainingAmountStr}
           </p>
 
           {#if $payments.splitDraft.allocations.length === 0}
-            <p>Р”РѕРґР°Р№С‚Рµ РґРѕРєСѓРјРµРЅС‚Рё Р· manual picker, С‰РѕР± СЃС„РѕСЂРјСѓРІР°С‚Рё СЂРѕР·РїРѕРґС–Р».</p>
+            <p>Додайте документи з manual picker, щоб сформувати розподіл.</p>
           {:else}
             <div class="documents-list">
               {#each $payments.splitDraft.allocations as allocation}
@@ -470,11 +486,11 @@
                   <div class="task-row-main">
                     <div>
                       <strong>{allocation.title}</strong>
-                      <p>{getDocumentKindLabel(allocation.documentKind)} вЂў Р—Р°Р»РёС€РѕРє РґРѕРєСѓРјРµРЅС‚Р°: {allocation.openAmountStr}</p>
+                      <p>{getDocumentKindLabel(allocation.documentKind)} • Залишок документа: {allocation.openAmountStr}</p>
                     </div>
                     <div class="task-row-meta">
                       <label>
-                        <span>РЎСѓРјР°</span>
+                        <span>Сума</span>
                         <input
                           value={allocation.amount}
                           on:input={(event) => onSplitAllocationInput(allocation.documentId, event)}
@@ -484,7 +500,7 @@
                   </div>
                   <div>
                     <button class="btn-ghost" on:click={() => payments.removeSplitAllocation(allocation.documentId)} disabled={$payments.loading}>
-                      РџСЂРёР±СЂР°С‚Рё
+                      Прибрати
                     </button>
                   </div>
                 </div>
@@ -492,9 +508,15 @@
             </div>
           {/if}
 
+          {#if !canConfirmSplit && $payments.splitDraft.allocations.length > 0}
+            <p class="split-draft-warning" data-testid="payments-split-warning">
+              Сума частин має дорівнювати сумі платежу. Залишок: {$payments.splitDraft.remainingAmountStr}
+            </p>
+          {/if}
+
           <div class="editor-actions">
-            <button class="btn-primary" on:click={() => payments.confirmSplitDraft()} disabled={$payments.loading || $payments.splitDraft.allocations.length === 0}>
-              РџС–РґС‚РІРµСЂРґРёС‚Рё СЂРѕР·РїРѕРґС–Р»
+            <button class="btn-primary" on:click={() => payments.confirmSplitDraft()} disabled={!canConfirmSplit}>
+              Підтвердити розподіл
             </button>
           </div>
         </section>
@@ -886,5 +908,15 @@
       flex-direction: column;
       align-items: flex-start;
     }
+  }
+
+  .split-draft-warning {
+    margin-top: 8px;
+    padding: 8px 12px;
+    border-radius: var(--radius-lg, 8px);
+    border: 1px solid color-mix(in srgb, var(--warning, #d97706) 32%, transparent);
+    background: color-mix(in srgb, var(--warning, #d97706) 12%, var(--bg-card));
+    color: var(--warning-strong, var(--warning, #b45309));
+    font-size: var(--font-sm, 0.875rem);
   }
 </style>
