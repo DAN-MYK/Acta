@@ -225,7 +225,8 @@ export function reportsLoad(filter: ReportsFilterDto): Promise<ReportsScreenDto>
       scope: filter.scope,
       dateFrom: filter.dateFrom,
       dateTo: filter.dateTo,
-      query: filter.query
+      query: filter.query,
+      selectedCounterpartyId: filter.selectedCounterpartyId
     }
   });
 }
@@ -237,7 +238,8 @@ export function reportsExportCsv(filter: ReportsFilterDto): Promise<ReportsExpor
       scope: filter.scope,
       dateFrom: filter.dateFrom,
       dateTo: filter.dateTo,
-      query: filter.query
+      query: filter.query,
+      selectedCounterpartyId: filter.selectedCounterpartyId
     }
   });
 }
@@ -247,13 +249,11 @@ export function settingsLoad(): Promise<SettingsScreenDto> {
 }
 
 export function settingsSavePreferences(
-  darkMode: boolean,
-  density: number
+  darkMode: boolean
 ): Promise<SettingsScreenMutationResultDto> {
   return appInvoke("settings_save_preferences", {
     request: {
-      darkMode,
-      density
+      darkMode
     }
   });
 }

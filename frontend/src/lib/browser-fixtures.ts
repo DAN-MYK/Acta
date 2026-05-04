@@ -36,8 +36,7 @@ import type {
 
 const state = {
   activeCompanyId: "company-act",
-  darkMode: false,
-  density: 1
+  darkMode: false
 };
 
 const companies = [
@@ -228,11 +227,14 @@ function reportsScreen(filter?: ReportsFilterDto): ReportsScreenDto {
     scope: filter?.scope ?? "active",
     dateFrom: filter?.dateFrom ?? "2026-02-01",
     dateTo: filter?.dateTo ?? "2026-05-01",
-    query: filter?.query ?? ""
+    query: filter?.query ?? "",
+    selectedCounterpartyId: filter?.selectedCounterpartyId ?? null
   };
 
   return {
     filter: resolvedFilter,
+    selectedCounterparty: null,
+    topCounterparties: [],
     summary: {
       openingBalanceStr: "125 000,00 грн",
       incomeStr: "48 200,00 грн",
@@ -318,8 +320,7 @@ function settingsScreen(): SettingsScreenDto {
       }
     ],
     preferences: {
-      darkMode: state.darkMode,
-      density: state.density
+      darkMode: state.darkMode
     },
     backup: {
       label: "Остання резервна копія",
@@ -583,7 +584,6 @@ export async function browserFixtureInvoke<T>(command: string, payload?: Record<
       return clone(settingsScreen()) as T;
     case "settings_save_preferences":
       state.darkMode = Boolean((payload?.request as { darkMode?: boolean } | undefined)?.darkMode);
-      state.density = Number((payload?.request as { density?: number } | undefined)?.density ?? state.density);
       return clone({ ok: true, message: "Налаштування вигляду збережено", screen: settingsScreen() } satisfies SettingsScreenMutationResultDto) as T;
     case "settings_save_company":
       return clone({ ok: true, message: "Дані компанії збережено", screen: settingsScreen() } satisfies SettingsScreenMutationResultDto) as T;

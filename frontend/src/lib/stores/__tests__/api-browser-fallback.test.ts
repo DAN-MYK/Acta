@@ -35,7 +35,8 @@ describe("browser fallback API", () => {
       scope: "all",
       dateFrom: "2026-02-01",
       dateTo: "2026-05-01",
-      query: "ромашка"
+      query: "ромашка",
+      selectedCounterpartyId: null
     });
 
     expect(screen.filter).toEqual({
@@ -43,7 +44,8 @@ describe("browser fallback API", () => {
       scope: "all",
       dateFrom: "2026-02-01",
       dateTo: "2026-05-01",
-      query: "ромашка"
+      query: "ромашка",
+      selectedCounterpartyId: null
     });
     expect(screen.receivablesRows.length).toBeGreaterThan(0);
   });
