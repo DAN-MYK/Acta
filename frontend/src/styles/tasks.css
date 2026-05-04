@@ -30,7 +30,6 @@
   background: var(--bg-card);
 }
 
-.task-focus-card,
 .task-today-panel {
   padding: 16px 18px;
   border-radius: var(--radius-2xl);
@@ -38,13 +37,6 @@
   border: 1px solid var(--border-hairline);
 }
 
-.task-focus-card {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 40%, transparent), transparent 65%),
-    var(--bg-card);
-}
-
-.task-focus-card p,
 .task-today-panel p {
   margin: 6px 0 0;
 }

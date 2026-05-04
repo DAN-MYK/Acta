@@ -59,48 +59,9 @@
   background: color-mix(in srgb, var(--danger) 78%, transparent);
 }
 
-.reports-focus-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  margin-top: 18px;
-}
-
-.reports-focus-card {
-  display: grid;
-  gap: 8px;
-  padding: 18px;
-  border-radius: var(--radius-3xl);
-  border: 1px solid var(--border-hairline);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 36%, transparent), transparent 68%),
-    var(--bg-card);
-}
-
-.reports-focus-card-primary {
-  box-shadow: inset 0 1px 0 color-mix(in srgb, white 22%, transparent);
-}
-
-.reports-focus-card-muted {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--bg-subtle) 78%, transparent), transparent 72%),
-    var(--bg-card);
-}
-
 .reports-focus-label {
   font-size: var(--font-sm);
   font-weight: 700;
-  color: var(--text-muted);
-}
-
-.reports-focus-card strong {
-  font-size: clamp(1.2rem, 2vw, 1.8rem);
-  letter-spacing: -0.02em;
-}
-
-.reports-focus-card p,
-.reports-focus-card small {
-  margin: 0;
   color: var(--text-muted);
 }
 
@@ -428,7 +389,6 @@ body[data-theme="dark"] .reports-table-row-head {
 
 @media (max-width: 1100px) {
   .reports-kpis,
-  .reports-focus-grid,
   .reports-filter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -436,7 +396,6 @@ body[data-theme="dark"] .reports-table-row-head {
 
 @media (max-width: 720px) {
   .reports-kpis,
-  .reports-focus-grid,
   .reports-filter-grid {
     grid-template-columns: minmax(0, 1fr);
   }

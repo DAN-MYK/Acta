@@ -283,21 +283,20 @@
     var(--bg-subtle);
 }
 
-.editor-items-empty p,
-.editor-item-meta {
+.editor-items-empty p {
   margin: 0;
 }
 
 .editor-item-head,
 .editor-item {
   display: grid;
-  grid-template-columns: minmax(0, 2.2fr) 84px minmax(110px, 0.9fr) minmax(130px, 1fr) 120px 160px;
-  gap: 12px;
-  align-items: start;
+  grid-template-columns: minmax(0, 2.4fr) 80px minmax(90px, 0.8fr) minmax(110px, 0.9fr) minmax(120px, 1fr) 36px;
+  gap: 10px;
+  align-items: center;
 }
 
 .editor-item-head {
-  padding: 0 8px;
+  padding: 0 4px;
   color: var(--text-muted);
 }
 
@@ -306,45 +305,40 @@
   font-weight: 600;
 }
 
-.editor-item-card {
-  display: grid;
-  gap: 12px;
-  padding: 16px;
-  border-radius: var(--radius-2xl);
-  border: 1px solid var(--border-hairline);
-  background: color-mix(in srgb, var(--bg-subtle) 64%, var(--bg-card));
-}
-
-.editor-item-meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: center;
-  color: var(--text-muted);
-}
-
-.editor-item-field-numeric input,
-.editor-item-cell-numeric,
-.editor-item-total {
+.editor-item-cell-numeric {
   text-align: right;
 }
 
-.editor-item-total {
-  display: grid;
-  gap: 6px;
-  align-self: stretch;
-  padding: 12px 14px;
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--border-hairline);
-  background: var(--bg-card);
-}
-
-.editor-item-total strong {
+.editor-item-sum {
   font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
-.editor-item-remove {
-  align-self: end;
+.btn-icon-danger {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-lg, 8px);
+  border: 1px solid color-mix(in srgb, var(--danger, #c2410c) 28%, var(--border-hairline));
+  background: color-mix(in srgb, var(--danger, #c2410c) 8%, var(--bg-card));
+  color: color-mix(in srgb, var(--danger, #c2410c) 78%, var(--text));
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.btn-icon-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger, #c2410c) 18%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--danger, #c2410c) 50%, var(--border-hairline));
+}
+
+.btn-icon-danger:disabled {
+  cursor: default;
+  opacity: 0.5;
 }
 
 .existing-pdf-card {
@@ -395,8 +389,7 @@
   }
 
   .doc-row,
-  .doc-row-body,
-  .editor-item-meta {
+  .doc-row-body {
     flex-direction: column;
     align-items: flex-start;
   }

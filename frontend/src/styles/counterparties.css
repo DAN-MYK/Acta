@@ -66,16 +66,6 @@
   color: var(--success-text);
 }
 
-.counterparty-overview {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.counterparty-overview-panel {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 44%, transparent), transparent 66%),
-    var(--bg-subtle);
-}
-
 .counterparty-row.active {
   outline: 2px solid var(--accent);
 }

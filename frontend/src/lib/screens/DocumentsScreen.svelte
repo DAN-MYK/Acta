@@ -41,11 +41,6 @@
     waybill: "накладну"
   };
 
-  const itemTotalFormatter = new Intl.NumberFormat("uk-UA", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  });
-
   interface DecimalValue {
     value: bigint;
     scale: number;
@@ -667,63 +662,51 @@
             <span></span>
           </div>
           {#each $documents.editor.items as item, index}
-            <div class="editor-item-card">
-              <div class="editor-item-meta">
-                <strong>Рядок {index + 1}</strong>
-                <span>Сума позиції {formatItemTotal(item.quantity, item.price)}</span>
-              </div>
-
-              <div class="editor-item">
-                <label class="editor-item-field">
-                  <span>Опис</span>
-                  <input
-                    value={item.description}
-                    placeholder="Опишіть товар або послугу"
-                    on:input={(event) => onItemFieldChange(index, "description", event)}
-                    disabled={$documents.loading}
-                  />
-                </label>
-                <label class="editor-item-field">
-                  <span>Од.</span>
-                  <input
-                    value={item.unit}
-                    placeholder="шт / год / посл."
-                    on:input={(event) => onItemFieldChange(index, "unit", event)}
-                    disabled={$documents.loading}
-                  />
-                </label>
-                <label class="editor-item-field editor-item-field-numeric">
-                  <span>Кількість</span>
-                  <input
-                    value={item.quantity}
-                    placeholder="0"
-                    inputmode="decimal"
-                    on:input={(event) => onItemFieldChange(index, "quantity", event)}
-                    disabled={$documents.loading}
-                  />
-                </label>
-                <label class="editor-item-field editor-item-field-numeric">
-                  <span>Ціна, грн</span>
-                  <input
-                    value={item.price}
-                    placeholder="0,00"
-                    inputmode="decimal"
-                    on:input={(event) => onItemFieldChange(index, "price", event)}
-                    disabled={$documents.loading}
-                  />
-                </label>
-                <div class="editor-item-total" aria-label={`Сума рядка ${index + 1}`}>
-                  <span>Сума</span>
-                  <strong>{formatItemTotal(item.quantity, item.price)}</strong>
-                </div>
-                <button
-                  class="btn-danger editor-item-remove"
-                  on:click={() => documents.removeItem(index)}
-                  disabled={$documents.loading}
-                >
-                  Видалити позицію
-                </button>
-              </div>
+            <div class="editor-item">
+              <input
+                aria-label={`Опис рядка ${index + 1}`}
+                value={item.description}
+                placeholder="Опишіть товар або послугу"
+                on:input={(event) => onItemFieldChange(index, "description", event)}
+                disabled={$documents.loading}
+              />
+              <input
+                aria-label={`Одиниця рядка ${index + 1}`}
+                value={item.unit}
+                placeholder="шт / год"
+                on:input={(event) => onItemFieldChange(index, "unit", event)}
+                disabled={$documents.loading}
+              />
+              <input
+                aria-label={`Кількість рядка ${index + 1}`}
+                class="editor-item-cell-numeric"
+                value={item.quantity}
+                placeholder="0"
+                inputmode="decimal"
+                on:input={(event) => onItemFieldChange(index, "quantity", event)}
+                disabled={$documents.loading}
+              />
+              <input
+                aria-label={`Ціна рядка ${index + 1}`}
+                class="editor-item-cell-numeric"
+                value={item.price}
+                placeholder="0,00"
+                inputmode="decimal"
+                on:input={(event) => onItemFieldChange(index, "price", event)}
+                disabled={$documents.loading}
+              />
+              <span
+                class="editor-item-cell-numeric editor-item-sum"
+                aria-label={`Сума рядка ${index + 1}`}
+              >{formatItemTotal(item.quantity, item.price)}</span>
+              <button
+                class="btn-icon-danger editor-item-remove"
+                aria-label={`Прибрати рядок ${index + 1}`}
+                on:click={() => documents.removeItem(index)}
+                disabled={$documents.loading}
+              >
+                ✕
+              </button>
             </div>
           {/each}
         {/if}

@@ -435,8 +435,8 @@ describe("DocumentsScreen component", () => {
 
     const { component, target } = renderDocuments();
 
-    expect(target.textContent).toContain("Сума позиції 1,01 грн");
-    expect(target.textContent).toContain("Сума позиції 0,67 грн");
+    expect(target.textContent).toContain("1,01 грн");
+    expect(target.textContent).toContain("0,67 грн");
     expect(target.textContent).toContain("1,68 грн");
 
     component.$destroy();
