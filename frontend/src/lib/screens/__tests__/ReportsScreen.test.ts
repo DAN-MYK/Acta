@@ -54,8 +54,11 @@ function makeReportsScreen(): ReportsScreenDto {
       scope: "active",
       dateFrom: "2026-02-01",
       dateTo: "2026-05-01",
-      query: ""
+      query: "",
+      selectedCounterpartyId: null
     },
+    selectedCounterparty: null,
+    topCounterparties: [],
     summary: {
       openingBalanceStr: "125 000,00 грн",
       incomeStr: "48 200,00 грн",

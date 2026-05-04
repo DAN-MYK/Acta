@@ -45,7 +45,9 @@ pub async fn execute_inbox_action(
             InboxEffect::RefreshScreens(vec![AppScreen::Dashboard, AppScreen::Tasks])
         }
         InboxAction::ReconcilePayment(payment_id) => {
-            crate::db::payments::mark_reconciled(ctx.pool(), payment_id).await?;
+            tracing::info!(
+                "inbox_action: unmatched payment {payment_id} redirected to payments screen"
+            );
             InboxEffect::RefreshScreens(vec![AppScreen::Dashboard, AppScreen::Payments])
         }
         InboxAction::OpenDocument(document_id) => InboxEffect::OpenDocument {

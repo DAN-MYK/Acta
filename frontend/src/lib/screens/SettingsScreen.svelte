@@ -33,12 +33,6 @@
     await shell.load();
   }
 
-  async function onSettingsDensityChange(event: Event) {
-    const select = event.currentTarget as HTMLSelectElement;
-    settings.updatePreference("density", Number(select.value));
-    await settings.savePreferences();
-  }
-
   function onSettingsCompanyFieldChange(field: keyof SettingsCompanyDto, event: Event) {
     const input = event.currentTarget as HTMLInputElement;
     const value = input.type === "checkbox" ? input.checked : input.value;
@@ -89,11 +83,6 @@
             <button class="btn-secondary" class:active={$settings.screen?.preferences.darkMode} on:click={() => onSettingsThemeChange(true)}>
               Темна тема
             </button>
-            <select value={$settings.screen?.preferences.density ?? 1} on:change={onSettingsDensityChange}>
-              <option value="0">Компактно</option>
-              <option value="1">Збалансовано</option>
-              <option value="2">Просторо</option>
-            </select>
           </div>
         </div>
       {:else if $settings.section === "company"}

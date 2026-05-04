@@ -17,8 +17,18 @@ import type {
   OpenTemplateResultDto,
   PaletteActivationResultDto,
   PaletteSearchResultDto,
+  PaymentMatchApplyAutoRequest,
+  PaymentMatchPreviewDto,
+  PaymentMatchPreviewRequest,
+  PaymentReconcileRequest,
+  PaymentReconcileSplitRequest,
+  PaymentReconcileSplitResultDto,
   PaymentDraftFormDto,
+  PaymentManualMatchCandidatesDto,
   PaymentsScreenDto,
+  PaymentMatchManualCandidatesRequest,
+  PaymentUnreconcileAllRequest,
+  PaymentUnreconcileRequest,
   ReportsExportResultDto,
   ReportsFilterDto,
   ReportsScreenDto,
@@ -215,7 +225,8 @@ export function reportsLoad(filter: ReportsFilterDto): Promise<ReportsScreenDto>
       scope: filter.scope,
       dateFrom: filter.dateFrom,
       dateTo: filter.dateTo,
-      query: filter.query
+      query: filter.query,
+      selectedCounterpartyId: filter.selectedCounterpartyId
     }
   });
 }
@@ -227,7 +238,8 @@ export function reportsExportCsv(filter: ReportsFilterDto): Promise<ReportsExpor
       scope: filter.scope,
       dateFrom: filter.dateFrom,
       dateTo: filter.dateTo,
-      query: filter.query
+      query: filter.query,
+      selectedCounterpartyId: filter.selectedCounterpartyId
     }
   });
 }
@@ -237,13 +249,11 @@ export function settingsLoad(): Promise<SettingsScreenDto> {
 }
 
 export function settingsSavePreferences(
-  darkMode: boolean,
-  density: number
+  darkMode: boolean
 ): Promise<SettingsScreenMutationResultDto> {
   return appInvoke("settings_save_preferences", {
     request: {
-      darkMode,
-      density
+      darkMode
     }
   });
 }
@@ -294,12 +304,40 @@ export function paymentCreateOrUpdate(form: PaymentDraftFormDto): Promise<Mutati
   return appInvoke("payment_create_or_update", { request: form });
 }
 
-export function paymentReconcile(paymentId: string): Promise<MutationResultDto> {
-  return appInvoke("payment_reconcile", { paymentId });
+export function paymentReconcile(request: PaymentReconcileRequest): Promise<MutationResultDto> {
+  return appInvoke("payment_reconcile", { request });
 }
 
-export function paymentUnreconcile(paymentId: string): Promise<MutationResultDto> {
-  return appInvoke("payment_unreconcile", { paymentId });
+export function paymentReconcileSplit(
+  request: PaymentReconcileSplitRequest
+): Promise<PaymentReconcileSplitResultDto> {
+  return appInvoke("payment_reconcile_split", { request });
+}
+
+export function paymentUnreconcile(request: PaymentUnreconcileRequest): Promise<MutationResultDto> {
+  return appInvoke("payment_unreconcile", { request });
+}
+
+export function paymentUnreconcileAll(
+  request: PaymentUnreconcileAllRequest
+): Promise<MutationResultDto> {
+  return appInvoke("payment_unreconcile_all", { request });
+}
+
+export function paymentMatchPreview(request: PaymentMatchPreviewRequest): Promise<PaymentMatchPreviewDto> {
+  return appInvoke("payment_match_preview", { request });
+}
+
+export function paymentMatchApplyAuto(
+  request: PaymentMatchApplyAutoRequest
+): Promise<MutationResultDto> {
+  return appInvoke("payment_match_apply_auto", { request });
+}
+
+export function paymentMatchManualCandidates(
+  request: PaymentMatchManualCandidatesRequest
+): Promise<PaymentManualMatchCandidatesDto> {
+  return appInvoke("payment_match_manual_candidates", { request });
 }
 
 export function documentGeneratePdf(docId: string): Promise<MutationResultDto> {

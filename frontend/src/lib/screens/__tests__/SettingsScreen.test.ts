@@ -129,8 +129,7 @@ function makeSettingsScreen(): SettingsScreenDto {
       vatCert: ""
     },
     preferences: {
-      darkMode: false,
-      density: 1
+      darkMode: false
     },
     integrations: [
       {
@@ -251,16 +250,11 @@ describe("SettingsScreen", () => {
       component.$destroy();
     });
 
-    it("використовує українські підписи щільності замість англійських", () => {
+    it("не показує застарілий density selector в секції appearance", () => {
       const { component, target } = renderSettings();
-      const options = Array.from(target.querySelectorAll("option")).map((option) => option.textContent?.trim());
 
-      expect(options).toContain("Компактно");
-      expect(options).toContain("Збалансовано");
-      expect(options).toContain("Просторо");
-      expect(options).not.toContain("Compact");
-      expect(options).not.toContain("Comfortable");
-      expect(options).not.toContain("Spacious");
+      const options = Array.from(target.querySelectorAll("option")).map((option) => option.textContent?.trim());
+      expect(options).toHaveLength(0);
 
       component.$destroy();
     });

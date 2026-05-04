@@ -20,7 +20,8 @@ const defaultFilter: ReportsFilterDto = {
   scope: "active",
   dateFrom: defaultFrom,
   dateTo: defaultTo,
-  query: ""
+  query: "",
+  selectedCounterpartyId: null
 };
 
 const initialState: ReportsState = {
