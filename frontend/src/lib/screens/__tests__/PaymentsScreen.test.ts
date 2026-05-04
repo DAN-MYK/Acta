@@ -621,6 +621,8 @@ describe("PaymentsScreen component", () => {
         willCreate: 2,
         willSkip: 1,
         conflicts: 0,
+        fileSize: 8192,
+        fileMtimeSecs: 1746355200,
         rows: [
           { action: "create", bankRef: "REF-1", description: "Перший платіж", note: "create: bank_ref відсутній у БД" },
           { action: "create", bankRef: "REF-2", description: "Другий платіж", note: "create: bank_ref відсутній у БД" },
@@ -667,6 +669,8 @@ describe("PaymentsScreen component", () => {
         willCreate: 0,
         willSkip: 2,
         conflicts: 0,
+        fileSize: 4096,
+        fileMtimeSecs: 1746355200,
         rows: [
           { action: "skip", bankRef: "REF-X", description: "Дубль 1", note: "skip: знайдено existing row за bank_ref" },
           { action: "skip", bankRef: "REF-Y", description: "Дубль 2", note: "skip: знайдено existing row за bank_ref" }

@@ -480,10 +480,14 @@ export interface PaymentImportPreviewDto {
   willSkip: number;
   conflicts: number;
   rows: PaymentImportPreviewRowDto[];
+  fileSize: number;
+  fileMtimeSecs: number;
 }
 
 export interface PaymentImportCommitRequest {
   path: string;
+  fileSize: number;
+  fileMtimeSecs: number;
 }
 
 export interface PaymentReconcileSplitAllocationDto {

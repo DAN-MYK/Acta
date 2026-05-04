@@ -294,12 +294,16 @@ pub struct PaymentImportPreviewDto {
     pub will_skip: i32,
     pub conflicts: i32,
     pub rows: Vec<PaymentImportPreviewRowDto>,
+    pub file_size: u64,
+    pub file_mtime_secs: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PaymentImportCommitRequest {
     pub path: String,
+    pub file_size: u64,
+    pub file_mtime_secs: i64,
 }
 
 fn format_decimal_ua(value: Decimal) -> String {
@@ -736,6 +740,8 @@ fn build_import_preview_dto(
     path: &Path,
     bank_name: &str,
     report: PaymentImportReport,
+    file_size: u64,
+    file_mtime_secs: i64,
 ) -> PaymentImportPreviewDto {
     let parsed = report.parsed as i32;
     let will_create = report.created as i32;
@@ -773,6 +779,8 @@ fn build_import_preview_dto(
         will_skip,
         conflicts,
         rows,
+        file_size,
+        file_mtime_secs,
     }
 }
 
@@ -999,6 +1007,15 @@ pub async fn payments_import_preview(
         ));
     }
 
+    let meta = fs::metadata(&path_buf).await?;
+    let file_size = meta.len();
+    let file_mtime_secs = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+
     let parsed_rows = parse_payments_statement_file(&path_buf).await?;
     let bank_name = parsed_rows
         .first()
@@ -1012,7 +1029,13 @@ pub async fn payments_import_preview(
     let report =
         apply_imported_payments(ctx.pool(), ctx.company_id(), &parsed_rows, true).await?;
 
-    Ok(build_import_preview_dto(&path_buf, &bank_name, report))
+    Ok(build_import_preview_dto(
+        &path_buf,
+        &bank_name,
+        report,
+        file_size,
+        file_mtime_secs,
+    ))
 }
 
 /// Підтверджує імпорт після `payments_import_preview` — фактично виконує запис у БД.
@@ -1027,10 +1050,24 @@ pub async fn payments_import_commit(
     );
 
     let path = PathBuf::from(trimmed);
-    if fs::metadata(&path).await.is_err() {
-        return Err(anyhow!(
+    let meta = fs::metadata(&path).await.map_err(|_| {
+        anyhow!(
             "Файл {} не знайдено або до нього немає доступу",
             path.display()
+        )
+    })?;
+
+    let current_size = meta.len();
+    let current_mtime = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+
+    if current_size != request.file_size || current_mtime != request.file_mtime_secs {
+        return Err(anyhow!(
+            "Файл виписки змінився після попереднього перегляду. Виберіть файл знову."
         ));
     }
 

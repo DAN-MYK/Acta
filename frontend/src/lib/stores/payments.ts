@@ -632,7 +632,11 @@ function createPaymentsStore() {
       }
       beginAction("import-commit");
       try {
-        const result = await paymentsImportCommit({ path: preview.path });
+        const result = await paymentsImportCommit({
+          path: preview.path,
+          fileSize: preview.fileSize,
+          fileMtimeSecs: preview.fileMtimeSecs,
+        });
         if (result.ok) {
           update((state) => ({ ...state, importPreview: null }));
           await refreshAfterMutation(result.message);

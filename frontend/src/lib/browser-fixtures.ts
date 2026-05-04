@@ -733,6 +733,8 @@ export async function browserFixtureInvoke<T>(command: string, payload?: Record<
         willCreate: 4,
         willSkip: 1,
         conflicts: 0,
+        fileSize: 12345,
+        fileMtimeSecs: 1746355200,
         rows: [
           {
             action: "create",
