@@ -11,7 +11,10 @@ use uuid::Uuid;
 use crate::app_ctx::AppCtx;
 use crate::db;
 use crate::import::bas_payments::{
-    bank_import_dir, import_payments_from_csv, newest_payments_csv_path,
+    apply_imported_payments, bank_import_dir, import_payments_from_csv,
+    import_payments_from_statement, newest_payments_csv_path, newest_statement_path,
+    parse_payments_statement_file, PaymentImportAction, PaymentImportPlanRow,
+    PaymentImportReport,
 };
 use crate::models::payment::{NewPayment, PaymentDirection, UpdatePayment};
 use crate::services::payment_matching::{
@@ -269,6 +272,35 @@ pub struct PaymentCalendarMonthDto {
 #[serde(rename_all = "camelCase")]
 pub struct PaymentScheduleCompleteRequest {
     pub schedule_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentImportPreviewRowDto {
+    pub action: String,
+    pub bank_ref: String,
+    pub description: String,
+    pub note: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentImportPreviewDto {
+    pub ok: bool,
+    pub message: String,
+    pub path: String,
+    pub bank_name: String,
+    pub parsed: i32,
+    pub will_create: i32,
+    pub will_skip: i32,
+    pub conflicts: i32,
+    pub rows: Vec<PaymentImportPreviewRowDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentImportCommitRequest {
+    pub path: String,
 }
 
 fn format_decimal_ua(value: Decimal) -> String {
@@ -686,9 +718,63 @@ fn manual_candidate_matches_query(
 }
 
 async fn run_bank_import(ctx: &AppCtx) -> Result<(usize, PathBuf)> {
-    let csv_path = newest_payments_csv_path().await?;
-    let report = import_payments_from_csv(ctx.pool(), ctx.company_id(), &csv_path, false).await?;
-    Ok((report.created, csv_path))
+    // Backward-compat: для legacy "Імпорт виписки" з `storage/import/bank/`.
+    // Підтримує і CSV, і XLSX через `newest_statement_path`.
+    let path = newest_statement_path().await?;
+    let report =
+        import_payments_from_statement(ctx.pool(), ctx.company_id(), &path, false).await?;
+    Ok((report.created, path))
+}
+
+fn payment_action_to_str(action: &PaymentImportAction) -> &'static str {
+    match action {
+        PaymentImportAction::Create => "create",
+        PaymentImportAction::Skip => "skip",
+    }
+}
+
+fn build_import_preview_dto(
+    path: &Path,
+    bank_name: &str,
+    report: PaymentImportReport,
+) -> PaymentImportPreviewDto {
+    let parsed = report.parsed as i32;
+    let will_create = report.created as i32;
+    let will_skip = report.skipped as i32;
+    let conflicts = report.conflicts as i32;
+
+    let rows = report
+        .rows
+        .into_iter()
+        .map(|row: PaymentImportPlanRow| PaymentImportPreviewRowDto {
+            action: payment_action_to_str(&row.action).to_string(),
+            bank_ref: row.bank_ref.unwrap_or_default(),
+            description: row.description,
+            note: row.note.unwrap_or_default(),
+        })
+        .collect();
+
+    let message = if parsed == 0 {
+        "У файлі не знайдено жодного рядка виписки".to_string()
+    } else if will_create == 0 {
+        format!("У файлі {parsed} рядків, але всі вже імпортовано раніше")
+    } else {
+        format!(
+            "Знайдено {parsed} рядків. Буде створено {will_create}, пропущено {will_skip}",
+        )
+    };
+
+    PaymentImportPreviewDto {
+        ok: true,
+        message,
+        path: path.to_string_lossy().into_owned(),
+        bank_name: bank_name.to_string(),
+        parsed,
+        will_create,
+        will_skip,
+        conflicts,
+        rows,
+    }
 }
 
 async fn ensure_manual_import_template() -> Result<PathBuf> {
@@ -891,6 +977,75 @@ pub async fn payments_import_latest_csv(ctx: &AppCtx) -> Result<MutationResultDt
     Ok(MutationResultDto {
         ok: true,
         message: format!("Імпортовано {imported} рядків з {}", path.display()),
+    })
+}
+
+/// Робить dry-run попереднього перегляду виписки за вказаним шляхом.
+/// Не вносить змін у БД, лише повертає підрахунок та плановані рядки.
+/// Використовується після вибору файлу через нативний file picker.
+pub async fn payments_import_preview(
+    ctx: &AppCtx,
+    path: String,
+) -> Result<PaymentImportPreviewDto> {
+    let trimmed = path.trim();
+    anyhow::ensure!(
+        !trimmed.is_empty(),
+        "Не вказано шляху до файлу виписки для попереднього перегляду"
+    );
+    let path_buf = PathBuf::from(trimmed);
+    if fs::metadata(&path_buf).await.is_err() {
+        return Err(anyhow!(
+            "Файл {} не знайдено або до нього немає доступу",
+            path_buf.display()
+        ));
+    }
+
+    let parsed_rows = parse_payments_statement_file(&path_buf).await?;
+    let bank_name = parsed_rows
+        .first()
+        .map(|row| row.bank_name.clone())
+        .unwrap_or_else(|| {
+            crate::import::bas_payments::parser_for_path(&path_buf)
+                .bank_name()
+                .to_string()
+        });
+
+    let report =
+        apply_imported_payments(ctx.pool(), ctx.company_id(), &parsed_rows, true).await?;
+
+    Ok(build_import_preview_dto(&path_buf, &bank_name, report))
+}
+
+/// Підтверджує імпорт після `payments_import_preview` — фактично виконує запис у БД.
+pub async fn payments_import_commit(
+    ctx: &AppCtx,
+    request: PaymentImportCommitRequest,
+) -> Result<MutationResultDto> {
+    let trimmed = request.path.trim();
+    anyhow::ensure!(
+        !trimmed.is_empty(),
+        "Не вказано шляху до файлу виписки для імпорту"
+    );
+
+    let path = PathBuf::from(trimmed);
+    if fs::metadata(&path).await.is_err() {
+        return Err(anyhow!(
+            "Файл {} не знайдено або до нього немає доступу",
+            path.display()
+        ));
+    }
+
+    let report =
+        import_payments_from_statement(ctx.pool(), ctx.company_id(), &path, false).await?;
+
+    Ok(MutationResultDto {
+        ok: true,
+        message: format!(
+            "Імпортовано {} нових платежів з {} (пропущено {})",
+            report.created,
+            path.display(),
+            report.skipped,
+        ),
     })
 }
 
