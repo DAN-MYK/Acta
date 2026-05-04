@@ -1,8 +1,8 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Result};
-use chrono::NaiveDate;
+use chrono::{Datelike, Duration, Local, NaiveDate, Weekday};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use tokio::fs;
@@ -209,6 +209,67 @@ pub struct PaymentManualMatchCandidatesDto {
 }
 
 // ─── Private helpers ──────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentCalendarMonthRequest {
+    pub month: String,
+    pub selected_date: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentCalendarEventDto {
+    pub id: String,
+    pub kind: String,
+    pub title: String,
+    pub subtitle: String,
+    pub date: String,
+    pub amount_str: String,
+    pub direction: String,
+    pub status_label: String,
+    pub recurrence_label: String,
+    pub counterparty_id: String,
+    pub counterparty_name: String,
+    pub link_kind: String,
+    pub link_id: String,
+    pub note: String,
+    pub actionable: bool,
+    pub overdue: bool,
+    pub done: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentCalendarDayDto {
+    pub date: String,
+    pub day_number: u32,
+    pub weekday_short: String,
+    pub in_current_month: bool,
+    pub today: bool,
+    pub selected: bool,
+    pub has_overdue: bool,
+    pub income_total_str: String,
+    pub expense_total_str: String,
+    pub event_count: usize,
+    pub events: Vec<PaymentCalendarEventDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentCalendarMonthDto {
+    pub month: String,
+    pub month_label: String,
+    pub selected_date: String,
+    pub today: String,
+    pub days: Vec<PaymentCalendarDayDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentScheduleCompleteRequest {
+    pub schedule_id: String,
+}
 
 fn format_decimal_ua(value: Decimal) -> String {
     let normalized = format!("{:.2}", value.round_dp(2)).replace('.', ",");

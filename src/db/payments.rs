@@ -723,7 +723,9 @@ pub async fn reconcile_split_scoped(
     let payment_amount = payment_amount_scoped_tx_locked(&mut tx, company_id, payment_id).await?;
     let total_allocated = allocations
         .iter()
-        .fold(rust_decimal::Decimal::ZERO, |sum, allocation| sum + allocation.amount);
+        .fold(rust_decimal::Decimal::ZERO, |sum, allocation| {
+            sum + allocation.amount
+        });
     anyhow::ensure!(
         total_allocated <= payment_amount,
         "Сума звірки перевищує суму платежу"
@@ -871,6 +873,32 @@ pub async fn list_upcoming_schedule(
     Ok(rows)
 }
 
+/// Список запланованих платежів у межах діапазону дат.
+pub async fn list_schedule_in_range(
+    pool: &PgPool,
+    company_id: Uuid,
+    from: chrono::NaiveDate,
+    to: chrono::NaiveDate,
+) -> Result<Vec<PaymentSchedule>> {
+    let rows = sqlx::query_as::<_, PaymentSchedule>(
+        r#"
+        SELECT id, company_id, title, amount, direction, scheduled_date,
+               recurrence, recurrence_end, counterparty_id, notes,
+               is_completed, created_at, updated_at
+        FROM payment_schedule
+        WHERE company_id = $1
+          AND scheduled_date BETWEEN $2 AND $3
+        ORDER BY scheduled_date ASC, created_at ASC
+        "#,
+    )
+    .bind(company_id)
+    .bind(from)
+    .bind(to)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
 /// Створити запланований платіж.
 pub async fn create_schedule(pool: &PgPool, data: NewPaymentSchedule) -> Result<PaymentSchedule> {
     let row = sqlx::query_as::<_, PaymentSchedule>(
@@ -907,4 +935,27 @@ pub async fn complete_schedule(pool: &PgPool, id: Uuid) -> Result<()> {
     .execute(pool)
     .await?;
     Ok(())
+}
+
+/// Позначити запланований платіж як виконаний лише в межах конкретної компанії.
+pub async fn complete_schedule_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+) -> Result<bool> {
+    let affected = sqlx::query(
+        r#"
+        UPDATE payment_schedule
+        SET is_completed = TRUE,
+            updated_at = NOW()
+        WHERE id = $1
+          AND company_id = $2
+        "#,
+    )
+    .bind(id)
+    .bind(company_id)
+    .execute(pool)
+    .await?
+    .rows_affected();
+    Ok(affected > 0)
 }

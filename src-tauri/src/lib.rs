@@ -86,6 +86,8 @@ pub fn run() {
             commands::payments::payments_import_latest_csv,
             commands::payments::payments_sync_bank,
             commands::payments::payments_open_manual_template,
+            commands::payments::payments_calendar_load,
+            commands::payments::payment_schedule_complete,
             commands::payments::payment_create_or_update,
             commands::payments::payment_reconcile,
             commands::payments::payment_reconcile_split,

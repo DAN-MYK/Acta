@@ -190,7 +190,7 @@ fn matches_query(task: &Task, query: Option<&str>) -> bool {
             .contains(&query)
 }
 
-async fn resolve_link_label(ctx: &AppCtx, task: &Task) -> Result<(String, String)> {
+pub(crate) async fn resolve_link_label(ctx: &AppCtx, task: &Task) -> Result<(String, String)> {
     if let Some(act_id) = task.act_id {
         if let Some((act, _)) = db::acts::get_by_id(ctx.pool(), act_id).await? {
             return Ok(("act".to_string(), format!("Акт {}", act.number)));

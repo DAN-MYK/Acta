@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { tick } from "svelte";
 import PaymentsScreen from "../PaymentsScreen.svelte";
 import type {
+  PaymentCalendarMonthDto,
   PaymentDraftFormDto,
   PaymentManualMatchCandidatesDto,
   PaymentMatchPreviewDto,
@@ -33,6 +34,12 @@ const mocks = vi.hoisted(() => {
 
   const paymentsState = createMockStore({
     list: null as PaymentsScreenDto | null,
+    calendar: null as PaymentCalendarMonthDto | null,
+    calendarInitialLoading: false,
+    calendarLoading: false,
+    calendarError: null as string | null,
+    calendarFilter: "all" as "all" | "schedule" | "task",
+    selectedCalendarEventId: null as string | null,
     initialLoading: false,
     loading: false,
     error: null as string | null,
@@ -69,11 +76,17 @@ const mocks = vi.hoisted(() => {
     closeManualMatchPicker: vi.fn(),
     closeMatchPreview: vi.fn(),
     confirmSplitDraft: vi.fn(),
+    completeSchedule: vi.fn(),
+    createPaymentFromSchedule: vi.fn(),
     confirmManualPickerCandidate: vi.fn(),
     confirmPreviewAutoMatch: vi.fn(),
     confirmSelectedPreviewCandidate: vi.fn(),
     importCsv: vi.fn(),
+    loadCalendar: vi.fn(),
+    moveCalendarSelection: vi.fn(),
     openEditor: vi.fn(),
+    openCalendarCounterparty: vi.fn(),
+    openCalendarTask: vi.fn(),
     openManualMatchPicker: vi.fn(),
     openManualTemplate: vi.fn(),
     addSelectedManualPickerCandidateToSplit: vi.fn(),
@@ -81,8 +94,12 @@ const mocks = vi.hoisted(() => {
     removeSplitAllocation: vi.fn(),
     save: vi.fn(),
     searchManualMatchCandidates: vi.fn(),
+    selectCalendarDate: vi.fn(),
+    selectCalendarEvent: vi.fn(),
     selectManualPickerCandidate: vi.fn(),
     selectPreviewCandidate: vi.fn(),
+    setCalendarFilter: vi.fn(),
+    shiftCalendarMonth: vi.fn(),
     syncBank: vi.fn(),
     unreconcile: vi.fn(),
     updateFormField: vi.fn(),
@@ -271,11 +288,17 @@ vi.mock("../../stores/payments", () => ({
     closeManualMatchPicker: mocks.closeManualMatchPicker,
     closeMatchPreview: mocks.closeMatchPreview,
     confirmSplitDraft: mocks.confirmSplitDraft,
+    completeSchedule: mocks.completeSchedule,
+    createPaymentFromSchedule: mocks.createPaymentFromSchedule,
     confirmManualPickerCandidate: mocks.confirmManualPickerCandidate,
     confirmPreviewAutoMatch: mocks.confirmPreviewAutoMatch,
     confirmSelectedPreviewCandidate: mocks.confirmSelectedPreviewCandidate,
     importCsv: mocks.importCsv,
+    loadCalendar: mocks.loadCalendar,
+    moveCalendarSelection: mocks.moveCalendarSelection,
     openEditor: mocks.openEditor,
+    openCalendarCounterparty: mocks.openCalendarCounterparty,
+    openCalendarTask: mocks.openCalendarTask,
     openManualMatchPicker: mocks.openManualMatchPicker,
     openManualTemplate: mocks.openManualTemplate,
     addSelectedManualPickerCandidateToSplit: mocks.addSelectedManualPickerCandidateToSplit,
@@ -283,8 +306,12 @@ vi.mock("../../stores/payments", () => ({
     removeSplitAllocation: mocks.removeSplitAllocation,
     save: mocks.save,
     searchManualMatchCandidates: mocks.searchManualMatchCandidates,
+    selectCalendarDate: mocks.selectCalendarDate,
+    selectCalendarEvent: mocks.selectCalendarEvent,
     selectManualPickerCandidate: mocks.selectManualPickerCandidate,
     selectPreviewCandidate: mocks.selectPreviewCandidate,
+    setCalendarFilter: mocks.setCalendarFilter,
+    shiftCalendarMonth: mocks.shiftCalendarMonth,
     syncBank: mocks.syncBank,
     unreconcile: mocks.unreconcile,
     updateFormField: mocks.updateFormField,
@@ -346,6 +373,12 @@ function renderPayments() {
 function setPaymentsState(
   overrides: Partial<{
     list: PaymentsScreenDto | null;
+    calendar: PaymentCalendarMonthDto | null;
+    calendarInitialLoading: boolean;
+    calendarLoading: boolean;
+    calendarError: string | null;
+    calendarFilter: "all" | "schedule" | "task";
+    selectedCalendarEventId: string | null;
     initialLoading: boolean;
     loading: boolean;
     error: string | null;
@@ -378,6 +411,12 @@ function setPaymentsState(
 ) {
   mocks.paymentsState.set({
     list: makePayments(),
+    calendar: null,
+    calendarInitialLoading: false,
+    calendarLoading: false,
+    calendarError: null,
+    calendarFilter: "all",
+    selectedCalendarEventId: null,
     initialLoading: false,
     loading: false,
     error: null,

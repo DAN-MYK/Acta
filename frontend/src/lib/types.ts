@@ -294,6 +294,60 @@ export interface PaymentsScreenDto {
   kpi: PaymentsKpiDto;
 }
 
+export interface PaymentCalendarMonthRequest {
+  month: string;
+  selectedDate?: string | null;
+}
+
+export interface PaymentScheduleCompleteRequest {
+  scheduleId: string;
+}
+
+export type PaymentCalendarEventKind = "schedule" | "task";
+export type PaymentCalendarFilterKind = "all" | PaymentCalendarEventKind;
+
+export interface PaymentCalendarEventDto {
+  id: string;
+  kind: PaymentCalendarEventKind;
+  title: string;
+  subtitle: string;
+  date: string;
+  amountStr: string;
+  direction: string;
+  statusLabel: string;
+  recurrenceLabel: string;
+  counterpartyId: string;
+  counterpartyName: string;
+  linkKind: string;
+  linkId: string;
+  note: string;
+  actionable: boolean;
+  overdue: boolean;
+  done: boolean;
+}
+
+export interface PaymentCalendarDayDto {
+  date: string;
+  dayNumber: number;
+  weekdayShort: string;
+  inCurrentMonth: boolean;
+  today: boolean;
+  selected: boolean;
+  hasOverdue: boolean;
+  incomeTotalStr: string;
+  expenseTotalStr: string;
+  eventCount: number;
+  events: PaymentCalendarEventDto[];
+}
+
+export interface PaymentCalendarMonthDto {
+  month: string;
+  monthLabel: string;
+  selectedDate: string;
+  today: string;
+  days: PaymentCalendarDayDto[];
+}
+
 export interface PaymentDraftFormDto {
   id: string;
   date: string;

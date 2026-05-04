@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use chrono::Utc;
+use chrono::{TimeZone, Utc};
 use rust_decimal_macros::dec;
 use std::sync::Arc;
 use std::sync::OnceLock;
@@ -1012,7 +1012,10 @@ async fn tauri_vertical_slice_payment_match_preview_and_apply_auto_exact() -> Re
         },
     )
     .await?;
-    assert!(apply_result.ok, "apply-auto має завершуватися успішно для exact match");
+    assert!(
+        apply_result.ok,
+        "apply-auto має завершуватися успішно для exact match"
+    );
 
     let act_link_amount = sqlx::query_scalar::<_, rust_decimal::Decimal>(
         "SELECT amount FROM payment_acts WHERE payment_id = $1 AND act_id = $2",
@@ -1186,9 +1189,7 @@ async fn tauri_vertical_slice_payment_match_preview_ambiguous_refuses_auto_apply
     .await
     .expect_err("ambiguous preview має блокувати auto-apply");
     assert!(
-        apply_err
-            .to_string()
-            .contains("Автозіставлення неможливе"),
+        apply_err.to_string().contains("Автозіставлення неможливе"),
         "для ambiguous apply-auto має повертати зрозумілу помилку"
     );
 
@@ -1412,6 +1413,120 @@ async fn tauri_vertical_slice_payment_reconcile_split_is_atomic() -> Result<()> 
         .bind(counterparty.id)
         .execute(ctx.pool())
         .await;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn tauri_vertical_slice_payment_calendar_load_includes_schedule_and_task_deadlines() -> Result<()> {
+    let _guard = tauri_vertical_slice_lock().lock().await;
+    let _ = dotenvy::dotenv();
+    std::env::set_var("ACTA_CONFIG_DIR", "storage/test-config");
+
+    let pool = acta::runtime::connect_pool().await?;
+    let company_id = acta::runtime::get_first_company_id(&pool).await;
+    let ctx = Arc::new(acta::app_ctx::AppCtx::new(pool, company_id));
+
+    let suffix = Uuid::new_v4().simple().to_string();
+    let counterparty = acta::db::counterparties::create(
+        ctx.pool(),
+        ctx.company_id(),
+        &acta::models::NewCounterparty {
+            name: format!("Calendar Counterparty {suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("calendar-cp-{suffix}")),
+        },
+    )
+    .await?;
+
+    let schedule = acta::db::payments::create_schedule(
+        ctx.pool(),
+        acta::models::payment::NewPaymentSchedule {
+            company_id: ctx.company_id(),
+            title: format!("Оренда офісу {suffix}"),
+            amount: Some(dec!(12500.00)),
+            direction: acta::models::payment::PaymentDirection::Expense,
+            scheduled_date: chrono::NaiveDate::from_ymd_opt(2026, 5, 6).expect("валидна дата"),
+            recurrence: acta::models::payment::ScheduleRecurrence::Monthly,
+            recurrence_end: None,
+            counterparty_id: Some(counterparty.id),
+            notes: Some("Оплатити до обіду".to_string()),
+        },
+    )
+    .await?;
+
+    let task = acta::db::tasks::create(
+        ctx.pool(),
+        ctx.company_id(),
+        &acta::models::NewTask {
+            title: format!("Підтвердити платіж {suffix}"),
+            description: Some("Звірити суму та реквізити".to_string()),
+            priority: acta::models::task::TaskPriority::High,
+            due_date: Some(
+                chrono::Utc
+                    .with_ymd_and_hms(2026, 5, 6, 9, 0, 0)
+                    .single()
+                    .expect("валидний дедлайн"),
+            ),
+            reminder_at: None,
+            counterparty_id: Some(counterparty.id),
+            act_id: None,
+        },
+    )
+    .await?;
+
+    let result = acta::tauri_api::payments::payments_calendar_load(
+        &ctx,
+        acta::tauri_api::payments::PaymentCalendarMonthRequest {
+            month: "2026-05".to_string(),
+            selected_date: Some("2026-05-06".to_string()),
+        },
+    )
+    .await?;
+
+    assert_eq!(result.month_label, "Травень 2026");
+    let day = result
+        .days
+        .iter()
+        .find(|day| day.date == "2026-05-06")
+        .ok_or_else(|| anyhow!("календар має містити день 2026-05-06"))?;
+    assert_eq!(day.event_count, 2);
+    assert_eq!(day.expense_total_str, "12\u{00a0}500,00");
+    assert!(day.events.iter().any(|event| event.id == schedule.id.to_string() && event.kind == "schedule"));
+    assert!(day.events.iter().any(|event| event.id == task.id.to_string() && event.kind == "task"));
+
+    let complete = acta::tauri_api::payments::payment_schedule_complete(
+        &ctx,
+        acta::tauri_api::payments::PaymentScheduleCompleteRequest {
+            schedule_id: schedule.id.to_string(),
+        },
+    )
+    .await?;
+    assert!(complete.ok);
+
+    let updated_schedule = sqlx::query_scalar::<_, bool>(
+        "SELECT is_completed FROM payment_schedule WHERE id = $1",
+    )
+    .bind(schedule.id)
+    .fetch_one(ctx.pool())
+    .await?;
+    assert!(updated_schedule);
+
+    let _ = acta::db::tasks::delete(ctx.pool(), task.id).await;
+    sqlx::query("DELETE FROM payment_schedule WHERE id = $1")
+        .bind(schedule.id)
+        .execute(ctx.pool())
+        .await?;
+    sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(counterparty.id)
+        .execute(ctx.pool())
+        .await?;
 
     Ok(())
 }

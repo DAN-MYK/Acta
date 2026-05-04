@@ -25,9 +25,12 @@ import type {
   PaymentReconcileSplitRequest,
   PaymentReconcileSplitResultDto,
   PaymentDraftFormDto,
+  PaymentCalendarMonthDto,
+  PaymentCalendarMonthRequest,
   PaymentManualMatchCandidatesDto,
   PaymentsScreenDto,
   PaymentMatchManualCandidatesRequest,
+  PaymentScheduleCompleteRequest,
   PaymentUnreconcileAllRequest,
   PaymentUnreconcileRequest,
   ReportsExportResultDto,
@@ -327,6 +330,18 @@ export function paymentsSyncBank(): Promise<MutationResultDto> {
 
 export function paymentsOpenManualTemplate(): Promise<OpenTemplateResultDto> {
   return appInvoke("payments_open_manual_template");
+}
+
+export function paymentsCalendarLoad(
+  request: PaymentCalendarMonthRequest
+): Promise<PaymentCalendarMonthDto> {
+  return appInvoke("payments_calendar_load", { request });
+}
+
+export function paymentScheduleComplete(
+  request: PaymentScheduleCompleteRequest
+): Promise<MutationResultDto> {
+  return appInvoke("payment_schedule_complete", { request });
 }
 
 export function paymentCreateOrUpdate(form: PaymentDraftFormDto): Promise<MutationResultDto> {

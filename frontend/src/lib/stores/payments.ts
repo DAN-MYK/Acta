@@ -1,20 +1,29 @@
 import { get, writable } from "svelte/store";
 import {
   paymentCreateOrUpdate,
+  paymentScheduleComplete,
   paymentMatchApplyAuto,
   paymentMatchManualCandidates,
   paymentMatchPreview,
   paymentReconcile,
   paymentReconcileSplit,
+  paymentsCalendarLoad,
   paymentsImportLatestCsv,
   paymentsList,
   paymentsOpenManualTemplate,
   paymentsSyncBank,
   paymentUnreconcileAll
 } from "../api";
+import { counterpartiesStore } from "./counterparties";
+import { navigationStore } from "./navigation";
+import { tasksStore } from "./tasks";
 import type {
   MutationResultDto,
   OpenTemplateResultDto,
+  PaymentCalendarDayDto,
+  PaymentCalendarEventDto,
+  PaymentCalendarFilterKind,
+  PaymentCalendarMonthDto,
   PaymentDraftFormDto,
   PaymentItemDto,
   PaymentManualMatchCandidatesDto,
@@ -34,6 +43,7 @@ type PaymentsActiveAction =
   | "confirm-manual-picker"
   | "confirm-split"
   | "unreconcile"
+  | "calendar-complete"
   | "save"
   | null;
 
@@ -61,6 +71,12 @@ interface PaymentSplitDraftState {
 
 interface PaymentsStoreState {
   list: PaymentsScreenDto | null;
+  calendar: PaymentCalendarMonthDto | null;
+  calendarInitialLoading: boolean;
+  calendarLoading: boolean;
+  calendarError: string | null;
+  calendarFilter: PaymentCalendarFilterKind;
+  selectedCalendarEventId: string | null;
   initialLoading: boolean;
   loading: boolean;
   error: string | null;
@@ -76,6 +92,12 @@ interface PaymentsStoreState {
 
 const initialState: PaymentsStoreState = {
   list: null,
+  calendar: null,
+  calendarInitialLoading: true,
+  calendarLoading: false,
+  calendarError: null,
+  calendarFilter: "all",
+  selectedCalendarEventId: null,
   initialLoading: true,
   loading: false,
   error: null,
@@ -88,6 +110,37 @@ const initialState: PaymentsStoreState = {
   activeAction: null,
   activePaymentId: null
 };
+
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatLocalMonth(date: Date): string {
+  return formatLocalDate(date).slice(0, 7);
+}
+
+function shiftMonth(month: string, delta: number): string {
+  const [yearPart, monthPart] = month.split("-");
+  const year = Number.parseInt(yearPart ?? "", 10);
+  const monthIndex = Number.parseInt(monthPart ?? "", 10);
+  const anchor = new Date(year, Math.max(monthIndex - 1, 0), 1);
+  anchor.setMonth(anchor.getMonth() + delta);
+  return formatLocalMonth(anchor);
+}
+
+function plusDays(dateValue: string, delta: number): string {
+  const [yearPart, monthPart, dayPart] = dateValue.split("-");
+  const anchor = new Date(
+    Number.parseInt(yearPart ?? "", 10),
+    Math.max(Number.parseInt(monthPart ?? "", 10) - 1, 0),
+    Number.parseInt(dayPart ?? "", 10)
+  );
+  anchor.setDate(anchor.getDate() + delta);
+  return formatLocalDate(anchor);
+}
 
 function parseMoneyValue(value: string): number {
   const normalized = value
@@ -107,16 +160,113 @@ function formatMoneyValue(value: number): string {
   }).format(Math.max(0, value));
 }
 
+function filterCalendarEvents(
+  day: PaymentCalendarDayDto | null | undefined,
+  filter: PaymentCalendarFilterKind
+): PaymentCalendarEventDto[] {
+  if (!day) {
+    return [];
+  }
+
+  if (filter === "all") {
+    return day.events;
+  }
+
+  return day.events.filter((event) => event.kind === filter);
+}
+
 function createPaymentsStore() {
   const { subscribe, update } = writable<PaymentsStoreState>(initialState);
 
-  async function loadPayments() {
-    update((state) => ({ ...state, loading: true, error: null }));
+  function selectedEventIdForCalendar(
+    calendar: PaymentCalendarMonthDto,
+    filter: PaymentCalendarFilterKind,
+    preferredEventId?: string | null
+  ) {
+    const selectedDay = calendar.days.find((day) => day.selected) ?? calendar.days[0] ?? null;
+    const visibleEvents = filterCalendarEvents(selectedDay, filter);
+
+    if (preferredEventId && visibleEvents.some((event) => event.id === preferredEventId)) {
+      return preferredEventId;
+    }
+
+    return visibleEvents[0]?.id ?? null;
+  }
+
+  async function loadCalendarMonth(month: string, selectedDate?: string | null) {
+    update((state) => ({ ...state, calendarLoading: true, calendarError: null }));
+
     try {
-      const list = await paymentsList();
-      update((state) => ({ ...state, list, initialLoading: false, loading: false }));
+      const calendar = await paymentsCalendarLoad({
+        month,
+        selectedDate: selectedDate ?? null
+      });
+      update((state) => ({
+        ...state,
+        calendar,
+        calendarInitialLoading: false,
+        calendarLoading: false,
+        selectedCalendarEventId: selectedEventIdForCalendar(
+          calendar,
+          state.calendarFilter,
+          state.selectedCalendarEventId
+        )
+      }));
     } catch (error) {
-      update((state) => ({ ...state, loading: false, error: String(error) }));
+      update((state) => ({
+        ...state,
+        calendarLoading: false,
+        calendarInitialLoading: false,
+        calendarError: String(error)
+      }));
+    }
+  }
+
+  async function loadPayments() {
+    const snapshot = get({ subscribe });
+    const month = snapshot.calendar?.month ?? formatLocalMonth(new Date());
+    const selectedDate = snapshot.calendar?.selectedDate ?? null;
+
+    update((state) => ({
+      ...state,
+      loading: true,
+      error: null,
+      calendarLoading: true,
+      calendarError: null
+    }));
+    try {
+      const [list, calendar] = await Promise.all([
+        paymentsList(),
+        paymentsCalendarLoad({
+          month,
+          selectedDate
+        })
+      ]);
+      update((state) => ({
+        ...state,
+        list,
+        calendar,
+        initialLoading: false,
+        calendarInitialLoading: false,
+        loading: false,
+        calendarLoading: false,
+        selectedCalendarEventId: selectedEventIdForCalendar(
+          calendar,
+          state.calendarFilter,
+          state.selectedCalendarEventId
+        )
+      }));
+    } catch (error) {
+      const message = String(error);
+      update((state) => ({
+        ...state,
+        loading: false,
+        calendarLoading: false,
+        initialLoading: false,
+        calendarInitialLoading: false,
+        error: message,
+        calendarError: message
+      }));
     }
   }
 
@@ -276,6 +426,143 @@ function createPaymentsStore() {
 
     async load() {
       await loadPayments();
+    },
+
+    async loadCalendar(month?: string, selectedDate?: string | null) {
+      const snapshot = get({ subscribe });
+      await loadCalendarMonth(month ?? snapshot.calendar?.month ?? formatLocalMonth(new Date()), selectedDate);
+    },
+
+    selectCalendarDate(date: string) {
+      update((state) => {
+        if (!state.calendar) {
+          return state;
+        }
+
+        const calendar = {
+          ...state.calendar,
+          selectedDate: date,
+          days: state.calendar.days.map((day) => ({
+            ...day,
+            selected: day.date === date
+          }))
+        };
+
+        return {
+          ...state,
+          calendar,
+          selectedCalendarEventId: selectedEventIdForCalendar(calendar, state.calendarFilter, null)
+        };
+      });
+    },
+
+    async shiftCalendarMonth(delta: number) {
+      const snapshot = get({ subscribe });
+      const month = shiftMonth(snapshot.calendar?.month ?? formatLocalMonth(new Date()), delta);
+      await loadCalendarMonth(month);
+    },
+
+    async moveCalendarSelection(deltaDays: number) {
+      const snapshot = get({ subscribe });
+      const selectedDate = snapshot.calendar?.selectedDate;
+      if (!snapshot.calendar || !selectedDate) {
+        return;
+      }
+
+      const nextDate = plusDays(selectedDate, deltaDays);
+      const nextMonth = nextDate.slice(0, 7);
+
+      if (nextMonth !== snapshot.calendar.month) {
+        await loadCalendarMonth(nextMonth, nextDate);
+        return;
+      }
+
+      this.selectCalendarDate(nextDate);
+    },
+
+    setCalendarFilter(filter: PaymentCalendarFilterKind) {
+      update((state) => {
+        if (!state.calendar) {
+          return {
+            ...state,
+            calendarFilter: filter,
+            selectedCalendarEventId: null
+          };
+        }
+
+        return {
+          ...state,
+          calendarFilter: filter,
+          selectedCalendarEventId: selectedEventIdForCalendar(
+            state.calendar,
+            filter,
+            state.selectedCalendarEventId
+          )
+        };
+      });
+    },
+
+    selectCalendarEvent(eventId: string) {
+      update((state) => ({
+        ...state,
+        selectedCalendarEventId: eventId
+      }));
+    },
+
+    async completeSchedule(scheduleId: string): Promise<MutationResultDto> {
+      beginAction("calendar-complete", scheduleId);
+      try {
+        const result = await paymentScheduleComplete({ scheduleId });
+        if (result.ok) {
+          const snapshot = get({ subscribe });
+          await loadCalendarMonth(snapshot.calendar?.month ?? formatLocalMonth(new Date()), snapshot.calendar?.selectedDate);
+          update((state) => ({ ...state, message: result.message, error: null }));
+        } else {
+          update((state) => ({ ...state, message: result.message, error: result.message }));
+        }
+        return result;
+      } catch (error) {
+        const message = String(error);
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message };
+      } finally {
+        finishAction();
+      }
+    },
+
+    async openCalendarTask(taskId: string) {
+      navigationStore.go("tasks");
+      await tasksStore.openEditor(taskId);
+    },
+
+    async openCalendarCounterparty(counterpartyId: string) {
+      if (!counterpartyId) {
+        return;
+      }
+
+      navigationStore.go("counterparties");
+      await counterpartiesStore.open(counterpartyId);
+    },
+
+    createPaymentFromSchedule(event: PaymentCalendarEventDto) {
+      const editor: PaymentDraftFormDto = {
+        id: "",
+        date: event.date,
+        amount: event.amountStr || "",
+        direction: event.direction === "income" ? "income" : "expense",
+        counterpartyId: event.counterpartyId,
+        counterpartyName: event.counterpartyName,
+        bankName: "",
+        reference: "",
+        description: event.title
+      };
+
+      update((state) => ({
+        ...state,
+        editor,
+        message: "Підготовлено чернетку платежу з календаря.",
+        error: null
+      }));
     },
 
     async importCsv(): Promise<MutationResultDto> {

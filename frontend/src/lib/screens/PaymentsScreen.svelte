@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PaymentCalendarPanel from "../components/PaymentCalendarPanel.svelte";
   import SkeletonCard from "../components/SkeletonCard.svelte";
   import SkeletonRow from "../components/SkeletonRow.svelte";
   import { paymentsStore } from "../stores/payments";
@@ -302,8 +303,10 @@
     {/if}
   </div>
 
+  <PaymentCalendarPanel />
+
   {#if flowTitle}
-    <section class="flow-banner" data-testid="payments-flow-banner">
+    <section class="flow-banner status-banner is-loading" data-testid="payments-flow-banner" role="status" aria-live="polite">
       <strong>{flowTitle}</strong>
       {#if flowDescription}
         <p>{flowDescription}</p>
@@ -312,11 +315,21 @@
   {/if}
 
   {#if $payments.message && !$payments.loading}
-    <p class="message">{$payments.message}</p>
+    <div class="status-banner is-success" role="status" aria-live="polite">
+      <div>
+        <strong>Дію виконано</strong>
+        <p>{$payments.message}</p>
+      </div>
+    </div>
   {/if}
 
   {#if $payments.error}
-    <p class="error">{$payments.error}</p>
+    <div class="status-banner is-error" role="alert" aria-live="assertive">
+      <div>
+        <strong>Потрібна увага</strong>
+        <p>{$payments.error}</p>
+      </div>
+    </div>
   {/if}
 
   {#if $payments.matchPreview}

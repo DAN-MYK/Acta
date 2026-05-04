@@ -204,7 +204,9 @@ pub fn choose_split_match(
         .cloned()
         .map(|candidate| score_candidate(input, candidate))
         .filter(|candidate| {
-            candidate.score.amount_fits && !candidate.score.exact_amount && candidate.score.total > 0
+            candidate.score.amount_fits
+                && !candidate.score.exact_amount
+                && candidate.score.total > 0
         })
         .collect();
 
@@ -221,14 +223,7 @@ pub fn choose_split_match(
     let mut best: Option<(i32, usize, Vec<ScoredMatchCandidate>)> = None;
     let pool: Vec<_> = scored.into_iter().take(6).collect();
     let mut current = Vec::new();
-    choose_split_match_recursive(
-        &pool,
-        0,
-        input.amount,
-        0,
-        &mut current,
-        &mut best,
-    );
+    choose_split_match_recursive(&pool, 0, input.amount, 0, &mut current, &mut best);
 
     best.map(|(_, _, candidates)| candidates)
 }
@@ -455,8 +450,12 @@ mod tests {
                         .sum::<Decimal>(),
                     dec!(3000.00)
                 );
-                assert!(candidates.iter().all(|candidate| candidate.score.amount_fits));
-                assert!(candidates.iter().all(|candidate| !candidate.score.exact_amount));
+                assert!(candidates
+                    .iter()
+                    .all(|candidate| candidate.score.amount_fits));
+                assert!(candidates
+                    .iter()
+                    .all(|candidate| !candidate.score.exact_amount));
             }
             other => panic!("очікували split-рекомендацію, отримали {other:?}"),
         }
