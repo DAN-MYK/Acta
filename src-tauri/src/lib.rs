@@ -59,6 +59,8 @@ pub fn run() {
             commands::tasks::task_set_status,
             commands::reports::reports_load,
             commands::reports::reports_export_csv,
+            commands::reports::reports_export_excel,
+            commands::reports::reports_export_excel_and_open,
             commands::settings::settings_load,
             commands::settings::settings_save_preferences,
             commands::settings::settings_save_company,

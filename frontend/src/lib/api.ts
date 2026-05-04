@@ -215,7 +215,8 @@ export function reportsLoad(filter: ReportsFilterDto): Promise<ReportsScreenDto>
       scope: filter.scope,
       dateFrom: filter.dateFrom,
       dateTo: filter.dateTo,
-      query: filter.query
+      query: filter.query,
+      selectedCounterpartyId: filter.selectedCounterpartyId ?? null
     }
   });
 }
@@ -227,7 +228,36 @@ export function reportsExportCsv(filter: ReportsFilterDto): Promise<ReportsExpor
       scope: filter.scope,
       dateFrom: filter.dateFrom,
       dateTo: filter.dateTo,
-      query: filter.query
+      query: filter.query,
+      selectedCounterpartyId: filter.selectedCounterpartyId ?? null
+    }
+  });
+}
+
+export function reportsExportExcel(filter: ReportsFilterDto): Promise<ReportsExportResultDto> {
+  return appInvoke("reports_export_excel", {
+    request: {
+      tab: filter.tab,
+      scope: filter.scope,
+      dateFrom: filter.dateFrom,
+      dateTo: filter.dateTo,
+      query: filter.query,
+      selectedCounterpartyId: filter.selectedCounterpartyId ?? null
+    }
+  });
+}
+
+export function reportsExportExcelAndOpen(
+  filter: ReportsFilterDto
+): Promise<ReportsExportResultDto> {
+  return appInvoke("reports_export_excel_and_open", {
+    request: {
+      tab: filter.tab,
+      scope: filter.scope,
+      dateFrom: filter.dateFrom,
+      dateTo: filter.dateTo,
+      query: filter.query,
+      selectedCounterpartyId: filter.selectedCounterpartyId ?? null
     }
   });
 }

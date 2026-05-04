@@ -350,7 +350,7 @@ export interface TaskMutationResultDto {
   message: string;
 }
 
-export type ReportsTab = "bank" | "receivables" | "payables";
+export type ReportsTab = "bank" | "pnl" | "receivables" | "payables";
 export type ReportsScope = "active" | "all";
 export type SettingsSection =
   | "appearance"
@@ -366,6 +366,7 @@ export interface ReportsFilterDto {
   dateFrom: string;
   dateTo: string;
   query: string;
+  selectedCounterpartyId: string | null;
 }
 
 export interface ReportsSummaryDto {
@@ -375,6 +376,9 @@ export interface ReportsSummaryDto {
   closingBalanceStr: string;
   receivablesTotalStr: string;
   payablesTotalStr: string;
+  pnlIncomeStr?: string;
+  pnlExpenseStr?: string;
+  pnlNetResultStr?: string;
 }
 
 export interface BankReportRowDto {
@@ -409,10 +413,27 @@ export interface PayableRowDto {
   recurrence: string;
 }
 
+export interface SelectedCounterpartyDto {
+  id: string;
+  name: string;
+}
+
+export interface TopCounterpartyRowDto {
+  counterpartyId: string;
+  counterpartyName: string;
+  primaryAmountStr: string;
+  secondaryLabel: string;
+  secondaryValue: string;
+  sharePercent: number;
+}
+
 export interface ReportsScreenDto {
   filter: ReportsFilterDto;
+  selectedCounterparty: SelectedCounterpartyDto | null;
+  topCounterparties: TopCounterpartyRowDto[];
   summary: ReportsSummaryDto;
   bankRows: BankReportRowDto[];
+  pnlRows?: BankReportRowDto[];
   receivablesRows: ReceivableRowDto[];
   payablesRows: PayableRowDto[];
 }

@@ -19,6 +19,7 @@ pub mod dashboard;
 pub mod document_templates;
 pub mod invoices;
 pub mod payments;
+pub mod reports;
 pub mod search;
 pub mod tasks;
 pub mod waybills;
@@ -27,7 +28,7 @@ pub mod waybills;
 mod tests {
     use super::{
         acts, categories, companies, contracts, counterparties, dashboard, document_templates,
-        ilike_pattern, invoices, payments, search, tasks, waybills,
+        ilike_pattern, invoices, payments, reports, search, tasks, waybills,
     };
 
     #[test]
@@ -42,6 +43,7 @@ mod tests {
         let _ = invoices::list;
         let _ = search::search;
         let _ = payments::list;
+        let _ = reports::compute_opening_balance;
         let _ = tasks::list_open;
         let _ = waybills::list;
     }
