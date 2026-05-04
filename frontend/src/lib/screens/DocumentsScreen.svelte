@@ -16,6 +16,9 @@
   let lastDraftContextCounterpartyId = "";
   let createButton: HTMLButtonElement | null = null;
   let createCounterpartySelect: HTMLSelectElement | null = null;
+  let pdfFindText = "";
+  let pdfReplaceText = "";
+  let lastPdfDocumentId = "";
 
   const documentKindLabels: Record<DocumentKind, string> = {
     invoice: "Рахунок",
@@ -62,6 +65,15 @@
     ($counterparties.screen?.items ?? []).find((cp) => cp.id === createCounterpartyId)?.name ??
     $documents.draftContext?.counterpartyName ??
     "";
+
+  $: {
+    const currentDocumentId = $documents.editor?.form.id ?? "";
+    if (currentDocumentId !== lastPdfDocumentId) {
+      lastPdfDocumentId = currentDocumentId;
+      pdfFindText = "";
+      pdfReplaceText = "";
+    }
+  }
 
   function onDocumentSearch(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
@@ -119,6 +131,18 @@
 
   function onReloadChain() {
     void documents.reloadCurrent();
+  }
+
+  function onAttachExistingPdf() {
+    void documents.attachExistingPdf();
+  }
+
+  function onOpenCurrentPdf() {
+    void documents.openCurrentPdf();
+  }
+
+  function onApplyPdfTextReplace() {
+    void documents.applyPdfTextReplace(pdfFindText, pdfReplaceText);
   }
 
   function onToggleSelection(docId: string) {
@@ -381,6 +405,10 @@
   function getEditorKindIcon(kind: string): AppIconName {
     return getDocumentKindIcon(kind);
   }
+
+  function supportsExistingPdfFlow(kind: string): boolean {
+    return kind === "invoice" || kind === "waybill";
+  }
 </script>
 
 <section class="panel" data-testid="documents-screen">
@@ -514,11 +542,21 @@
   </div>
 
   {#if $documents.message}
-    <p class="message">{$documents.message}</p>
+    <div class="status-banner is-success" role="status" aria-live="polite">
+      <div>
+        <strong>Дію виконано</strong>
+        <p>{$documents.message}</p>
+      </div>
+    </div>
   {/if}
 
   {#if $documents.error}
-    <p class="error">{$documents.error}</p>
+    <div class="status-banner is-error" role="alert" aria-live="assertive">
+      <div>
+        <strong>Потрібна увага</strong>
+        <p>{$documents.error}</p>
+      </div>
+    </div>
   {/if}
 
   {#if $documents.initialLoading}
@@ -813,5 +851,99 @@
         {/if}
       </div>
     </div>
+
+    {#if supportsExistingPdfFlow($documents.editor.form.kind)}
+      <div class="editor-items-card existing-pdf-card" data-testid="documents-existing-pdf">
+        <div class="editor-items-header">
+          <div>
+            <strong>Існуючий PDF</strong>
+            <p>
+              Підтриманий сценарій: прив’язати існуючий PDF, прочитати текстовий шар і виконати exact
+              replace у підтримуваному content stream. Це не універсальний PDF-редактор.
+            </p>
+          </div>
+          <div class="editor-actions existing-pdf-actions">
+            <button class="btn-secondary" on:click={onAttachExistingPdf} disabled={$documents.loading}>
+              {$documents.editor.pdf ? "Прив’язати інший PDF" : "Прив’язати PDF"}
+            </button>
+            <button
+              class="btn-ghost"
+              on:click={onOpenCurrentPdf}
+              disabled={$documents.loading || !$documents.editor.pdf}
+            >
+              Відкрити PDF
+            </button>
+          </div>
+        </div>
+
+        {#if $documents.editor.pdf}
+          <div class="chain-summary">
+            <div class="chain-summary-block chain-summary-block-wide">
+              <span>Файл</span>
+              <strong>{$documents.editor.pdf.filePath}</strong>
+            </div>
+            <div class="chain-summary-block">
+              <span>Сторінки</span>
+              <strong>{$documents.editor.pdf.pageCount}</strong>
+            </div>
+            <div class="chain-summary-block">
+              <span>Текстовий шар</span>
+              <strong>{$documents.editor.pdf.hasTextOps ? "Знайдено" : "Не знайдено"}</strong>
+            </div>
+            <div class="chain-summary-block">
+              <span>Exact replace</span>
+              <strong>{$documents.editor.pdf.editable ? "Підтримується" : "Непідтримується"}</strong>
+            </div>
+          </div>
+
+          {#if $documents.editor.pdf.warnings.length > 0}
+            <div class="existing-pdf-warnings">
+              {#each $documents.editor.pdf.warnings as warning}
+                <p>{warning}</p>
+              {/each}
+            </div>
+          {/if}
+
+          <label class="editor-grid-span existing-pdf-preview">
+            Витягнутий текст
+            <textarea rows="10" readonly value={$documents.editor.pdf.extractedText}></textarea>
+          </label>
+
+          <div class="editor-item existing-pdf-replace">
+            <label class="editor-item-field">
+              <span>Знайти текст</span>
+              <input bind:value={pdfFindText} placeholder="Точний фрагмент з витягнутого тексту" />
+            </label>
+            <label class="editor-item-field">
+              <span>Замінити на</span>
+              <input bind:value={pdfReplaceText} placeholder="Новий текст" />
+            </label>
+            <button
+              class="btn-primary"
+              on:click={onApplyPdfTextReplace}
+              disabled={
+                $documents.loading ||
+                !$documents.editor.pdf.editable ||
+                !pdfFindText.trim() ||
+                !pdfReplaceText.trim()
+              }
+            >
+              Застосувати exact replace
+            </button>
+          </div>
+        {:else}
+          <div class="editor-items-empty" data-testid="documents-existing-pdf-empty">
+            <strong>PDF ще не прив’язано</strong>
+            <p>
+              Прив’яжіть існуючий PDF до цього документа, щоб переглянути текстовий шар і виконати
+              підтримувану заміну тексту без перезапису оригіналу.
+            </p>
+            <button class="btn-primary" on:click={onAttachExistingPdf} disabled={$documents.loading}>
+              Прив’язати перший PDF
+            </button>
+          </div>
+        {/if}
+      </div>
+    {/if}
   </section>
 {/if}

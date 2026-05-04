@@ -102,8 +102,23 @@ export interface DocumentChainDto {
 export interface DocumentEditorDto {
   form: DocumentDraftFormDto;
   items: DocumentDraftItemDto[];
+  pdf: DocumentPdfStateDto | null;
   showTypePicker: boolean;
   showEditor: boolean;
+}
+
+export interface DocumentPdfStateDto {
+  filePath: string;
+  pageCount: number;
+  extractedText: string;
+  hasTextOps: boolean;
+  editable: boolean;
+  warnings: string[];
+}
+
+export interface DocumentPdfActionResultDto {
+  editor: DocumentEditorDto;
+  message: string;
 }
 
 export interface PaletteActivationResultDto {

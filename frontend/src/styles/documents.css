@@ -398,13 +398,48 @@
   align-self: end;
 }
 
+.existing-pdf-card {
+  display: grid;
+  gap: 16px;
+}
+
+.existing-pdf-actions {
+  flex-wrap: wrap;
+}
+
+.existing-pdf-warnings {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: var(--radius-2xl);
+  border: 1px solid color-mix(in srgb, var(--warning, #d97706) 30%, var(--border-hairline));
+  background: color-mix(in srgb, var(--warning, #d97706) 8%, var(--bg-card));
+  color: var(--text-muted);
+}
+
+.existing-pdf-warnings p,
+.existing-pdf-preview textarea {
+  margin: 0;
+}
+
+.existing-pdf-preview textarea {
+  min-height: 220px;
+  font-family: var(--font-mono, "Cascadia Code", "Fira Code", monospace);
+  white-space: pre-wrap;
+}
+
+.existing-pdf-replace {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+}
+
 @media (max-width: 1080px) {
   .create-strip,
   .create-strip-flow,
   .documents-focus-grid,
   .chain-summary,
   .editor-item-head,
-  .editor-item {
+  .editor-item,
+  .existing-pdf-replace {
     grid-template-columns: 1fr;
   }
 

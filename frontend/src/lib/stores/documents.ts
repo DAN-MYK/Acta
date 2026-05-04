@@ -7,6 +7,9 @@ import {
   documentDelete,
   documentGeneratePdf,
   documentOpen,
+  documentPdfApplyTextReplace,
+  documentPdfAttachExisting,
+  documentPdfOpenCurrent,
   documentSave,
   documentsBulkAdvanceStatus,
   documentsBulkDelete,
@@ -314,6 +317,65 @@ function createDocumentsStore() {
       try {
         const response = await documentGeneratePdf(docId);
         update((state) => ({ ...state, loading: false, message: response.message }));
+      } catch (error) {
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      }
+    },
+    async attachExistingPdf(sourcePath?: string) {
+      const snapshot = get({ subscribe });
+      const docId = snapshot.editor?.form.id;
+      if (!docId) {
+        return;
+      }
+
+      update((state) => ({ ...state, loading: true, error: null, message: null }));
+      try {
+        const response = await documentPdfAttachExisting(docId, sourcePath);
+        update((state) => ({
+          ...state,
+          editor: response.editor,
+          loading: false,
+          message: response.message
+        }));
+      } catch (error) {
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      }
+    },
+    async applyPdfTextReplace(findText: string, replaceText: string) {
+      const snapshot = get({ subscribe });
+      const docId = snapshot.editor?.form.id;
+      if (!docId) {
+        return;
+      }
+
+      update((state) => ({ ...state, loading: true, error: null, message: null }));
+      try {
+        const response = await documentPdfApplyTextReplace(docId, findText, replaceText);
+        update((state) => ({
+          ...state,
+          editor: response.editor,
+          loading: false,
+          message: response.message
+        }));
+      } catch (error) {
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      }
+    },
+    async openCurrentPdf() {
+      const snapshot = get({ subscribe });
+      const docId = snapshot.editor?.form.id;
+      if (!docId) {
+        return;
+      }
+
+      update((state) => ({ ...state, loading: true, error: null, message: null }));
+      try {
+        const response = await documentPdfOpenCurrent(docId);
+        update((state) => ({
+          ...state,
+          loading: false,
+          message: response.message
+        }));
       } catch (error) {
         update((state) => ({ ...state, loading: false, error: String(error) }));
       }

@@ -10,6 +10,7 @@ import type {
   DashboardScreenDto,
   DocumentChainDto,
   DocumentEditorDto,
+  DocumentPdfActionResultDto,
   DocumentsListDto,
   ImportPlanDto,
   ImportResultDto,
@@ -370,6 +371,34 @@ export function paymentMatchManualCandidates(
 
 export function documentGeneratePdf(docId: string): Promise<MutationResultDto> {
   return appInvoke("document_generate_pdf", { docId });
+}
+
+export function documentPdfAttachExisting(
+  docId: string,
+  sourcePath?: string
+): Promise<DocumentPdfActionResultDto> {
+  return appInvoke("document_pdf_attach_existing", {
+    docId,
+    sourcePath: sourcePath || null
+  });
+}
+
+export function documentPdfApplyTextReplace(
+  docId: string,
+  findText: string,
+  replaceText: string
+): Promise<DocumentPdfActionResultDto> {
+  return appInvoke("document_pdf_apply_text_replace", {
+    request: {
+      docId,
+      findText,
+      replaceText
+    }
+  });
+}
+
+export function documentPdfOpenCurrent(docId: string): Promise<MutationResultDto> {
+  return appInvoke("document_pdf_open_current", { docId });
 }
 
 export const importBasPickDirectory = () => appInvoke<string | null>("import_bas_pick_directory");

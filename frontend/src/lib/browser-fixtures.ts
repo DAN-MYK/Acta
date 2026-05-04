@@ -188,6 +188,14 @@ function documentEditor(kind = "invoice", counterpartyId = "cp-1"): DocumentEdit
         price: "6025,00"
       }
     ],
+    pdf: {
+      filePath: "C:/tmp/working.pdf",
+      pageCount: 1,
+      extractedText: "DRAFT STATUS",
+      hasTextOps: true,
+      editable: true,
+      warnings: []
+    },
     showTypePicker: false,
     showEditor: true
   };
@@ -481,6 +489,28 @@ export async function browserFixtureInvoke<T>(command: string, payload?: Record<
       return clone(documentChain()) as T;
     case "document_chain_create_draft":
       return clone(documentEditor(String((payload?.request as { targetKind?: string } | undefined)?.targetKind ?? "act"))) as T;
+    case "document_pdf_attach_existing":
+      return clone({
+        editor: documentEditor(),
+        message: "PDF прив’язано"
+      }) as T;
+    case "document_pdf_apply_text_replace":
+      return clone({
+        editor: {
+          ...documentEditor(),
+          pdf: {
+            filePath: "C:/tmp/working.pdf",
+            pageCount: 1,
+            extractedText: "PAID STATUS",
+            hasTextOps: true,
+            editable: true,
+            warnings: []
+          }
+        },
+        message: "Текст у PDF оновлено"
+      }) as T;
+    case "document_pdf_open_current":
+      return clone({ ok: true, documentId: "doc-1", message: "PDF відкрито" } satisfies MutationResultDto) as T;
     case "documents_bulk_delete":
       return clone({ total: 2, succeeded: 2, failed: 0, errors: [], message: "Вибрані документи видалено" } satisfies BulkMutationResultDto) as T;
     case "documents_bulk_advance_status":

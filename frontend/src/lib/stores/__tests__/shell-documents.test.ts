@@ -73,6 +73,7 @@ function makeEditor(id: string): DocumentEditorDto {
         price: "1234.50"
       }
     ],
+    pdf: null,
     showTypePicker: false,
     showEditor: true
   };

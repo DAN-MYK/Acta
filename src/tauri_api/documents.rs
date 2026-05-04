@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
 use chrono::{NaiveDate, Utc};
@@ -23,6 +24,7 @@ use crate::pdf::generator::{
     amount_to_words, ensure_invoice_output_dir, ensure_output_dir, generate_act_pdf,
     generate_invoice_pdf, PdfActData, PdfActItem, PdfCompany, PdfInvoiceData, PdfInvoiceItem,
 };
+use crate::pdf::reader::{inspect_pdf, replace_pdf_text_with_report};
 
 const CHAIN_PARENT_PREFIX: &str = "[chain-parent:";
 const CHAIN_PARENT_SUFFIX: &str = "]";
@@ -136,8 +138,27 @@ pub struct DocumentsListDto {
 pub struct DocumentEditorDto {
     pub form: DocumentDraftFormDto,
     pub items: Vec<DocumentDraftItemDto>,
+    pub pdf: Option<DocumentPdfStateDto>,
     pub show_type_picker: bool,
     pub show_editor: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentPdfStateDto {
+    pub file_path: String,
+    pub page_count: usize,
+    pub extracted_text: String,
+    pub has_text_ops: bool,
+    pub editable: bool,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentPdfActionResultDto {
+    pub editor: DocumentEditorDto,
+    pub message: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -180,6 +201,14 @@ pub struct CreateChainDraftRequest {
 pub struct SaveDocumentRequest {
     pub form: DocumentDraftFormDto,
     pub items: Vec<DocumentDraftItemDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ReplaceDocumentPdfTextRequest {
+    pub doc_id: String,
+    pub find_text: String,
+    pub replace_text: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -288,6 +317,66 @@ fn document_ref_string(kind: &str, id: Uuid) -> String {
     }
 }
 
+async fn load_existing_pdf_path(pool: &PgPool, doc_ref: DocumentRef) -> Result<Option<String>> {
+    match doc_ref {
+        DocumentRef::Act(_) => Ok(None),
+        DocumentRef::Invoice(id) => Ok(db::invoices::get_by_id(pool, id)
+            .await?
+            .and_then(|(invoice, _)| invoice.pdf_path)),
+        DocumentRef::Waybill(id) => Ok(db::waybills::get_by_id(pool, id)
+            .await?
+            .and_then(|(waybill, _)| waybill.pdf_path)),
+    }
+}
+
+async fn persist_existing_pdf_path(
+    pool: &PgPool,
+    doc_ref: DocumentRef,
+    path: String,
+) -> Result<()> {
+    match doc_ref {
+        DocumentRef::Act(_) => anyhow::bail!("Для актів flow існуючого PDF поки не підтримується"),
+        DocumentRef::Invoice(id) => {
+            db::invoices::set_pdf_path(pool, id, Some(path))
+                .await?
+                .ok_or_else(|| anyhow!("Рахунок не знайдено"))?;
+        }
+        DocumentRef::Waybill(id) => {
+            db::waybills::set_pdf_path(pool, id, Some(path))
+                .await?
+                .ok_or_else(|| anyhow!("Накладну не знайдено"))?;
+        }
+    }
+
+    Ok(())
+}
+
+async fn load_document_kind_and_number(
+    pool: &PgPool,
+    doc_ref: DocumentRef,
+) -> Result<(String, String)> {
+    match doc_ref {
+        DocumentRef::Act(id) => {
+            let (act, _) = db::acts::get_by_id(pool, id)
+                .await?
+                .ok_or_else(|| anyhow!("Акт не знайдено"))?;
+            Ok(("act".to_string(), act.number))
+        }
+        DocumentRef::Invoice(id) => {
+            let (invoice, _) = db::invoices::get_by_id(pool, id)
+                .await?
+                .ok_or_else(|| anyhow!("Рахунок не знайдено"))?;
+            Ok(("invoice".to_string(), invoice.number))
+        }
+        DocumentRef::Waybill(id) => {
+            let (waybill, _) = db::waybills::get_by_id(pool, id)
+                .await?
+                .ok_or_else(|| anyhow!("Накладну не знайдено"))?;
+            Ok(("waybill".to_string(), waybill.number))
+        }
+    }
+}
+
 fn split_visible_notes_and_chain_parent(notes: Option<&str>) -> (String, Option<String>) {
     let mut visible_lines = Vec::new();
     let mut parent_ref = None;
@@ -359,6 +448,152 @@ fn optional_string(value: &str) -> Option<String> {
     } else {
         Some(trimmed.to_string())
     }
+}
+
+fn supports_existing_pdf_flow(kind: &str) -> bool {
+    matches!(kind, "invoice" | "waybill")
+}
+
+fn document_ref_uuid(doc_ref: DocumentRef) -> Uuid {
+    match doc_ref {
+        DocumentRef::Act(id) | DocumentRef::Invoice(id) | DocumentRef::Waybill(id) => id,
+    }
+}
+
+fn sanitize_pdf_fragment(value: &str) -> String {
+    let sanitized = value
+        .chars()
+        .map(|ch| match ch {
+            'A'..='Z'
+            | 'a'..='z'
+            | '0'..='9'
+            | 'А'..='Я'
+            | 'а'..='я'
+            | 'І'
+            | 'і'
+            | 'Ї'
+            | 'ї'
+            | 'Є'
+            | 'є'
+            | '_'
+            | '-' => ch,
+            _ => '_',
+        })
+        .collect::<String>()
+        .trim_matches('_')
+        .to_string();
+
+    if sanitized.is_empty() {
+        "document".to_string()
+    } else {
+        sanitized
+    }
+}
+
+fn managed_existing_pdf_dir(storage_dir: &Path, kind: &str, doc_id: Uuid, number: &str) -> PathBuf {
+    storage_dir
+        .join("existing_pdf")
+        .join(kind)
+        .join(format!("{doc_id}_{}", sanitize_pdf_fragment(number)))
+}
+
+async fn inspect_document_pdf_state(file_path: String) -> DocumentPdfStateDto {
+    let task_path = file_path.clone();
+    match tokio::task::spawn_blocking(move || {
+        let path = PathBuf::from(&task_path);
+        if !path.exists() {
+            return DocumentPdfStateDto {
+                file_path: task_path,
+                page_count: 0,
+                extracted_text: String::new(),
+                has_text_ops: false,
+                editable: false,
+                warnings: vec!["Керований PDF-файл не знайдено на диску.".to_string()],
+            };
+        }
+
+        match inspect_pdf(&path) {
+            Ok(summary) => DocumentPdfStateDto {
+                file_path: path.display().to_string(),
+                page_count: summary.page_count,
+                extracted_text: summary.extracted_text,
+                has_text_ops: summary.has_text_ops,
+                editable: summary.editable,
+                warnings: summary.warnings,
+            },
+            Err(error) => DocumentPdfStateDto {
+                file_path: path.display().to_string(),
+                page_count: 0,
+                extracted_text: String::new(),
+                has_text_ops: false,
+                editable: false,
+                warnings: vec![error.to_string()],
+            },
+        }
+    })
+    .await
+    {
+        Ok(state) => state,
+        Err(error) => DocumentPdfStateDto {
+            file_path,
+            page_count: 0,
+            extracted_text: String::new(),
+            has_text_ops: false,
+            editable: false,
+            warnings: vec![format!("Не вдалось виконати inspection PDF: {error}")],
+        },
+    }
+}
+
+async fn attach_existing_pdf_copy(
+    storage_dir: PathBuf,
+    kind: String,
+    doc_id: Uuid,
+    number: String,
+    source_path: String,
+) -> Result<String> {
+    tokio::task::spawn_blocking(move || {
+        let source = PathBuf::from(&source_path);
+        if !source.exists() {
+            return Err(anyhow!("PDF-файл не знайдено: {}", source.display()));
+        }
+
+        let target_dir = managed_existing_pdf_dir(&storage_dir, &kind, doc_id, &number);
+        std::fs::create_dir_all(&target_dir).with_context(|| {
+            format!(
+                "Не вдалось створити директорію для керованого PDF: {}",
+                target_dir.display()
+            )
+        })?;
+
+        let original_path = target_dir.join("original.pdf");
+        let working_path = target_dir.join("working.pdf");
+
+        std::fs::copy(&source, &original_path).with_context(|| {
+            format!(
+                "Не вдалось скопіювати оригінальний PDF у керовану папку: {}",
+                original_path.display()
+            )
+        })?;
+        std::fs::copy(&source, &working_path).with_context(|| {
+            format!(
+                "Не вдалось створити робочу копію PDF: {}",
+                working_path.display()
+            )
+        })?;
+
+        Ok(working_path.display().to_string())
+    })
+    .await
+    .context("PDF copy thread error")?
+}
+
+async fn open_pdf_file(file_path: String) -> Result<()> {
+    tokio::task::spawn_blocking(move || open::that(file_path))
+        .await
+        .context("PDF open thread error")?
+        .context("Не вдалось відкрити PDF у системному переглядачі")?;
+    Ok(())
 }
 
 fn normalize_chain_kind(kind: &str) -> Option<&'static str> {
@@ -843,6 +1078,7 @@ async fn build_existing_document_form(
                     notes: split_visible_notes_and_chain_parent(act.notes.as_deref()).0,
                 },
                 items: act_items_to_draft(items),
+                pdf: None,
                 show_type_picker: false,
                 show_editor: true,
             })
@@ -853,6 +1089,10 @@ async fn build_existing_document_form(
                 .ok_or_else(|| anyhow!("Рахунок не знайдено"))?;
             let counterparty_name =
                 load_counterparty_name(pool, company_id, invoice.counterparty_id).await?;
+            let pdf = match invoice.pdf_path.clone() {
+                Some(path) => Some(inspect_document_pdf_state(path).await),
+                None => None,
+            };
             Ok(DocumentEditorDto {
                 form: DocumentDraftFormDto {
                     id: format!("inv:{id}"),
@@ -865,6 +1105,7 @@ async fn build_existing_document_form(
                     notes: split_visible_notes_and_chain_parent(invoice.notes.as_deref()).0,
                 },
                 items: invoice_items_to_draft(items),
+                pdf,
                 show_type_picker: false,
                 show_editor: true,
             })
@@ -875,6 +1116,10 @@ async fn build_existing_document_form(
                 .ok_or_else(|| anyhow!("Накладну не знайдено"))?;
             let counterparty_name =
                 load_counterparty_name(pool, company_id, waybill.counterparty_id).await?;
+            let pdf = match waybill.pdf_path.clone() {
+                Some(path) => Some(inspect_document_pdf_state(path).await),
+                None => None,
+            };
             Ok(DocumentEditorDto {
                 form: DocumentDraftFormDto {
                     id: format!("wbl:{id}"),
@@ -887,6 +1132,7 @@ async fn build_existing_document_form(
                     notes: split_visible_notes_and_chain_parent(waybill.notes.as_deref()).0,
                 },
                 items: waybill_items_to_draft(items),
+                pdf,
                 show_type_picker: false,
                 show_editor: true,
             })
@@ -1173,6 +1419,92 @@ pub async fn document_open(ctx: &AppCtx, doc_id: String) -> Result<DocumentEdito
     build_existing_document_form(ctx.pool(), ctx.company_id(), doc_ref).await
 }
 
+pub async fn document_pdf_attach_existing(
+    ctx: &AppCtx,
+    doc_id: String,
+    source_path: String,
+) -> Result<DocumentPdfActionResultDto> {
+    let doc_ref = parse_document_ref(&doc_id)
+        .ok_or_else(|| anyhow!("Некоректний ідентифікатор документа"))?;
+    let doc_uuid = document_ref_uuid(doc_ref);
+    let (kind, number) = load_document_kind_and_number(ctx.pool(), doc_ref).await?;
+
+    if !supports_existing_pdf_flow(&kind) {
+        return Err(anyhow!(
+            "Для документа типу {kind} прив’язка існуючого PDF поки не підтримується"
+        ));
+    }
+
+    let managed_path = attach_existing_pdf_copy(
+        ctx.storage_dir().to_path_buf(),
+        kind,
+        doc_uuid,
+        number,
+        source_path,
+    )
+    .await?;
+    persist_existing_pdf_path(ctx.pool(), doc_ref, managed_path.clone()).await?;
+
+    Ok(DocumentPdfActionResultDto {
+        editor: document_open(ctx, doc_id).await?,
+        message: format!("PDF прив’язано до документа: {managed_path}"),
+    })
+}
+
+pub async fn document_pdf_apply_text_replace(
+    ctx: &AppCtx,
+    request: ReplaceDocumentPdfTextRequest,
+) -> Result<DocumentPdfActionResultDto> {
+    let doc_ref = parse_document_ref(&request.doc_id)
+        .ok_or_else(|| anyhow!("Некоректний ідентифікатор документа"))?;
+    let file_path = load_existing_pdf_path(ctx.pool(), doc_ref)
+        .await?
+        .ok_or_else(|| anyhow!("Спочатку прив’яжіть існуючий PDF до документа"))?;
+
+    let report = tokio::task::spawn_blocking({
+        let file_path = file_path.clone();
+        let find_text = request.find_text.clone();
+        let replace_text = request.replace_text.clone();
+        move || replace_pdf_text_with_report(Path::new(&file_path), &find_text, &replace_text)
+    })
+    .await
+    .context("PDF replace thread error")??;
+
+    let message = if report.changed {
+        format!(
+            "Текст у PDF оновлено. Знайдено до заміни: {}, залишилось після заміни: {}.",
+            report.occurrences_before, report.occurrences_after
+        )
+    } else {
+        report
+            .warnings
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "Змін у PDF не внесено".to_string())
+    };
+
+    Ok(DocumentPdfActionResultDto {
+        editor: document_open(ctx, request.doc_id).await?,
+        message,
+    })
+}
+
+pub async fn document_pdf_open_current(ctx: &AppCtx, doc_id: String) -> Result<MutationResultDto> {
+    let doc_ref = parse_document_ref(&doc_id)
+        .ok_or_else(|| anyhow!("Некоректний ідентифікатор документа"))?;
+    let file_path = load_existing_pdf_path(ctx.pool(), doc_ref)
+        .await?
+        .ok_or_else(|| anyhow!("Для цього документа ще не прив’язано PDF"))?;
+
+    open_pdf_file(file_path.clone()).await?;
+
+    Ok(MutationResultDto {
+        ok: true,
+        document_id: doc_id,
+        message: format!("PDF відкрито: {file_path}"),
+    })
+}
+
 pub async fn document_prepare_new(
     ctx: &AppCtx,
     counterparty_id: String,
@@ -1211,6 +1543,7 @@ pub async fn document_create_draft(
     Ok(DocumentEditorDto {
         form,
         items: Vec::new(),
+        pdf: None,
         show_type_picker: false,
         show_editor: true,
     })
@@ -1533,6 +1866,7 @@ pub async fn document_chain_create_draft(
     Ok(DocumentEditorDto {
         form,
         items: draft_items,
+        pdf: None,
         show_type_picker: false,
         show_editor: true,
     })
@@ -1857,5 +2191,19 @@ mod pdf_tests {
         let wbl_id = format!("wbl:{}", uuid::Uuid::nil());
         let doc_ref = parse_document_ref(&wbl_id);
         assert!(matches!(doc_ref, Some(DocumentRef::Waybill(_))));
+    }
+
+    #[test]
+    fn managed_existing_pdf_dir_is_unique_per_document_id() {
+        let storage_dir = Path::new("storage");
+        let first_id = Uuid::new_v4();
+        let second_id = Uuid::new_v4();
+
+        let first = managed_existing_pdf_dir(storage_dir, "invoice", first_id, "INV-001");
+        let second = managed_existing_pdf_dir(storage_dir, "invoice", second_id, "INV-001");
+
+        assert_ne!(first, second);
+        assert!(first.to_string_lossy().contains(&first_id.to_string()));
+        assert!(second.to_string_lossy().contains(&second_id.to_string()));
     }
 }

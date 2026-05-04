@@ -45,6 +45,7 @@ function makeEditor(id: string, kind = "invoice", notes = ""): DocumentEditorDto
         price: "1234.50"
       }
     ],
+    pdf: null,
     showTypePicker: false,
     showEditor: true
   };
@@ -71,7 +72,7 @@ describe("documents store smoke", () => {
     invokeMock.mockReset();
   });
 
-  it("covers documents list, selection, bulk delete, open, create, save, chain, status and delete flow", async () => {
+  it("covers documents list, selection, bulk delete, open, create, save, chain, pdf, status and delete flow", async () => {
     const { documentsStore } = await loadStores();
 
     let docs = makeDocumentsList(["doc-1", "doc-2"]);
@@ -118,6 +119,54 @@ describe("documents store smoke", () => {
             message: "Документ збережено"
           };
         }
+        case "document_pdf_attach_existing": {
+          const request = payload as { docId: string };
+          const current = editors.get(request.docId) ?? makeEditor(request.docId);
+          const editor = {
+            ...current,
+            pdf: {
+              filePath: "C:/tmp/working.pdf",
+              pageCount: 1,
+              extractedText: "DRAFT STATUS",
+              hasTextOps: true,
+              editable: true,
+              warnings: []
+            }
+          };
+          editors.set(request.docId, editor);
+          return {
+            editor,
+            message: "PDF прив’язано"
+          };
+        }
+        case "document_pdf_apply_text_replace": {
+          const request = payload as {
+            request: { docId: string; findText: string; replaceText: string };
+          };
+          const current = editors.get(request.request.docId) ?? makeEditor(request.request.docId);
+          const sourceText = current.pdf?.extractedText ?? "DRAFT STATUS";
+          const editor = {
+            ...current,
+            pdf: {
+              filePath: "C:/tmp/working.pdf",
+              pageCount: 1,
+              extractedText: sourceText.replace(request.request.findText, request.request.replaceText),
+              hasTextOps: true,
+              editable: true,
+              warnings: []
+            }
+          };
+          editors.set(request.request.docId, editor);
+          return {
+            editor,
+            message: "Текст у PDF оновлено"
+          };
+        }
+        case "document_pdf_open_current":
+          return {
+            ok: true,
+            message: "PDF відкрито"
+          };
         case "document_chain_create_draft": {
           const request = payload as { request: { sourceId: string; targetKind: string } };
           const editor = makeEditor("doc-3", request.request.targetKind);
@@ -177,6 +226,17 @@ describe("documents store smoke", () => {
     await documentsStore.save();
     expect(snapshot(documentsStore).editor?.form.notes).toBe("Smoke notes");
     expect(snapshot(documentsStore).message).toBe("Документ збережено");
+
+    await documentsStore.open("doc-1");
+    await documentsStore.attachExistingPdf();
+    expect(snapshot(documentsStore).editor?.pdf?.filePath).toBe("C:/tmp/working.pdf");
+
+    await documentsStore.applyPdfTextReplace("DRAFT", "PAID");
+    expect(snapshot(documentsStore).editor?.pdf?.extractedText).toContain("PAID");
+    expect(snapshot(documentsStore).message).toBe("Текст у PDF оновлено");
+
+    await documentsStore.openCurrentPdf();
+    expect(snapshot(documentsStore).message).toBe("PDF відкрито");
 
     await documentsStore.createChainDraft("act");
     expect(snapshot(documentsStore).editor?.form.kind).toBe("act");

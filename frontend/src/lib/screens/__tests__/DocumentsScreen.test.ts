@@ -53,6 +53,8 @@ const mocks = vi.hoisted(() => {
     documentsState,
     addItem: vi.fn(),
     advanceStatus: vi.fn(),
+    applyPdfTextReplace: vi.fn(),
+    attachExistingPdf: vi.fn(),
     bulkAdvanceStatus: vi.fn(),
     bulkDelete: vi.fn(),
     closeEditor: vi.fn(),
@@ -62,6 +64,7 @@ const mocks = vi.hoisted(() => {
     generatePdf: vi.fn(),
     load: vi.fn(),
     open: vi.fn(),
+    openCurrentPdf: vi.fn(),
     reloadCurrent: vi.fn(),
     removeItem: vi.fn(),
     save: vi.fn(),
@@ -70,10 +73,6 @@ const mocks = vi.hoisted(() => {
     updateFormField: vi.fn(),
     updateItemField: vi.fn()
   };
-  /*
-    buttonByText(target, "Р’РёРґР°Р»РёС‚Рё РІРёР±СЂР°РЅС–").click();
-    buttonByText(target, "Р’РёРґР°Р»РёС‚Рё").click();
-*/
 });
 
 vi.mock("../../stores/documents", () => ({
@@ -81,6 +80,8 @@ vi.mock("../../stores/documents", () => ({
     subscribe: mocks.documentsState.subscribe,
     addItem: mocks.addItem,
     advanceStatus: mocks.advanceStatus,
+    applyPdfTextReplace: mocks.applyPdfTextReplace,
+    attachExistingPdf: mocks.attachExistingPdf,
     bulkAdvanceStatus: mocks.bulkAdvanceStatus,
     bulkDelete: mocks.bulkDelete,
     closeEditor: mocks.closeEditor,
@@ -90,6 +91,7 @@ vi.mock("../../stores/documents", () => ({
     generatePdf: mocks.generatePdf,
     load: mocks.load,
     open: mocks.open,
+    openCurrentPdf: mocks.openCurrentPdf,
     reloadCurrent: mocks.reloadCurrent,
     removeItem: mocks.removeItem,
     save: mocks.save,
@@ -164,6 +166,14 @@ function makeEditor(items: boolean | DocumentEditorDto["items"] = true): Documen
             }
           ]
         : [],
+    pdf: {
+      filePath: "C:/tmp/working.pdf",
+      pageCount: 1,
+      extractedText: "DRAFT STATUS",
+      hasTextOps: true,
+      editable: true,
+      warnings: []
+    },
     showTypePicker: false,
     showEditor: true
   };
@@ -241,6 +251,8 @@ describe("DocumentsScreen component", () => {
     for (const fn of [
       mocks.addItem,
       mocks.advanceStatus,
+      mocks.applyPdfTextReplace,
+      mocks.attachExistingPdf,
       mocks.bulkAdvanceStatus,
       mocks.bulkDelete,
       mocks.closeEditor,
@@ -250,6 +262,7 @@ describe("DocumentsScreen component", () => {
       mocks.generatePdf,
       mocks.load,
       mocks.open,
+      mocks.openCurrentPdf,
       mocks.reloadCurrent,
       mocks.removeItem,
       mocks.save,
@@ -359,12 +372,14 @@ describe("DocumentsScreen component", () => {
     buttonByText(target, "Додати позицію").click();
     buttonByText(target, "Зберегти").click();
     buttonByText(target, "Наступний статус").click();
+    buttonByText(target, "Відкрити PDF").click();
     (target.querySelector('[data-testid="documents-chain-create-act"]') as HTMLButtonElement).click();
     await tick();
 
     expect(mocks.addItem).toHaveBeenCalled();
     expect(mocks.save).toHaveBeenCalled();
     expect(mocks.advanceStatus).toHaveBeenCalled();
+    expect(mocks.openCurrentPdf).toHaveBeenCalled();
     expect(mocks.createChainDraft).toHaveBeenCalledWith("act");
 
     component.$destroy();
@@ -495,7 +510,7 @@ describe("DocumentsScreen component", () => {
     component.$destroy();
   });
 
-  it("exposes stable smoke markers for shell and item editor empty state", () => {
+  it("exposes stable smoke markers for shell, item editor and existing pdf section", () => {
     setDocumentsState([], false);
     const { component, target } = renderDocuments();
 
@@ -504,7 +519,67 @@ describe("DocumentsScreen component", () => {
     expect(target.querySelector('[data-testid="documents-focus-primary"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="documents-list"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="documents-items-empty"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="documents-existing-pdf"]')).toBeTruthy();
     expect(target.textContent).toContain("Додати першу позицію");
+
+    component.$destroy();
+  });
+
+  it("renders existing pdf flow with preview and replace action", async () => {
+    const { component, target } = renderDocuments();
+
+    expect(target.textContent).toContain("Існуючий PDF");
+    expect(target.textContent).toContain("Текстовий шар");
+    expect(target.textContent).toContain("Знайдено");
+    expect(
+      (target.querySelector('[data-testid="documents-existing-pdf"] textarea[readonly]') as HTMLTextAreaElement).value
+    ).toContain("DRAFT STATUS");
+
+    const inputs = target.querySelectorAll('[data-testid="documents-existing-pdf"] input');
+    (inputs[0] as HTMLInputElement).value = "DRAFT";
+    inputs[0].dispatchEvent(new Event("input", { bubbles: true }));
+    (inputs[1] as HTMLInputElement).value = "PAID";
+    inputs[1].dispatchEvent(new Event("input", { bubbles: true }));
+    await tick();
+
+    buttonByText(target, "Застосувати exact replace").click();
+    expect(mocks.applyPdfTextReplace).toHaveBeenCalledWith("DRAFT", "PAID");
+
+    component.$destroy();
+  });
+
+  it("keeps exact replace disabled for unreadable existing pdf", () => {
+    mocks.documentsState.set({
+      list: makeList(),
+      editor: {
+        ...makeEditor(),
+        pdf: {
+          filePath: "C:/tmp/unreadable.pdf",
+          pageCount: 1,
+          extractedText: "",
+          hasTextOps: true,
+          editable: false,
+          warnings: ["Text extraction не дав читабельного результату."]
+        }
+      },
+      chain: makeChain(),
+      draftContext: {
+        counterpartyId: "counterparty-1",
+        counterpartyName: "ТОВ Ромашка"
+      },
+      selectedIds: [],
+      initialLoading: false,
+      loading: false,
+      error: null,
+      message: null,
+      query: ""
+    });
+
+    const { component, target } = renderDocuments();
+    const replaceButton = buttonByText(target, "Застосувати exact replace");
+
+    expect(target.textContent).toContain("Непідтримується");
+    expect(replaceButton.disabled).toBe(true);
 
     component.$destroy();
   });
