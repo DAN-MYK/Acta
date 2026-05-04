@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import AppIcon from "../components/AppIcon.svelte";
   import SkeletonRow from "../components/SkeletonRow.svelte";
   import type { AppIconName } from "../icons";
@@ -18,6 +19,9 @@
   let pdfFindText = "";
   let pdfReplaceText = "";
   let lastPdfDocumentId = "";
+  let drawerSection: HTMLElement | null = null;
+  let drawerReturnFocus: HTMLElement | null = null;
+  let lastEditorDocumentId = "";
 
   const documentKindLabels: Record<DocumentKind, string> = {
     invoice: "Рахунок",
@@ -72,6 +76,38 @@
       pdfFindText = "";
       pdfReplaceText = "";
     }
+  }
+
+  $: {
+    const editorDocumentId = $documents.editor?.form.id ?? "";
+
+    if (editorDocumentId && !lastEditorDocumentId) {
+      const previouslyFocused = document.activeElement;
+      drawerReturnFocus = previouslyFocused instanceof HTMLElement ? previouslyFocused : null;
+      void tick().then(() => {
+        const heading = drawerSection?.querySelector<HTMLElement>("h3");
+        heading?.focus();
+      });
+    }
+
+    if (!editorDocumentId && lastEditorDocumentId) {
+      const target = drawerReturnFocus && document.contains(drawerReturnFocus) ? drawerReturnFocus : null;
+      void tick().then(() => target?.focus());
+      drawerReturnFocus = null;
+    }
+
+    lastEditorDocumentId = editorDocumentId;
+  }
+
+  function onDrawerKeydown(event: KeyboardEvent) {
+    if (event.key === "Escape" && $documents.editor) {
+      event.preventDefault();
+      void documents.closeEditor();
+    }
+  }
+
+  function onDrawerBackdropClick() {
+    void documents.closeEditor();
   }
 
   function onDocumentSearch(event: Event) {
@@ -508,8 +544,24 @@
   {/if}
 </section>
 
+<svelte:window on:keydown={onDrawerKeydown} />
+
 {#if $documents.editor}
-  <section class="editor-sheet">
+  <button
+    type="button"
+    class="documents-drawer-backdrop"
+    aria-label="Закрити редактор"
+    data-testid="documents-drawer-backdrop"
+    on:click={onDrawerBackdropClick}
+  ></button>
+  <section
+    class="editor-sheet documents-drawer"
+    bind:this={drawerSection}
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="documents-drawer-title"
+    data-testid="documents-drawer"
+  >
     <div class="editor-header">
       <div>
         <div class="editor-header-meta">
@@ -519,7 +571,7 @@
           </span>
           <span class="doc-status-chip">{getCurrentChainStatus()}</span>
         </div>
-        <h3>{$documents.editor.form.title}</h3>
+        <h3 id="documents-drawer-title" tabindex="-1">{$documents.editor.form.title}</h3>
         <p>{$documents.editor.form.counterpartyName}</p>
       </div>
       <div class="editor-actions">

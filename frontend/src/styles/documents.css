@@ -149,6 +149,68 @@
   gap: 18px;
 }
 
+.documents-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  background: color-mix(in srgb, #0b1220 38%, transparent);
+  backdrop-filter: blur(2px);
+  z-index: 49;
+  animation: documents-drawer-backdrop-in 160ms ease-out;
+}
+
+.documents-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(880px, 70vw);
+  margin: 0;
+  padding: 24px;
+  border-radius: var(--radius-3xl) 0 0 var(--radius-3xl);
+  border: 1px solid var(--border-hairline);
+  border-right: 0;
+  background: var(--bg-card);
+  box-shadow: -24px 0 60px -20px color-mix(in srgb, #0b1220 35%, transparent);
+  overflow-y: auto;
+  z-index: 50;
+  animation: documents-drawer-in 200ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.documents-drawer:focus-visible {
+  outline: none;
+}
+
+@keyframes documents-drawer-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes documents-drawer-in {
+  from {
+    transform: translateX(40px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@media (max-width: 720px) {
+  .documents-drawer {
+    width: 100vw;
+    border-radius: 0;
+  }
+}
+
 .editor-header-meta,
 .editor-items-summary {
   display: flex;
