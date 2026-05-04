@@ -1,4 +1,3 @@
-pub mod bank_import;
 pub mod counterparties;
 pub mod dashboard;
 pub mod documents;
