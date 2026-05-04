@@ -60,10 +60,10 @@
       </div>
       <div class="cashflow-list">
         <div class="cashflow-row cashflow-head">
-          <span style="text-align:left">Місяць</span>
-          <span style="text-align:right">Нетто</span>
-          <span style="text-align:right">Надходження</span>
-          <span style="text-align:right">Витрати</span>
+          <span>Місяць</span>
+          <span>Нетто</span>
+          <span>Надходження</span>
+          <span>Витрати</span>
         </div>
         {#each $dashboard.screen?.cashflowRows ?? [] as row}
           <div class="cashflow-row">

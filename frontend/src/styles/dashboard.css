@@ -104,6 +104,14 @@ body[data-theme="dark"] .dashboard-panel {
   padding-bottom: 6px;
 }
 
+.cashflow-row.cashflow-head > span:first-child {
+  text-align: left;
+}
+
+.cashflow-row.cashflow-head > span:not(:first-child) {
+  text-align: right;
+}
+
 .cashflow-income {
   color: var(--success);
   text-align: right;

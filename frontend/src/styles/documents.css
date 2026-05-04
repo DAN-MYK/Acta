@@ -366,6 +366,12 @@
   align-self: end;
 }
 
+@media (max-width: 1280px) and (min-width: 769px) {
+  .create-strip-flow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 1080px) {
   .create-strip,
   .create-strip-flow,
