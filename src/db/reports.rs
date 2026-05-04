@@ -687,11 +687,7 @@ pub async fn load_top_counterparties_receivables(
     .fetch_all(ctx.pool())
     .await?;
 
-    let max_primary = rows
-        .iter()
-        .map(|r| r.total)
-        .max()
-        .unwrap_or(Decimal::ZERO);
+    let max_primary = rows.iter().map(|r| r.total).max().unwrap_or(Decimal::ZERO);
 
     Ok(rows
         .into_iter()
@@ -774,11 +770,7 @@ pub async fn load_top_counterparties_payables(
     .fetch_all(ctx.pool())
     .await?;
 
-    let max_primary = rows
-        .iter()
-        .map(|r| r.total)
-        .max()
-        .unwrap_or(Decimal::ZERO);
+    let max_primary = rows.iter().map(|r| r.total).max().unwrap_or(Decimal::ZERO);
 
     Ok(rows
         .into_iter()

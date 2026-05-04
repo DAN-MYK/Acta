@@ -396,6 +396,38 @@ describe("App shell orchestration", () => {
     component.$destroy();
   });
 
+  it("keeps keyboard focus trapped inside the palette and supports arrow navigation", async () => {
+    const { component, target } = renderApp();
+    await tick();
+
+    const toggle = target.querySelector('[data-testid="palette-toggle"]') as HTMLButtonElement;
+    toggle.focus();
+    toggle.click();
+
+    const paletteInput = await vi.waitFor(() => {
+      const input = target.querySelector(".palette input") as HTMLInputElement | null;
+      expect(input).toBeTruthy();
+      return input as HTMLInputElement;
+    });
+
+    paletteInput.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    await tick();
+
+    const firstItem = target.querySelector('[data-testid="palette-item-0"]') as HTMLButtonElement | null;
+    expect(firstItem).toBeTruthy();
+    expect(document.activeElement).toBe(firstItem);
+
+    firstItem!.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    await tick();
+    expect(document.activeElement).toBe(paletteInput);
+
+    paletteInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }));
+    await tick();
+    expect(document.activeElement).toBe(firstItem);
+
+    component.$destroy();
+  });
+
   it("shows visible progress and disables critical actions during company reload", async () => {
     mocks.appShellSwitchActiveCompany.mockImplementation(async () => {
       mocks.appShellState.set({

@@ -41,11 +41,7 @@ pub async fn search(pool: &PgPool, company_id: Uuid, query: &str) -> Result<Vec<
 
 /// Отримати тільки назву контрагента у межах компанії — легший варіант ніж `get_by_id`,
 /// коли решта полів не потрібна (наприклад, для resolve `selected_counterparty` у reports drill-down).
-pub async fn get_name_by_id(
-    pool: &PgPool,
-    company_id: Uuid,
-    id: Uuid,
-) -> Result<Option<String>> {
+pub async fn get_name_by_id(pool: &PgPool, company_id: Uuid, id: Uuid) -> Result<Option<String>> {
     let name = sqlx::query_scalar::<_, String>(
         "SELECT name FROM counterparties WHERE company_id = $1 AND id = $2",
     )

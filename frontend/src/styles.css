@@ -96,6 +96,13 @@ textarea {
   color: inherit;
 }
 
+.nav button,
+.theme-switcher button,
+.topbar-actions button,
+.palette-item {
+  min-height: 44px;
+}
+
 
 .nav button.active {
   background: var(--accent);
@@ -442,6 +449,11 @@ textarea {
   gap: 16px;
 }
 
+.palette-item.active {
+  background: color-mix(in srgb, var(--accent-soft) 72%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border-hairline));
+}
+
 .palette-item p {
   margin: 6px 0 0;
 }
@@ -490,6 +502,18 @@ textarea {
 
 .hint {
   opacity: 0.75;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .error {
@@ -748,6 +772,10 @@ textarea {
 
 .task-tabs button:hover:not(.active) {
   background: var(--bg-hover);
+}
+
+.task-tabs button[role="tab"] {
+  min-height: 44px;
 }
 
 /* --- Focus-visible (keyboard navigation) --- */

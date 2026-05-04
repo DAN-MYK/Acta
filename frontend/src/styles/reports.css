@@ -256,9 +256,29 @@ body[data-theme="dark"] .reports-table-row-head {
   font-size: var(--font-sm);
 }
 
+.reports-top-counterparty-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.reports-top-counterparty-item {
+  display: grid;
+  gap: 6px;
+}
+
 .reports-top-counterparty-row {
   display: grid;
-  gap: 4px;
+  grid-template-columns: 2.2rem minmax(0, 2.4fr) auto auto;
+  grid-template-areas:
+    "rank name amount share"
+    "rank secondary secondary secondary"
+    "bar bar bar bar";
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 4px;
   width: 100%;
   text-align: left;
   padding: 10px 14px;
@@ -266,11 +286,17 @@ body[data-theme="dark"] .reports-table-row-head {
   border: 1px solid color-mix(in srgb, var(--border-hairline) 86%, transparent);
   background: color-mix(in srgb, var(--bg-card) 92%, var(--bg-subtle));
   cursor: pointer;
-  transition: background 0.12s;
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
 }
 
 .reports-top-counterparty-row:hover {
   background: var(--bg-subtle);
+}
+
+.reports-top-counterparty-row:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
 .reports-top-counterparty-row.active {
@@ -278,11 +304,76 @@ body[data-theme="dark"] .reports-table-row-head {
   border-color: color-mix(in srgb, var(--accent) 36%, transparent);
 }
 
+.reports-top-cp-rank {
+  grid-area: rank;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.8rem;
+  height: 1.8rem;
+  padding: 0 6px;
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--accent-soft) 70%, var(--bg-card));
+  color: var(--accent-text);
+  font-size: var(--font-sm);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.reports-top-counterparty-row.active .reports-top-cp-rank {
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+
+.reports-top-cp-name {
+  grid-area: name;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.reports-top-cp-tag {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bg-subtle) 80%, transparent);
+  color: var(--text-muted);
+}
+
+.reports-top-cp-amount {
+  grid-area: amount;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.reports-top-cp-share {
+  grid-area: share;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--text-muted);
+  min-width: 3rem;
+}
+
+.reports-top-cp-secondary {
+  grid-area: secondary;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
 .reports-top-counterparty-bar {
+  grid-area: bar;
   height: 4px;
   background: var(--bg-subtle);
   border-radius: 2px;
   overflow: hidden;
+  margin-top: 4px;
 }
 
 .reports-top-counterparty-bar span {
@@ -290,6 +381,42 @@ body[data-theme="dark"] .reports-table-row-head {
   height: 100%;
   background: var(--accent);
   border-radius: 2px;
+}
+
+.reports-top-counterparty-cta {
+  justify-self: end;
+  font-size: var(--font-sm);
+  padding: 6px 14px;
+}
+
+.reports-top-counterparties-focus-name {
+  font-weight: 700;
+}
+
+.reports-top-counterparties-focus-meta {
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: var(--font-sm);
+}
+
+.reports-search-row {
+  display: grid;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 600;
+}
+
+.reports-search-row input {
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-xl);
+  padding: 12px 14px;
+  background: var(--bg-field);
+  color: var(--text-primary);
+}
+
+.reports-export-actions {
+  gap: 8px;
 }
 
 .reports-context-text {

@@ -38,6 +38,7 @@ const mocks = vi.hoisted(() => {
     reportsState,
     load: vi.fn(),
     toggleCounterparty: vi.fn(),
+    resetFilters: vi.fn(),
     exportCsv: vi.fn(),
     exportExcel: vi.fn(),
     exportExcelAndOpen: vi.fn()
@@ -47,11 +48,24 @@ const mocks = vi.hoisted(() => {
 vi.mock("../../stores/reports", () => ({
   reportsStore: {
     subscribe: mocks.reportsState.subscribe,
-    load: mocks.load,
-    toggleCounterparty: mocks.toggleCounterparty,
-    exportCsv: mocks.exportCsv,
-    exportExcel: mocks.exportExcel,
-    exportExcelAndOpen: mocks.exportExcelAndOpen
+    get load() {
+      return mocks.load;
+    },
+    get toggleCounterparty() {
+      return mocks.toggleCounterparty;
+    },
+    get resetFilters() {
+      return mocks.resetFilters;
+    },
+    get exportCsv() {
+      return mocks.exportCsv;
+    },
+    get exportExcel() {
+      return mocks.exportExcel;
+    },
+    get exportExcelAndOpen() {
+      return mocks.exportExcelAndOpen;
+    }
   }
 }));
 
@@ -134,6 +148,7 @@ describe("ReportsScreen", () => {
   beforeEach(() => {
     mocks.load.mockReset();
     mocks.toggleCounterparty.mockReset();
+    mocks.resetFilters.mockReset();
     mocks.exportCsv.mockReset();
     mocks.exportExcel.mockReset();
     mocks.exportExcelAndOpen.mockReset();
@@ -171,18 +186,19 @@ describe("ReportsScreen", () => {
       button.textContent?.includes("Відкрити Excel")
     );
     const exportExcelButton = Array.from(target.querySelectorAll("button")).find(
-      (button) => button.textContent === "Експортувати Excel"
+      (button) => button.textContent?.trim() === "Експортувати Excel"
     );
     const exportButton = Array.from(target.querySelectorAll("button")).find((button) =>
       button.textContent?.includes("Експортувати CSV")
     );
 
     expect(openExcelButton).toBeTruthy();
-    expect(openExcelButton?.className).toContain("btn-primary");
+    expect(openExcelButton?.className).toContain("btn-secondary");
+    expect(openExcelButton?.className).not.toContain("btn-primary");
     expect(exportExcelButton).toBeTruthy();
-    expect(exportExcelButton?.className).toContain("btn-secondary");
+    expect(exportExcelButton?.className).toContain("btn-ghost");
     expect(exportButton).toBeTruthy();
-    expect(exportButton?.className).toContain("btn-secondary");
+    expect(exportButton?.className).toContain("btn-ghost");
     expect(target.textContent).toContain("Гроші на рахунках і в русі");
     expect(target.textContent).toContain("Дохід, витрати і результат");
     expect(target.textContent).toContain("Нам мають заплатити");
@@ -361,6 +377,25 @@ describe("ReportsScreen", () => {
     component.$destroy();
   });
 
+  it("supports arrow-key navigation between report tabs", async () => {
+    const { component, target } = renderReports();
+    await tick();
+
+    const bankTab = Array.from(target.querySelectorAll('[role="tab"]')).find((button) =>
+      button.textContent?.includes("Гроші")
+    ) as HTMLButtonElement | undefined;
+
+    expect(bankTab).toBeTruthy();
+    bankTab!.focus();
+    bankTab!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    await tick();
+
+    expect(mocks.load).toHaveBeenCalledWith({ tab: "pnl" });
+    expect(document.activeElement?.textContent).toContain("Дохід");
+
+    component.$destroy();
+  });
+
   it("keeps chrome visible and skeletonizes only the reports table during initial loading", () => {
     mocks.reportsState.set({
       screen: null,
@@ -405,6 +440,246 @@ describe("ReportsScreen", () => {
     expect(target.querySelector('[data-testid="skeleton-row-item"]')).toBeNull();
     expect(target.textContent).toContain("Відкрити Excel");
     expect(target.textContent).toContain("Експортувати CSV");
+
+    component.$destroy();
+  });
+
+  it("renders ranking numbers and a legend hint inside top counterparties", async () => {
+    mocks.reportsState.set({
+      screen: {
+        ...makeReportsScreen(),
+        topCounterparties: [
+          {
+            counterpartyId: "cp-1",
+            counterpartyName: "ТОВ Ромашка",
+            primaryAmountStr: "48 200,00 грн",
+            secondaryLabel: "Чистий рух",
+            secondaryValue: "29 200,00 грн",
+            sharePercent: 100
+          },
+          {
+            counterpartyId: "cp-2",
+            counterpartyName: "ПП Дніпро",
+            primaryAmountStr: "32 000,00 грн",
+            secondaryLabel: "Чистий рух",
+            secondaryValue: "12 000,00 грн",
+            sharePercent: 66
+          }
+        ]
+      },
+      initialLoading: false,
+      loading: false,
+      error: null,
+      message: null
+    });
+
+    const { component, target } = renderReports();
+    await tick();
+
+    const ranks = Array.from(target.querySelectorAll(".reports-top-cp-rank")).map(
+      (node) => node.textContent?.trim()
+    );
+    expect(ranks).toEqual(["1", "2"]);
+    expect(target.textContent).toContain("Сортовано за загальним рухом грошей");
+    expect(target.textContent).toContain("% — частка від лідера");
+
+    component.$destroy();
+  });
+
+  it("shows drill CTA only for an active counterparty with a real id and active scope", async () => {
+    mocks.reportsState.set({
+      screen: {
+        ...makeReportsScreen(),
+        filter: { ...makeReportsScreen().filter, selectedCounterpartyId: "cp-1" },
+        selectedCounterparty: { id: "cp-1", name: "ТОВ Ромашка" },
+        topCounterparties: [
+          {
+            counterpartyId: "cp-1",
+            counterpartyName: "ТОВ Ромашка",
+            primaryAmountStr: "48 200,00 грн",
+            secondaryLabel: "Чистий рух",
+            secondaryValue: "29 200,00 грн",
+            sharePercent: 100
+          }
+        ]
+      },
+      initialLoading: false,
+      loading: false,
+      error: null,
+      message: null
+    });
+
+    const { component, target } = renderReports();
+    await tick();
+
+    const drillCta = target.querySelector(
+      '[data-testid="top-counterparty-open-cp-1"]'
+    ) as HTMLButtonElement | null;
+    expect(drillCta).toBeTruthy();
+    expect(drillCta?.textContent).toContain("Відкрити картку контрагента");
+
+    component.$destroy();
+  });
+
+  it("hides drill CTA for bank-name pseudo rows and tags them as без картки", async () => {
+    const bankNameId = "bank-name:Privat";
+    mocks.reportsState.set({
+      screen: {
+        ...makeReportsScreen(),
+        filter: { ...makeReportsScreen().filter, selectedCounterpartyId: bankNameId },
+        selectedCounterparty: { id: bankNameId, name: "Privat" },
+        topCounterparties: [
+          {
+            counterpartyId: bankNameId,
+            counterpartyName: "Privat",
+            primaryAmountStr: "12 000,00 грн",
+            secondaryLabel: "Чистий рух",
+            secondaryValue: "12 000,00 грн",
+            sharePercent: 100
+          }
+        ]
+      },
+      initialLoading: false,
+      loading: false,
+      error: null,
+      message: null
+    });
+
+    const { component, target } = renderReports();
+    await tick();
+
+    expect(target.querySelector(`[data-testid="top-counterparty-open-${bankNameId}"]`)).toBeNull();
+    expect(target.textContent).toContain("без картки");
+
+    component.$destroy();
+  });
+
+  it("hides drill CTA when scope is all even for a real counterparty id", async () => {
+    mocks.reportsState.set({
+      screen: {
+        ...makeReportsScreen(),
+        filter: {
+          ...makeReportsScreen().filter,
+          scope: "all",
+          selectedCounterpartyId: "cp-1"
+        },
+        selectedCounterparty: { id: "cp-1", name: "ТОВ Ромашка" }
+      },
+      initialLoading: false,
+      loading: false,
+      error: null,
+      message: null
+    });
+
+    const { component, target } = renderReports();
+    await tick();
+
+    expect(target.querySelector('[data-testid="top-counterparty-open-cp-1"]')).toBeNull();
+
+    component.$destroy();
+  });
+
+  it("shows count of rows visible in the table when drill-down is active", async () => {
+    mocks.reportsState.set({
+      screen: {
+        ...makeReportsScreen(),
+        filter: {
+          ...makeReportsScreen().filter,
+          tab: "receivables",
+          selectedCounterpartyId: "cp-1"
+        },
+        selectedCounterparty: { id: "cp-1", name: "ТОВ Ромашка" },
+        receivablesRows: [
+          {
+            docId: "doc-1",
+            docType: "invoice",
+            docNumber: "INV-1",
+            docDate: "2026-05-01",
+            companyName: "ТОВ Акт",
+            counterparty: "ТОВ Ромашка",
+            amountStr: "10 000,00 грн",
+            expectedDate: "2026-05-15",
+            overdueDays: 0,
+            status: "Очікується"
+          },
+          {
+            docId: "doc-2",
+            docType: "act",
+            docNumber: "ACT-9",
+            docDate: "2026-04-29",
+            companyName: "ТОВ Акт",
+            counterparty: "ТОВ Ромашка",
+            amountStr: "8 000,00 грн",
+            expectedDate: "2026-05-08",
+            overdueDays: 0,
+            status: "Очікується"
+          }
+        ]
+      },
+      initialLoading: false,
+      loading: false,
+      error: null,
+      message: null
+    });
+
+    const { component, target } = renderReports();
+    await tick();
+
+    expect(target.textContent).toContain("У таблиці нижче: 2");
+
+    component.$destroy();
+  });
+
+  it("disables export buttons during operational loading and signals aria-busy", async () => {
+    mocks.reportsState.set({
+      screen: makeReportsScreen(),
+      initialLoading: false,
+      loading: true,
+      error: null,
+      message: null
+    });
+
+    const { component, target } = renderReports();
+    await tick();
+
+    const exportButtons = Array.from(target.querySelectorAll("button")).filter((button) =>
+      button.textContent?.includes("Excel") || button.textContent?.includes("CSV")
+    ) as HTMLButtonElement[];
+    expect(exportButtons.length).toBeGreaterThan(0);
+    for (const button of exportButtons) {
+      expect(button.disabled).toBe(true);
+    }
+
+    const screen = target.querySelector('[data-testid="reports-screen"]');
+    expect(screen?.getAttribute("aria-busy")).toBe("true");
+
+    component.$destroy();
+  });
+
+  it("renders Скинути фільтри action in the empty state and triggers store reset", async () => {
+    mocks.reportsState.set({
+      screen: {
+        ...makeReportsScreen(),
+        filter: { ...makeReportsScreen().filter, tab: "payables" },
+        payablesRows: []
+      },
+      initialLoading: false,
+      loading: false,
+      error: null,
+      message: null
+    });
+
+    const { component, target } = renderReports();
+    await tick();
+
+    const reset = target.querySelector(
+      '[data-testid="reports-empty-reset-action"]'
+    ) as HTMLButtonElement | null;
+    expect(reset).toBeTruthy();
+    reset!.click();
+    await tick();
+
+    expect(mocks.resetFilters).toHaveBeenCalled();
 
     component.$destroy();
   });

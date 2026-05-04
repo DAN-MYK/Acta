@@ -338,7 +338,10 @@ async fn build_reports_screen(
                         get_counterparty_name_by_id(ctx.pool(), ctx.company_id(), uuid).await?
                     }
                 };
-                maybe_name.map(|name| SelectedCounterpartyDto { id: id.clone(), name })
+                maybe_name.map(|name| SelectedCounterpartyDto {
+                    id: id.clone(),
+                    name,
+                })
             } else if let Some(name) = id
                 .strip_prefix("bank-name:")
                 .map(str::trim)

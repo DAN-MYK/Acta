@@ -1,5 +1,7 @@
 <script lang="ts">
   import SkeletonRow from "../components/SkeletonRow.svelte";
+  import { counterpartiesStore } from "../stores/counterparties";
+  import { navigationStore } from "../stores/navigation";
   import { reportsStore } from "../stores/reports";
   import type { PayableRowDto, ReceivableRowDto, ReportsScope, ReportsScreenDto, ReportsTab, TopCounterpartyRowDto } from "../types";
 
@@ -24,6 +26,14 @@
   ];
   let dateFromInput: HTMLInputElement | null = null;
   let reportTabButtons: Array<HTMLButtonElement | null> = [];
+
+  function isBankNameRow(row: TopCounterpartyRowDto): boolean {
+    return row.counterpartyId.startsWith("bank-name:");
+  }
+
+  function isCounterpartyDrillable(row: TopCounterpartyRowDto, scope: ReportsScope | undefined): boolean {
+    return !isBankNameRow(row) && scope !== "all";
+  }
 
   function onReportsSearch(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
@@ -382,11 +392,47 @@
     void reports.toggleCounterparty(counterpartyId);
   }
 
+  async function onOpenCounterpartyCard(row: TopCounterpartyRowDto) {
+    if (!isCounterpartyDrillable(row, $reports.screen?.filter.scope)) {
+      return;
+    }
+
+    await counterpartiesStore.load();
+    await counterpartiesStore.open(row.counterpartyId);
+    navigationStore.go("counterparties");
+  }
+
+  function onResetAllFilters() {
+    void reports.resetFilters();
+  }
+
   function getTopCounterpartiesSubtitle(tab: string | undefined): string {
-    if (tab === "receivables") return "Хто формує найбільшу дебіторку у вибраному періоді.";
-    if (tab === "payables") return "Кому зараз найбільше винні або скоро маємо платити.";
-    if (tab === "pnl") return "Хто найбільше впливає на фінрезультат за період.";
-    return "По кому зараз проходить найбільший рух грошей.";
+    if (tab === "receivables") {
+      return "Сортовано за сумою дебіторки. % — частка контрагента від лідера, поряд — сума до отримання за період.";
+    }
+    if (tab === "payables") {
+      return "Сортовано за сумою кредиторки. % — частка від лідера, поряд — сума до оплати за період.";
+    }
+    if (tab === "pnl") {
+      return "Сортовано за внеском у фінрезультат. % — частка від лідера, поряд — чистий результат.";
+    }
+    return "Сортовано за загальним рухом грошей. % — частка від лідера, поряд — чистий рух.";
+  }
+
+  function getActiveRowsCount(screen: ReportsScreenDto | null): number {
+    if (!screen) {
+      return 0;
+    }
+    if (screen.filter.tab === "pnl") {
+      return screen.pnlRows?.length ?? 0;
+    }
+    if (screen.filter.tab === "receivables") {
+      return screen.receivablesRows.length;
+    }
+    if (screen.filter.tab === "payables") {
+      return screen.payablesRows.length;
+    }
+    return screen.bankRows.length;
   }
 
   function getContextText(screen: ReportsScreenDto | null): string {
@@ -418,21 +464,38 @@
   }
 </script>
 
-<section class="panel" data-testid="reports-screen">
+<section
+  class="panel"
+  data-testid="reports-screen"
+  aria-busy={$reports.loading && !$reports.initialLoading ? "true" : undefined}
+>
   <div class="panel-header">
     <div>
       <h2>Звіти</h2>
       <p>{getReportHeadline($reports.screen?.filter.tab)}</p>
     </div>
-    <div class="panel-actions">
-      <button class="btn-primary" on:click={() => reports.exportExcelAndOpen()}>Відкрити Excel</button>
-      <button class="btn-secondary" on:click={() => reports.exportExcel()}>Експортувати Excel</button>
-      <input
-        placeholder="Шукати документ, контрагента або категорію"
-        value={$reports.screen?.filter.query ?? ""}
-        on:input={onReportsSearch}
-      />
-      <button class="btn-secondary" on:click={() => reports.exportCsv()}>Експортувати CSV</button>
+    <div class="panel-actions reports-export-actions">
+      <button
+        class="btn-secondary"
+        on:click={() => reports.exportExcelAndOpen()}
+        disabled={$reports.loading}
+      >
+        Відкрити Excel
+      </button>
+      <button
+        class="btn-ghost"
+        on:click={() => reports.exportExcel()}
+        disabled={$reports.loading}
+      >
+        Експортувати Excel
+      </button>
+      <button
+        class="btn-ghost"
+        on:click={() => reports.exportCsv()}
+        disabled={$reports.loading}
+      >
+        Експортувати CSV
+      </button>
     </div>
   </div>
 
@@ -543,6 +606,16 @@
         />
       </label>
     </div>
+
+    <label class="reports-search-row">
+      <span>Пошук у звіті</span>
+      <input
+        type="search"
+        placeholder="Шукати документ, контрагента або категорію"
+        value={$reports.screen?.filter.query ?? ""}
+        on:input={onReportsSearch}
+      />
+    </label>
   </div>
 
   <div class="reports-kpis">
@@ -561,14 +634,17 @@
         <p class="reports-top-counterparties-subtitle">{getTopCounterpartiesSubtitle($reports.screen?.filter.tab)}</p>
       </div>
       {#if $reports.screen?.selectedCounterparty}
-        <div class="reports-top-counterparties-focus">
-          <span>Фокус: {$reports.screen.selectedCounterparty.name}</span>
+        <div class="reports-top-counterparties-focus" data-testid="reports-top-counterparties-focus">
+          <span class="reports-top-counterparties-focus-name">Фокус: {$reports.screen.selectedCounterparty.name}</span>
+          <span class="reports-top-counterparties-focus-meta">
+            У таблиці нижче: {getActiveRowsCount($reports.screen)}
+          </span>
           <button
             class="btn-secondary reports-top-counterparties-reset"
             type="button"
             on:click={onResetCounterpartyFocus}
           >
-            Скинути
+            Скинути фокус
           </button>
         </div>
       {/if}
@@ -581,28 +657,55 @@
     {:else if ($reports.screen?.topCounterparties?.length ?? 0) === 0}
       <p class="reports-top-counterparties-empty">Контрагентів немає у вибраному діапазоні.</p>
     {:else}
-      {#each $reports.screen?.topCounterparties ?? [] as row}
-        <button
-          class="reports-top-counterparty-row"
-          class:active={$reports.screen?.filter.selectedCounterpartyId === row.counterpartyId}
-          data-testid="top-counterparty-{row.counterpartyId}"
-          on:click={() => onToggleCounterparty(row)}
-          type="button"
-        >
-          <span class="reports-top-cp-name">{row.counterpartyName}</span>
-          <span class="reports-top-cp-amount money-value" data-negative={row.primaryAmountStr.trim().startsWith("-")}>{row.primaryAmountStr}</span>
-          <span class="reports-top-cp-share">{row.sharePercent}%</span>
-          <span class="reports-top-cp-secondary">{row.secondaryLabel}: {row.secondaryValue}</span>
-          <div
-            class="reports-top-counterparty-bar"
-            role="progressbar"
-            aria-valuenow={row.sharePercent}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-label="Частка {row.sharePercent}%"
-          ><span style="width: {row.sharePercent}%"></span></div>
-        </button>
-      {/each}
+      <ol class="reports-top-counterparty-list">
+        {#each $reports.screen?.topCounterparties ?? [] as row, index}
+          {@const isActive = $reports.screen?.filter.selectedCounterpartyId === row.counterpartyId}
+          {@const drillable = isCounterpartyDrillable(row, $reports.screen?.filter.scope)}
+          <li class="reports-top-counterparty-item">
+            <button
+              class="reports-top-counterparty-row"
+              class:active={isActive}
+              data-testid="top-counterparty-{row.counterpartyId}"
+              on:click={() => onToggleCounterparty(row)}
+              type="button"
+              aria-pressed={isActive}
+            >
+              <span class="reports-top-cp-rank" aria-hidden="true">{index + 1}</span>
+              <span class="reports-top-cp-name">
+                {row.counterpartyName}
+                {#if isBankNameRow(row)}
+                  <span class="reports-top-cp-tag">без картки</span>
+                {/if}
+              </span>
+              <span
+                class="reports-top-cp-amount money-value"
+                data-negative={row.primaryAmountStr.trim().startsWith("-")}
+              >{row.primaryAmountStr}</span>
+              <span class="reports-top-cp-share">{row.sharePercent}%</span>
+              <span class="reports-top-cp-secondary">{row.secondaryLabel}: {row.secondaryValue}</span>
+              <div
+                class="reports-top-counterparty-bar"
+                role="progressbar"
+                aria-valuenow={row.sharePercent}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuetext="{row.sharePercent}% від лідера"
+                aria-label="Частка {row.sharePercent}%"
+              ><span style="width: {row.sharePercent}%"></span></div>
+            </button>
+            {#if isActive && drillable}
+              <button
+                class="btn-ghost reports-top-counterparty-cta"
+                type="button"
+                data-testid="top-counterparty-open-{row.counterpartyId}"
+                on:click={() => onOpenCounterpartyCard(row)}
+              >
+                Відкрити картку контрагента
+              </button>
+            {/if}
+          </li>
+        {/each}
+      </ol>
     {/if}
   </div>
 
@@ -656,10 +759,24 @@
         >
           Змінити період
         </button>
+        <button
+          class="btn-ghost"
+          type="button"
+          data-testid="reports-empty-reset-action"
+          on:click={onResetAllFilters}
+        >
+          Скинути фільтри
+        </button>
       </div>
     </div>
   {:else if $reports.screen?.filter.tab === "bank"}
-    <div class="reports-table-card" data-testid="reports-table-card">
+    <div
+      class="reports-table-card"
+      data-testid="reports-table-card"
+      id={reportsTabPanelId}
+      role="tabpanel"
+      aria-labelledby={getTabId("bank")}
+    >
       <div class="reports-table-scroll">
         <div class="reports-table">
           <div class="reports-table-row reports-table-row-head reports-table-row-bank">
@@ -680,7 +797,13 @@
       </div>
     </div>
   {:else if $reports.screen?.filter.tab === "pnl"}
-    <div class="reports-table-card" data-testid="reports-table-card">
+    <div
+      class="reports-table-card"
+      data-testid="reports-table-card"
+      id={reportsTabPanelId}
+      role="tabpanel"
+      aria-labelledby={getTabId("pnl")}
+    >
       <div class="reports-table-scroll">
         <div class="reports-table">
           <div class="reports-table-row reports-table-row-head reports-table-row-bank">
@@ -701,7 +824,13 @@
       </div>
     </div>
   {:else if $reports.screen?.filter.tab === "receivables"}
-    <div class="reports-table-card" data-testid="reports-table-card">
+    <div
+      class="reports-table-card"
+      data-testid="reports-table-card"
+      id={reportsTabPanelId}
+      role="tabpanel"
+      aria-labelledby={getTabId("receivables")}
+    >
       <div class="reports-table-scroll">
         <div class="reports-table">
           <div class="reports-table-row reports-table-row-head reports-table-row-receivables">
@@ -733,7 +862,13 @@
       </div>
     </div>
   {:else}
-    <div class="reports-table-card" data-testid="reports-table-card">
+    <div
+      class="reports-table-card"
+      data-testid="reports-table-card"
+      id={reportsTabPanelId}
+      role="tabpanel"
+      aria-labelledby={getTabId("payables")}
+    >
       <div class="reports-table-scroll">
         <div class="reports-table">
           <div class="reports-table-row reports-table-row-head reports-table-row-payables">

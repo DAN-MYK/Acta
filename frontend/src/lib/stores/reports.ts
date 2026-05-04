@@ -161,6 +161,17 @@ export function createReportsStore() {
       const currentId = get({ subscribe }).screen?.filter.selectedCounterpartyId ?? null;
       await this.load({ selectedCounterpartyId: currentId === counterpartyId ? null : counterpartyId });
     },
+    async resetFilters() {
+      const tab = get({ subscribe }).screen?.filter.tab ?? defaultFilter.tab;
+      await this.load({
+        tab,
+        scope: defaultFilter.scope,
+        dateFrom: defaultFilter.dateFrom,
+        dateTo: defaultFilter.dateTo,
+        query: defaultFilter.query,
+        selectedCounterpartyId: null
+      });
+    },
     async exportCsv() {
       const filter = get({ subscribe }).screen?.filter ?? defaultFilter;
       update((state) => ({ ...state, loading: true, error: null, message: null }));
