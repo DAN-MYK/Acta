@@ -3922,7 +3922,7 @@ async fn payments_reconcile_split_scoped_replaces_allocations_atomically() -> Re
     assert_eq!(acts_total, dec!(1500.00));
     assert_eq!(invoices_total, dec!(2000.00));
 
-    // Крок 2: повторний split з іншим розподілом (1000+2500). Перевіряємо idempotency:
+    // Крок 2: повторний split з іншим розподілом (1000+1900). Перевіряємо idempotency:
     // має повністю замінити попередні allocation, не подвоюючи їх.
     db::payments::reconcile_split_scoped(
         &pool,
@@ -3961,7 +3961,7 @@ async fn payments_reconcile_split_scoped_replaces_allocations_atomically() -> Re
     );
     assert_eq!(invoices_total_after, dec!(1900.00));
 
-    // Edge case: 1 allocation = вся сума платежу. Має бути валідним.
+    // Edge case: один allocation без invoice-частини теж має бути валідним.
     db::payments::reconcile_split_scoped(
         &pool,
         DEFAULT_COMPANY_ID,

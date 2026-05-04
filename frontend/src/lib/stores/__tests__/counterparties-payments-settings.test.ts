@@ -1153,8 +1153,8 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
   it("keeps the sidebar theme toggle on the persisted settings flow", () => {
     expect(appSource).toContain("async function onQuickThemeToggle()");
     expect(appSource).toContain("settings.savePreferences()");
-    expect(appSource).toContain("appShell.bootstrap()");
-    expect(appSource).toContain("appShell.syncThemeFromSettings");
+    expect(appSource).toContain("await shell.load();");
+    expect(appSource).toContain("theme.setMode(saved.screen.preferences.darkMode ? \"dark\" : \"light\")");
     expect(appSource).toContain("on:click={onQuickThemeToggle}");
     expect(appSource).not.toContain("on:click={() => theme.toggle()}");
   });
