@@ -119,6 +119,14 @@
       return "Імпорт триває";
     }
 
+    if ($payments.loading && $payments.activeAction === "import-pick") {
+      return "Готуємо preview виписки";
+    }
+
+    if ($payments.loading && $payments.activeAction === "import-commit") {
+      return "Імпортуємо нові платежі";
+    }
+
     if ($payments.loading && $payments.activeAction === "sync") {
       return "Оновлюємо рухи з банку";
     }
@@ -151,12 +159,24 @@
       return "Фіксуємо ручний вибір документа";
     }
 
+    if ($payments.loading && $payments.activeAction === "confirm-split") {
+      return "Зберігаємо розподіл платежу";
+    }
+
     return null;
   }
 
   function getFlowDescription(): string | null {
     if ($payments.loading && $payments.activeAction === "import") {
       return "Імпортуємо виписку та оновлюємо список платежів, щоб одразу показати незведені рухи.";
+    }
+
+    if ($payments.loading && $payments.activeAction === "import-pick") {
+      return "Розбираємо файл виписки і будуємо список платежів, що чекають на імпорт.";
+    }
+
+    if ($payments.loading && $payments.activeAction === "import-commit") {
+      return "Записуємо нові платежі у БД на основі підтвердженого preview.";
     }
 
     if ($payments.loading && $payments.activeAction === "sync") {
@@ -191,6 +211,10 @@
       return "Прив'язуємо платіж до документа, обраного через ручний пошук.";
     }
 
+    if ($payments.loading && $payments.activeAction === "confirm-split") {
+      return "Записуємо розподіл платежу між кількома документами і оновлюємо статуси.";
+    }
+
     return null;
   }
 
@@ -198,6 +222,8 @@
   $: unmatchedPayments = items.filter((item) => !item.matchedDoc);
   $: matchedPayments = items.filter((item) => Boolean(item.matchedDoc));
   $: busyImport = $payments.loading && $payments.activeAction === "import";
+  $: busyImportPick = $payments.loading && $payments.activeAction === "import-pick";
+  $: busyImportCommit = $payments.loading && $payments.activeAction === "import-commit";
   $: busySync = $payments.loading && $payments.activeAction === "sync";
   $: busySave = $payments.loading && $payments.activeAction === "save";
   $: manualPickerCanConfirm = Boolean(
@@ -236,10 +262,22 @@
           <p>CSV-імпорт лишається головним входом у сценарій, а допоміжні дії не відволікають від нього.</p>
         </div>
         <div class="payment-action-buttons">
-          <button bind:this={importButton} class="btn-primary" on:click={() => payments.importCsv()} disabled={busyImport}>
-            {busyImport ? "Імпортуємо виписку..." : "Імпортувати виписку"}
+          <button
+            bind:this={importButton}
+            class="btn-primary"
+            on:click={() => payments.pickAndPreviewImport()}
+            disabled={busyImportPick || busyImport || busyImportCommit}
+          >
+            {busyImportPick ? "Готуємо preview..." : "Імпортувати виписку"}
           </button>
-          <button class="btn-ghost" on:click={() => payments.syncBank()} disabled={busyImport || busySync}>
+          <button
+            class="btn-ghost"
+            on:click={() => payments.importCsv()}
+            disabled={busyImport || busyImportPick || busyImportCommit}
+          >
+            {busyImport ? "Імпортуємо виписку з storage..." : "Імпорт з storage/import/bank"}
+          </button>
+          <button class="btn-ghost" on:click={() => payments.syncBank()} disabled={busyImport || busySync || busyImportPick}>
             {busySync ? "Оновлюємо з банку..." : "Оновити з банку"}
           </button>
           <button class="btn-ghost" on:click={() => payments.openManualTemplate()} disabled={busyImport || busySync}>
@@ -330,6 +368,77 @@
         <p>{$payments.error}</p>
       </div>
     </div>
+  {/if}
+
+  {#if $payments.importPreview}
+    <section class="chain-panel" data-testid="payments-import-preview" aria-label="Попередній перегляд імпорту виписки">
+      <div class="chain-panel-header">
+        <div>
+          <strong>Попередній перегляд: {$payments.importPreview.bankName || "виписка"}</strong>
+          <p>{$payments.importPreview.message}</p>
+          <p class="payment-import-preview-path"><code>{$payments.importPreview.path}</code></p>
+        </div>
+        <div class="editor-actions">
+          <button
+            class="btn-primary"
+            on:click={() => payments.commitImportPreview()}
+            disabled={busyImportCommit || $payments.importPreview.willCreate === 0}
+          >
+            {busyImportCommit
+              ? "Імпортуємо..."
+              : $payments.importPreview.willCreate === 0
+              ? "Немає нових платежів"
+              : `Імпортувати ${$payments.importPreview.willCreate} платежі(ів)`}
+          </button>
+          <button
+            class="btn-ghost"
+            on:click={() => payments.cancelImportPreview()}
+            disabled={busyImportCommit}
+          >
+            Скасувати
+          </button>
+        </div>
+      </div>
+
+      <ul class="payment-import-preview-summary">
+        <li><span>Розпізнано рядків</span><strong>{$payments.importPreview.parsed}</strong></li>
+        <li><span>Буде створено</span><strong>{$payments.importPreview.willCreate}</strong></li>
+        <li><span>Уже існує (skip)</span><strong>{$payments.importPreview.willSkip}</strong></li>
+        {#if $payments.importPreview.conflicts > 0}
+          <li class="payment-import-preview-conflict"><span>Конфлікти</span><strong>{$payments.importPreview.conflicts}</strong></li>
+        {/if}
+      </ul>
+
+      {#if $payments.importPreview.rows.length > 0}
+        <table class="payment-import-preview-table">
+          <thead>
+            <tr>
+              <th scope="col">Дія</th>
+              <th scope="col">Bank ref</th>
+              <th scope="col">Призначення</th>
+              <th scope="col">Нотатка</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each $payments.importPreview.rows.slice(0, 25) as row, idx (idx)}
+              <tr class:is-skipped={row.action === "skip"}>
+                <td>{row.action === "create" ? "Нове" : "Пропуск"}</td>
+                <td>{row.bankRef || "—"}</td>
+                <td>{row.description || "—"}</td>
+                <td>{row.note}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+        {#if $payments.importPreview.rows.length > 25}
+          <p class="payment-import-preview-more">
+            Показано перші 25 з {$payments.importPreview.rows.length} рядків.
+          </p>
+        {/if}
+      {:else}
+        <p class="payment-import-preview-empty">У файлі не знайдено жодного рядка виписки.</p>
+      {/if}
+    </section>
   {/if}
 
   {#if $payments.matchPreview}
@@ -957,5 +1066,72 @@
       flex-direction: column;
       align-items: flex-start;
     }
+  }
+
+  .payment-import-preview-path {
+    font-size: 0.85em;
+    color: var(--color-text-muted, #888);
+    margin: 0.25rem 0 0 0;
+    overflow-wrap: anywhere;
+  }
+
+  .payment-import-preview-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    list-style: none;
+    padding: 0;
+    margin: 1rem 0 0.75rem 0;
+  }
+
+  .payment-import-preview-summary li {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  .payment-import-preview-summary li span {
+    font-size: 0.78em;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-muted, #888);
+  }
+
+  .payment-import-preview-summary li strong {
+    font-size: 1.25rem;
+  }
+
+  .payment-import-preview-summary li.payment-import-preview-conflict strong {
+    color: var(--color-danger, #c0392b);
+  }
+
+  .payment-import-preview-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0.75rem;
+    font-size: 0.92rem;
+  }
+
+  .payment-import-preview-table thead {
+    background: var(--color-surface-alt, #f3f5f8);
+  }
+
+  .payment-import-preview-table th,
+  .payment-import-preview-table td {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--color-border-subtle, #e6e8ec);
+    vertical-align: top;
+  }
+
+  .payment-import-preview-table tr.is-skipped {
+    color: var(--color-text-muted, #888);
+  }
+
+  .payment-import-preview-more,
+  .payment-import-preview-empty {
+    margin: 0.5rem 0 0 0;
+    font-size: 0.88rem;
+    color: var(--color-text-muted, #888);
   }
 </style>

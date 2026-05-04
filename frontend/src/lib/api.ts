@@ -27,6 +27,8 @@ import type {
   PaymentDraftFormDto,
   PaymentCalendarMonthDto,
   PaymentCalendarMonthRequest,
+  PaymentImportCommitRequest,
+  PaymentImportPreviewDto,
   PaymentManualMatchCandidatesDto,
   PaymentsScreenDto,
   PaymentMatchManualCandidatesRequest,
@@ -382,6 +384,20 @@ export function paymentMatchManualCandidates(
   request: PaymentMatchManualCandidatesRequest
 ): Promise<PaymentManualMatchCandidatesDto> {
   return appInvoke("payment_match_manual_candidates", { request });
+}
+
+export function paymentsImportPickAndPreview(): Promise<PaymentImportPreviewDto | null> {
+  return appInvoke("payments_import_pick_and_preview");
+}
+
+export function paymentsImportPreview(path: string): Promise<PaymentImportPreviewDto> {
+  return appInvoke("payments_import_preview", { path });
+}
+
+export function paymentsImportCommit(
+  request: PaymentImportCommitRequest
+): Promise<MutationResultDto> {
+  return appInvoke("payments_import_commit", { request });
 }
 
 export function documentGeneratePdf(docId: string): Promise<MutationResultDto> {

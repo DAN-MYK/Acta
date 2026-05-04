@@ -8,7 +8,10 @@ import {
   paymentReconcile,
   paymentReconcileSplit,
   paymentsCalendarLoad,
+  paymentsImportCommit,
   paymentsImportLatestCsv,
+  paymentsImportPickAndPreview,
+  paymentsImportPreview,
   paymentsList,
   paymentsOpenManualTemplate,
   paymentsSyncBank,
@@ -25,6 +28,7 @@ import type {
   PaymentCalendarFilterKind,
   PaymentCalendarMonthDto,
   PaymentDraftFormDto,
+  PaymentImportPreviewDto,
   PaymentItemDto,
   PaymentManualMatchCandidatesDto,
   PaymentMatchCandidateDto,
@@ -35,6 +39,8 @@ import type {
 
 type PaymentsActiveAction =
   | "import"
+  | "import-pick"
+  | "import-commit"
   | "sync"
   | "reconcile"
   | "manual-search"
@@ -86,6 +92,7 @@ interface PaymentsStoreState {
   selectedCandidateId: string | null;
   manualPicker: PaymentManualPickerState | null;
   splitDraft: PaymentSplitDraftState | null;
+  importPreview: PaymentImportPreviewDto | null;
   activeAction: PaymentsActiveAction;
   activePaymentId: string | null;
 }
@@ -107,6 +114,7 @@ const initialState: PaymentsStoreState = {
   selectedCandidateId: null,
   manualPicker: null,
   splitDraft: null,
+  importPreview: null,
   activeAction: null,
   activePaymentId: null
 };
@@ -146,7 +154,7 @@ function parseMoneyValue(value: string): number {
   const normalized = value
     .replace(/\u00a0/g, "")
     .replace(/\s+/g, "")
-    .replace(/грн/gi, "")
+    .replace(/[^0-9,.-]/g, "")
     .replace(",", ".")
     .trim();
   const parsed = Number.parseFloat(normalized);
@@ -579,6 +587,94 @@ function createPaymentsStore() {
         const message = String(error);
         update((state) => ({ ...state, message, error: message }));
         return { ok: false, message };
+      } finally {
+        finishAction();
+      }
+    },
+
+    /// Запускає file picker, парсить виписку і кладе план у `importPreview`.
+    /// Користувач підтверджує commit окремо через `commitImportPreview()`.
+    async pickAndPreviewImport(): Promise<PaymentImportPreviewDto | null> {
+      beginAction("import-pick");
+      try {
+        const preview = await paymentsImportPickAndPreview();
+        if (!preview) {
+          update((state) => ({
+            ...state,
+            message: "Імпорт скасовано — файл не вибрано.",
+            error: null
+          }));
+          return null;
+        }
+        update((state) => ({
+          ...state,
+          importPreview: preview,
+          message: preview.message,
+          error: null
+        }));
+        return preview;
+      } catch (error) {
+        const message = String(error);
+        update((state) => ({ ...state, message, error: message, importPreview: null }));
+        return null;
+      } finally {
+        finishAction();
+      }
+    },
+
+    /// Підтверджує preview і фактично записує платежі у БД.
+    async commitImportPreview(): Promise<MutationResultDto> {
+      const preview = get({ subscribe }).importPreview;
+      if (!preview) {
+        const message = "Немає підготованого preview для імпорту.";
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message };
+      }
+      beginAction("import-commit");
+      try {
+        const result = await paymentsImportCommit({ path: preview.path });
+        if (result.ok) {
+          update((state) => ({ ...state, importPreview: null }));
+          await refreshAfterMutation(result.message);
+        } else {
+          update((state) => ({ ...state, message: result.message, error: result.message }));
+        }
+        return result;
+      } catch (error) {
+        const message = String(error);
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message };
+      } finally {
+        finishAction();
+      }
+    },
+
+    /// Закриває preview не імпортуючи нічого.
+    cancelImportPreview() {
+      update((state) => ({
+        ...state,
+        importPreview: null,
+        message: "Попередній перегляд імпорту відкладено.",
+        error: null
+      }));
+    },
+
+    /// Перезавантажує preview за вже відомим шляхом (без re-pick).
+    async refreshImportPreview(): Promise<void> {
+      const existing = get({ subscribe }).importPreview;
+      if (!existing) return;
+      beginAction("import-pick");
+      try {
+        const preview = await paymentsImportPreview(existing.path);
+        update((state) => ({
+          ...state,
+          importPreview: preview,
+          message: preview.message,
+          error: null
+        }));
+      } catch (error) {
+        const message = String(error);
+        update((state) => ({ ...state, message, error: message }));
       } finally {
         finishAction();
       }

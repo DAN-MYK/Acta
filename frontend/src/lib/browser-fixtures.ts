@@ -18,7 +18,9 @@ import type {
   PaletteActivationResultDto,
   PaletteItemDto,
   PaletteSearchResultDto,
+  PaymentImportPreviewDto,
   PaymentItemDto,
+  PaymentManualMatchCandidatesDto,
   PaymentMatchPreviewDto,
   ReportsExportResultDto,
   ReportsFilterDto,
@@ -691,6 +693,84 @@ export async function browserFixtureInvoke<T>(command: string, payload?: Record<
       } satisfies PaymentMatchPreviewDto) as T;
     case "payment_match_apply_auto":
       return clone({ ok: true, message: "Автозіставлення платежу застосовано" } satisfies MutationResultDto) as T;
+    case "payment_match_manual_candidates":
+      return clone({
+        paymentId: (payload?.request as { paymentId?: string } | undefined)?.paymentId ?? "pay-1",
+        query: (payload?.request as { query?: string } | undefined)?.query ?? "",
+        candidates: [
+          {
+            documentId: "doc-2",
+            documentKind: "invoice",
+            title: "INV-2026-0040 ТОВ Барвінок",
+            openAmountStr: "12 000,00 грн",
+            totalScore: 65,
+            sameIban: false,
+            referenceHit: false,
+            textHits: 1,
+            daysDistance: 4
+          },
+          {
+            documentId: "doc-3",
+            documentKind: "act",
+            title: "АКТ-2026-0007 ФОП Маленко",
+            openAmountStr: "8 500,00 грн",
+            totalScore: 50,
+            sameIban: false,
+            referenceHit: false,
+            textHits: 0,
+            daysDistance: 7
+          }
+        ]
+      } satisfies PaymentManualMatchCandidatesDto) as T;
+    case "payments_import_pick_and_preview":
+    case "payments_import_preview":
+      return clone({
+        ok: true,
+        message: "Знайдено 5 рядків. Буде створено 4, пропущено 1",
+        path: "C:\\fixtures\\bank-statement.csv",
+        bankName: "ПриватБанк",
+        parsed: 5,
+        willCreate: 4,
+        willSkip: 1,
+        conflicts: 0,
+        rows: [
+          {
+            action: "create",
+            bankRef: "REF-001",
+            description: "Оплата за послуги",
+            note: "create: bank_ref відсутній у БД"
+          },
+          {
+            action: "create",
+            bankRef: "REF-002",
+            description: "Платіж постачальнику",
+            note: "create: bank_ref відсутній у БД"
+          },
+          {
+            action: "create",
+            bankRef: "REF-003",
+            description: "Повернення депозиту",
+            note: "create: bank_ref відсутній у БД"
+          },
+          {
+            action: "create",
+            bankRef: "REF-004",
+            description: "Аванс для оренди",
+            note: "create: bank_ref відсутній у БД"
+          },
+          {
+            action: "skip",
+            bankRef: "REF-005",
+            description: "Дубль попереднього платежу",
+            note: "skip: знайдено existing row за bank_ref"
+          }
+        ]
+      } satisfies PaymentImportPreviewDto) as T;
+    case "payments_import_commit":
+      return clone({
+        ok: true,
+        message: "Імпортовано 4 нових платежів з C:\\fixtures\\bank-statement.csv (пропущено 1)"
+      } satisfies MutationResultDto) as T;
     case "import_bas_pick_directory":
       return "C:\\tmp\\bas-export" as T;
     case "import_bas_plan":

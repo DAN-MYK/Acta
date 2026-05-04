@@ -463,6 +463,29 @@ export interface PaymentManualMatchCandidatesDto {
   candidates: PaymentMatchCandidateDto[];
 }
 
+export interface PaymentImportPreviewRowDto {
+  action: "create" | "skip";
+  bankRef: string;
+  description: string;
+  note: string;
+}
+
+export interface PaymentImportPreviewDto {
+  ok: boolean;
+  message: string;
+  path: string;
+  bankName: string;
+  parsed: number;
+  willCreate: number;
+  willSkip: number;
+  conflicts: number;
+  rows: PaymentImportPreviewRowDto[];
+}
+
+export interface PaymentImportCommitRequest {
+  path: string;
+}
+
 export interface PaymentReconcileSplitAllocationDto {
   documentId: string;
   documentKind: "act" | "invoice";

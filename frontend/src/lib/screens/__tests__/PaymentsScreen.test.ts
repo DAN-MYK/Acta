@@ -7,6 +7,7 @@ import PaymentsScreen from "../PaymentsScreen.svelte";
 import type {
   PaymentCalendarMonthDto,
   PaymentDraftFormDto,
+  PaymentImportPreviewDto,
   PaymentManualMatchCandidatesDto,
   PaymentMatchPreviewDto,
   PaymentsScreenDto
@@ -66,15 +67,18 @@ const mocks = vi.hoisted(() => {
           }>;
         }
       | null,
+    importPreview: null as PaymentImportPreviewDto | null,
     activeAction: null as string | null,
     activePaymentId: null as string | null
   });
 
   return {
     paymentsState,
+    cancelImportPreview: vi.fn(),
     closeEditor: vi.fn(),
     closeManualMatchPicker: vi.fn(),
     closeMatchPreview: vi.fn(),
+    commitImportPreview: vi.fn(),
     confirmSplitDraft: vi.fn(),
     completeSchedule: vi.fn(),
     createPaymentFromSchedule: vi.fn(),
@@ -82,6 +86,7 @@ const mocks = vi.hoisted(() => {
     confirmPreviewAutoMatch: vi.fn(),
     confirmSelectedPreviewCandidate: vi.fn(),
     importCsv: vi.fn(),
+    pickAndPreviewImport: vi.fn(),
     loadCalendar: vi.fn(),
     moveCalendarSelection: vi.fn(),
     openEditor: vi.fn(),
@@ -284,9 +289,11 @@ const mocks = vi.hoisted(() => {
 vi.mock("../../stores/payments", () => ({
   paymentsStore: {
     subscribe: mocks.paymentsState.subscribe,
+    cancelImportPreview: mocks.cancelImportPreview,
     closeEditor: mocks.closeEditor,
     closeManualMatchPicker: mocks.closeManualMatchPicker,
     closeMatchPreview: mocks.closeMatchPreview,
+    commitImportPreview: mocks.commitImportPreview,
     confirmSplitDraft: mocks.confirmSplitDraft,
     completeSchedule: mocks.completeSchedule,
     createPaymentFromSchedule: mocks.createPaymentFromSchedule,
@@ -294,6 +301,7 @@ vi.mock("../../stores/payments", () => ({
     confirmPreviewAutoMatch: mocks.confirmPreviewAutoMatch,
     confirmSelectedPreviewCandidate: mocks.confirmSelectedPreviewCandidate,
     importCsv: mocks.importCsv,
+    pickAndPreviewImport: mocks.pickAndPreviewImport,
     loadCalendar: mocks.loadCalendar,
     moveCalendarSelection: mocks.moveCalendarSelection,
     openEditor: mocks.openEditor,
@@ -405,6 +413,7 @@ function setPaymentsState(
           }>;
         }
       | null;
+    importPreview: PaymentImportPreviewDto | null;
     activeAction: string | null;
     activePaymentId: string | null;
   }> = {}
@@ -426,6 +435,7 @@ function setPaymentsState(
     selectedCandidateId: null,
     manualPicker: null,
     splitDraft: null,
+    importPreview: null,
     activeAction: null,
     activePaymentId: null,
     ...overrides
@@ -446,9 +456,11 @@ describe("PaymentsScreen component", () => {
     setPaymentsState();
 
     for (const fn of [
+      mocks.cancelImportPreview,
       mocks.closeEditor,
       mocks.closeManualMatchPicker,
       mocks.closeMatchPreview,
+      mocks.commitImportPreview,
       mocks.confirmSplitDraft,
       mocks.confirmManualPickerCandidate,
       mocks.confirmPreviewAutoMatch,
@@ -457,6 +469,7 @@ describe("PaymentsScreen component", () => {
       mocks.openEditor,
       mocks.openManualMatchPicker,
       mocks.openManualTemplate,
+      mocks.pickAndPreviewImport,
       mocks.addSelectedManualPickerCandidateToSplit,
       mocks.reconcile,
       mocks.removeSplitAllocation,
@@ -593,6 +606,77 @@ describe("PaymentsScreen component", () => {
     expect(target.textContent).toContain("Ще немає жодного платежу");
     expect(target.textContent).toContain("Імпортуйте виписку");
     expect(importButton.disabled).toBe(true);
+
+    component.$destroy();
+  });
+
+  it("shows import preview section and routes commit and cancel actions", async () => {
+    setPaymentsState({
+      importPreview: {
+        ok: true,
+        message: "Знайдено 3 рядки. Буде створено 2, пропущено 1",
+        path: "/tmp/bank.csv",
+        bankName: "ПриватБанк",
+        parsed: 3,
+        willCreate: 2,
+        willSkip: 1,
+        conflicts: 0,
+        rows: [
+          { action: "create", bankRef: "REF-1", description: "Перший платіж", note: "create: bank_ref відсутній у БД" },
+          { action: "create", bankRef: "REF-2", description: "Другий платіж", note: "create: bank_ref відсутній у БД" },
+          { action: "skip", bankRef: "REF-3", description: "Дубль", note: "skip: знайдено existing row за bank_ref" }
+        ]
+      }
+    });
+
+    const { component, target } = renderPayments();
+    await tick();
+
+    const preview = target.querySelector('[data-testid="payments-import-preview"]');
+    expect(preview).toBeTruthy();
+    expect(preview?.textContent).toContain("ПриватБанк");
+    expect(preview?.textContent).toContain("Знайдено 3 рядки");
+    expect(preview?.textContent).toContain("Розпізнано рядків");
+    expect(preview?.textContent).toContain("Буде створено");
+    expect(preview?.textContent).toContain("Перший платіж");
+    expect(preview?.textContent).toContain("Дубль");
+
+    const commitBtn = buttonByText(target, "Імпортувати 2 платежі(ів)");
+    expect(commitBtn.className).toContain("btn-primary");
+    expect(commitBtn.disabled).toBe(false);
+
+    const cancelBtn = buttonByText(target, "Скасувати");
+    commitBtn.click();
+    cancelBtn.click();
+    await tick();
+
+    expect(mocks.commitImportPreview).toHaveBeenCalledTimes(1);
+    expect(mocks.cancelImportPreview).toHaveBeenCalledTimes(1);
+
+    component.$destroy();
+  });
+
+  it("disables import preview commit when willCreate is 0", () => {
+    setPaymentsState({
+      importPreview: {
+        ok: true,
+        message: "Усі рядки вже імпортовано раніше",
+        path: "/tmp/old.csv",
+        bankName: "Укргазбанк",
+        parsed: 2,
+        willCreate: 0,
+        willSkip: 2,
+        conflicts: 0,
+        rows: [
+          { action: "skip", bankRef: "REF-X", description: "Дубль 1", note: "skip: знайдено existing row за bank_ref" },
+          { action: "skip", bankRef: "REF-Y", description: "Дубль 2", note: "skip: знайдено existing row за bank_ref" }
+        ]
+      }
+    });
+
+    const { component, target } = renderPayments();
+
+    expect(buttonByText(target, "Немає нових платежів").disabled).toBe(true);
 
     component.$destroy();
   });

@@ -102,6 +102,35 @@ function makePayments(ids: string[]): PaymentsScreenDto {
   };
 }
 
+function makePaymentCalendarMonth(payload?: unknown) {
+  const request = (payload as { request?: { month?: string; selectedDate?: string | null } } | undefined)?.request;
+  const month = request?.month ?? "2026-04";
+  const selectedDate = request?.selectedDate ?? `${month}-30`;
+  const dayNumber = Number.parseInt(selectedDate.slice(-2), 10) || 1;
+
+  return {
+    month,
+    monthLabel: "Квітень 2026",
+    selectedDate,
+    today: "2026-04-30",
+    days: [
+      {
+        date: selectedDate,
+        dayNumber,
+        weekdayShort: "пн",
+        inCurrentMonth: true,
+        today: selectedDate === "2026-04-30",
+        selected: true,
+        hasOverdue: false,
+        incomeTotalStr: "0,00 грн",
+        expenseTotalStr: "0,00 грн",
+        eventCount: 0,
+        events: []
+      }
+    ]
+  };
+}
+
 function makeSettingsScreen(): SettingsScreenDto {
   return {
     company: {
@@ -159,6 +188,10 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     let currentDetail = makeCounterpartyDetail("cp-1");
 
     invokeMock.mockImplementation(async (command, payload) => {
+      if (command === "payments_calendar_load") {
+        return makePaymentCalendarMonth(payload);
+      }
+
       switch (command) {
         case "counterparties_list":
           return screen;
@@ -226,6 +259,10 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     let list = makePayments(["pay-1"]);
 
     invokeMock.mockImplementation(async (command, payload) => {
+      if (command === "payments_calendar_load") {
+        return makePaymentCalendarMonth(payload);
+      }
+
       switch (command) {
         case "payments_list":
           return list;
@@ -344,6 +381,10 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     let list = makePayments(["pay-1", "pay-2", "pay-3"]);
 
     invokeMock.mockImplementation(async (command, payload) => {
+      if (command === "payments_calendar_load") {
+        return makePaymentCalendarMonth(payload);
+      }
+
       switch (command) {
         case "payments_list":
           return list;
@@ -487,6 +528,10 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     const { paymentsStore } = await loadStores();
 
     invokeMock.mockImplementation(async (command, payload) => {
+      if (command === "payments_calendar_load") {
+        return makePaymentCalendarMonth(payload);
+      }
+
       switch (command) {
         case "payments_list":
           return makePayments(["pay-2"]);
@@ -533,6 +578,10 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     const { paymentsStore } = await loadStores();
 
     invokeMock.mockImplementation(async (command, payload) => {
+      if (command === "payments_calendar_load") {
+        return makePaymentCalendarMonth(payload);
+      }
+
       switch (command) {
         case "payments_list":
           return makePayments(["pay-1", "pay-2", "pay-3"]);
@@ -592,6 +641,10 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     let list = makePayments(["pay-1", "pay-2", "pay-3"]);
 
     invokeMock.mockImplementation(async (command, payload) => {
+      if (command === "payments_calendar_load") {
+        return makePaymentCalendarMonth(payload);
+      }
+
       switch (command) {
         case "payments_list":
           return list;
@@ -707,6 +760,10 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     const list = makePayments(["pay-1", "pay-2", "pay-3"]);
 
     invokeMock.mockImplementation(async (command, payload) => {
+      if (command === "payments_calendar_load") {
+        return makePaymentCalendarMonth(payload);
+      }
+
       switch (command) {
         case "payments_list":
           return list;
@@ -757,6 +814,7 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     await paymentsStore.reconcile("pay-3");
     await paymentsStore.openManualMatchPicker("pay-3");
 
+    paymentsStore.selectManualPickerCandidate("inv-7");
     await paymentsStore.addSelectedManualPickerCandidateToSplit();
     expect(snapshot(paymentsStore).splitDraft?.allocations).toHaveLength(1);
     expect(normalizeMoneyText(snapshot(paymentsStore).splitDraft?.remainingAmountStr)).toContain("1 500,00");
@@ -788,6 +846,10 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     }> = [];
 
     invokeMock.mockImplementation(async (command, payload) => {
+      if (command === "payments_calendar_load") {
+        return makePaymentCalendarMonth(payload);
+      }
+
       switch (command) {
         case "payments_list":
           return list;
@@ -934,6 +996,10 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     const { paymentsStore } = await loadStores();
 
     invokeMock.mockImplementation(async (command, payload) => {
+      if (command === "payments_calendar_load") {
+        return makePaymentCalendarMonth(payload);
+      }
+
       switch (command) {
         case "payments_list":
           return makePayments(["pay-3"]);
@@ -1003,6 +1069,10 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     const { paymentsStore } = await loadStores();
 
     invokeMock.mockImplementation(async (command, payload) => {
+      if (command === "payments_calendar_load") {
+        return makePaymentCalendarMonth(payload);
+      }
+
       switch (command) {
         case "payments_list":
           return makePayments(["pay-2"]);
@@ -1074,6 +1144,10 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     const { paymentsStore } = await loadStores();
 
     invokeMock.mockImplementation(async (command, payload) => {
+      if (command === "payments_calendar_load") {
+        return makePaymentCalendarMonth(payload);
+      }
+
       switch (command) {
         case "payments_list":
           return makePayments(["pay-2"]);
@@ -1142,6 +1216,10 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     const { paymentsStore } = await loadStores();
 
     invokeMock.mockImplementation(async (command, payload) => {
+      if (command === "payments_calendar_load") {
+        return makePaymentCalendarMonth(payload);
+      }
+
       switch (command) {
         case "payments_list":
           return makePayments(["pay-1", "pay-2"]);
