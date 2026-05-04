@@ -5,10 +5,13 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::db;
+use crate::import::bank_common::ParsedBankRow;
 use crate::import::bank_csv::{
-    BankStatementParser, OschadbankCsvParser, ParsedBankRow, SenseBankCsvParser,
+    BankStatementParser, MonobankCsvParser, OschadbankCsvParser, OtpBankCsvParser,
+    PrivatBankCsvParser, PumbCsvParser, RaiffeisenCsvParser, SenseBankCsvParser,
     UkrgasbankCsvParser,
 };
+use crate::import::bank_xlsx::{is_xlsx_path, parse_xlsx_file};
 use crate::models::payment::NewPayment;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,7 +42,10 @@ pub fn bank_import_dir() -> PathBuf {
     PathBuf::from("storage/import/bank")
 }
 
-pub async fn newest_payments_csv_path() -> Result<PathBuf> {
+/// Шукає найновішу банківську виписку (CSV/XLSX/XLS) у `storage/import/bank/`.
+///
+/// Backward compatibility: поверне `.csv` якщо немає XLSX (старий flow).
+pub async fn newest_statement_path() -> Result<PathBuf> {
     let dir = bank_import_dir();
     tokio::fs::create_dir_all(&dir).await?;
     let mut entries = tokio::fs::read_dir(&dir).await?;
@@ -47,10 +53,14 @@ pub async fn newest_payments_csv_path() -> Result<PathBuf> {
 
     while let Some(entry) = entries.next_entry().await? {
         let path = entry.path();
-        let Some(ext) = path.extension().and_then(|value| value.to_str()) else {
+        let Some(ext) = path
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(str::to_lowercase)
+        else {
             continue;
         };
-        if !ext.eq_ignore_ascii_case("csv") {
+        if !matches!(ext.as_str(), "csv" | "xlsx" | "xls") {
             continue;
         }
 
@@ -66,9 +76,15 @@ pub async fn newest_payments_csv_path() -> Result<PathBuf> {
         }
     }
 
-    newest
-        .map(|(_, path)| path)
-        .ok_or_else(|| anyhow!("У `storage/import/bank/` не знайдено CSV для імпорту"))
+    newest.map(|(_, path)| path).ok_or_else(|| {
+        anyhow!("У `storage/import/bank/` не знайдено CSV або XLSX для імпорту")
+    })
+}
+
+/// Аліас для зворотної сумісності зі старим API.
+#[deprecated(note = "Використовуйте `newest_statement_path()` — він підтримує і XLSX")]
+pub async fn newest_payments_csv_path() -> Result<PathBuf> {
+    newest_statement_path().await
 }
 
 pub async fn parse_payments_csv_file(path: &Path) -> Result<Vec<ParsedBankRow>> {
@@ -94,13 +110,36 @@ pub fn parse_payments_csv_text(path: &Path, csv_text: &str) -> Result<Vec<Parsed
     Err(last_error.unwrap_or_else(|| anyhow!("Не вдалося розпізнати формат банківського CSV")))
 }
 
+/// Універсальний парсер виписки за path: CSV або XLSX/XLS.
+///
+/// Виявляє формат за extension і викликає відповідний бекенд-парсер.
+pub async fn parse_payments_statement_file(path: &Path) -> Result<Vec<ParsedBankRow>> {
+    if is_xlsx_path(path) {
+        let bank_name = parser_for_path(path).bank_name();
+        return parse_xlsx_file(bank_name, path).await;
+    }
+
+    parse_payments_csv_file(path).await
+}
+
 pub async fn import_payments_from_csv(
     pool: &PgPool,
     company_id: Uuid,
     path: &Path,
     dry_run: bool,
 ) -> Result<PaymentImportReport> {
-    let rows = parse_payments_csv_file(path).await?;
+    let rows = parse_payments_statement_file(path).await?;
+    apply_imported_payments(pool, company_id, &rows, dry_run).await
+}
+
+/// Універсальний імпорт виписки (CSV або XLSX) з повним dry-run підтримкою.
+pub async fn import_payments_from_statement(
+    pool: &PgPool,
+    company_id: Uuid,
+    path: &Path,
+    dry_run: bool,
+) -> Result<PaymentImportReport> {
+    let rows = parse_payments_statement_file(path).await?;
     apply_imported_payments(pool, company_id, &rows, dry_run).await
 }
 
@@ -180,35 +219,60 @@ fn build_create_note(row: &ParsedBankRow) -> String {
     }
 }
 
-fn parser_for_path(path: &Path) -> Box<dyn BankStatementParser> {
+/// Підбирає bank-specific парсер за filename.
+///
+/// Розширений список: Ощадбанк, Sense, ПриватБанк, Monobank, Райффайзен,
+/// OTP Bank, ПУМБ, Укргазбанк (default).
+pub(crate) fn parser_for_path(path: &Path) -> Box<dyn BankStatementParser> {
     let name = path
         .file_name()
         .and_then(|value| value.to_str())
         .map(|value| value.to_lowercase())
         .unwrap_or_default();
 
-    if name.contains("ощад") || name.contains("oschad") {
+    if contains_any(&name, &["ощад", "oschad"]) {
         Box::new(OschadbankCsvParser)
-    } else if name.contains("sense") || name.contains("альфа") || name.contains("alpha") {
+    } else if contains_any(&name, &["приват", "privat", "p24"]) {
+        Box::new(PrivatBankCsvParser)
+    } else if contains_any(&name, &["моно", "mono"]) {
+        Box::new(MonobankCsvParser)
+    } else if contains_any(&name, &["sense", "альфа", "alpha"]) {
         Box::new(SenseBankCsvParser)
+    } else if contains_any(&name, &["райф", "raiff"]) {
+        Box::new(RaiffeisenCsvParser)
+    } else if contains_any(&name, &["otp"]) {
+        Box::new(OtpBankCsvParser)
+    } else if contains_any(&name, &["пумб", "pumb"]) {
+        Box::new(PumbCsvParser)
     } else {
         Box::new(UkrgasbankCsvParser)
     }
 }
 
+fn contains_any(haystack: &str, needles: &[&str]) -> bool {
+    needles.iter().any(|needle| haystack.contains(needle))
+}
+
 fn parser_candidates(path: &Path) -> Vec<Box<dyn BankStatementParser>> {
     let primary = parser_for_path(path);
     let primary_name = primary.bank_name();
-    let mut parsers = vec![primary];
+    let mut parsers: Vec<Box<dyn BankStatementParser>> = vec![primary];
 
-    if primary_name != OschadbankCsvParser.bank_name() {
-        parsers.push(Box::new(OschadbankCsvParser));
-    }
-    if primary_name != SenseBankCsvParser.bank_name() {
-        parsers.push(Box::new(SenseBankCsvParser));
-    }
-    if primary_name != UkrgasbankCsvParser.bank_name() {
-        parsers.push(Box::new(UkrgasbankCsvParser));
+    let pool: Vec<Box<dyn BankStatementParser>> = vec![
+        Box::new(OschadbankCsvParser),
+        Box::new(SenseBankCsvParser),
+        Box::new(PrivatBankCsvParser),
+        Box::new(MonobankCsvParser),
+        Box::new(RaiffeisenCsvParser),
+        Box::new(OtpBankCsvParser),
+        Box::new(PumbCsvParser),
+        Box::new(UkrgasbankCsvParser),
+    ];
+
+    for parser in pool {
+        if parser.bank_name() != primary_name {
+            parsers.push(parser);
+        }
     }
 
     parsers
@@ -239,6 +303,48 @@ mod tests {
             .expect("CSV має парситися fallback-парсером");
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].bank_name, "Укргазбанк");
+    }
+
+    #[test]
+    fn parser_for_path_routes_privat() {
+        let parser = parser_for_path(Path::new("privat_p24_2026-04.csv"));
+        assert_eq!(parser.bank_name(), "ПриватБанк");
+    }
+
+    #[test]
+    fn parser_for_path_routes_mono() {
+        let parser = parser_for_path(Path::new("mono-export.xlsx"));
+        assert_eq!(parser.bank_name(), "Monobank");
+    }
+
+    #[test]
+    fn parser_for_path_routes_raiffeisen() {
+        let parser = parser_for_path(Path::new("Raiffeisen_2026.csv"));
+        assert_eq!(parser.bank_name(), "Райффайзен Банк");
+    }
+
+    #[test]
+    fn parser_for_path_routes_otp() {
+        let parser = parser_for_path(Path::new("otp_business_2026.xlsx"));
+        assert_eq!(parser.bank_name(), "OTP Bank");
+    }
+
+    #[test]
+    fn parser_for_path_routes_pumb() {
+        let parser = parser_for_path(Path::new("pumb_2026.csv"));
+        assert_eq!(parser.bank_name(), "ПУМБ");
+    }
+
+    #[test]
+    fn parser_for_path_falls_back_to_ukrgasbank() {
+        let parser = parser_for_path(Path::new("unknown.csv"));
+        assert_eq!(parser.bank_name(), "Укргазбанк");
+    }
+
+    #[test]
+    fn parser_for_path_recognises_uk_privat() {
+        let parser = parser_for_path(Path::new("приватбанк-виписка-травень.csv"));
+        assert_eq!(parser.bank_name(), "ПриватБанк");
     }
 
     #[test]

@@ -1,84 +1,21 @@
-use anyhow::{anyhow, bail, Result};
-use chrono::NaiveDate;
+//! CSV-парсер банківських виписок. Використовує спільну інфраструктуру з
+//! [`crate::import::bank_common`] — header-aliases, decimal/date normalizers,
+//! `HeaderLayout`. Працює з UTF-8 текстом (BOM stripping вбудовано).
+
+use anyhow::{anyhow, Result};
 use csv::StringRecord;
-use rust_decimal::Decimal;
 
-use crate::models::payment::PaymentDirection;
+use crate::import::bank_common::{
+    amount_and_direction_from_strings, header_layout_from_strs, normalize_iban, parse_date,
+    preprocess_csv_text, HeaderLayout, ParsedBankRow,
+};
 
-#[derive(Debug, Clone)]
-pub struct ParsedBankRow {
-    pub date: NaiveDate,
-    pub amount: Decimal,
-    pub direction: PaymentDirection,
-    pub description: String,
-    pub bank_ref: Option<String>,
-    pub bank_name: String,
-    pub counterparty_name: Option<String>,
-    pub counterparty_iban: Option<String>,
-    pub currency: Option<String>,
-}
+pub use crate::import::bank_common::ParsedBankRow as BankRow;
 
+/// Trait, який дозволяє підставляти різні bank-specific парсери.
 pub trait BankStatementParser {
     fn bank_name(&self) -> &'static str;
     fn parse(&self, csv_text: &str) -> Result<Vec<ParsedBankRow>>;
-}
-
-#[derive(Debug, Clone, Default)]
-struct HeaderLayout {
-    date_idx: Option<usize>,
-    amount_idx: Option<usize>,
-    description_idx: Option<usize>,
-    direction_idx: Option<usize>,
-    reference_idx: Option<usize>,
-    counterparty_name_idx: Option<usize>,
-    counterparty_iban_idx: Option<usize>,
-    currency_idx: Option<usize>,
-    debit_idx: Option<usize>,
-    credit_idx: Option<usize>,
-}
-
-fn parse_decimal(raw: &str) -> Result<Decimal> {
-    let trimmed = raw.trim().trim_matches('"').replace('\u{00a0}', " ");
-    if trimmed.is_empty() {
-        bail!("Порожнє числове поле");
-    }
-
-    let mut normalized = trimmed.replace(' ', "").replace(',', ".");
-    let negative = normalized.starts_with('-')
-        || normalized.ends_with('-')
-        || (normalized.starts_with('(') && normalized.ends_with(')'));
-    normalized = normalized
-        .trim_start_matches('-')
-        .trim_end_matches('-')
-        .trim_start_matches('(')
-        .trim_end_matches(')')
-        .trim_start_matches('+')
-        .to_string();
-
-    let mut value = normalized.parse::<Decimal>()?;
-    if negative {
-        value = -value;
-    }
-    Ok(value)
-}
-
-fn parse_date(raw: &str) -> Result<NaiveDate> {
-    let trimmed = raw.trim().trim_matches('"');
-    let date_only = trimmed.split(['T', ' ']).next().unwrap_or(trimmed).trim();
-
-    for format in [
-        "%d.%m.%Y", "%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d", "%Y%m%d", "%d-%m-%Y",
-    ] {
-        if let Ok(date) = NaiveDate::parse_from_str(date_only, format) {
-            return Ok(date);
-        }
-    }
-
-    Err(anyhow!("Не вдалося розібрати дату '{raw}'"))
-}
-
-fn preprocess_csv_text(csv_text: &str) -> &str {
-    csv_text.trim_start_matches('\u{feff}')
 }
 
 fn detect_delimiter(csv_text: &str) -> u8 {
@@ -93,16 +30,6 @@ fn detect_delimiter(csv_text: &str) -> u8 {
         .max_by_key(|(_, ch)| first_line.matches(*ch).count())
         .map(|(byte, _)| byte)
         .unwrap_or(b',')
-}
-
-fn normalize_header(raw: &str) -> String {
-    raw.trim()
-        .trim_matches('\u{feff}')
-        .trim_matches('"')
-        .to_lowercase()
-        .chars()
-        .filter(|ch| !matches!(ch, ' ' | '_' | '-' | '.' | ':' | '/' | '\\' | '(' | ')'))
-        .collect()
 }
 
 fn field_at(record: &StringRecord, idx: Option<usize>) -> Option<&str> {
@@ -124,174 +51,40 @@ fn optional_text(record: &StringRecord, idx: Option<usize>) -> Option<String> {
         .map(str::to_string)
 }
 
-fn normalize_iban(value: &str) -> Option<String> {
-    let normalized = value
-        .trim()
-        .chars()
-        .filter(|ch| !ch.is_whitespace())
-        .collect::<String>()
-        .to_uppercase();
-
-    if normalized.is_empty() {
-        None
-    } else {
-        Some(normalized)
-    }
-}
-
-fn find_header_index(headers: &StringRecord, aliases: &[&str]) -> Option<usize> {
-    headers.iter().position(|value| {
-        let normalized = normalize_header(value);
-        aliases.iter().any(|alias| normalized == *alias)
-    })
-}
-
 fn header_layout(headers: &StringRecord) -> HeaderLayout {
-    HeaderLayout {
-        date_idx: find_header_index(
-            headers,
-            &[
-                "date",
-                "operationdate",
-                "documentdate",
-                "valuedate",
-                "posteddate",
-                "дата",
-                "датаоперації",
-                "документдата",
-                "датавалютування",
-            ],
-        ),
-        amount_idx: find_header_index(headers, &["amount", "sum", "total", "сума"]),
-        description_idx: find_header_index(
-            headers,
-            &[
-                "description",
-                "purpose",
-                "details",
-                "comment",
-                "назначениеплатежа",
-                "призначенняплатежу",
-                "опис",
-                "коментар",
-                "деталі",
-            ],
-        ),
-        direction_idx: find_header_index(
-            headers,
-            &[
-                "direction",
-                "type",
-                "operationtype",
-                "напрям",
-                "тип",
-                "типоперації",
-            ],
-        ),
-        reference_idx: find_header_index(
-            headers,
-            &[
-                "reference",
-                "ref",
-                "bankref",
-                "docno",
-                "documentno",
-                "operationid",
-                "референс",
-                "номердокумента",
-                "кодоперації",
-            ],
-        ),
-        counterparty_name_idx: find_header_index(
-            headers,
-            &[
-                "counterparty",
-                "counterpartyname",
-                "name",
-                "receiver",
-                "sender",
-                "company",
-                "контрагент",
-                "назваконтрагента",
-                "отримувач",
-                "платник",
-            ],
-        ),
-        counterparty_iban_idx: find_header_index(
-            headers,
-            &[
-                "iban",
-                "counterpartyiban",
-                "recipientiban",
-                "senderiban",
-                "ібан",
-                "ибан",
-                "контрагентібан",
-            ],
-        ),
-        currency_idx: find_header_index(
-            headers,
-            &["currency", "curr", "currencycode", "валюта", "кодвалюти"],
-        ),
-        debit_idx: find_header_index(headers, &["debit", "debet", "видаток", "списання"]),
-        credit_idx: find_header_index(headers, &["credit", "kredit", "надходження", "зарахування"]),
-    }
+    let raw: Vec<&str> = headers.iter().collect();
+    header_layout_from_strs(&raw)
 }
 
-fn parse_direction_text(raw: &str) -> Option<PaymentDirection> {
-    let normalized = raw.trim().trim_matches('"').to_lowercase();
-    match normalized.as_str() {
-        "income" | "in" | "credit" | "надходження" | "зарахування" | "прихід" => {
-            Some(PaymentDirection::Income)
-        }
-        "expense" | "out" | "debit" | "витрата" | "списання" | "видаток" => {
-            Some(PaymentDirection::Expense)
-        }
-        _ => None,
-    }
-}
-
-fn amount_and_direction(
+fn parse_record(
+    bank_name: &str,
     record: &StringRecord,
+    date_idx: usize,
     layout: &HeaderLayout,
-) -> Result<(Decimal, PaymentDirection)> {
-    if let Some(direction_raw) = field_at(record, layout.direction_idx).map(str::trim) {
-        if !direction_raw.is_empty() {
-            let direction = parse_direction_text(direction_raw)
-                .ok_or_else(|| anyhow!("Невідомий напрямок платежу: {direction_raw}"))?;
-            let amount = parse_decimal(field_at(record, layout.amount_idx).unwrap_or(""))?;
-            return Ok((amount.abs(), direction));
-        }
-    }
+) -> Result<ParsedBankRow> {
+    let direction_field = field_at(record, layout.direction_idx);
+    let amount_field = field_at(record, layout.amount_idx);
+    let debit_field = field_at(record, layout.debit_idx);
+    let credit_field = field_at(record, layout.credit_idx);
 
-    if let Some(amount_raw) = field_at(record, layout.amount_idx).map(str::trim) {
-        if !amount_raw.is_empty() {
-            let amount = parse_decimal(amount_raw)?;
-            if amount.is_sign_negative() {
-                return Ok((amount.abs(), PaymentDirection::Expense));
-            }
-            return Ok((amount, PaymentDirection::Income));
-        }
-    }
+    let (amount, direction) = amount_and_direction_from_strings(
+        direction_field,
+        amount_field,
+        debit_field,
+        credit_field,
+    )?;
 
-    let debit = optional_text(record, layout.debit_idx)
-        .map(|value| parse_decimal(&value))
-        .transpose()?;
-    let credit = optional_text(record, layout.credit_idx)
-        .map(|value| parse_decimal(&value))
-        .transpose()?;
-
-    match (debit, credit) {
-        (Some(debit), None) if !debit.is_zero() => Ok((debit.abs(), PaymentDirection::Expense)),
-        (None, Some(credit)) if !credit.is_zero() => Ok((credit.abs(), PaymentDirection::Income)),
-        (Some(debit), Some(credit)) if credit.is_zero() && !debit.is_zero() => {
-            Ok((debit.abs(), PaymentDirection::Expense))
-        }
-        (Some(debit), Some(credit)) if debit.is_zero() && !credit.is_zero() => {
-            Ok((credit.abs(), PaymentDirection::Income))
-        }
-        _ => bail!("Не вдалося визначити суму або напрямок платежу"),
-    }
+    Ok(ParsedBankRow {
+        date: parse_date(record.get(date_idx).unwrap_or(""))?,
+        amount,
+        direction,
+        description: text_or_empty(record, layout.description_idx),
+        bank_ref: optional_text(record, layout.reference_idx),
+        bank_name: bank_name.to_string(),
+        counterparty_name: optional_text(record, layout.counterparty_name_idx),
+        counterparty_iban: field_at(record, layout.counterparty_iban_idx).and_then(normalize_iban),
+        currency: optional_text(record, layout.currency_idx),
+    })
 }
 
 fn parse_generic_csv(bank_name: &str, csv_text: &str) -> Result<Vec<ParsedBankRow>> {
@@ -320,30 +113,19 @@ fn parse_generic_csv(bank_name: &str, csv_text: &str) -> Result<Vec<ParsedBankRo
     Ok(rows)
 }
 
-fn parse_record(
-    bank_name: &str,
-    record: &StringRecord,
-    date_idx: usize,
-    layout: &HeaderLayout,
-) -> Result<ParsedBankRow> {
-    let (amount, direction) = amount_and_direction(record, layout)?;
-
-    Ok(ParsedBankRow {
-        date: parse_date(record.get(date_idx).unwrap_or(""))?,
-        amount,
-        direction,
-        description: text_or_empty(record, layout.description_idx),
-        bank_ref: optional_text(record, layout.reference_idx),
-        bank_name: bank_name.to_string(),
-        counterparty_name: optional_text(record, layout.counterparty_name_idx),
-        counterparty_iban: field_at(record, layout.counterparty_iban_idx).and_then(normalize_iban),
-        currency: optional_text(record, layout.currency_idx),
-    })
+/// Узагальнена функція парсингу CSV для будь-якого банку.
+pub fn parse_csv(bank_name: &str, csv_text: &str) -> Result<Vec<ParsedBankRow>> {
+    parse_generic_csv(bank_name, csv_text)
 }
 
 pub struct UkrgasbankCsvParser;
 pub struct OschadbankCsvParser;
 pub struct SenseBankCsvParser;
+pub struct PrivatBankCsvParser;
+pub struct MonobankCsvParser;
+pub struct RaiffeisenCsvParser;
+pub struct OtpBankCsvParser;
+pub struct PumbCsvParser;
 
 impl BankStatementParser for UkrgasbankCsvParser {
     fn bank_name(&self) -> &'static str {
@@ -372,65 +154,57 @@ impl BankStatementParser for SenseBankCsvParser {
     }
 }
 
+impl BankStatementParser for PrivatBankCsvParser {
+    fn bank_name(&self) -> &'static str {
+        "ПриватБанк"
+    }
+    fn parse(&self, csv_text: &str) -> Result<Vec<ParsedBankRow>> {
+        parse_generic_csv(self.bank_name(), csv_text)
+    }
+}
+
+impl BankStatementParser for MonobankCsvParser {
+    fn bank_name(&self) -> &'static str {
+        "Monobank"
+    }
+    fn parse(&self, csv_text: &str) -> Result<Vec<ParsedBankRow>> {
+        parse_generic_csv(self.bank_name(), csv_text)
+    }
+}
+
+impl BankStatementParser for RaiffeisenCsvParser {
+    fn bank_name(&self) -> &'static str {
+        "Райффайзен Банк"
+    }
+    fn parse(&self, csv_text: &str) -> Result<Vec<ParsedBankRow>> {
+        parse_generic_csv(self.bank_name(), csv_text)
+    }
+}
+
+impl BankStatementParser for OtpBankCsvParser {
+    fn bank_name(&self) -> &'static str {
+        "OTP Bank"
+    }
+    fn parse(&self, csv_text: &str) -> Result<Vec<ParsedBankRow>> {
+        parse_generic_csv(self.bank_name(), csv_text)
+    }
+}
+
+impl BankStatementParser for PumbCsvParser {
+    fn bank_name(&self) -> &'static str {
+        "ПУМБ"
+    }
+    fn parse(&self, csv_text: &str) -> Result<Vec<ParsedBankRow>> {
+        parse_generic_csv(self.bank_name(), csv_text)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::payment::PaymentDirection;
     use chrono::NaiveDate;
     use rust_decimal_macros::dec;
-
-    #[test]
-    fn parse_decimal_standard_dot() {
-        assert_eq!(parse_decimal("1200.50").unwrap(), dec!(1200.50));
-    }
-
-    #[test]
-    fn parse_decimal_european_space_comma() {
-        assert_eq!(parse_decimal("1 200,50").unwrap(), dec!(1200.50));
-    }
-
-    #[test]
-    fn parse_decimal_space_thousands_dot() {
-        assert_eq!(parse_decimal("1 200.50").unwrap(), dec!(1200.50));
-    }
-
-    #[test]
-    fn parse_decimal_parentheses_negative() {
-        assert_eq!(parse_decimal("(100.00)").unwrap(), dec!(-100.00));
-    }
-
-    #[test]
-    fn parse_decimal_trims_whitespace() {
-        assert_eq!(parse_decimal("  500.00  ").unwrap(), dec!(500.00));
-    }
-
-    #[test]
-    fn parse_decimal_invalid_returns_err() {
-        assert!(parse_decimal("abc").is_err());
-    }
-
-    #[test]
-    fn parse_date_dd_mm_yyyy() {
-        let d = parse_date("03.04.2026").unwrap();
-        assert_eq!(d, NaiveDate::from_ymd_opt(2026, 4, 3).unwrap());
-    }
-
-    #[test]
-    fn parse_date_iso_yyyy_mm_dd() {
-        let d = parse_date("2026-04-15").unwrap();
-        assert_eq!(d, NaiveDate::from_ymd_opt(2026, 4, 15).unwrap());
-    }
-
-    #[test]
-    fn parse_date_slash_format_supported() {
-        let d = parse_date("03/04/2026").unwrap();
-        assert_eq!(d, NaiveDate::from_ymd_opt(2026, 4, 3).unwrap());
-    }
-
-    #[test]
-    fn parse_date_datetime_supported() {
-        let d = parse_date("2026-04-15T14:20:00").unwrap();
-        assert_eq!(d, NaiveDate::from_ymd_opt(2026, 4, 15).unwrap());
-    }
 
     #[test]
     fn ukrgasbank_bank_name() {
@@ -508,5 +282,28 @@ mod tests {
         let rows = OschadbankCsvParser.parse(csv).unwrap();
         assert_eq!(rows[0].amount, dec!(800.00));
         assert_eq!(rows[0].direction, PaymentDirection::Income);
+    }
+
+    #[test]
+    fn privat_parser_returns_correct_bank_name() {
+        let csv = "date,amount,description,direction\n\
+                   01.04.2026,500.00,Тест,income\n";
+        let rows = PrivatBankCsvParser.parse(csv).unwrap();
+        assert_eq!(rows[0].bank_name, "ПриватБанк");
+    }
+
+    #[test]
+    fn mono_parser_handles_extended_uk_headers() {
+        let csv = "Дата проведення;Сума;Призначення платежу;Контрагент;Рахунок отримувача\n\
+                   2026-04-15;1\u{00a0}200,50;Платіж постачальнику;ТОВ Ромашка;UA12 305299 0000026000123456\n";
+        let rows = MonobankCsvParser.parse(csv).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].amount, dec!(1200.50));
+        assert_eq!(rows[0].counterparty_name.as_deref(), Some("ТОВ Ромашка"));
+        assert_eq!(
+            rows[0].counterparty_iban.as_deref(),
+            Some("UA123052990000026000123456")
+        );
+        assert_eq!(rows[0].bank_name, "Monobank");
     }
 }
