@@ -713,15 +713,17 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     expect(snapshot(paymentsStore).splitDraft?.remainingAmountStr).toContain("0,00");
   });
 
-  it("persists a split draft across multiple reconcile calls", async () => {
+  it("persists a split draft through one batch reconcile call", async () => {
     const { paymentsStore } = await loadStores();
 
     let list = makePayments(["pay-1", "pay-2", "pay-3"]);
-    const reconcileCalls: Array<{
+    const splitCalls: Array<{
       paymentId: string;
-      documentId: string;
-      documentKind: string;
-      amount: string;
+      allocations: Array<{
+        documentId: string;
+        documentKind: string;
+        amount: string;
+      }>;
     }> = [];
 
     invokeMock.mockImplementation(async (command, payload) => {
@@ -766,29 +768,36 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
               }
             ]
           };
-        case "payment_reconcile": {
+        case "payment_reconcile_split": {
           const request = {
             ...(payload as {
-              request: { paymentId: string; documentId: string; documentKind: string; amount: string };
+              request: {
+                paymentId: string;
+                allocations: Array<{
+                  documentId: string;
+                  documentKind: string;
+                  amount: string;
+                }>;
+              };
             }).request
           };
-          reconcileCalls.push(request);
+          splitCalls.push(request);
 
-          const expected =
-            reconcileCalls.length === 1
-              ? {
-                  paymentId: "pay-3",
-                  documentId: "inv-7",
-                  documentKind: "invoice"
-                }
-              : {
-                  paymentId: "pay-3",
-                  documentId: "act-9",
-                  documentKind: "act"
-                };
-
-          expect(request).toMatchObject(expected);
-          expect(normalizeMoneyText(request.amount)).toContain("1 500,00");
+          expect(request.paymentId).toBe("pay-3");
+          expect(request.allocations).toHaveLength(2);
+          expect(request.allocations.map((allocation) => allocation.documentId)).toEqual([
+            "inv-7",
+            "act-9"
+          ]);
+          expect(request.allocations.map((allocation) => allocation.documentKind)).toEqual([
+            "invoice",
+            "act"
+          ]);
+          expect(
+            request.allocations.every((allocation) =>
+              normalizeMoneyText(allocation.amount).includes("1 500,00")
+            )
+          ).toBe(true);
 
           list = {
             ...list,
@@ -796,8 +805,7 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
               item.id === "pay-3"
                 ? {
                     ...item,
-                    matchedDoc:
-                      reconcileCalls.length === 1 ? "INV-007 (частково)" : "INV-007 + ACT-009"
+                    matchedDoc: "INV-007 + ACT-009"
                   }
                 : item
             )
@@ -805,7 +813,14 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
 
           return {
             ok: true,
-            message: "ok"
+            message: "Розподіл платежу підтверджено",
+            paymentId: "pay-3",
+            allocationCount: 2,
+            totalAllocatedStr: "3 000,00 грн",
+            allocations: request.allocations.map((allocation) => ({
+              ...allocation,
+              amount: allocation.amount
+            }))
           };
         }
         default:
@@ -830,8 +845,8 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     expect(snapshot(paymentsStore).matchPreview).toBeNull();
     expect(snapshot(paymentsStore).message).toBe("Розподіл платежу підтверджено");
     expect(snapshot(paymentsStore).list?.items.find((item) => item.id === "pay-3")?.matchedDoc).toContain("ACT-009");
-    expect(reconcileCalls).toHaveLength(2);
-    expect(invokeMock.mock.calls.filter(([command]) => command === "payment_reconcile")).toHaveLength(2);
+    expect(splitCalls).toHaveLength(1);
+    expect(invokeMock.mock.calls.filter(([command]) => command === "payment_reconcile_split")).toHaveLength(1);
     expect(invokeMock.mock.calls.filter(([command]) => command === "payments_list")).toHaveLength(2);
   });
 

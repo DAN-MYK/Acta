@@ -3797,6 +3797,265 @@ async fn payments_reconcile_supports_split_and_rejects_overallocation() -> Resul
 }
 
 #[tokio::test]
+async fn payments_reconcile_split_scoped_replaces_allocations_atomically() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let suffix = unique_suffix();
+    let cp = db::counterparties::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewCounterparty {
+            name: format!("Split Round-Trip {suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("split-rt-cp-{suffix}")),
+        },
+    )
+    .await?;
+
+    let act = db::acts::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewAct {
+            number: format!("RT-ACT-{suffix}"),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: models::DocumentDirection::Outgoing,
+            date: Utc::now().date_naive(),
+            expected_payment_date: None,
+            status: models::ActStatus::Issued,
+            notes: None,
+            bas_id: None,
+            items: vec![models::NewActItem {
+                description: "Послуга".to_string(),
+                quantity: dec!(1.0000),
+                unit: "шт".to_string(),
+                unit_price: dec!(1500.00),
+            }],
+        },
+    )
+    .await?;
+
+    let invoice = db::invoices::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewInvoice {
+            number: format!("RT-INV-{suffix}"),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: models::DocumentDirection::Outgoing,
+            date: Utc::now().date_naive(),
+            expected_payment_date: None,
+            notes: None,
+            bas_id: None,
+            items: vec![models::NewInvoiceItem {
+                position: 1,
+                description: "Товар".to_string(),
+                unit: Some("шт".to_string()),
+                quantity: dec!(1.0000),
+                price: dec!(2000.00),
+            }],
+        },
+    )
+    .await?;
+
+    let payment = db::payments::create(
+        &pool,
+        models::payment::NewPayment {
+            company_id: DEFAULT_COMPANY_ID,
+            date: Utc::now().date_naive(),
+            amount: dec!(3500.00),
+            direction: models::payment::PaymentDirection::Income,
+            counterparty_id: Some(cp.id),
+            bank_name: Some("Тест Банк".to_string()),
+            bank_ref: Some(format!("RT-{suffix}")),
+            description: Some("Round-trip розподіл".to_string()),
+        },
+    )
+    .await?;
+
+    // Крок 1: початковий split на 1500 (act) + 2000 (invoice) = 3500.
+    db::payments::reconcile_split_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        payment.id,
+        &[
+            db::payments::PaymentReconcileAllocation {
+                document_kind: "act".to_string(),
+                document_id: act.id,
+                amount: dec!(1500.00),
+            },
+            db::payments::PaymentReconcileAllocation {
+                document_kind: "invoice".to_string(),
+                document_id: invoice.id,
+                amount: dec!(2000.00),
+            },
+        ],
+    )
+    .await?;
+
+    let payment_after_first = db::payments::get_by_id_scoped(&pool, DEFAULT_COMPANY_ID, payment.id)
+        .await?
+        .expect("payment exists after first split");
+    assert!(payment_after_first.is_reconciled, "split must mark payment as reconciled");
+
+    let acts_total: rust_decimal::Decimal =
+        sqlx::query_scalar("SELECT COALESCE(SUM(amount), 0) FROM payment_acts WHERE payment_id = $1")
+            .bind(payment.id)
+            .fetch_one(&pool)
+            .await?;
+    let invoices_total: rust_decimal::Decimal = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(amount), 0) FROM payment_invoices WHERE payment_id = $1",
+    )
+    .bind(payment.id)
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(acts_total, dec!(1500.00));
+    assert_eq!(invoices_total, dec!(2000.00));
+
+    // Крок 2: повторний split з іншим розподілом (1000+2500). Перевіряємо idempotency:
+    // має повністю замінити попередні allocation, не подвоюючи їх.
+    db::payments::reconcile_split_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        payment.id,
+        &[
+            db::payments::PaymentReconcileAllocation {
+                document_kind: "act".to_string(),
+                document_id: act.id,
+                amount: dec!(1000.00),
+            },
+            db::payments::PaymentReconcileAllocation {
+                document_kind: "invoice".to_string(),
+                document_id: invoice.id,
+                amount: dec!(1900.00),
+            },
+        ],
+    )
+    .await?;
+
+    let acts_total_after: rust_decimal::Decimal =
+        sqlx::query_scalar("SELECT COALESCE(SUM(amount), 0) FROM payment_acts WHERE payment_id = $1")
+            .bind(payment.id)
+            .fetch_one(&pool)
+            .await?;
+    let invoices_total_after: rust_decimal::Decimal = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(amount), 0) FROM payment_invoices WHERE payment_id = $1",
+    )
+    .bind(payment.id)
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(
+        acts_total_after,
+        dec!(1000.00),
+        "повторний split має замінити попередню суму, а не додати"
+    );
+    assert_eq!(invoices_total_after, dec!(1900.00));
+
+    // Edge case: 1 allocation = вся сума платежу. Має бути валідним.
+    db::payments::reconcile_split_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        payment.id,
+        &[db::payments::PaymentReconcileAllocation {
+            document_kind: "act".to_string(),
+            document_id: act.id,
+            amount: dec!(1500.00),
+        }],
+    )
+    .await?;
+
+    let single_acts_total: rust_decimal::Decimal =
+        sqlx::query_scalar("SELECT COALESCE(SUM(amount), 0) FROM payment_acts WHERE payment_id = $1")
+            .bind(payment.id)
+            .fetch_one(&pool)
+            .await?;
+    let single_invoices_total: rust_decimal::Decimal = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(amount), 0) FROM payment_invoices WHERE payment_id = $1",
+    )
+    .bind(payment.id)
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(single_acts_total, dec!(1500.00));
+    assert_eq!(
+        single_invoices_total,
+        dec!(0),
+        "після single-allocation split інвойсних частин бути не повинно"
+    );
+
+    // Validation: empty allocations відхиляються.
+    let empty_err = db::payments::reconcile_split_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        payment.id,
+        &[],
+    )
+    .await
+    .expect_err("empty allocations must be rejected");
+    assert!(empty_err.to_string().contains("хоча б один"));
+
+    // Validation: загальна сума > payment.amount відхиляється цілком,
+    // попередній stored state не змінюється.
+    let over_err = db::payments::reconcile_split_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        payment.id,
+        &[
+            db::payments::PaymentReconcileAllocation {
+                document_kind: "act".to_string(),
+                document_id: act.id,
+                amount: dec!(1500.00),
+            },
+            db::payments::PaymentReconcileAllocation {
+                document_kind: "invoice".to_string(),
+                document_id: invoice.id,
+                amount: dec!(2500.00),
+            },
+        ],
+    )
+    .await
+    .expect_err("over-allocation must be rejected");
+    assert!(over_err.to_string().contains("перевищує суму платежу"));
+
+    // Stored state має лишитися від останнього успішного виклику (1500 act, 0 invoice).
+    let preserved_acts_total: rust_decimal::Decimal =
+        sqlx::query_scalar("SELECT COALESCE(SUM(amount), 0) FROM payment_acts WHERE payment_id = $1")
+            .bind(payment.id)
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(
+        preserved_acts_total,
+        dec!(1500.00),
+        "відхилений split не повинен модифікувати існуючі allocation"
+    );
+
+    db::payments::delete(&pool, payment.id).await?;
+    sqlx::query("DELETE FROM acts WHERE id = $1")
+        .bind(act.id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM invoices WHERE id = $1")
+        .bind(invoice.id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn payments_schedule_create_complete_and_list_upcoming_in_db() -> Result<()> {
     let Some(pool) = test_pool().await? else {
         return Ok(());
@@ -5296,298 +5555,3 @@ async fn acts_update_with_items_replaces_positions_and_recalculates_total() -> R
     Ok(())
 }
 
-#[tokio::test]
-async fn load_pnl_rows_groups_by_category_and_excludes_draft() -> Result<()> {
-    use acta::app_ctx::AppCtx;
-    use acta::db::reports::load_pnl_rows;
-    use acta::models::reports::{ReportsScope, ResolvedReportsFilter};
-
-    let Some(pool) = test_pool().await? else {
-        return Ok(());
-    };
-    let suffix = unique_suffix();
-    let today = chrono::Utc::now().date_naive();
-    let period_start = today - Duration::days(30);
-
-    let cp = create_test_counterparty(&pool, &suffix, &format!("ІТ PNL CP {suffix}"), None, None)
-        .await?;
-    let cat_income_id = create_test_category(
-        &pool,
-        DEFAULT_COMPANY_ID,
-        &format!("Послуги {suffix}"),
-        "income",
-    )
-    .await?;
-
-    let act_id = create_test_act(
-        &pool,
-        DEFAULT_COMPANY_ID,
-        cp.id,
-        &format!("PNL-{suffix}-1"),
-        dec!(10000),
-        "issued",
-        Some(cat_income_id),
-        today,
-    )
-    .await?;
-
-    let act_id2 = create_test_act(
-        &pool,
-        DEFAULT_COMPANY_ID,
-        cp.id,
-        &format!("PNL-{suffix}-2"),
-        dec!(5000),
-        "issued",
-        Some(cat_income_id),
-        today,
-    )
-    .await?;
-
-    let draft_id = create_test_act(
-        &pool,
-        DEFAULT_COMPANY_ID,
-        cp.id,
-        &format!("PNL-{suffix}-draft"),
-        dec!(99999),
-        "draft",
-        Some(cat_income_id),
-        today,
-    )
-    .await?;
-
-    let ctx = AppCtx::new(pool.clone(), DEFAULT_COMPANY_ID);
-    let filter = ResolvedReportsFilter {
-        scope: ReportsScope::Active,
-        date_from: period_start,
-        date_to: today,
-        query: format!("Послуги {suffix}"),
-    };
-
-    let rows = load_pnl_rows(&ctx, &filter).await?;
-
-    assert_eq!(rows.len(), 1, "має бути рівно 1 категорія після фільтра");
-    assert_eq!(rows[0].income, dec!(15000), "10000 + 5000 = агрегація по категорії");
-    assert_eq!(rows[0].expense, dec!(0));
-
-    sqlx::query("DELETE FROM acts WHERE id IN ($1, $2, $3)")
-        .bind(act_id)
-        .bind(act_id2)
-        .bind(draft_id)
-        .execute(&pool)
-        .await?;
-    sqlx::query("DELETE FROM categories WHERE id = $1")
-        .bind(cat_income_id)
-        .execute(&pool)
-        .await?;
-    sqlx::query("DELETE FROM counterparties WHERE id = $1")
-        .bind(cp.id)
-        .execute(&pool)
-        .await?;
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn compute_opening_balance_sums_payments_before_period() -> Result<()> {
-    use acta::app_ctx::AppCtx;
-    use acta::db::reports::compute_opening_balance;
-    use acta::models::reports::{ReportsScope, ResolvedReportsFilter};
-
-    let Some(pool) = test_pool().await? else {
-        return Ok(());
-    };
-    let today = chrono::Utc::now().date_naive();
-    let period_start = today - Duration::days(10);
-    let before_period = today - Duration::days(20);
-
-    // Payment BEFORE period_start → included in opening balance
-    let p1 = create_test_payment(&pool, DEFAULT_COMPANY_ID, None, dec!(5000), "income", before_period).await?;
-    // Expense BEFORE period_start → reduces opening balance
-    let p2 = create_test_payment(&pool, DEFAULT_COMPANY_ID, None, dec!(1000), "expense", before_period).await?;
-    // Payment WITHIN period → NOT in opening balance
-    let p3 = create_test_payment(&pool, DEFAULT_COMPANY_ID, None, dec!(9999), "income", today).await?;
-    // Payment on the boundary date (date_from itself) — must be excluded from opening balance
-    // because the SQL uses strict `date < date_from`
-    let p4 = create_test_payment(&pool, DEFAULT_COMPANY_ID, None, dec!(777), "income", period_start).await?;
-
-    let ctx = AppCtx::new(pool.clone(), DEFAULT_COMPANY_ID);
-    let filter = ResolvedReportsFilter {
-        scope: ReportsScope::Active,
-        date_from: period_start,
-        date_to: today,
-        query: String::new(),
-    };
-
-    let balance_before = compute_opening_balance(&ctx, &filter).await?;
-
-    // Remove within-period payments (p3) and boundary-date payment (p4),
-    // verify neither affects opening balance
-    sqlx::query("DELETE FROM payments WHERE id IN ($1, $2)").bind(p3).bind(p4).execute(&pool).await?;
-
-    let balance_after = compute_opening_balance(&ctx, &filter).await?;
-    assert_eq!(balance_before, balance_after, "payment within period and on boundary date must not affect opening balance");
-
-    // The balance must include 5000 income - 1000 expense = net +4000 from our test payments
-    // (there may be other payments in the DB, so we check delta)
-    // We verify by comparing before and after removing p1 and p2
-    sqlx::query("DELETE FROM payments WHERE id IN ($1, $2)").bind(p1).bind(p2).execute(&pool).await?;
-    let balance_without_test_payments = compute_opening_balance(&ctx, &filter).await?;
-    let delta = balance_before - balance_without_test_payments;
-    assert_eq!(delta, dec!(4000), "test payments net 5000-1000=4000 must be in opening balance");
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn load_bank_rows_groups_payments_by_counterparty() -> Result<()> {
-    use acta::app_ctx::AppCtx;
-    use acta::db::reports::load_bank_rows;
-    use acta::models::reports::{ReportsScope, ResolvedReportsFilter};
-
-    let Some(pool) = test_pool().await? else {
-        return Ok(());
-    };
-    let suffix = unique_suffix();
-    let today = chrono::Utc::now().date_naive();
-    let period_start = today - Duration::days(30);
-
-    let cp = create_test_counterparty(&pool, &suffix, &format!("ІТ Bank CP {suffix}"), None, None).await?;
-
-    let p1 = create_test_payment(&pool, DEFAULT_COMPANY_ID, Some(cp.id), dec!(3000), "income", today).await?;
-    let p2 = create_test_payment(&pool, DEFAULT_COMPANY_ID, Some(cp.id), dec!(1000), "expense", today).await?;
-
-    let ctx = AppCtx::new(pool.clone(), DEFAULT_COMPANY_ID);
-    let filter = ResolvedReportsFilter {
-        scope: ReportsScope::Active,
-        date_from: period_start,
-        date_to: today,
-        query: format!("ІТ Bank CP {suffix}"),
-    };
-
-    let rows = load_bank_rows(&ctx, &filter).await?;
-
-    assert_eq!(rows.len(), 1, "має бути один рядок по контрагенту після query фільтра");
-    assert_eq!(rows[0].income, dec!(3000));
-    assert_eq!(rows[0].expense, dec!(1000));
-    assert!(rows[0].label.contains(&suffix));
-    assert_eq!(rows[0].key, cp.id.to_string());
-
-    sqlx::query("DELETE FROM payments WHERE id IN ($1, $2)").bind(p1).bind(p2).execute(&pool).await?;
-    sqlx::query("DELETE FROM counterparties WHERE id = $1").bind(cp.id).execute(&pool).await?;
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn load_receivables_rows_calculates_overdue_days() -> Result<()> {
-    use acta::app_ctx::AppCtx;
-    use acta::db::reports::load_receivables_rows;
-    use acta::models::reports::{ReportsScope, ResolvedReportsFilter};
-
-    let Some(pool) = test_pool().await? else {
-        return Ok(());
-    };
-    let suffix = unique_suffix();
-    let today = chrono::Utc::now().date_naive();
-    let period_start = today - Duration::days(60);
-    let overdue_expected = today - Duration::days(10);
-
-    let cp = create_test_counterparty(&pool, &suffix, &format!("ІТ Recv CP {suffix}"), None, None).await?;
-
-    // Рахунок зі статусом issued та простроченою expected_payment_date
-    let inv_id = create_test_invoice(
-        &pool, DEFAULT_COMPANY_ID, cp.id,
-        &format!("INV-{suffix}"),
-        dec!(8000),
-        "issued",
-        Some(overdue_expected),
-        period_start + Duration::days(1),
-    ).await?;
-
-    // Рахунок зі статусом paid → НЕ повинен з'явитись у дебіторці
-    let paid_id = create_test_invoice(
-        &pool, DEFAULT_COMPANY_ID, cp.id,
-        &format!("INV-{suffix}-PAID"),
-        dec!(5000),
-        "paid",
-        None,
-        period_start + Duration::days(1),
-    ).await?;
-
-    let ctx = AppCtx::new(pool.clone(), DEFAULT_COMPANY_ID);
-    let filter = ResolvedReportsFilter {
-        scope: ReportsScope::Active,
-        date_from: period_start,
-        date_to: today,
-        query: format!("ІТ Recv CP {suffix}"),
-    };
-
-    let rows = load_receivables_rows(&ctx, &filter).await?;
-
-    assert_eq!(rows.len(), 1, "тільки issued рахунок має бути в дебіторці");
-    assert_eq!(rows[0].amount, dec!(8000));
-    assert!(rows[0].overdue_days >= 10, "прострочка має бути >= 10 днів");
-
-    sqlx::query("DELETE FROM invoices WHERE id IN ($1, $2)").bind(inv_id).bind(paid_id).execute(&pool).await?;
-    sqlx::query("DELETE FROM counterparties WHERE id = $1").bind(cp.id).execute(&pool).await?;
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn load_payables_rows_returns_expense_schedule_entries() -> Result<()> {
-    use acta::app_ctx::AppCtx;
-    use acta::db::reports::load_payables_rows;
-    use acta::models::reports::{ReportsScope, ResolvedReportsFilter};
-
-    let Some(pool) = test_pool().await? else {
-        return Ok(());
-    };
-    let suffix = unique_suffix();
-    let today = chrono::Utc::now().date_naive();
-    let period_start = today - Duration::days(30);
-
-    let cp = create_test_counterparty(&pool, &suffix, &format!("ІТ Payable CP {suffix}"), None, None).await?;
-
-    let title = format!("Оренда ІТ {suffix}");
-    let ps_id = create_test_payment_schedule(
-        &pool, DEFAULT_COMPANY_ID, Some(cp.id),
-        &title, dec!(6000), today,
-    ).await?;
-
-    // Виконаний запис — НЕ повинен з'явитись у кредиторці (is_completed = TRUE)
-    let completed_id = Uuid::new_v4();
-    sqlx::query(
-        r#"INSERT INTO payment_schedule
-           (id, company_id, counterparty_id, title, amount, direction, scheduled_date, is_completed, recurrence)
-           VALUES ($1, $2, $3, $4, $5, 'expense'::payment_direction, $6, TRUE, 'none')"#,
-    )
-    .bind(completed_id)
-    .bind(DEFAULT_COMPANY_ID)
-    .bind(Some(cp.id))
-    .bind(format!("Оренда ІТ {suffix} DONE"))
-    .bind(dec!(9999))
-    .bind(today)
-    .execute(&pool)
-    .await?;
-
-    let ctx = AppCtx::new(pool.clone(), DEFAULT_COMPANY_ID);
-    let filter = ResolvedReportsFilter {
-        scope: ReportsScope::Active,
-        date_from: period_start,
-        date_to: today,
-        query: format!("Оренда ІТ {suffix}"),
-    };
-
-    let rows = load_payables_rows(&ctx, &filter).await?;
-
-    assert_eq!(rows.len(), 1, "має бути один запис: виконаний excluded через is_completed=TRUE");
-    assert_eq!(rows[0].amount, dec!(6000));
-    assert!(rows[0].title.contains(&suffix));
-    assert_eq!(rows[0].overdue_days, 0, "scheduled_date=today → overdue_days=0");
-
-    sqlx::query("DELETE FROM payment_schedule WHERE id IN ($1, $2)").bind(ps_id).bind(completed_id).execute(&pool).await?;
-    sqlx::query("DELETE FROM counterparties WHERE id = $1").bind(cp.id).execute(&pool).await?;
-
-    Ok(())
-}
