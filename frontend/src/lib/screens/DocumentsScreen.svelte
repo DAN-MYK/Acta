@@ -22,6 +22,9 @@
   let drawerSection: HTMLElement | null = null;
   let drawerReturnFocus: HTMLElement | null = null;
   let lastEditorDocumentId = "";
+  let chainMenuOpen = false;
+  let chainMenuButton: HTMLButtonElement | null = null;
+  let chainMenuPopover: HTMLElement | null = null;
 
   const documentKindLabels: Record<DocumentKind, string> = {
     invoice: "Рахунок",
@@ -95,7 +98,18 @@
   }
 
   function onDrawerKeydown(event: KeyboardEvent) {
-    if (event.key === "Escape" && $documents.editor) {
+    if (event.key !== "Escape") {
+      return;
+    }
+
+    if (chainMenuOpen) {
+      event.preventDefault();
+      chainMenuOpen = false;
+      chainMenuButton?.focus();
+      return;
+    }
+
+    if ($documents.editor) {
       event.preventDefault();
       void documents.closeEditor();
     }
@@ -103,6 +117,45 @@
 
   function onDrawerBackdropClick() {
     void documents.closeEditor();
+  }
+
+  function toggleChainMenu() {
+    chainMenuOpen = !chainMenuOpen;
+  }
+
+  function closeChainMenu() {
+    chainMenuOpen = false;
+  }
+
+  function onWindowClickForChainMenu(event: MouseEvent) {
+    if (!chainMenuOpen) {
+      return;
+    }
+    const target = event.target as Node | null;
+    if (target && chainMenuButton?.contains(target)) {
+      return;
+    }
+    if (target && chainMenuPopover?.contains(target)) {
+      return;
+    }
+    closeChainMenu();
+  }
+
+  function onChainMenuAdvanceStatus() {
+    void documents.advanceStatus();
+    closeChainMenu();
+  }
+
+  function onChainMenuCreateChain(kind: DocumentKind) {
+    onCreateChainDraft(kind);
+    closeChainMenu();
+  }
+
+  $: {
+    const editorDocId = $documents.editor?.form.id ?? "";
+    if (!editorDocId && chainMenuOpen) {
+      chainMenuOpen = false;
+    }
   }
 
   function onDocumentSearch(event: Event) {
@@ -539,7 +592,7 @@
   {/if}
 </section>
 
-<svelte:window on:keydown={onDrawerKeydown} />
+<svelte:window on:keydown={onDrawerKeydown} on:click={onWindowClickForChainMenu} />
 
 {#if $documents.editor}
   <button
@@ -578,20 +631,51 @@
         >
           Зберегти
         </button>
-        <button class="btn-secondary" on:click={() => documents.advanceStatus()} disabled={$documents.loading}>
-          Наступний статус
-        </button>
-        {#each getChainTargets($documents.editor.form.kind) as targetKind}
+
+        <div class="chain-menu" class:chain-menu-open={chainMenuOpen}>
           <button
-            class="btn-secondary"
-            data-testid={`documents-chain-create-${targetKind}`}
-            on:click={() => onCreateChainDraft(targetKind)}
+            bind:this={chainMenuButton}
+            class="btn-secondary chain-menu-trigger"
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={chainMenuOpen}
+            on:click|stopPropagation={toggleChainMenu}
             disabled={$documents.loading}
           >
-            <AppIcon name={documentKindIcons[targetKind]} size={16} />
-            <span>Створити {documentKindActionLabels[targetKind]}</span>
+            <span>Дії далі</span>
+            <span aria-hidden="true" class="chain-menu-caret">▾</span>
           </button>
-        {/each}
+          <div
+            bind:this={chainMenuPopover}
+            class="chain-menu-popover"
+            role="menu"
+            hidden={!chainMenuOpen}
+          >
+            <button
+              role="menuitem"
+              type="button"
+              class="chain-menu-item"
+              on:click={onChainMenuAdvanceStatus}
+              disabled={$documents.loading}
+            >
+              Наступний статус
+            </button>
+            {#each getChainTargets($documents.editor.form.kind) as targetKind}
+              <button
+                role="menuitem"
+                type="button"
+                class="chain-menu-item"
+                data-testid={`documents-chain-create-${targetKind}`}
+                on:click={() => onChainMenuCreateChain(targetKind)}
+                disabled={$documents.loading}
+              >
+                <AppIcon name={documentKindIcons[targetKind]} size={16} />
+                <span>Створити {documentKindActionLabels[targetKind]}</span>
+              </button>
+            {/each}
+          </div>
+        </div>
+
         {#if ["act", "invoice"].includes($documents.editor.form.kind)}
           <button class="btn-ghost" on:click={() => documents.generatePdf()} disabled={$documents.loading}>
             PDF
@@ -718,91 +802,75 @@
         <div class="editor-items-header">
           <div>
             <strong>Існуючий PDF</strong>
-            <p>
-              Підтриманий сценарій: прив’язати існуючий PDF, прочитати текстовий шар і виконати exact
-              replace у підтримуваному content stream. Це не універсальний PDF-редактор.
-            </p>
+            {#if $documents.editor.pdf}
+              <p class="existing-pdf-status">
+                {$documents.editor.pdf.filePath} · {$documents.editor.pdf.pageCount} стор. ·
+                {$documents.editor.pdf.editable ? "Exact replace доступний" : "Тільки перегляд"}
+              </p>
+            {:else}
+              <p class="existing-pdf-status">Не прив'язано</p>
+            {/if}
           </div>
           <div class="editor-actions existing-pdf-actions">
             <button class="btn-secondary" on:click={onAttachExistingPdf} disabled={$documents.loading}>
-              {$documents.editor.pdf ? "Прив’язати інший PDF" : "Прив’язати PDF"}
+              {$documents.editor.pdf ? "Прив'язати інший PDF" : "Прив'язати PDF"}
             </button>
-            <button
-              class="btn-ghost"
-              on:click={onOpenCurrentPdf}
-              disabled={$documents.loading || !$documents.editor.pdf}
-            >
-              Відкрити PDF
-            </button>
+            {#if $documents.editor.pdf}
+              <button
+                class="btn-ghost"
+                on:click={onOpenCurrentPdf}
+                disabled={$documents.loading}
+              >
+                Відкрити PDF
+              </button>
+            {/if}
           </div>
         </div>
 
         {#if $documents.editor.pdf}
-          <div class="chain-summary">
-            <div class="chain-summary-block chain-summary-block-wide">
-              <span>Файл</span>
-              <strong>{$documents.editor.pdf.filePath}</strong>
-            </div>
-            <div class="chain-summary-block">
-              <span>Сторінки</span>
-              <strong>{$documents.editor.pdf.pageCount}</strong>
-            </div>
-            <div class="chain-summary-block">
-              <span>Текстовий шар</span>
-              <strong>{$documents.editor.pdf.hasTextOps ? "Знайдено" : "Не знайдено"}</strong>
-            </div>
-            <div class="chain-summary-block">
-              <span>Exact replace</span>
-              <strong>{$documents.editor.pdf.editable ? "Підтримується" : "Непідтримується"}</strong>
-            </div>
-          </div>
+          <details class="existing-pdf-details" open={$documents.editor.pdf.warnings.length > 0}>
+            <summary>Текстовий шар і exact replace</summary>
 
-          {#if $documents.editor.pdf.warnings.length > 0}
-            <div class="existing-pdf-warnings">
-              {#each $documents.editor.pdf.warnings as warning}
-                <p>{warning}</p>
-              {/each}
-            </div>
-          {/if}
-
-          <label class="editor-grid-span existing-pdf-preview">
-            Витягнутий текст
-            <textarea rows="10" readonly value={$documents.editor.pdf.extractedText}></textarea>
-          </label>
-
-          <div class="editor-item existing-pdf-replace">
-            <label class="editor-item-field">
-              <span>Знайти текст</span>
-              <input bind:value={pdfFindText} placeholder="Точний фрагмент з витягнутого тексту" />
-            </label>
-            <label class="editor-item-field">
-              <span>Замінити на</span>
-              <input bind:value={pdfReplaceText} placeholder="Новий текст" />
-            </label>
-            <button
-              class="btn-primary"
-              on:click={onApplyPdfTextReplace}
-              disabled={
-                $documents.loading ||
-                !$documents.editor.pdf.editable ||
-                !pdfFindText.trim() ||
-                !pdfReplaceText.trim()
-              }
-            >
-              Застосувати exact replace
-            </button>
-          </div>
-        {:else}
-          <div class="editor-items-empty" data-testid="documents-existing-pdf-empty">
-            <strong>PDF ще не прив’язано</strong>
-            <p>
-              Прив’яжіть існуючий PDF до цього документа, щоб переглянути текстовий шар і виконати
-              підтримувану заміну тексту без перезапису оригіналу.
+            <p class="existing-pdf-meta">
+              Текстовий шар: {$documents.editor.pdf.hasTextOps ? "Знайдено" : "Не знайдено"}
             </p>
-            <button class="btn-primary" on:click={onAttachExistingPdf} disabled={$documents.loading}>
-              Прив’язати перший PDF
-            </button>
-          </div>
+
+            {#if $documents.editor.pdf.warnings.length > 0}
+              <div class="existing-pdf-warnings">
+                {#each $documents.editor.pdf.warnings as warning}
+                  <p>{warning}</p>
+                {/each}
+              </div>
+            {/if}
+
+            <label class="existing-pdf-preview">
+              Витягнутий текст
+              <textarea rows="10" readonly value={$documents.editor.pdf.extractedText}></textarea>
+            </label>
+
+            <div class="existing-pdf-replace">
+              <label>
+                <span>Знайти текст</span>
+                <input bind:value={pdfFindText} placeholder="Точний фрагмент з витягнутого тексту" />
+              </label>
+              <label>
+                <span>Замінити на</span>
+                <input bind:value={pdfReplaceText} placeholder="Новий текст" />
+              </label>
+              <button
+                class="btn-primary"
+                on:click={onApplyPdfTextReplace}
+                disabled={
+                  $documents.loading ||
+                  !$documents.editor.pdf.editable ||
+                  !pdfFindText.trim() ||
+                  !pdfReplaceText.trim()
+                }
+              >
+                Застосувати exact replace
+              </button>
+            </div>
+          </details>
         {/if}
       </div>
     {/if}

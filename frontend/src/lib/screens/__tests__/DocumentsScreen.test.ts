@@ -307,7 +307,7 @@ describe("DocumentsScreen component", () => {
       "btn-primary"
     );
     expect(buttonByText(target, "Зберегти").className).toContain("btn-primary");
-    expect(buttonByText(target, "Наступний статус").className).toContain("btn-secondary");
+    expect(buttonByText(target, "Дії далі").className).toContain("btn-secondary");
     expect(buttonByText(target, "Видалити").className).toContain("btn-danger");
     expect(buttonByText(target, "Закрити").className).toContain("btn-ghost");
     expect(buttonByText(target, "PDF").className).toContain("btn-ghost");
@@ -566,7 +566,7 @@ describe("DocumentsScreen component", () => {
     const { component, target } = renderDocuments();
     const replaceButton = buttonByText(target, "Застосувати exact replace");
 
-    expect(target.textContent).toContain("Непідтримується");
+    expect(target.textContent).toContain("Тільки перегляд");
     expect(replaceButton.disabled).toBe(true);
 
     component.$destroy();
