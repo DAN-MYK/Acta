@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Result};
 use chrono::{Datelike, Duration, Local, NaiveDate, Weekday};
@@ -11,10 +11,9 @@ use uuid::Uuid;
 use crate::app_ctx::AppCtx;
 use crate::db;
 use crate::import::bas_payments::{
-    apply_imported_payments, bank_import_dir, import_payments_from_csv,
-    import_payments_from_statement, newest_payments_csv_path, newest_statement_path,
-    parse_payments_statement_file, PaymentImportAction, PaymentImportPlanRow,
-    PaymentImportReport,
+    apply_imported_payments, bank_import_dir, import_payments_from_statement,
+    newest_statement_path, parse_payments_statement_file, PaymentImportAction,
+    PaymentImportPlanRow, PaymentImportReport,
 };
 use crate::models::payment::{NewPayment, PaymentDirection, UpdatePayment};
 use crate::services::payment_matching::{
