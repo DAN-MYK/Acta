@@ -1,17 +1,18 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { argv, cwd, exit } from "node:process";
+import { TextDecoder } from "node:util";
 
 const roots = argv.slice(2);
 const scanRoots = roots.length > 0 ? roots : ["frontend/src", "src", "tests", "e2e-tests/test"];
 const extensions = new Set([".css", ".js", ".rs", ".svelte", ".ts"]);
 const mojibakePatterns = [
-  /[\u00c0-\u00ff]{2,}/,
   /(?:\u00d0|\u00d1|\u0432\u0402|\u0432\u045a|\u0432\u045c|\u0432\u201d){2,}/,
   /(?:[\u0420\u0421\u00d0\u00d1][\u0080-\u00ff]){3,}/,
   /(?:[\u0420\u0421][\u00b0-\u00b7\u0451\u0402-\u040f\u0452-\u045f\u2026]){2,}/,
   /\?{4,}/
 ];
+const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 const ignoreDirs = new Set([
   ".cache",
   ".git",
@@ -61,7 +62,20 @@ const findings = [];
 for (const root of scanRoots) {
   const files = await collectFiles(join(cwd(), root));
   for (const file of files) {
-    const text = await readFile(file, "utf8");
+    const bytes = await readFile(file);
+    if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+      findings.push(`${file}:1: UTF-8 BOM detected`);
+      continue;
+    }
+
+    let text;
+    try {
+      text = utf8Decoder.decode(bytes);
+    } catch {
+      findings.push(`${file}:1: invalid UTF-8 bytes`);
+      continue;
+    }
+
     const lines = text.split(/\r?\n/);
 
     lines.forEach((line, index) => {
