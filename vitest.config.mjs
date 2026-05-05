@@ -9,6 +9,7 @@ export default defineConfig({
     include: [
       "e2e-tests/__tests__/**/*.test.ts",
       "frontend/src/__tests__/**/*.test.ts",
+      "frontend/src/lib/__tests__/**/*.test.ts",
       "frontend/src/lib/components/__tests__/**/*.test.ts",
       "frontend/src/lib/stores/__tests__/**/*.test.ts",
       "frontend/src/lib/screens/__tests__/**/*.test.ts"

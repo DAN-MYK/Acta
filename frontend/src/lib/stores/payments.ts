@@ -19,11 +19,18 @@ import {
 } from "../api";
 import { counterpartiesStore } from "./counterparties";
 import { navigationStore } from "./navigation";
+import { formatMinorMoney, parseMoneyToMinor } from "../money";
+import {
+  filterCalendarEvents,
+  formatLocalDate,
+  formatLocalMonth,
+  plusDays,
+  shiftMonth
+} from "./paymentsUtils";
 import { tasksStore } from "./tasks";
 import type {
   MutationResultDto,
   OpenTemplateResultDto,
-  PaymentCalendarDayDto,
   PaymentCalendarEventDto,
   PaymentCalendarFilterKind,
   PaymentCalendarMonthDto,
@@ -118,70 +125,6 @@ const initialState: PaymentsStoreState = {
   activeAction: null,
   activePaymentId: null
 };
-
-function formatLocalDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function formatLocalMonth(date: Date): string {
-  return formatLocalDate(date).slice(0, 7);
-}
-
-function shiftMonth(month: string, delta: number): string {
-  const [yearPart, monthPart] = month.split("-");
-  const year = Number.parseInt(yearPart ?? "", 10);
-  const monthIndex = Number.parseInt(monthPart ?? "", 10);
-  const anchor = new Date(year, Math.max(monthIndex - 1, 0), 1);
-  anchor.setMonth(anchor.getMonth() + delta);
-  return formatLocalMonth(anchor);
-}
-
-function plusDays(dateValue: string, delta: number): string {
-  const [yearPart, monthPart, dayPart] = dateValue.split("-");
-  const anchor = new Date(
-    Number.parseInt(yearPart ?? "", 10),
-    Math.max(Number.parseInt(monthPart ?? "", 10) - 1, 0),
-    Number.parseInt(dayPart ?? "", 10)
-  );
-  anchor.setDate(anchor.getDate() + delta);
-  return formatLocalDate(anchor);
-}
-
-function parseMoneyValue(value: string): number {
-  const normalized = value
-    .replace(/\u00a0/g, "")
-    .replace(/\s+/g, "")
-    .replace(/[^0-9,.-]/g, "")
-    .replace(",", ".")
-    .trim();
-  const parsed = Number.parseFloat(normalized);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function formatMoneyValue(value: number): string {
-  return new Intl.NumberFormat("uk-UA", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(Math.max(0, value));
-}
-
-function filterCalendarEvents(
-  day: PaymentCalendarDayDto | null | undefined,
-  filter: PaymentCalendarFilterKind
-): PaymentCalendarEventDto[] {
-  if (!day) {
-    return [];
-  }
-
-  if (filter === "all") {
-    return day.events;
-  }
-
-  return day.events.filter((event) => event.kind === filter);
-}
 
 function createPaymentsStore() {
   const { subscribe, update } = writable<PaymentsStoreState>(initialState);
@@ -330,6 +273,25 @@ function createPaymentsStore() {
     }));
   };
 
+  const failMutation = (message: string): MutationResultDto => ({ ok: false, message });
+
+  const runMutationAction = async <T extends MutationResultDto>(
+    action: PaymentsActiveAction,
+    task: () => Promise<T>,
+    paymentId?: string
+  ): Promise<T | MutationResultDto> => {
+    beginAction(action, paymentId);
+    try {
+      return await task();
+    } catch (error) {
+      const message = String(error);
+      update((state) => ({ ...state, message, error: message }));
+      return failMutation(message);
+    } finally {
+      finishAction();
+    }
+  };
+
   const getSelectedPreviewCandidate = (
     preview: PaymentMatchPreviewDto,
     selectedCandidateId: string | null
@@ -360,18 +322,23 @@ function createPaymentsStore() {
     selectedCandidateId: manualPicker.candidates[0]?.documentId ?? null
   });
 
+  const parseAmountMinor = (value: string): bigint => parseMoneyToMinor(value) ?? 0n;
+
+  const formatRemainingMinor = (value: bigint): string =>
+    formatMinorMoney(value < 0n ? 0n : value);
+
   const recalculateSplitDraft = (
     splitDraft: PaymentSplitDraftState
   ): PaymentSplitDraftState => {
-    const paymentAmount = parseMoneyValue(splitDraft.paymentAmountStr);
+    const paymentAmount = parseAmountMinor(splitDraft.paymentAmountStr);
     const allocatedAmount = splitDraft.allocations.reduce(
-      (sum, allocation) => sum + parseMoneyValue(allocation.amount),
-      0
+      (sum, allocation) => sum + parseAmountMinor(allocation.amount),
+      0n
     );
 
     return {
       ...splitDraft,
-      remainingAmountStr: formatMoneyValue(paymentAmount - allocatedAmount)
+      remainingAmountStr: formatRemainingMinor(paymentAmount - allocatedAmount)
     };
   };
 
@@ -382,11 +349,11 @@ function createPaymentsStore() {
   ): PaymentSplitDraftState => {
     const paymentAmountStr = state.list?.items.find((item) => item.id === paymentId)?.amountStr;
     const fallbackAmount = candidates.reduce(
-      (sum, candidate) => sum + parseMoneyValue(candidate.openAmountStr),
-      0
+      (sum, candidate) => sum + parseAmountMinor(candidate.openAmountStr),
+      0n
     );
-    const paymentAmount = parseMoneyValue(paymentAmountStr ?? "0");
-    const resolvedAmount = formatMoneyValue(paymentAmount > 0 ? paymentAmount : fallbackAmount);
+    const paymentAmount = parseAmountMinor(paymentAmountStr ?? "0");
+    const resolvedAmount = formatMinorMoney(paymentAmount > 0n ? paymentAmount : fallbackAmount);
 
     return {
       paymentId,
@@ -402,17 +369,16 @@ function createPaymentsStore() {
     candidates: PaymentMatchCandidateDto[]
   ): PaymentSplitDraftState => {
     const draft = buildInitialSplitDraft(state, paymentId, candidates);
-    let remainingAmount = parseMoneyValue(draft.paymentAmountStr);
+    let remainingAmount = parseAmountMinor(draft.paymentAmountStr);
 
     draft.allocations = candidates
       .map((candidate) => {
-        const allocationAmount = Math.min(
-          Math.max(remainingAmount, 0),
-          parseMoneyValue(candidate.openAmountStr)
-        );
+        const candidateOpen = parseAmountMinor(candidate.openAmountStr);
+        const cap = remainingAmount > 0n ? remainingAmount : 0n;
+        const allocationAmount = cap < candidateOpen ? cap : candidateOpen;
         remainingAmount -= allocationAmount;
 
-        if (allocationAmount <= 0) {
+        if (allocationAmount <= 0n) {
           return null;
         }
 
@@ -421,7 +387,7 @@ function createPaymentsStore() {
           documentKind: candidate.documentKind,
           title: candidate.title,
           openAmountStr: candidate.openAmountStr,
-          amount: formatMoneyValue(allocationAmount)
+          amount: formatMinorMoney(allocationAmount)
         };
       })
       .filter((allocation): allocation is PaymentSplitAllocationDraft => allocation !== null);
@@ -518,8 +484,7 @@ function createPaymentsStore() {
     },
 
     async completeSchedule(scheduleId: string): Promise<MutationResultDto> {
-      beginAction("calendar-complete", scheduleId);
-      try {
+      return runMutationAction("calendar-complete", async () => {
         const result = await paymentScheduleComplete({ scheduleId });
         if (result.ok) {
           const snapshot = get({ subscribe });
@@ -529,13 +494,7 @@ function createPaymentsStore() {
           update((state) => ({ ...state, message: result.message, error: result.message }));
         }
         return result;
-      } catch (error) {
-        const message = String(error);
-        update((state) => ({ ...state, message, error: message }));
-        return { ok: false, message };
-      } finally {
-        finishAction();
-      }
+      }, scheduleId);
     },
 
     async openCalendarTask(taskId: string) {
@@ -574,8 +533,7 @@ function createPaymentsStore() {
     },
 
     async importCsv(): Promise<MutationResultDto> {
-      beginAction("import");
-      try {
+      return runMutationAction("import", async () => {
         const result = await paymentsImportLatestCsv();
         if (result.ok) {
           await refreshAfterMutation(result.message);
@@ -583,13 +541,7 @@ function createPaymentsStore() {
           update((state) => ({ ...state, message: result.message, error: result.message }));
         }
         return result;
-      } catch (error) {
-        const message = String(error);
-        update((state) => ({ ...state, message, error: message }));
-        return { ok: false, message };
-      } finally {
-        finishAction();
-      }
+      });
     },
 
     /// Запускає file picker, парсить виписку і кладе план у `importPreview`.
@@ -685,8 +637,7 @@ function createPaymentsStore() {
     },
 
     async syncBank(): Promise<MutationResultDto> {
-      beginAction("sync");
-      try {
+      return runMutationAction("sync", async () => {
         const result = await paymentsSyncBank();
         if (result.ok) {
           await refreshAfterMutation(result.message);
@@ -694,13 +645,7 @@ function createPaymentsStore() {
           update((state) => ({ ...state, message: result.message, error: result.message }));
         }
         return result;
-      } catch (error) {
-        const message = String(error);
-        update((state) => ({ ...state, message, error: message }));
-        return { ok: false, message };
-      } finally {
-        finishAction();
-      }
+      });
     },
 
     async reconcile(id: string) {
@@ -948,14 +893,15 @@ function createPaymentsStore() {
         return { ok: false, message };
       }
 
-      const remainingAmount = parseMoneyValue(splitDraft.remainingAmountStr);
-      if (remainingAmount <= 0) {
+      const remainingAmount = parseAmountMinor(splitDraft.remainingAmountStr);
+      if (remainingAmount <= 0n) {
         const message = "Увесь платіж уже розподілено. За потреби змініть суми в чернетці.";
         update((state) => ({ ...state, message, error: message }));
         return { ok: false, message };
       }
 
-      const allocationAmount = Math.min(remainingAmount, parseMoneyValue(candidate.openAmountStr));
+      const candidateOpen = parseAmountMinor(candidate.openAmountStr);
+      const allocationAmount = remainingAmount < candidateOpen ? remainingAmount : candidateOpen;
 
       update((state) => {
         if (!state.splitDraft) {
@@ -973,7 +919,7 @@ function createPaymentsStore() {
                 documentKind: candidate.documentKind,
                 title: candidate.title,
                 openAmountStr: candidate.openAmountStr,
-                amount: formatMoneyValue(allocationAmount)
+                amount: formatMinorMoney(allocationAmount)
               }
             ]
           }),
@@ -996,14 +942,23 @@ function createPaymentsStore() {
           return state;
         }
 
-        const nextAmount = parseMoneyValue(amount);
-        const documentOpenAmount = parseMoneyValue(current.openAmountStr);
+        const parsedNext = parseMoneyToMinor(amount);
+        if (parsedNext === null) {
+          return {
+            ...state,
+            message: "Сума розподілу має бути числом у форматі 0,00.",
+            error: "Сума розподілу має бути числом у форматі 0,00."
+          };
+        }
+
+        const nextAmount = parsedNext;
+        const documentOpenAmount = parseAmountMinor(current.openAmountStr);
         const otherAllocationsTotal = state.splitDraft.allocations
           .filter((allocation) => allocation.documentId !== documentId)
-          .reduce((sum, allocation) => sum + parseMoneyValue(allocation.amount), 0);
-        const paymentAmount = parseMoneyValue(state.splitDraft.paymentAmountStr);
+          .reduce((sum, allocation) => sum + parseAmountMinor(allocation.amount), 0n);
+        const paymentAmount = parseAmountMinor(state.splitDraft.paymentAmountStr);
 
-        if (nextAmount <= 0) {
+        if (nextAmount <= 0n) {
           return {
             ...state,
             message: "Сума розподілу має бути більшою за нуль.",
@@ -1135,7 +1090,7 @@ function createPaymentsStore() {
         return errorResult(message);
       }
 
-      if (parseMoneyValue(splitDraft.remainingAmountStr) > 0) {
+      if (parseAmountMinor(splitDraft.remainingAmountStr) !== 0n) {
         const message = "Розподіл ще не завершено. Закрийте залишок платежу або зменште суму.";
         update((state) => ({ ...state, message, error: message }));
         return errorResult(message);
