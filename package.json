@@ -8,6 +8,7 @@
     "dev:guard": "node scripts/ensure-vite-dev.mjs",
     "build": "vite build",
     "check": "svelte-check --tsconfig ./tsconfig.json",
+    "check:encoding": "node scripts/check-text-encoding.mjs",
     "test:frontend": "vitest run --config vitest.config.mjs",
     "test:e2e": "npm --prefix e2e-tests test",
     "tauri": "tauri"

@@ -78,7 +78,7 @@ describe("Acta desktop shell smoke", () => {
 
     await browser.waitUntil(async () => (await getTheme()) !== initialTheme, {
       timeout: 30000,
-      timeoutMsg: "РџРµСЂРµРјРёРєР°С‡ С‚РµРјРё РЅРµ Р·РјС–РЅРёРІ body[data-theme] Сѓ native Tauri runtime"
+      timeoutMsg: "Перемикач теми не змінив body[data-theme] у native Tauri runtime"
     });
 
     const toggledTheme = await getTheme();
@@ -96,7 +96,7 @@ describe("Acta desktop shell smoke", () => {
 
     await browser.waitUntil(async () => (await getTheme()) === initialTheme, {
       timeout: 30000,
-      timeoutMsg: "РўРµРјР° РЅРµ РїРѕРІРµСЂРЅСѓР»Р°СЃСЊ Сѓ РїРѕС‡Р°С‚РєРѕРІРёР№ СЃС‚Р°РЅ РїС–СЃР»СЏ smoke toggle"
+      timeoutMsg: "Тема не повернулась у початковий стан після smoke toggle"
     });
   });
 });
