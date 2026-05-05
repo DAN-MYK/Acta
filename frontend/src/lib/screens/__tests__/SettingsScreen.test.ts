@@ -71,34 +71,6 @@ const mocks = vi.hoisted(() => {
     importExecute: vi.fn(),
     importReset: vi.fn()
   };
-  it("renders theme choice as segmented control without density leak", async () => {
-    const { component, target } = renderSettings();
-    await tick();
-
-    const segmented = target.querySelector('[data-testid="theme-segmented"]');
-
-    expect(segmented).toBeTruthy();
-    expect(segmented?.getAttribute("role")).toBe("radiogroup");
-    expect(target.textContent).toContain("Світла");
-    expect(target.textContent).toContain("Темна");
-    expect(target.textContent).not.toContain("selector не впливав");
-
-    component.$destroy();
-  });
-
-  it("marks the active theme option via radio semantics", async () => {
-    const { component, target } = renderSettings();
-    await tick();
-
-    const radios = Array.from(target.querySelectorAll('[data-testid="theme-segmented"] button'));
-
-    expect(radios).toHaveLength(2);
-    expect(radios[0].getAttribute("role")).toBe("radio");
-    expect(radios[0].getAttribute("aria-checked")).toBe("true");
-    expect(radios[1].getAttribute("aria-checked")).toBe("false");
-
-    component.$destroy();
-  });
 });
 
 vi.mock("../../stores/settings", () => ({
@@ -552,6 +524,35 @@ describe("SettingsScreen", () => {
     await tick();
 
     expect(mocks.importReset).toHaveBeenCalled();
+
+    component.$destroy();
+  });
+
+  it("renders theme choice as segmented control without density leak", async () => {
+    const { component, target } = renderSettings();
+    await tick();
+
+    const segmented = target.querySelector('[data-testid="theme-segmented"]');
+
+    expect(segmented).toBeTruthy();
+    expect(segmented?.getAttribute("role")).toBe("radiogroup");
+    expect(target.textContent).toContain("Світла");
+    expect(target.textContent).toContain("Темна");
+    expect(target.textContent).not.toContain("selector не впливав");
+
+    component.$destroy();
+  });
+
+  it("marks the active theme option via radio semantics", async () => {
+    const { component, target } = renderSettings();
+    await tick();
+
+    const radios = Array.from(target.querySelectorAll('[data-testid="theme-segmented"] button'));
+
+    expect(radios).toHaveLength(2);
+    expect(radios[0].getAttribute("role")).toBe("radio");
+    expect(radios[0].getAttribute("aria-checked")).toBe("true");
+    expect(radios[1].getAttribute("aria-checked")).toBe("false");
 
     component.$destroy();
   });

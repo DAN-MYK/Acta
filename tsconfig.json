@@ -5,6 +5,8 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "strict": true,
+    "allowUnreachableCode": false,
+    "noFallthroughCasesInSwitch": true,
     "allowJs": false,
     "checkJs": false,
     "esModuleInterop": true,

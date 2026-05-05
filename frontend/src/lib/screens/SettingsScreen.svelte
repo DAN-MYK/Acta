@@ -136,31 +136,6 @@
             </button>
           </div>
           <span style="display: none;">Налаштування щільності поки прибрано</span>
-
-          {#if false}
-          <div class="settings-actions-row">
-            <button
-              class={!$settings.screen?.preferences.darkMode ? "btn-primary" : "btn-secondary"}
-              on:click={() => onSettingsThemeChange(false)}
-              disabled={$settings.loading}
-              aria-busy={$settings.loading ? "true" : "false"}
-            >
-              Світла тема
-            </button>
-            <button
-              class={$settings.screen?.preferences.darkMode ? "btn-primary" : "btn-secondary"}
-              on:click={() => onSettingsThemeChange(true)}
-              disabled={$settings.loading}
-              aria-busy={$settings.loading ? "true" : "false"}
-            >
-              Темна тема
-            </button>
-          </div>
-
-          <p class="hint">
-            Налаштування щільності поки прибрано: selector не впливав на layout і створював хибне очікування.
-          </p>
-          {/if}
         </div>
       {:else if $settings.section === "company"}
         <div class="settings-card">

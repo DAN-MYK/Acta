@@ -378,17 +378,6 @@ export interface PaymentReconcileSplitRequest {
   allocations: PaymentReconcileSplitAllocationRequest[];
 }
 
-export interface PaymentReconcileSplitAllocationRequest {
-  documentKind: "act" | "invoice";
-  documentId: string;
-  amount: string;
-}
-
-export interface PaymentReconcileSplitRequest {
-  paymentId: string;
-  allocations: PaymentReconcileSplitAllocationRequest[];
-}
-
 export interface PaymentReconcileSplitAllocationResultDto {
   documentId: string;
   documentKind: "act" | "invoice";
@@ -488,22 +477,6 @@ export interface PaymentImportCommitRequest {
   path: string;
   fileSize: number;
   fileMtimeSecs: number;
-}
-
-export interface PaymentReconcileSplitAllocationDto {
-  documentId: string;
-  documentKind: "act" | "invoice";
-  title: string;
-  amountStr: string;
-}
-
-export interface PaymentReconcileSplitResultDto {
-  ok: boolean;
-  message: string;
-  paymentId: string;
-  allocationCount: number;
-  totalAllocatedStr: string;
-  allocations: PaymentReconcileSplitAllocationDto[];
 }
 
 export type TaskStatus = "open" | "in_progress" | "done" | "cancelled";

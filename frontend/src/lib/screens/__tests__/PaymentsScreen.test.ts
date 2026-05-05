@@ -111,179 +111,6 @@ const mocks = vi.hoisted(() => {
     updateManualMatchQuery: vi.fn(),
     updateSplitAllocationAmount: vi.fn()
   };
-  it("renders split-draft strings without mojibake", async () => {
-    setPaymentsState({
-      splitDraft: {
-        paymentId: "payment-1",
-        paymentAmountStr: "100,00 грн",
-        remainingAmountStr: "20,00 грн",
-        allocations: []
-      }
-    });
-
-    const { component, target } = renderPayments();
-    await tick();
-
-    const text = target.textContent ?? "";
-
-    expect(text).toContain("Чернетка розподілу");
-    expect(text).toContain("Сума платежу");
-    expect(text).toContain("Залишок");
-    expect(text).toContain("Додайте документи з manual picker");
-    expect(text).not.toContain("РІР‚Сћ");
-    expect(text).not.toContain("Р В§Р ВµРЎР‚Р Р…Р ВµРЎвЂљР С”Р В°");
-
-    component.$destroy();
-  });
-
-  it("renders split-allocation controls without mojibake", async () => {
-    setPaymentsState({
-      splitDraft: {
-        paymentId: "payment-1",
-        paymentAmountStr: "100,00 грн",
-        remainingAmountStr: "20,00 грн",
-        allocations: [
-          {
-            documentId: "invoice-1",
-            documentKind: "invoice",
-            title: "INV-001",
-            openAmountStr: "20,00 грн",
-            amount: "20,00"
-          }
-        ]
-      }
-    });
-
-    const { component, target } = renderPayments();
-    await tick();
-
-    const text = target.textContent ?? "";
-
-    expect(text).toContain("Залишок документа");
-    expect(text).toContain("Сума");
-    expect(text).toContain("Прибрати");
-    expect(text).toContain("Підтвердити розподіл");
-
-    component.$destroy();
-  });
-
-  it("renders manual-picker split button without mojibake", async () => {
-    setPaymentsState({
-      matchPreview: {
-        paymentId: "payment-1",
-        isReconciled: false,
-        decisionKind: "none",
-        candidates: [],
-        autoMatch: null
-      },
-      manualPicker: {
-        paymentId: "payment-1",
-        query: "",
-        candidates: [],
-        selectedCandidateId: null
-      }
-    });
-
-    const { component, target } = renderPayments();
-    await tick();
-
-    expect(target.textContent ?? "").toContain("Додати до розподілу");
-
-    component.$destroy();
-  });
-
-  it("renders split preview with recommended candidates", async () => {
-    setPaymentsState({
-      matchPreview: {
-        paymentId: "payment-1",
-        isReconciled: false,
-        decisionKind: "split",
-        candidates: [
-          {
-            documentId: "invoice-1",
-            documentKind: "invoice",
-            title: "INV-001",
-            openAmountStr: "4 000,00 РіСЂРЅ",
-            totalScore: 88,
-            sameIban: true,
-            referenceHit: true,
-            textHits: 2,
-            daysDistance: 1
-          },
-          {
-            documentId: "act-9",
-            documentKind: "act",
-            title: "ACT-009",
-            openAmountStr: "4 450,00 РіСЂРЅ",
-            totalScore: 86,
-            sameIban: true,
-            referenceHit: true,
-            textHits: 2,
-            daysDistance: 0
-          }
-        ],
-        autoMatch: null
-      },
-      splitDraft: {
-        paymentId: "payment-1",
-        paymentAmountStr: "8 450,00 РіСЂРЅ",
-        remainingAmountStr: "0,00 РіСЂРЅ",
-        allocations: [
-          {
-            documentId: "invoice-1",
-            documentKind: "invoice",
-            title: "INV-001",
-            openAmountStr: "4 000,00 РіСЂРЅ",
-            amount: "4 000,00"
-          },
-          {
-            documentId: "act-9",
-            documentKind: "act",
-            title: "ACT-009",
-            openAmountStr: "4 450,00 РіСЂРЅ",
-            amount: "4 450,00"
-          }
-        ]
-      }
-    });
-
-    const { component, target } = renderPayments();
-    await tick();
-
-    const text = target.textContent ?? "";
-    expect(text).toContain("Рекомендований розподіл платежу");
-    expect(text).toContain("INV-001");
-    expect(text).toContain("ACT-009");
-    expect(text).toContain("Рекомендація для розподілу");
-
-    component.$destroy();
-  });
-  it("describes why manual confirmation is unavailable", () => {
-    setPaymentsState({
-      matchPreview: {
-        paymentId: "payment-1",
-        isReconciled: false,
-        decisionKind: "none",
-        candidates: [],
-        autoMatch: null
-      },
-      manualPicker: {
-        paymentId: "payment-1",
-        query: "missing",
-        candidates: [],
-        selectedCandidateId: null
-      }
-    });
-
-    const { component, target } = renderPayments();
-    const confirmButton = buttonByText(target, "РџС–РґС‚РІРµСЂРґРёС‚Рё РІРёР±СЂР°РЅРёР№ РґРѕРєСѓРјРµРЅС‚");
-    const descriptionId = confirmButton.getAttribute("aria-describedby");
-
-    expect(descriptionId).toBeTruthy();
-    expect(target.querySelector(`#${descriptionId}`)?.textContent).toContain("РєР°РЅРґРёРґР°С‚");
-
-    component.$destroy();
-  });
 });
 
 vi.mock("../../stores/payments", () => ({
@@ -872,6 +699,194 @@ describe("PaymentsScreen component", () => {
 
     expect(target.textContent).toContain("За цим запитом кандидатів поки немає.");
     expect(buttonByText(target, "Підтвердити вибраний документ").disabled).toBe(true);
+
+    component.$destroy();
+  });
+
+  it("renders split-draft strings without mojibake", async () => {
+    setPaymentsState({
+      matchPreview: {
+        paymentId: "payment-1",
+        isReconciled: false,
+        decisionKind: "none",
+        candidates: [],
+        autoMatch: null
+      },
+      splitDraft: {
+        paymentId: "payment-1",
+        paymentAmountStr: "100,00 грн",
+        remainingAmountStr: "20,00 грн",
+        allocations: []
+      }
+    });
+
+    const { component, target } = renderPayments();
+    await tick();
+
+    const text = target.textContent ?? "";
+
+    expect(text).toContain("Чернетка розподілу");
+    expect(text).toContain("Сума платежу");
+    expect(text).toContain("Залишок");
+    expect(text).toContain("Додайте документи з manual picker");
+    expect(text).not.toContain("вЂў");
+
+    component.$destroy();
+  });
+
+  it("renders split-allocation controls without mojibake", async () => {
+    setPaymentsState({
+      matchPreview: {
+        paymentId: "payment-1",
+        isReconciled: false,
+        decisionKind: "none",
+        candidates: [],
+        autoMatch: null
+      },
+      splitDraft: {
+        paymentId: "payment-1",
+        paymentAmountStr: "100,00 грн",
+        remainingAmountStr: "20,00 грн",
+        allocations: [
+          {
+            documentId: "invoice-1",
+            documentKind: "invoice",
+            title: "INV-001",
+            openAmountStr: "20,00 грн",
+            amount: "20,00"
+          }
+        ]
+      }
+    });
+
+    const { component, target } = renderPayments();
+    await tick();
+
+    const text = target.textContent ?? "";
+
+    expect(text).toContain("Залишок документа");
+    expect(text).toContain("Сума");
+    expect(text).toContain("Прибрати");
+    expect(text).toContain("Підтвердити розподіл");
+
+    component.$destroy();
+  });
+
+  it("renders manual-picker split button without mojibake", async () => {
+    setPaymentsState({
+      matchPreview: {
+        paymentId: "payment-1",
+        isReconciled: false,
+        decisionKind: "none",
+        candidates: [],
+        autoMatch: null
+      },
+      manualPicker: {
+        paymentId: "payment-1",
+        query: "",
+        candidates: [],
+        selectedCandidateId: null
+      }
+    });
+
+    const { component, target } = renderPayments();
+    await tick();
+
+    expect(target.textContent ?? "").toContain("Додати до розподілу");
+
+    component.$destroy();
+  });
+
+  it("renders split preview with recommended candidates", async () => {
+    setPaymentsState({
+      matchPreview: {
+        paymentId: "payment-1",
+        isReconciled: false,
+        decisionKind: "split",
+        candidates: [
+          {
+            documentId: "invoice-1",
+            documentKind: "invoice",
+            title: "INV-001",
+            openAmountStr: "4 000,00 грн",
+            totalScore: 88,
+            sameIban: true,
+            referenceHit: true,
+            textHits: 2,
+            daysDistance: 1
+          },
+          {
+            documentId: "act-9",
+            documentKind: "act",
+            title: "ACT-009",
+            openAmountStr: "4 450,00 грн",
+            totalScore: 86,
+            sameIban: true,
+            referenceHit: true,
+            textHits: 2,
+            daysDistance: 0
+          }
+        ],
+        autoMatch: null
+      },
+      splitDraft: {
+        paymentId: "payment-1",
+        paymentAmountStr: "8 450,00 грн",
+        remainingAmountStr: "0,00 грн",
+        allocations: [
+          {
+            documentId: "invoice-1",
+            documentKind: "invoice",
+            title: "INV-001",
+            openAmountStr: "4 000,00 грн",
+            amount: "4 000,00"
+          },
+          {
+            documentId: "act-9",
+            documentKind: "act",
+            title: "ACT-009",
+            openAmountStr: "4 450,00 грн",
+            amount: "4 450,00"
+          }
+        ]
+      }
+    });
+
+    const { component, target } = renderPayments();
+    await tick();
+
+    const text = target.textContent ?? "";
+    expect(text).toContain("Рекомендований розподіл платежу");
+    expect(text).toContain("INV-001");
+    expect(text).toContain("ACT-009");
+    expect(text).toContain("Рекомендація для розподілу");
+
+    component.$destroy();
+  });
+
+  it("describes why manual confirmation is unavailable", () => {
+    setPaymentsState({
+      matchPreview: {
+        paymentId: "payment-1",
+        isReconciled: false,
+        decisionKind: "none",
+        candidates: [],
+        autoMatch: null
+      },
+      manualPicker: {
+        paymentId: "payment-1",
+        query: "missing",
+        candidates: [],
+        selectedCandidateId: null
+      }
+    });
+
+    const { component, target } = renderPayments();
+    const confirmButton = buttonByText(target, "Підтвердити вибраний документ");
+    const descriptionId = confirmButton.getAttribute("aria-describedby");
+
+    expect(descriptionId).toBeTruthy();
+    expect(target.querySelector(`#${descriptionId}`)?.textContent).toContain("кандидат");
 
     component.$destroy();
   });

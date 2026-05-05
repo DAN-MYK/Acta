@@ -1,5 +1,6 @@
 import { get, writable } from "svelte/store";
 import { reportsExportCsv, reportsExportExcel, reportsExportExcelAndOpen, reportsLoad } from "../api";
+import { compareMinor, parseMoneyToMinor } from "../money";
 import type { PayableRowDto, ReceivableRowDto, ReportsFilterDto, ReportsScreenDto } from "../types";
 
 interface ReportsState {
@@ -46,10 +47,8 @@ function compareDates(left: string, right: string): number {
   return compareStrings(left || "9999-12-31", right || "9999-12-31");
 }
 
-function parseMoneyValue(value: string): number {
-  const normalized = value.replace(/\s+/g, "").replace("грн", "").replace(",", ".").trim();
-  const parsed = Number.parseFloat(normalized);
-  return Number.isFinite(parsed) ? parsed : 0;
+function compareAmountStrDesc(leftStr: string, rightStr: string): number {
+  return compareMinor(parseMoneyToMinor(rightStr) ?? 0n, parseMoneyToMinor(leftStr) ?? 0n);
 }
 
 function stableSortRows<T>(rows: T[], compare: (left: T, right: T) => number): T[] {
@@ -72,7 +71,7 @@ function compareReceivables(left: ReceivableRowDto, right: ReceivableRowDto): nu
     return dueDateOrder;
   }
 
-  const amountOrder = parseMoneyValue(right.amountStr) - parseMoneyValue(left.amountStr);
+  const amountOrder = compareAmountStrDesc(left.amountStr, right.amountStr);
   if (amountOrder !== 0) {
     return amountOrder;
   }
@@ -95,7 +94,7 @@ function comparePayables(left: PayableRowDto, right: PayableRowDto): number {
     return dueDateOrder;
   }
 
-  const amountOrder = parseMoneyValue(right.amountStr) - parseMoneyValue(left.amountStr);
+  const amountOrder = compareAmountStrDesc(left.amountStr, right.amountStr);
   if (amountOrder !== 0) {
     return amountOrder;
   }
