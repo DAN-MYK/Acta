@@ -177,6 +177,32 @@ body[data-theme="dark"] {
   --acta-motion-fast: 120ms cubic-bezier(0.2, 0, 0, 1);
   --acta-motion-base: 180ms cubic-bezier(0.2, 0, 0, 1);
   --acta-motion-slow: 240ms cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Legacy alias tokens ───
+     Compatibility shims for pre-Wave-1 component CSS that still references
+     short names. Treat as deprecated — new code should use --acta-* directly,
+     and these aliases should disappear as legacy usages are migrated. */
+  --space-1: var(--acta-space-1);
+  --space-2: var(--acta-space-2);
+  --space-3: var(--acta-space-3);
+  --space-4: var(--acta-space-4);
+  --space-5: var(--acta-space-5);
+  --space-6: var(--acta-space-6);
+  --floating-shadow: var(--acta-shadow-card);
+  --positive-strong: var(--acta-color-success);
+  --success-text: var(--acta-color-success);
+  --bg-card: var(--acta-color-bg-elevated);
+  --accent: var(--acta-color-accent);
+  --accent-strong: var(--acta-color-accent-hover);
+  --accent-soft: var(--acta-color-accent-soft);
+  --text-primary: var(--acta-color-text);
+  --text-muted: var(--acta-color-text-muted);
+  --line: var(--acta-color-border);
+  --border-hairline: var(--acta-color-border);
+  --danger: var(--acta-color-danger);
+  --font-base: var(--acta-font-sans);
+  --font-body: 14px;
+  --control-height: 38px;
 }
 
 /* ==========================================================================
