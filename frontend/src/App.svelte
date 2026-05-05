@@ -33,18 +33,35 @@
   let activePaletteIndex = -1;
   let wasPaletteOpen = false;
 
-  const sidebarScreens: Array<{
+  const mainNavItems: Array<{
     screen: ScreenId;
     label: string;
-    icon: "dashboard" | "documents" | "counterparties" | "payments" | "reports" | "tasks" | "settings";
+    icon: "dashboard" | "documents" | "counterparties" | "payments" | "reports" | "tasks";
+    badgeKey?: "documentsBadge" | "tasksBadge";
   }> = [
-    { screen: "dashboard", label: "Дашборд", icon: "dashboard" },
-    { screen: "documents", label: "Документи", icon: "documents" },
+    { screen: "dashboard", label: "Головна", icon: "dashboard" },
+    { screen: "documents", label: "Документи", icon: "documents", badgeKey: "documentsBadge" },
     { screen: "counterparties", label: "Контрагенти", icon: "counterparties" },
     { screen: "payments", label: "Платежі", icon: "payments" },
     { screen: "reports", label: "Звіти", icon: "reports" },
-    { screen: "tasks", label: "Завдання", icon: "tasks" },
-    { screen: "settings", label: "Налаштування", icon: "settings" }
+    { screen: "tasks", label: "Завдання", icon: "tasks", badgeKey: "tasksBadge" }
+  ];
+
+  const screenTitles: Record<ScreenId, string> = {
+    dashboard: "Головна",
+    documents: "Документи",
+    counterparties: "Контрагенти",
+    payments: "Платежі",
+    reports: "Звіти",
+    tasks: "Завдання",
+    settings: "Налаштування"
+  };
+
+  const savedFilters = [
+    { label: "Прострочені рахунки", count: 1 },
+    { label: "Акти без підпису", count: 2 },
+    { label: "Неприв'язані платежі", count: 2 },
+    { label: "Цей тиждень", count: 7 }
   ];
 
   onMount(async () => {
@@ -85,8 +102,45 @@
   $: appShellState = $appShell;
   $: shellState = $shell.state;
   $: isShellBusy = $shell.loading || appShellState.loading;
-  $: themeLabel = $theme === "dark" ? "темна" : "світла";
   $: shellProgressLabel = appShellState.progressLabel ?? $shell.progressLabel;
+  $: screenTitle = screenTitles[currentScreen] ?? "Acta";
+  $: activeCompany = shellState?.companyItems.find(c => c.active);
+
+  function groupLabel(kind: string): string {
+    if (kind === 'navigate') return 'Перехід';
+    if (kind.startsWith('create_')) return 'Створити';
+    if (kind === 'open_document') return 'Документи';
+    if (kind === 'open_counterparty') return 'Контрагенти';
+    return 'Інше';
+  }
+
+  $: groupedPaletteItems = (() => {
+    const groups: { label: string; items: typeof $palette.items; startIndex: number }[] = [];
+    let currentLabel = '';
+    let currentItems: typeof $palette.items = [];
+    let startIndex = 0;
+    let totalIndex = 0;
+
+    for (const item of $palette.items) {
+      const label = groupLabel(item.kind ?? 'navigate');
+      if (label !== currentLabel) {
+        if (currentItems.length > 0) {
+          groups.push({ label: currentLabel, items: currentItems, startIndex });
+        }
+        currentLabel = label;
+        currentItems = [];
+        startIndex = totalIndex;
+      }
+      currentItems.push(item);
+      totalIndex++;
+    }
+
+    if (currentItems.length > 0) {
+      groups.push({ label: currentLabel, items: currentItems, startIndex });
+    }
+
+    return groups;
+  })();
 
   function onPaletteInput(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
@@ -265,68 +319,139 @@
 
 <div class="app-shell">
   <aside class="sidebar">
-    <div class="brand">
-      <div class="brand-mark">A</div>
-      <div>
-        <strong>Acta</strong>
-        <p>Управлінський облік</p>
-      </div>
+    <!-- Brand + Company (об'єднано) -->
+    <div class="company-switcher">
+      <button class="company-btn" disabled={isShellBusy} on:click={() => {}}>
+        <div class="company-logo">
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
+            <path d="M6 4l4 10M14 4l-4 10M5 5l1 1 2-2" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="company-info">
+          <span class="company-name">{shellState?.chrome.companyName ?? "Acta"}</span>
+          <span class="company-sub">{activeCompany?.subtitle ?? "Acta · упр. облік"}</span>
+        </div>
+        <AppIcon name="chevronDown" />
+      </button>
+      <select
+        aria-label="Активна компанія"
+        class="sr-only"
+        disabled={isShellBusy}
+        value={shellState?.activeCompanyId}
+        on:change={onCompanyChange}
+      >
+        {#each shellState?.companyItems ?? [] as company}
+          <option value={company.id}>{company.name}</option>
+        {/each}
+      </select>
     </div>
 
+    <!-- Main nav (36px items, з nav-rail для активних) -->
     <nav class="nav">
-      {#each sidebarScreens as item}
+      {#each mainNavItems as item}
+        {@const badge = item.badgeKey ? shellState?.chrome[item.badgeKey] : undefined}
         <button
-          data-testid={`nav-${item.screen}`}
+          class="nav-item"
           class:active={currentScreen === item.screen}
+          data-testid={`nav-${item.screen}`}
+          aria-current={currentScreen === item.screen ? "page" : undefined}
           disabled={isShellBusy}
           on:click={() => navigation.go(item.screen)}
         >
+          <span class="nav-rail"></span>
           <AppIcon name={item.icon} surface={currentScreen === item.screen} />
           <span>{item.label}</span>
+          {#if badge}
+            <span class="nav-badge">{badge}</span>
+          {/if}
         </button>
       {/each}
     </nav>
 
-    <div class="theme-switcher">
-      <button data-testid="theme-toggle" disabled={isShellBusy} on:click={onQuickThemeToggle}>
-        <AppIcon name="theme" surface={true} />
-        <span>Тема: {themeLabel}</span>
-      </button>
+    <!-- Saved filters -->
+    <div class="saved-filters">
+      <div class="saved-filters-header">
+        <span>Збережені фільтри</span>
+        <button class="saved-filters-add" aria-label="Додати фільтр">+</button>
+      </div>
+      {#each savedFilters as f}
+        <button class="saved-filter-item">
+          <span>⭐</span>
+          <span class="saved-filter-label">{f.label}</span>
+          <span class="saved-filter-count">{f.count}</span>
+        </button>
+      {/each}
+    </div>
+
+    <div class="sidebar-spacer"></div>
+
+    <!-- Settings nav -->
+    <button
+      class="nav-item"
+      class:active={currentScreen === "settings"}
+      data-testid="nav-settings"
+      aria-current={currentScreen === "settings" ? "page" : undefined}
+      disabled={isShellBusy}
+      on:click={() => navigation.go("settings")}
+      style="margin-bottom: 4px"
+    >
+      <span class="nav-rail"></span>
+      <AppIcon name="settings" surface={currentScreen === "settings"} />
+      <span>Налаштування</span>
+    </button>
+
+    <!-- User pill -->
+    <div class="user-footer">
+      <div class="user-avatar" aria-hidden="true">{shellState?.chrome.userInitials ?? "АА"}</div>
+      <div class="user-info">
+        <span class="user-name">{shellState?.chrome.userName ?? "Користувач"}</span>
+        <span class="user-role">{shellState?.chrome.userRole ?? ""}</span>
+      </div>
+      <button class="user-more" aria-label="Меню користувача">···</button>
     </div>
   </aside>
 
-  <main class="content">
-    <header class:busy={isShellBusy} class="topbar">
-      <div>
-        <h1>{shellState?.chrome.companyName ?? "Acta"}</h1>
-        <p>{shellProgressLabel ?? shellState?.chrome.userRole ?? "Завантаження shell..."}</p>
+  <div class="main">
+    <header class="topbar">
+      <!-- LEFT: title + subtitle -->
+      <div class="topbar-left">
+        <div class="topbar-title">{screenTitle}</div>
+        <div class="topbar-subtitle">
+          {#if shellProgressLabel}{shellProgressLabel}{:else}{shellState?.chrome.companyName ?? ""}{/if}
+        </div>
       </div>
 
-      <div class="topbar-actions">
-        <select
-          aria-label="Активна компанія"
-          disabled={isShellBusy}
-          value={shellState?.activeCompanyId}
-          on:change={onCompanyChange}
-        >
-          {#each shellState?.companyItems ?? [] as company}
-            <option value={company.id}>{company.name}</option>
-          {/each}
-        </select>
+      <!-- CENTER: search trigger -->
+      <button
+        bind:this={paletteToggleButton}
+        class="topbar-search"
+        data-testid="palette-toggle"
+        disabled={isShellBusy}
+        aria-label="Відкрити палітру команд"
+        aria-haspopup="dialog"
+        aria-expanded={$palette.open}
+        aria-controls={$palette.open ? paletteListId : undefined}
+        on:click={() => palette.toggle()}
+      >
+        <AppIcon name="search" />
+        <span class="topbar-search-placeholder">Пошук документа…</span>
+        <span class="topbar-search-kbd"><kbd>Ctrl</kbd><kbd>K</kbd></span>
+      </button>
 
+      <!-- RIGHT: theme toggle + user avatar -->
+      <div class="topbar-right">
         <button
-          bind:this={paletteToggleButton}
-          data-testid="palette-toggle"
+          class="topbar-icon-btn"
+          data-testid="theme-toggle"
           disabled={isShellBusy}
-          aria-label="Відкрити палітру команд"
-          aria-haspopup="dialog"
-          aria-expanded={$palette.open}
-          aria-controls={$palette.open ? paletteListId : undefined}
-          on:click={() => palette.toggle()}
+          aria-label="Перемкнути тему"
+          on:click={onQuickThemeToggle}
         >
-          <AppIcon name="palette" surface={true} />
-          <span>Ctrl+K</span>
+          <AppIcon name="theme" surface={true} />
         </button>
+        <div class="topbar-user-avatar" aria-hidden="true">
+          {shellState?.chrome.userInitials ?? "АА"}
+        </div>
       </div>
     </header>
 
@@ -336,27 +461,29 @@
       </div>
     {/if}
 
-    {#if currentScreen === "dashboard"}
-      <DashboardScreen />
-    {:else if currentScreen === "documents"}
-      <DocumentsScreen />
-    {:else if currentScreen === "counterparties"}
-      <CounterpartiesScreen />
-    {:else if currentScreen === "reports"}
-      <ReportsScreen />
-    {:else if currentScreen === "tasks"}
-      <TasksScreen />
-    {:else if currentScreen === "settings"}
-      <SettingsScreen />
-    {:else if currentScreen === "payments"}
-      <PaymentsScreen />
-    {:else}
-      <section class="panel empty-screen">
-        <h2>Невідомий екран</h2>
-        <p>Сторінку не знайдено.</p>
-      </section>
-    {/if}
-  </main>
+    <div class="screen-outlet">
+      {#if currentScreen === "dashboard"}
+        <DashboardScreen />
+      {:else if currentScreen === "documents"}
+        <DocumentsScreen />
+      {:else if currentScreen === "counterparties"}
+        <CounterpartiesScreen />
+      {:else if currentScreen === "reports"}
+        <ReportsScreen />
+      {:else if currentScreen === "tasks"}
+        <TasksScreen />
+      {:else if currentScreen === "settings"}
+        <SettingsScreen />
+      {:else if currentScreen === "payments"}
+        <PaymentsScreen />
+      {:else}
+        <section class="panel empty-screen">
+          <h2>Невідомий екран</h2>
+          <p>Сторінку не знайдено.</p>
+        </section>
+      {/if}
+    </div>
+  </div>
 
   {#if $palette.open}
     <button
@@ -365,39 +492,55 @@
       aria-label="Закрити палітру команд"
       on:click={closePalette}
     ></button>
+
     <section class="palette" data-testid="palette" role="dialog" aria-modal="true" aria-labelledby={paletteTitleId}>
       <h2 id={paletteTitleId} class="sr-only">Палітра команд</h2>
-      <input
-        bind:this={paletteInput}
-        type="search"
-        placeholder="Пошук команд, екранів і документів"
-        aria-label="Пошук команд, екранів і документів"
-        aria-controls={paletteListId}
-        on:input={onPaletteInput}
-        on:keydown={handlePaletteInputKeydown}
-      />
 
-      <div class="palette-items" data-testid="palette-items" id={paletteListId}>
-        {#each $palette.items as item, index}
-          <button
-            bind:this={paletteItemButtons[index]}
-            data-testid={`palette-item-${index}`}
-            class="palette-item"
-            class:active={activePaletteIndex === index}
-            aria-current={activePaletteIndex === index ? "true" : undefined}
-            on:click={() => activatePaletteItem(index)}
-            on:focus={() => {
-              activePaletteIndex = index;
-            }}
-            on:keydown={(event) => handlePaletteItemKeydown(event, index)}
-          >
-            <div>
-              <strong>{item.title}</strong>
-              <p>{item.subtitle}</p>
-            </div>
-            <span>{item.shortcut}</span>
-          </button>
+      <!-- Header row з input -->
+      <div class="palette-header">
+        <AppIcon name="search" />
+        <input
+          bind:this={paletteInput}
+          type="search"
+          placeholder="Пошук команд, екранів і документів"
+          aria-label="Пошук команд, екранів і документів"
+          aria-controls={paletteListId}
+          on:input={onPaletteInput}
+          on:keydown={handlePaletteInputKeydown}
+        />
+        <kbd class="palette-esc">esc</kbd>
+      </div>
+
+      <!-- Results grouped by kind -->
+      <div class="palette-results" id={paletteListId} data-testid="palette-items">
+        {#each groupedPaletteItems as group}
+          <div class="palette-group-label">{group.label}</div>
+          {#each group.items as item, groupIndex}
+            {@const index = group.startIndex + groupIndex}
+            <button
+              bind:this={paletteItemButtons[index]}
+              data-testid={`palette-item-${index}`}
+              class="palette-item"
+              class:active={activePaletteIndex === index}
+              aria-current={activePaletteIndex === index ? "true" : undefined}
+              on:click={() => activatePaletteItem(index)}
+              on:focus={() => { activePaletteIndex = index; }}
+              on:keydown={(event) => handlePaletteItemKeydown(event, index)}
+            >
+              <span class="palette-item-label">{item.title}</span>
+              <span class="palette-item-meta">{item.subtitle}</span>
+              <span class="palette-item-shortcut">{item.shortcut}</span>
+            </button>
+          {/each}
         {/each}
+      </div>
+
+      <!-- Footer -->
+      <div class="palette-footer">
+        <span>↑↓ навігація</span>
+        <span>↵ вибрати</span>
+        <span class="palette-footer-spacer"></span>
+        <span>{$palette.items.length} результатів</span>
       </div>
     </section>
   {/if}

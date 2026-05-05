@@ -357,10 +357,10 @@
   .calendar-shell {
     margin-top: 18px;
     padding: 18px;
-    border-radius: var(--radius-3xl);
-    border: 1px solid var(--border-hairline);
-    background: var(--bg-card);
-    box-shadow: var(--shadow-sm);
+    border-radius: var(--acta-radius-2xl);
+    border: 1px solid var(--acta-color-border);
+    background: var(--acta-color-bg-elevated);
+    box-shadow: var(--acta-shadow-card);
     display: grid;
     gap: 18px;
   }
@@ -398,7 +398,7 @@
   .calendar-event-detail p,
   .calendar-note p {
     margin: 4px 0 0;
-    color: var(--text-muted);
+    color: var(--acta-color-text-muted);
   }
 
   .calendar-toolbar,
@@ -417,20 +417,20 @@
     gap: 6px;
     padding: 4px;
     border-radius: 999px;
-    background: var(--bg-soft);
+    background: var(--acta-color-bg-subtle);
   }
 
   .calendar-filters button {
     border: 0;
     background: transparent;
-    color: var(--text-muted);
+    color: var(--acta-color-text-muted);
     padding: 8px 12px;
     border-radius: 999px;
   }
 
   .calendar-filters button.active {
-    background: var(--accent-soft);
-    color: var(--accent-strong);
+    background: var(--acta-color-accent-soft);
+    color: var(--acta-color-accent-hover);
   }
 
   .calendar-summary {
@@ -440,9 +440,9 @@
   .calendar-summary-card,
   .calendar-grid-panel,
   .calendar-side-panel {
-    border-radius: var(--radius-2xl);
-    border: 1px solid var(--border-hairline);
-    background: color-mix(in srgb, var(--bg-card) 82%, white 18%);
+    border-radius: var(--acta-radius-2xl);
+    border: 1px solid var(--acta-color-border);
+    background: color-mix(in srgb, var(--acta-color-bg-elevated) 82%, white 18%);
   }
 
   .calendar-summary-card {
@@ -457,7 +457,7 @@
   }
 
   .calendar-summary-card span {
-    color: var(--text-muted);
+    color: var(--acta-color-text-muted);
   }
 
   .calendar-layout {
@@ -487,23 +487,23 @@
   }
 
   .calendar-weekdays span {
-    color: var(--text-muted);
+    color: var(--acta-color-text-muted);
     font-size: 0.85rem;
     text-align: center;
   }
 
   .calendar-grid:focus-visible {
-    outline: 2px solid var(--accent-strong);
+    outline: 2px solid var(--acta-color-accent-hover);
     outline-offset: 6px;
-    border-radius: var(--radius-2xl);
+    border-radius: var(--acta-radius-2xl);
   }
 
   .calendar-day {
     min-height: 132px;
     padding: 12px;
-    border-radius: var(--radius-xl);
-    border: 1px solid var(--border-hairline);
-    background: var(--bg-card);
+    border-radius: var(--acta-radius-xl);
+    border: 1px solid var(--acta-color-border);
+    background: var(--acta-color-bg-elevated);
     display: grid;
     align-content: start;
     gap: 10px;
@@ -512,16 +512,16 @@
 
   .calendar-day.is-muted {
     opacity: 0.65;
-    background: var(--bg-soft);
+    background: var(--acta-color-bg-subtle);
   }
 
   .calendar-day.is-selected {
-    border-color: var(--accent-strong);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-soft) 70%, transparent 30%);
+    border-color: var(--acta-color-accent-hover);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--acta-color-accent-soft) 70%, transparent 30%);
   }
 
   .calendar-day.has-overdue {
-    background: color-mix(in srgb, var(--bg-card) 86%, #f7d7d2 14%);
+    background: color-mix(in srgb, var(--acta-color-bg-elevated) 86%, #f7d7d2 14%);
   }
 
   .calendar-day-top,
@@ -550,8 +550,8 @@
   }
 
   .calendar-day-top span {
-    background: var(--bg-soft);
-    color: var(--text-muted);
+    background: var(--acta-color-bg-subtle);
+    color: var(--acta-color-text-muted);
   }
 
   .calendar-money {
@@ -564,17 +564,17 @@
   }
 
   .calendar-money.is-negative {
-    color: var(--danger-strong);
+    color: var(--acta-color-danger);
   }
 
   .calendar-pill {
-    background: var(--bg-soft);
-    color: var(--text-base);
+    background: var(--acta-color-bg-subtle);
+    color: var(--acta-color-text);
   }
 
   .calendar-pill.is-schedule {
-    background: color-mix(in srgb, var(--accent-soft) 76%, white 24%);
-    color: var(--accent-strong);
+    background: color-mix(in srgb, var(--acta-color-accent-soft) 76%, white 24%);
+    color: var(--acta-color-accent-hover);
   }
 
   .calendar-pill.is-task {
@@ -593,7 +593,7 @@
   }
 
   .calendar-pill.is-more {
-    color: var(--text-muted);
+    color: var(--acta-color-text-muted);
   }
 
   .calendar-event-list,
@@ -606,20 +606,20 @@
   .calendar-event-row {
     width: 100%;
     padding: 12px;
-    border-radius: var(--radius-xl);
-    border: 1px solid var(--border-hairline);
-    background: var(--bg-card);
+    border-radius: var(--acta-radius-xl);
+    border: 1px solid var(--acta-color-border);
+    background: var(--acta-color-bg-elevated);
     text-align: left;
   }
 
   .calendar-event-row.is-selected {
-    border-color: var(--accent-strong);
-    background: color-mix(in srgb, var(--accent-soft) 18%, var(--bg-card) 82%);
+    border-color: var(--acta-color-accent-hover);
+    background: color-mix(in srgb, var(--acta-color-accent-soft) 18%, var(--acta-color-bg-elevated) 82%);
   }
 
   .calendar-event-meta {
     justify-content: flex-end;
-    color: var(--text-muted);
+    color: var(--acta-color-text-muted);
     font-size: 0.85rem;
   }
 
@@ -632,12 +632,12 @@
 
   .calendar-event-facts div {
     padding: 10px 12px;
-    border-radius: var(--radius-lg);
-    background: var(--bg-soft);
+    border-radius: var(--acta-radius-lg);
+    background: var(--acta-color-bg-subtle);
   }
 
   .calendar-event-facts dt {
-    color: var(--text-muted);
+    color: var(--acta-color-text-muted);
     font-size: 0.8rem;
   }
 
@@ -659,8 +659,8 @@
   .calendar-loading-grid,
   .calendar-loading-side {
     min-height: 320px;
-    border-radius: var(--radius-2xl);
-    background: linear-gradient(120deg, var(--bg-soft), color-mix(in srgb, var(--bg-soft) 72%, white 28%));
+    border-radius: var(--acta-radius-2xl);
+    background: linear-gradient(120deg, var(--acta-color-bg-subtle), color-mix(in srgb, var(--acta-color-bg-subtle) 72%, white 28%));
   }
 
   @media (max-width: 960px) {

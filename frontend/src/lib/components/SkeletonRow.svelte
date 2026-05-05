@@ -40,15 +40,15 @@
     align-items: center;
     gap: var(--space-4);
     padding: var(--space-4);
-    border-radius: var(--radius-xl);
-    background: color-mix(in srgb, var(--bg-card) 88%, transparent);
-    border: 1px solid var(--border-hairline);
+    border-radius: var(--acta-radius-xl);
+    background: color-mix(in srgb, var(--acta-color-bg-elevated) 88%, transparent);
+    border: 1px solid var(--acta-color-border);
   }
 
   .skeleton-icon {
     width: 2.75rem;
     height: 2.75rem;
-    border-radius: var(--radius-lg);
+    border-radius: var(--acta-radius-lg);
     flex-shrink: 0;
   }
 

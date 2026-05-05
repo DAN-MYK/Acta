@@ -26,15 +26,15 @@
   display: grid;
   gap: 6px;
   padding: 14px 16px;
-  border-radius: var(--radius-2xl);
-  background: var(--bg-card);
+  border-radius: var(--acta-radius-2xl);
+  background: var(--acta-color-bg-elevated);
 }
 
 .task-today-panel {
   padding: 16px 18px;
-  border-radius: var(--radius-2xl);
-  background: var(--bg-card);
-  border: 1px solid var(--border-hairline);
+  border-radius: var(--acta-radius-2xl);
+  background: var(--acta-color-bg-elevated);
+  border: 1px solid var(--acta-color-border);
 }
 
 .task-today-panel p {
@@ -46,23 +46,23 @@
   flex-wrap: wrap;
   gap: 6px;
   padding: 4px;
-  border-radius: var(--radius-xl);
-  background: var(--bg-subtle);
-  border: 1px solid var(--border-hairline);
+  border-radius: var(--acta-radius-xl);
+  background: var(--acta-color-bg-subtle);
+  border: 1px solid var(--acta-color-border);
 }
 
 .task-tabs button,
 .task-row button:last-child {
   border: 0;
   background: transparent;
-  border-radius: var(--radius-lg);
+  border-radius: var(--acta-radius-lg);
   padding: 8px 14px;
   cursor: pointer;
 }
 
 .task-tabs button.active {
-  background: var(--bg-elevated);
-  color: var(--text);
+  background: var(--acta-color-bg-elevated);
+  color: var(--acta-color-text);
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
@@ -79,8 +79,8 @@
 
 .task-row-main {
   border: 0;
-  background: var(--bg-card);
-  border-radius: var(--radius-2xl);
+  background: var(--acta-color-bg-elevated);
+  border-radius: var(--acta-radius-2xl);
   padding: 14px 16px;
   text-align: left;
   cursor: pointer;
@@ -95,8 +95,8 @@
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 12px;
-  color: var(--text-muted);
-  font-size: var(--font-sm);
+  color: var(--acta-color-text-muted);
+  font-size: 11px;
 }
 
 .task-row-status {
@@ -113,9 +113,9 @@
 
 .task-pill {
   display: inline-block;
-  color: var(--accent-text);
-  background: var(--accent-soft);
-  border-radius: var(--radius-md);
+  color: var(--acta-color-accent-text);
+  background: var(--acta-color-accent-soft);
+  border-radius: var(--acta-radius-md);
   padding: 3px 8px;
-  font-size: var(--font-sm);
+  font-size: 11px;
 }

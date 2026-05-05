@@ -26,9 +26,9 @@
     display: grid;
     gap: var(--space-3);
     padding: var(--space-5);
-    border-radius: var(--radius-2xl);
-    background: color-mix(in srgb, var(--bg-card-strong) 90%, transparent);
-    border: 1px solid var(--border-hairline);
+    border-radius: var(--acta-radius-2xl);
+    background: color-mix(in srgb, var(--acta-color-bg-elevated) 90%, transparent);
+    border: 1px solid var(--acta-color-border);
     box-shadow: var(--floating-shadow);
   }
 
