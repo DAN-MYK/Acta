@@ -9,7 +9,9 @@
 
 ## Мета
 
-Імплементувати design foundation з handoff-специфікації (Acta Design Tokens v2.0) у наш Svelte/Tauri проект. Хвиля 1 охоплює: токени, shell (sidebar + topbar), і 8 reusable Svelte-компонентів. Екрани і форми — окремі хвилі.
+Імплементувати design foundation з handoff-специфікації (Acta Design Tokens v2.0) у наш Svelte/Tauri проект. Хвиля 1 охоплює: токени, shell (sidebar + topbar), і 8 reusable Svelte-компонентів.
+
+**Межа Wave 1:** компоненти створюються і перевіряються "smoke usage" — тобто використовуються в shell, palette та dashboard де це природньо (Button, Card, KPI, StatusBadge). Повне впровадження Table, Modal, FormField, CommandBar у DocumentsScreen, PaymentsScreen, форми документів — **наступні хвилі**. Screens/forms Wave 1 не торкається.
 
 ---
 
@@ -231,12 +233,13 @@ User pill
 
 ### 2.3 Command Palette — рестайл + групи
 
-**⚠️ Логіка залишається в `paletteStore`.** Зміни: додати `group: string` поле до `PaletteItem`.
+**⚠️ Логіка залишається в `paletteStore` і `PaletteItemDto` (types.ts) без змін.** Групи — виключно presentation layer в `App.svelte` через `groupLabel(kind)`. Жодних змін у DTO, store або backend.
 
-**Нові групи:**
-- `Перехід` — 6 навігаційних команд (G+H, G+D, etc.)
-- `Створити` — 5 create команд (C+I, C+A, etc.)
-- (існуючі items залишаються)
+**Групи виводяться з `kind` field:**
+- `kind === 'navigate'` → "Перехід"
+- `kind.startsWith('create_')` → "Створити"
+- `kind === 'open_document'` → "Документи"
+- `kind === 'open_counterparty'` → "Контрагенти"
 
 **Вигляд:**
 ```
@@ -480,19 +483,32 @@ disabled: bg subtle; opacity 0.6; cursor not-allowed
 ### Table.svelte — повна специфікація
 
 ```
+// Svelte 4 не підтримує generic component syntax — типи визначаємо у окремому .ts файлі
+// frontend/src/lib/components/table-types.ts:
+export interface TableColumn {
+  id: string;
+  header: string;
+  accessor: (row: Record<string, unknown>) => unknown;
+  align?: 'left' | 'right' | 'center';
+  width?: string;
+  sortable?: boolean;
+}
+
+// Table.svelte props (через export let):
 Props:
-  columns: Array<{ id: string; header: string; accessor: (row) => any;
-                   align?: 'left'|'right'|'center'; width?: string; sortable?: boolean }>
-  rows: T[]
-  getRowId: (row: T) => string
-  selectedIds?: string[] = []
-  onSelectChange?: (ids: string[]) => void
-  onRowClick?: (row: T) => void
-  sortBy?: string
-  sortDir?: 'asc'|'desc'
-  onSortChange?: (col: string, dir: 'asc'|'desc') => void
-  emptyTitle?: string = 'Немає даних'
-  emptySubtitle?: string = ''
+  columns: TableColumn[]
+  rows: Record<string, unknown>[]
+  getRowId: (row: Record<string, unknown>) => string
+  selectedIds: string[] = []
+  onSelectChange: ((ids: string[]) => void) | undefined = undefined
+  onRowClick: ((row: Record<string, unknown>) => void) | undefined = undefined
+  sortBy: string | undefined = undefined
+  sortDir: 'asc' | 'desc' = 'asc'
+  onSortChange: ((col: string, dir: 'asc' | 'desc') => void) | undefined = undefined
+  emptyTitle: string = 'Немає даних'
+  emptySubtitle: string = ''
+
+// Caller передає rows як Record<string,unknown>[] через as-cast або прямо з store
 
 HTML: <table> з <thead sticky> та <tbody>
   header: 32px; bg subtle; border-bottom border-strong
@@ -614,11 +630,15 @@ CSS:
 
 ## 5. Fonts
 
-JetBrains Sans потрібно завантажити і підключити:
-- Завантажити `JetBrainsSans-Regular.woff2` і `JetBrainsSans-SemiBold.woff2` з JetBrains CDN
-- Покласти в `frontend/public/fonts/`
-- Підключити через `@font-face` у `tokens.css`
-- JetBrains Mono — підключити через Google Fonts або локально
+Обидва шрифти використовуються як **локальні assets**, закомічені у репозиторій. Google Fonts як runtime dependency не використовується (Tauri-аплікація може працювати offline).
+
+**Дії:**
+- Завантажити і закомітити у `frontend/public/fonts/`:
+  - `JetBrainsSans-Regular.woff2`
+  - `JetBrainsSans-SemiBold.woff2`
+  - `JetBrainsMono-Regular.woff2`
+  - `JetBrainsMono-Medium.woff2`
+- Підключити через `@font-face` у `tokens.css` з `src: url('/fonts/...')` (Vite serve public/)
 
 ---
 
@@ -671,6 +691,7 @@ JetBrains Sans потрібно завантажити і підключити:
 - [ ] Topbar: 3-column grid, search center, user avatar right, white bg
 - [ ] Command palette: групований список + footer
 - [ ] Шрифт JetBrains Sans завантажений і рендериться
-- [ ] 8 компонентів імплементовано і використовуються в екранах
+- [ ] 8 компонентів імплементовано; Button/Card/KPI/StatusBadge — smoke usage у shell/dashboard; Table/Modal/FormField/CommandBar — створені але не впроваджені у screens (Wave 2+)
 - [ ] Темна тема коректно перемикається з новими токенами
-- [ ] `npm run build` проходить без помилок TypeScript
+- [ ] `npm run check` (svelte-check) проходить без помилок
+- [ ] `npm run build` проходить без помилок
