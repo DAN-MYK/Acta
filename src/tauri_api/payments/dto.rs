@@ -205,6 +205,8 @@ pub struct PaymentCalendarEventDto {
     pub subtitle: String,
     pub date: String,
     pub amount_str: String,
+    #[serde(skip)]
+    pub amount: rust_decimal::Decimal,
     pub direction: String,
     pub status_label: String,
     pub recurrence_label: String,
@@ -273,6 +275,7 @@ pub struct PaymentImportPreviewDto {
     pub rows: Vec<PaymentImportPreviewRowDto>,
     pub file_size: u64,
     pub file_mtime_secs: i64,
+    pub file_hash: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -281,4 +284,5 @@ pub struct PaymentImportCommitRequest {
     pub path: String,
     pub file_size: u64,
     pub file_mtime_secs: i64,
+    pub file_hash: String,
 }

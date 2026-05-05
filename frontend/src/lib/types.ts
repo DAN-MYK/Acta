@@ -471,12 +471,14 @@ export interface PaymentImportPreviewDto {
   rows: PaymentImportPreviewRowDto[];
   fileSize: number;
   fileMtimeSecs: number;
+  fileHash: string;
 }
 
 export interface PaymentImportCommitRequest {
   path: string;
   fileSize: number;
   fileMtimeSecs: number;
+  fileHash: string;
 }
 
 export type TaskStatus = "open" | "in_progress" | "done" | "cancelled";

@@ -301,12 +301,25 @@ fn payment_action_to_str(action: &PaymentImportAction) -> &'static str {
     }
 }
 
+/// Детермінований FNV-1a 64-bit хеш у hex.
+/// Використовується для перевірки що файл виписки не змінився між preview і commit.
+/// Не криптографічний — мета лише виявити модифікацію вмісту.
+fn fnv1a_64_hex(bytes: &[u8]) -> String {
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for byte in bytes {
+        hash ^= *byte as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("{hash:016x}")
+}
+
 fn build_import_preview_dto(
     path: &Path,
     bank_name: &str,
     report: PaymentImportReport,
     file_size: u64,
     file_mtime_secs: i64,
+    file_hash: String,
 ) -> PaymentImportPreviewDto {
     let parsed = report.parsed as i32;
     let will_create = report.created as i32;
@@ -344,6 +357,7 @@ fn build_import_preview_dto(
         rows,
         file_size,
         file_mtime_secs,
+        file_hash,
     }
 }
 
@@ -458,6 +472,10 @@ pub async fn payments_import_preview(
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
 
+    let bytes = fs::read(&path_buf).await?;
+    let file_hash = fnv1a_64_hex(&bytes);
+    drop(bytes);
+
     let parsed_rows = parse_payments_statement_file(&path_buf).await?;
     let bank_name = parsed_rows
         .first()
@@ -476,6 +494,7 @@ pub async fn payments_import_preview(
         report,
         file_size,
         file_mtime_secs,
+        file_hash,
     ))
 }
 
@@ -509,6 +528,16 @@ pub async fn payments_import_commit(
     if current_size != request.file_size || current_mtime != request.file_mtime_secs {
         return Err(anyhow!(
             "Файл виписки змінився після попереднього перегляду. Виберіть файл знову."
+        ));
+    }
+
+    let bytes = fs::read(&path).await?;
+    let current_hash = fnv1a_64_hex(&bytes);
+    drop(bytes);
+
+    if current_hash != request.file_hash {
+        return Err(anyhow!(
+            "Вміст файлу виписки змінився після попереднього перегляду. Виберіть файл знову."
         ));
     }
 
@@ -770,13 +799,18 @@ pub async fn payment_match_apply_auto(
 
     match decision {
         MatchDecision::Exact(candidate) => {
-            db::payments::reconcile_document_scoped(
+            let allocation = db::payments::PaymentReconcileAllocation {
+                document_kind: match_document_kind_to_str(candidate.candidate.document_kind)
+                    .to_string(),
+                document_id: candidate.candidate.document_id,
+                amount: payment.amount,
+            };
+
+            db::payments::reconcile_split_scoped(
                 ctx.pool(),
                 ctx.company_id(),
                 payment.id,
-                match_document_kind_to_str(candidate.candidate.document_kind),
-                candidate.candidate.document_id,
-                payment.amount,
+                &[allocation],
             )
             .await?;
 

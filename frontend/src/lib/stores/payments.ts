@@ -588,6 +588,7 @@ function createPaymentsStore() {
           path: preview.path,
           fileSize: preview.fileSize,
           fileMtimeSecs: preview.fileMtimeSecs,
+          fileHash: preview.fileHash,
         });
         if (result.ok) {
           update((state) => ({ ...state, importPreview: null }));

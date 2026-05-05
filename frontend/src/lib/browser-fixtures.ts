@@ -735,6 +735,7 @@ export async function browserFixtureInvoke<T>(command: string, payload?: Record<
         conflicts: 0,
         fileSize: 12345,
         fileMtimeSecs: 1746355200,
+        fileHash: "0000000000000000",
         rows: [
           {
             action: "create",

@@ -95,14 +95,6 @@ fn calendar_event_sort_key(event: &PaymentCalendarEventDto) -> (u8, String, Stri
     (kind_weight, event.title.clone(), event.id.clone())
 }
 
-fn parse_event_amount(value: &str) -> Decimal {
-    let normalized = value
-        .replace('\u{00a0}', "")
-        .replace(' ', "")
-        .replace(',', ".");
-    normalized.parse::<Decimal>().unwrap_or(Decimal::ZERO)
-}
-
 fn calendar_grid_bounds(anchor: NaiveDate) -> Result<(NaiveDate, NaiveDate)> {
     let month_start = anchor.with_day(1).ok_or_else(|| {
         anyhow!("Не вдалося визначити початок місяця")
@@ -152,15 +144,11 @@ pub(super) fn build_calendar_month(
         let income_total = day_events
             .iter()
             .filter(|event| event.kind == "schedule" && event.direction == "income")
-            .fold(Decimal::ZERO, |sum, event| {
-                sum + parse_event_amount(&event.amount_str)
-            });
+            .fold(Decimal::ZERO, |sum, event| sum + event.amount);
         let expense_total = day_events
             .iter()
             .filter(|event| event.kind == "schedule" && event.direction == "expense")
-            .fold(Decimal::ZERO, |sum, event| {
-                sum + parse_event_amount(&event.amount_str)
-            });
+            .fold(Decimal::ZERO, |sum, event| sum + event.amount);
 
         days.push(PaymentCalendarDayDto {
             date: key,
@@ -236,12 +224,13 @@ pub async fn payments_calendar_load(
             kind: "schedule".to_string(),
             title: schedule.title,
             subtitle: if counterparty_name.is_empty() {
-                "Р СџР В»Р В°Р Р…Р С•Р Р†Р С‘Р в„– Р С—Р В»Р В°РЎвЂљРЎвЂ“Р В¶".to_string()
+                "Плановий платіж".to_string()
             } else {
                 counterparty_name.clone()
             },
             date: format_date_iso(schedule.scheduled_date),
             amount_str: schedule.amount.map(format_decimal_ua).unwrap_or_default(),
+            amount: schedule.amount.unwrap_or(Decimal::ZERO),
             direction: schedule.direction.as_str().to_string(),
             status_label: schedule_status_label(schedule.is_completed).to_string(),
             recurrence_label: recurrence_label(&schedule.recurrence).to_string(),
@@ -289,12 +278,13 @@ pub async fn payments_calendar_load(
             kind: "task".to_string(),
             title: task.title.clone(),
             subtitle: format!(
-                "{} Р’В· {}",
+                "{} · {}",
                 task.priority.label(),
                 link_label_if_present(&link_label)
             ),
             date: format_date_iso(due_date),
             amount_str: String::new(),
+            amount: Decimal::ZERO,
             direction: String::new(),
             status_label: task.status.label().to_string(),
             recurrence_label: String::new(),
