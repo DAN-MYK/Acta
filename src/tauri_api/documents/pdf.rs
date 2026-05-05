@@ -133,6 +133,78 @@ pub(super) fn managed_existing_pdf_dir(
         .join(format!("{doc_id}_{}", sanitize_pdf_fragment(number)))
 }
 
+/// Перевіряє що `source_path` має розширення PDF і не перетинається з керованою
+/// директорією `storage_dir/existing_pdf/` після canonicalize. Це захищає attach-flow
+/// від випадку коли користувач (або зловмисник) вказує існуючий керований PDF як
+/// джерело — інакше copy(source -> working.pdf) переписав би оригінал самим собою
+/// або вкрав би чужий PDF в managed dir.
+pub(super) fn ensure_attach_source_safe(
+    storage_dir: &Path,
+    source_path: &Path,
+) -> Result<PathBuf> {
+    let extension_ok = source_path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.eq_ignore_ascii_case("pdf"))
+        .unwrap_or(false);
+    anyhow::ensure!(
+        extension_ok,
+        "Файл має бути PDF (розширення .pdf)"
+    );
+
+    let canonical_source = std::fs::canonicalize(source_path).with_context(|| {
+        format!(
+            "Не вдалось нормалізувати шлях до PDF-файлу: {}",
+            source_path.display()
+        )
+    })?;
+
+    let canonical_managed_root = std::fs::canonicalize(storage_dir.join("existing_pdf"))
+        .ok();
+    if let Some(root) = canonical_managed_root {
+        anyhow::ensure!(
+            !canonical_source.starts_with(&root),
+            "PDF-джерело знаходиться всередині керованої директорії — виберіть зовнішній файл"
+        );
+    }
+
+    Ok(canonical_source)
+}
+
+/// Перевіряє що `db_path` (звідки PDF буде прочитано/перезаписано) після canonicalize
+/// знаходиться саме у `managed_existing_pdf_dir(storage_dir, kind, doc_id, number)`.
+/// Захищає replace/open flow від redirect на довільний шлях через manipulation БД
+/// або застарілі absolute paths поза storage_dir.
+pub(super) fn ensure_managed_pdf_path(
+    storage_dir: &Path,
+    kind: &str,
+    doc_id: Uuid,
+    number: &str,
+    db_path: &Path,
+) -> Result<PathBuf> {
+    let canonical_path = std::fs::canonicalize(db_path).with_context(|| {
+        format!(
+            "Не вдалось нормалізувати збережений шлях до PDF: {}",
+            db_path.display()
+        )
+    })?;
+
+    let expected_dir = managed_existing_pdf_dir(storage_dir, kind, doc_id, number);
+    let canonical_expected = std::fs::canonicalize(&expected_dir).with_context(|| {
+        format!(
+            "Керована директорія для PDF не існує: {}",
+            expected_dir.display()
+        )
+    })?;
+
+    anyhow::ensure!(
+        canonical_path.starts_with(&canonical_expected),
+        "Збережений PDF лежить поза керованою директорією документа — операцію скасовано"
+    );
+
+    Ok(canonical_path)
+}
+
 pub(super) async fn inspect_document_pdf_state(file_path: String) -> DocumentPdfStateDto {
     let task_path = file_path.clone();
     match tokio::task::spawn_blocking(move || {

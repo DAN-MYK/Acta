@@ -849,12 +849,14 @@ pub async fn document_pdf_attach_existing(
         ));
     }
 
+    let safe_source = ensure_attach_source_safe(ctx.storage_dir(), Path::new(&source_path))?;
+
     let managed_path = attach_existing_pdf_copy(
         ctx.storage_dir().to_path_buf(),
         kind,
         doc_uuid,
         number,
-        source_path,
+        safe_source.to_string_lossy().into_owned(),
     )
     .await?;
     persist_existing_pdf_path(ctx.pool(), doc_ref, managed_path.clone()).await?;
@@ -871,15 +873,25 @@ pub async fn document_pdf_apply_text_replace(
 ) -> Result<DocumentPdfActionResultDto> {
     let doc_ref = parse_document_ref(&request.doc_id)
         .ok_or_else(|| anyhow!("Некоректний ідентифікатор документа"))?;
+    let doc_uuid = document_ref_uuid(doc_ref);
+    let (kind, number) = load_document_kind_and_number(ctx.pool(), doc_ref).await?;
     let file_path = load_existing_pdf_path(ctx.pool(), doc_ref)
         .await?
         .ok_or_else(|| anyhow!("Спочатку прив’яжіть існуючий PDF до документа"))?;
 
+    let safe_path = ensure_managed_pdf_path(
+        ctx.storage_dir(),
+        &kind,
+        doc_uuid,
+        &number,
+        Path::new(&file_path),
+    )?;
+
     let report = tokio::task::spawn_blocking({
-        let file_path = file_path.clone();
+        let safe_path = safe_path.clone();
         let find_text = request.find_text.clone();
         let replace_text = request.replace_text.clone();
-        move || replace_pdf_text_with_report(Path::new(&file_path), &find_text, &replace_text)
+        move || replace_pdf_text_with_report(&safe_path, &find_text, &replace_text)
     })
     .await
     .context("PDF replace thread error")??;
