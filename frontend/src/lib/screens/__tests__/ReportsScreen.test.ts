@@ -138,7 +138,7 @@ function makeReportsApiResponse(filter: ReportsScreenDto["filter"]): ReportsScre
     selectedCounterparty: filter.selectedCounterpartyId
       ? {
           id: filter.selectedCounterpartyId,
-          name: "РўРћР’ Р РѕРјР°С€РєР°"
+          name: "ТОВ Ромашка"
         }
       : null
   };

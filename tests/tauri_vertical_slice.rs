@@ -228,7 +228,7 @@ async fn tauri_vertical_slice_shell_and_documents_smoke() -> Result<()> {
         assert_eq!(bulk_status_result.failed, 0);
         assert!(
             bulk_status_result.message.contains("1"),
-            "bulk advance status РјР°С” РїРѕРІРµСЂС‚Р°С‚Рё РїРѕРІС–РґРѕРјР»РµРЅРЅСЏ Р· Р»С–С‡РёР»СЊРЅРёРєРѕРј РѕР±СЂРѕР±Р»РµРЅРёС… РґРѕРєСѓРјРµРЅС‚С–РІ"
+            "bulk advance status має повертати повідомлення з лічильником оброблених документів"
         );
 
         let bulk_status_list = acta::tauri_api::documents::documents_list(
@@ -240,10 +240,10 @@ async fn tauri_vertical_slice_shell_and_documents_smoke() -> Result<()> {
             .items
             .iter()
             .find(|item| item.id == bulk_status_draft.form.id)
-            .ok_or_else(|| anyhow!("bulk-status draft РјР°С” Р±СѓС‚Рё РїСЂРёСЃСѓС‚РЅС–Р№ Сѓ СЃРїРёСЃРєСѓ"))?;
+            .ok_or_else(|| anyhow!("bulk-status draft має бути присутній у списку"))?;
         assert_ne!(
-            advanced_bulk_item.status_label, "Р§РµСЂРЅРµС‚РєР°",
-            "РїС–СЃР»СЏ bulk advance status РґРѕРєСѓРјРµРЅС‚ РЅРµ РјР°С” Р»РёС€Р°С‚РёСЃСЏ Сѓ С‡РµСЂРЅРµС‚С†С–"
+            advanced_bulk_item.status_label, "Чернетка",
+            "після bulk advance status документ не має лишатися у чернетці"
         );
 
         Ok(())
@@ -589,6 +589,112 @@ async fn tauri_vertical_slice_shell_and_documents_smoke() -> Result<()> {
 }
 
 #[tokio::test]
+async fn dashboard_load_uses_expected_receivables_for_upcoming_payments() -> Result<()> {
+    let _guard = tauri_vertical_slice_lock().lock().await;
+    let _ = dotenvy::dotenv();
+    std::env::set_var("ACTA_CONFIG_DIR", "storage/test-config");
+
+    let pool = acta::runtime::connect_pool().await?;
+    let company_id = acta::runtime::get_first_company_id(&pool).await;
+    let ctx = Arc::new(acta::app_ctx::AppCtx::new(pool, company_id));
+
+    let suffix = Uuid::new_v4().simple().to_string();
+    let counterparty = acta::db::counterparties::create(
+        ctx.pool(),
+        ctx.company_id(),
+        &acta::models::NewCounterparty {
+            name: format!("Dashboard Receivable Counterparty {suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("dash-rec-cp-{}", &suffix[..24])),
+        },
+    )
+    .await?;
+
+    let due_date = chrono::NaiveDate::from_ymd_opt(2000, 1, 1)
+        .ok_or_else(|| anyhow!("не вдалося розрахувати дату очікуваної оплати"))?;
+    let act = acta::db::acts::create(
+        ctx.pool(),
+        ctx.company_id(),
+        &acta::models::NewAct {
+            number: format!("DASH-REC-{}", &suffix[..24]),
+            counterparty_id: counterparty.id,
+            contract_id: None,
+            category_id: None,
+            direction: acta::models::DocumentDirection::Outgoing,
+            date: Utc::now().date_naive(),
+            expected_payment_date: Some(due_date),
+            status: acta::models::ActStatus::Issued,
+            notes: None,
+            bas_id: None,
+            items: vec![acta::models::NewActItem {
+                description: "Очікувана оплата для dashboard".to_string(),
+                quantity: dec!(1.0000),
+                unit: "шт".to_string(),
+                unit_price: dec!(432.10),
+            }],
+        },
+    )
+    .await?;
+
+    let payment_ref = format!("DASH-UNMATCHED-{}", &suffix[..24]);
+    acta::tauri_api::payments::payment_create_or_update(
+        &ctx,
+        acta::tauri_api::payments::PaymentCreateOrUpdateRequest {
+            id: String::new(),
+            date: Utc::now().date_naive().format("%Y-%m-%d").to_string(),
+            amount: "432.10".to_string(),
+            direction: "income".to_string(),
+            counterparty_id: counterparty.id.to_string(),
+            counterparty_name: String::new(),
+            bank_name: String::new(),
+            reference: payment_ref.clone(),
+            description: "Нерознесений платіж не має бути upcoming receivable".to_string(),
+        },
+    )
+    .await?;
+    let payment_id = sqlx::query_scalar::<_, Uuid>(
+        "SELECT id FROM payments WHERE company_id = $1 AND bank_ref = $2 ORDER BY created_at DESC LIMIT 1",
+    )
+    .bind(ctx.company_id())
+    .bind(&payment_ref)
+    .fetch_one(ctx.pool())
+    .await?;
+
+    let dashboard = acta::tauri_api::dashboard::dashboard_load(&ctx).await?;
+    let upcoming_ids = dashboard
+        .upcoming_payments
+        .iter()
+        .map(|payment| payment.id.as_str())
+        .collect::<Vec<_>>();
+    let act_id = act.id.to_string();
+    let payment_id_text = payment_id.to_string();
+
+    assert!(
+        upcoming_ids.contains(&act_id.as_str()),
+        "dashboard upcoming payments мають брати id акту з expected_payment_date"
+    );
+    assert!(
+        !upcoming_ids.contains(&payment_id_text.as_str()),
+        "нерознесений банківський платіж не має виглядати як очікувана оплата"
+    );
+
+    acta::db::payments::delete_scoped(ctx.pool(), ctx.company_id(), payment_id).await?;
+    let _ = acta::db::acts::delete(ctx.pool(), act.id).await;
+    let _ = sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(counterparty.id)
+        .execute(ctx.pool())
+        .await;
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn tauri_vertical_slice_payments_smoke() -> Result<()> {
     let _guard = tauri_vertical_slice_lock().lock().await;
     let _ = dotenvy::dotenv();
@@ -698,11 +804,11 @@ async fn tauri_vertical_slice_payments_smoke() -> Result<()> {
 
     let dashboard_after_create = acta::tauri_api::dashboard::dashboard_load(&ctx).await?;
     assert!(
-        dashboard_after_create
+        !dashboard_after_create
             .upcoming_payments
             .iter()
             .any(|payment| payment.id == new_payment_id),
-        "dashboard upcoming payments мають віддавати id реального payment record для drill-in"
+        "dashboard upcoming payments не мають показувати фактичні банківські платежі"
     );
 
     // Виконати решту кроків з гарантованим cleanup
@@ -1418,7 +1524,8 @@ async fn tauri_vertical_slice_payment_reconcile_split_is_atomic() -> Result<()> 
 }
 
 #[tokio::test]
-async fn tauri_vertical_slice_payment_calendar_load_includes_schedule_and_task_deadlines() -> Result<()> {
+async fn tauri_vertical_slice_payment_calendar_load_includes_schedule_and_task_deadlines(
+) -> Result<()> {
     let _guard = tauri_vertical_slice_lock().lock().await;
     let _ = dotenvy::dotenv();
     std::env::set_var("ACTA_CONFIG_DIR", "storage/test-config");
@@ -1498,8 +1605,14 @@ async fn tauri_vertical_slice_payment_calendar_load_includes_schedule_and_task_d
         .ok_or_else(|| anyhow!("календар має містити день 2026-05-06"))?;
     assert_eq!(day.event_count, 2);
     assert_eq!(day.expense_total_str, "12\u{00a0}500,00");
-    assert!(day.events.iter().any(|event| event.id == schedule.id.to_string() && event.kind == "schedule"));
-    assert!(day.events.iter().any(|event| event.id == task.id.to_string() && event.kind == "task"));
+    assert!(day
+        .events
+        .iter()
+        .any(|event| event.id == schedule.id.to_string() && event.kind == "schedule"));
+    assert!(day
+        .events
+        .iter()
+        .any(|event| event.id == task.id.to_string() && event.kind == "task"));
 
     let complete = acta::tauri_api::payments::payment_schedule_complete(
         &ctx,
@@ -1510,12 +1623,11 @@ async fn tauri_vertical_slice_payment_calendar_load_includes_schedule_and_task_d
     .await?;
     assert!(complete.ok);
 
-    let updated_schedule = sqlx::query_scalar::<_, bool>(
-        "SELECT is_completed FROM payment_schedule WHERE id = $1",
-    )
-    .bind(schedule.id)
-    .fetch_one(ctx.pool())
-    .await?;
+    let updated_schedule =
+        sqlx::query_scalar::<_, bool>("SELECT is_completed FROM payment_schedule WHERE id = $1")
+            .bind(schedule.id)
+            .fetch_one(ctx.pool())
+            .await?;
     assert!(updated_schedule);
 
     let _ = acta::db::tasks::delete(ctx.pool(), task.id).await;
