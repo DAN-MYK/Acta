@@ -40,7 +40,7 @@ const mocks = vi.hoisted(() => {
   });
 
   return {
-    closeEditor: vi.fn(),
+    closeEditor: vi.fn(() => ({ ok: true })),
     deleteCurrent: vi.fn(),
     load: vi.fn(),
     openEditor: vi.fn(),
@@ -167,6 +167,7 @@ describe("TasksScreen component", () => {
     ]) {
       fn.mockReset();
     }
+    mocks.closeEditor.mockReturnValue({ ok: true });
   });
 
   afterEach(() => {
@@ -257,4 +258,31 @@ describe("TasksScreen component", () => {
 
     component.$destroy();
   });
+
+  it("shows the dirty banner on Escape before closing the editor", async () => {
+    mocks.closeEditor.mockReturnValue({ ok: false, reason: "dirty" } as any);
+    const { component, target } = renderTasks();
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true }));
+    await tick();
+
+    expect(target.querySelector('[data-testid="tasks-dirty-banner"]')).toBeTruthy();
+    expect(mocks.closeEditor).toHaveBeenCalledWith(false);
+
+    component.$destroy();
+  });
+
+  it("shows the dirty banner on backdrop click before closing the editor", async () => {
+    mocks.closeEditor.mockReturnValue({ ok: false, reason: "dirty" } as any);
+    const { component, target } = renderTasks();
+
+    (target.querySelector(".editor-backdrop") as HTMLDivElement).click();
+    await tick();
+
+    expect(target.querySelector('[data-testid="tasks-dirty-banner"]')).toBeTruthy();
+    expect(mocks.closeEditor).toHaveBeenCalledWith(false);
+
+    component.$destroy();
+  });
+
 });

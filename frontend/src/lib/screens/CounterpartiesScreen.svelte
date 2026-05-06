@@ -10,6 +10,17 @@
   const navigation = navigationStore;
   let pendingDirtyClose = false;
 
+  function closeEditor(force = false) {
+    const result = counterparties.closeEditor(force);
+    if (result && result.ok === false && result.reason === "dirty") {
+      pendingDirtyClose = true;
+      return result;
+    }
+
+    pendingDirtyClose = false;
+    return result;
+  }
+
   function onCounterpartySearch(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
     void counterparties.load(input.value);
@@ -32,21 +43,25 @@
   }
 
   function requestCloseEditor() {
-    const result = counterparties.closeEditor();
-    if (result && result.ok === false && result.reason === "dirty") {
-      pendingDirtyClose = true;
-      return;
-    }
-    pendingDirtyClose = false;
+    closeEditor();
   }
 
   function confirmDiscardChanges() {
-    pendingDirtyClose = false;
-    counterparties.closeEditor(true);
+    closeEditor(true);
   }
 
   function cancelDiscardChanges() {
     pendingDirtyClose = false;
+  }
+
+  function onEditorBackdropClick() {
+    requestCloseEditor();
+  }
+
+  function onWindowKeydown(event: KeyboardEvent) {
+    if ($counterparties.editor && event.key === "Escape") {
+      requestCloseEditor();
+    }
   }
 
   function getOverdueDocumentsLabel(overdueCount: number): string {
@@ -147,6 +162,8 @@
 
 
 </script>
+
+<svelte:window on:keydown={onWindowKeydown} />
 
 <section
   class="panel"
@@ -413,7 +430,14 @@
 </section>
 
 {#if $counterparties.editor}
-  <section class="editor-sheet">
+  <button
+    type="button"
+    class="editor-backdrop"
+    aria-label="Закрити редактор"
+    data-testid="counterparties-editor-backdrop"
+    on:click={onEditorBackdropClick}
+  ></button>
+  <section class="editor-sheet" role="dialog" aria-modal="true">
     {#if pendingDirtyClose}
       <div
         class="editor-dirty-banner"

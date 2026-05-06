@@ -57,7 +57,7 @@ const mocks = vi.hoisted(() => {
     attachExistingPdf: vi.fn(),
     bulkAdvanceStatus: vi.fn(),
     bulkDelete: vi.fn(),
-    closeEditor: vi.fn(),
+    closeEditor: vi.fn(() => ({ ok: true })),
     create: vi.fn(),
     createChainDraft: vi.fn(),
     deleteCurrent: vi.fn(),
@@ -69,7 +69,6 @@ const mocks = vi.hoisted(() => {
     removeItem: vi.fn(),
     save: vi.fn(),
     selectAllVisible: vi.fn(),
-    isEditorDirty: vi.fn(() => false),
     toggleSelected: vi.fn(),
     updateFormField: vi.fn(),
     updateItemField: vi.fn()
@@ -97,7 +96,6 @@ vi.mock("../../stores/documents", () => ({
     removeItem: mocks.removeItem,
     save: mocks.save,
     selectAllVisible: mocks.selectAllVisible,
-    isEditorDirty: mocks.isEditorDirty,
     toggleSelected: mocks.toggleSelected,
     updateFormField: mocks.updateFormField,
     updateItemField: mocks.updateItemField
@@ -269,7 +267,6 @@ describe("DocumentsScreen component", () => {
       mocks.removeItem,
       mocks.save,
       mocks.selectAllVisible,
-      mocks.isEditorDirty,
       mocks.toggleSelected,
       mocks.updateFormField,
       mocks.updateItemField
@@ -280,7 +277,7 @@ describe("DocumentsScreen component", () => {
     mocks.selectAllVisible.mockImplementation(() => {
       setDocumentsState(["doc-1", "doc-2"]);
     });
-    mocks.isEditorDirty.mockReturnValue(false);
+    mocks.closeEditor.mockReturnValue({ ok: true });
     mocks.toggleSelected.mockImplementation((docId: string) => {
       setDocumentsState([docId]);
     });
@@ -328,20 +325,39 @@ describe("DocumentsScreen component", () => {
   });
 
   it("shows inline dirty banner before closing a dirty editor", async () => {
-    mocks.isEditorDirty.mockReturnValue(true);
+    const confirmSpy = vi.spyOn(window, "confirm");
+    mocks.closeEditor.mockReturnValue({ ok: false, reason: "dirty" } as any);
     const { component, target } = renderDocuments();
 
     buttonByText(target, "Закрити").click();
     await tick();
 
     expect(target.querySelector('[data-testid="documents-dirty-banner"]')).toBeTruthy();
-    expect(mocks.closeEditor).not.toHaveBeenCalled();
+    expect(mocks.closeEditor).toHaveBeenCalledWith(false);
+    expect(confirmSpy).not.toHaveBeenCalled();
 
+    confirmSpy.mockRestore();
     component.$destroy();
   });
 
-  it("forces close after confirming dirty editor dismissal", async () => {
-    mocks.isEditorDirty.mockReturnValue(true);
+  it("shows the dirty banner on Escape without falling back to window.confirm", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm");
+    mocks.closeEditor.mockReturnValue({ ok: false, reason: "dirty" } as any);
+    const { component, target } = renderDocuments();
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true }));
+    await tick();
+
+    expect(target.querySelector('[data-testid="documents-dirty-banner"]')).toBeTruthy();
+    expect(mocks.closeEditor).toHaveBeenCalledWith(false);
+    expect(confirmSpy).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+    component.$destroy();
+  });
+
+  it("forces close after confirming dirty editor dismissal from the backdrop", async () => {
+    mocks.closeEditor.mockReturnValueOnce({ ok: false, reason: "dirty" } as any).mockReturnValueOnce({ ok: true });
     const { component, target } = renderDocuments();
 
     (target.querySelector('[data-testid="documents-drawer-backdrop"]') as HTMLButtonElement).click();

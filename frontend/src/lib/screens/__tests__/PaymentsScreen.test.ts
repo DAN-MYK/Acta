@@ -708,7 +708,7 @@ describe("PaymentsScreen component", () => {
   });
 
   it("shows inline dirty banner before closing a dirty editor", async () => {
-    mocks.closeEditor.mockReturnValue({ ok: false, reason: "dirty" });
+    mocks.closeEditor.mockReturnValue({ ok: false, reason: "dirty" } as any);
     setPaymentsState({
       editor: {
         id: "payment-1",
@@ -729,12 +729,66 @@ describe("PaymentsScreen component", () => {
     await tick();
 
     expect(target.querySelector('[data-testid="payments-dirty-banner"]')).toBeTruthy();
-    expect(mocks.closeEditor).toHaveBeenCalledWith();
+    expect(mocks.closeEditor).toHaveBeenCalledWith(false);
 
     buttonByText(target, "Так, закрити").click();
     await tick();
 
     expect(mocks.closeEditor).toHaveBeenCalledWith(true);
+
+    component.$destroy();
+  });
+
+  it("shows the dirty banner on Escape before closing the editor", async () => {
+    mocks.closeEditor.mockReturnValue({ ok: false, reason: "dirty" } as any);
+    setPaymentsState({
+      editor: {
+        id: "payment-1",
+        date: "2026-05-01",
+        amount: "1000,00",
+        direction: "income",
+        counterpartyId: "",
+        counterpartyName: "",
+        bankName: "ПриватБанк",
+        reference: "REF-1",
+        description: "Тестовий платіж"
+      }
+    });
+
+    const { component, target } = renderPayments();
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true }));
+    await tick();
+
+    expect(target.querySelector('[data-testid="payments-dirty-banner"]')).toBeTruthy();
+    expect(mocks.closeEditor).toHaveBeenCalledWith(false);
+
+    component.$destroy();
+  });
+
+  it("shows the dirty banner on backdrop click before closing the editor", async () => {
+    mocks.closeEditor.mockReturnValue({ ok: false, reason: "dirty" } as any);
+    setPaymentsState({
+      editor: {
+        id: "payment-1",
+        date: "2026-05-01",
+        amount: "1000,00",
+        direction: "income",
+        counterpartyId: "",
+        counterpartyName: "",
+        bankName: "ПриватБанк",
+        reference: "REF-1",
+        description: "Тестовий платіж"
+      }
+    });
+
+    const { component, target } = renderPayments();
+
+    (target.querySelector('[data-testid="payments-editor-backdrop"]') as HTMLButtonElement).click();
+    await tick();
+
+    expect(target.querySelector('[data-testid="payments-dirty-banner"]')).toBeTruthy();
+    expect(mocks.closeEditor).toHaveBeenCalledWith(false);
 
     component.$destroy();
   });

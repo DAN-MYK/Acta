@@ -10,6 +10,17 @@
   let importButton: HTMLButtonElement | null = null;
   let pendingDirtyClose = false;
 
+  function closeEditor(force = false) {
+    const result = payments.closeEditor(force);
+    if (result && result.ok === false && result.reason === "dirty") {
+      pendingDirtyClose = true;
+      return result;
+    }
+
+    pendingDirtyClose = false;
+    return result;
+  }
+
   function onPaymentFieldChange(field: keyof PaymentDraftFormDto, event: Event) {
     const input = event.currentTarget as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
     payments.updateFormField(field, input.value);
@@ -30,21 +41,25 @@
   }
 
   function requestCloseEditor() {
-    const result = payments.closeEditor();
-    if (result && result.ok === false && result.reason === "dirty") {
-      pendingDirtyClose = true;
-      return;
-    }
-    pendingDirtyClose = false;
+    closeEditor();
   }
 
   function confirmDiscardChanges() {
-    pendingDirtyClose = false;
-    payments.closeEditor(true);
+    closeEditor(true);
   }
 
   function cancelDiscardChanges() {
     pendingDirtyClose = false;
+  }
+
+  function onEditorBackdropClick() {
+    requestCloseEditor();
+  }
+
+  function onWindowKeydown(event: KeyboardEvent) {
+    if ($payments.editor && event.key === "Escape") {
+      requestCloseEditor();
+    }
   }
 
   function getPaymentStateLabel(matchedDoc: string): string {
@@ -217,6 +232,8 @@
   }
 
 </script>
+
+<svelte:window on:keydown={onWindowKeydown} />
 
 <section
   class="panel"
@@ -738,7 +755,14 @@
 </section>
 
 {#if $payments.editor}
-  <section class="editor-sheet">
+  <button
+    type="button"
+    class="editor-backdrop"
+    aria-label="Закрити редактор"
+    data-testid="payments-editor-backdrop"
+    on:click={onEditorBackdropClick}
+  ></button>
+  <section class="editor-sheet" role="dialog" aria-modal="true">
     {#if pendingDirtyClose}
       <div
         class="editor-dirty-banner"

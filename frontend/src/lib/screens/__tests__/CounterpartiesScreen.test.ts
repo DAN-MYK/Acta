@@ -366,7 +366,7 @@ describe("CounterpartiesScreen component", () => {
   });
 
   it("shows inline dirty banner before closing a dirty editor", async () => {
-    mocks.closeEditor.mockReturnValue({ ok: false, reason: "dirty" });
+    mocks.closeEditor.mockReturnValue({ ok: false, reason: "dirty" } as any);
     mocks.counterpartiesState.set({
       screen: makeScreen(),
       detail: makeDetail(),
@@ -399,12 +399,90 @@ describe("CounterpartiesScreen component", () => {
     await tick();
 
     expect(target.querySelector('[data-testid="counterparties-dirty-banner"]')).toBeTruthy();
-    expect(mocks.closeEditor).toHaveBeenCalledWith();
+    expect(mocks.closeEditor).toHaveBeenCalledWith(false);
 
     buttonByText(target, "Так, закрити").click();
     await tick();
 
     expect(mocks.closeEditor).toHaveBeenCalledWith(true);
+
+    component.$destroy();
+  });
+
+  it("shows the dirty banner on Escape before closing the editor", async () => {
+    mocks.closeEditor.mockReturnValue({ ok: false, reason: "dirty" } as any);
+    mocks.counterpartiesState.set({
+      screen: makeScreen(),
+      detail: makeDetail(),
+      editor: {
+        form: {
+          id: "cp-2",
+          title: "Редагувати контрагента",
+          name: "ФОП Петренко",
+          edrpou: "87654321",
+          ipn: "",
+          iban: "",
+          address: "",
+          phone: "",
+          email: "",
+          notes: ""
+        },
+        showEditor: true
+      },
+      selectedId: "cp-2",
+      initialLoading: false,
+      loading: false,
+      error: null,
+      message: null,
+      query: ""
+    });
+
+    const { component, target } = renderCounterparties();
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true }));
+    await tick();
+
+    expect(target.querySelector('[data-testid="counterparties-dirty-banner"]')).toBeTruthy();
+    expect(mocks.closeEditor).toHaveBeenCalledWith(false);
+
+    component.$destroy();
+  });
+
+  it("shows the dirty banner on backdrop click before closing the editor", async () => {
+    mocks.closeEditor.mockReturnValue({ ok: false, reason: "dirty" } as any);
+    mocks.counterpartiesState.set({
+      screen: makeScreen(),
+      detail: makeDetail(),
+      editor: {
+        form: {
+          id: "cp-2",
+          title: "Редагувати контрагента",
+          name: "ФОП Петренко",
+          edrpou: "87654321",
+          ipn: "",
+          iban: "",
+          address: "",
+          phone: "",
+          email: "",
+          notes: ""
+        },
+        showEditor: true
+      },
+      selectedId: "cp-2",
+      initialLoading: false,
+      loading: false,
+      error: null,
+      message: null,
+      query: ""
+    });
+
+    const { component, target } = renderCounterparties();
+
+    (target.querySelector('[data-testid="counterparties-editor-backdrop"]') as HTMLButtonElement).click();
+    await tick();
+
+    expect(target.querySelector('[data-testid="counterparties-dirty-banner"]')).toBeTruthy();
+    expect(mocks.closeEditor).toHaveBeenCalledWith(false);
 
     component.$destroy();
   });

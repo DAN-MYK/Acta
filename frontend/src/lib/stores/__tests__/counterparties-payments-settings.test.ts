@@ -1,4 +1,4 @@
-﻿import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import appSource from "../../../App.svelte?raw";
 import frontendApiSource from "../../api.ts?raw";
 import tauriDocumentsSource from "../../../../../src-tauri/src/commands/documents.rs?raw";
@@ -20,10 +20,10 @@ function makeCounterparties(ids: string[]): CounterpartiesScreenDto {
   return {
     items: ids.map((id, index) => ({
       id,
-      name: `РљРѕРЅС‚СЂР°РіРµРЅС‚ ${index + 1}`,
+      name: `Контрагент ${index + 1}`,
       edrpou: `1234567${index}`,
       kind: "",
-      balanceStr: "0,00 РіСЂРЅ",
+      balanceStr: "0,00 грн",
       docCount: 0,
       overdueCount: 0
     }))
@@ -34,23 +34,23 @@ function makeCounterpartyDetail(id: string): CounterpartyDetailScreenDto {
   return {
     info: {
       id,
-      name: `РљРѕРЅС‚СЂР°РіРµРЅС‚ ${id}`,
+      name: `Контрагент ${id}`,
       kind: "",
       edrpou: "12345678",
       ipn: "",
       vat: "",
       iban: "UA123456789012345678901234567",
       bank: "",
-      address: "Рј. РљРёС—РІ",
+      address: "м. Київ",
       director: "",
       phone: "",
       email: "",
       clientSince: "",
-      balanceStr: "0,00 РіСЂРЅ",
+      balanceStr: "0,00 грн",
       balanceIsNegative: false,
       docCount: 0,
       overdueCount: 0,
-      overdueAmountStr: "0,00 РіСЂРЅ",
+      overdueAmountStr: "0,00 грн",
       lastContactDays: 0,
       lastContactDate: ""
     },
@@ -63,8 +63,8 @@ function makeCounterpartyEditor(id = ""): CounterpartyEditorDto {
   return {
     form: {
       id,
-      title: id ? "Р РµРґР°РіСѓРІР°РЅРЅСЏ РєРѕРЅС‚СЂР°РіРµРЅС‚Р°" : "РќРѕРІРёР№ РєРѕРЅС‚СЂР°РіРµРЅС‚",
-      name: id ? `РљРѕРЅС‚СЂР°РіРµРЅС‚ ${id}` : "",
+      title: id ? "Редагування контрагента" : "Новий контрагент",
+      name: id ? `Контрагент ${id}` : "",
       edrpou: "",
       ipn: "",
       iban: "",
@@ -83,20 +83,20 @@ function makePayments(ids: string[]): PaymentsScreenDto {
       id,
       date: "2026-04-30",
       counterpartyId: `cp-${index + 1}`,
-      counterparty: `РљРѕРЅС‚СЂР°РіРµРЅС‚ ${index + 1}`,
-      amountStr: `${index + 1} 000,00 РіСЂРЅ`,
+      counterparty: `Контрагент ${index + 1}`,
+      amountStr: `${index + 1} 000,00 грн`,
       direction: index % 2 === 0 ? "in" : "out",
       matchedDoc: "",
-      account: "РџСЂРёРІР°С‚Р‘Р°РЅРє"
+      account: "ПриватБанк"
     })),
-    counterparties: [{ id: "cp-1", name: "РљРѕРЅС‚СЂР°РіРµРЅС‚ 1" }],
+    counterparties: [{ id: "cp-1", name: "Контрагент 1" }],
     kpi: {
-      incomingStr: "1 000,00 РіСЂРЅ",
-      outgoingStr: "0,00 РіСЂРЅ",
-      netStr: "1 000,00 РіСЂРЅ",
-      unmatchedStr: "1 000,00 РіСЂРЅ",
-      incomingSub: "РќР°РґС…РѕРґР¶РµРЅРЅСЏ",
-      outgoingSub: "Р’РёС‚СЂР°С‚Рё",
+      incomingStr: "1 000,00 грн",
+      outgoingStr: "0,00 грн",
+      netStr: "1 000,00 грн",
+      unmatchedStr: "1 000,00 грн",
+      incomingSub: "Надходження",
+      outgoingSub: "Витрати",
       unmatchedCount: ids.length
     }
   };
@@ -134,21 +134,21 @@ function makePaymentCalendarMonth(payload?: unknown) {
 function makeSettingsScreen(): SettingsScreenDto {
   return {
     company: {
-      fullName: "РўРћР’ РђРєС‚",
-      shortName: "РђРєС‚",
+      fullName: "ТОВ Акт",
+      shortName: "Акт",
       edrpou: "12345678",
       ipn: "",
-      address: "Рј. РљРёС—РІ",
-      director: "Р†РІР°РЅРµРЅРєРѕ Р†.Р†.",
+      address: "м. Київ",
+      director: "Іваненко І.І.",
       iban: "UA123456789012345678901234567",
-      bank: "РџСЂРёРІР°С‚Р‘Р°РЅРє",
+      bank: "ПриватБанк",
       vatRegistered: false,
       vatCert: ""
     },
     integrations: [
       {
         label: "BAS",
-        description: "Р•РєСЃРїРѕСЂС‚ BAS",
+        description: "Експорт BAS",
         tag: "bas",
         enabled: false
       }
@@ -166,7 +166,7 @@ function makeSettingsScreen(): SettingsScreenDto {
       darkMode: false
     },
     backup: {
-      label: "РћСЃС‚Р°РЅРЅСЏ РєРѕРїС–СЏ",
+      label: "Остання копія",
       file: "backup.zip",
       kind: "manual",
       note: "OK",
@@ -205,7 +205,7 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
           return {
             ok: true,
             savedId: "cp-3",
-            message: "РљРѕРЅС‚СЂР°РіРµРЅС‚Р° Р·Р±РµСЂРµР¶РµРЅРѕ",
+            message: "Контрагента збережено",
             updatedList: screen.items,
             updatedDetail: currentDetail
           };
@@ -213,13 +213,13 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
           screen = makeCounterparties(["cp-2"]);
           return {
             ok: true,
-            message: "РљРѕРЅС‚СЂР°РіРµРЅС‚Р° Р°СЂС…С–РІРѕРІР°РЅРѕ"
+            message: "Контрагента архівовано"
           };
         case "counterparty_create_document_context":
           expect(payload).toEqual({ counterpartyId: "cp-2" });
           return {
             counterpartyId: "cp-2",
-            counterpartyName: "РљРѕРЅС‚СЂР°РіРµРЅС‚ cp-2"
+            counterpartyName: "Контрагент cp-2"
           };
         default:
           throw new Error(`unexpected command: ${command}`);
@@ -236,20 +236,20 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     expect(snapshot(counterpartiesStore).detail?.info.id).toBe("cp-2");
 
     await counterpartiesStore.openEditor();
-    counterpartiesStore.updateFormField("name", "РќРѕРІРёР№ РєРѕРЅС‚СЂР°РіРµРЅС‚");
+    counterpartiesStore.updateFormField("name", "Новий контрагент");
     await counterpartiesStore.save();
     expect(snapshot(counterpartiesStore).selectedId).toBe("cp-3");
-    expect(snapshot(counterpartiesStore).message).toBe("РљРѕРЅС‚СЂР°РіРµРЅС‚Р° Р·Р±РµСЂРµР¶РµРЅРѕ");
+    expect(snapshot(counterpartiesStore).message).toBe("Контрагента збережено");
 
     await counterpartiesStore.archiveCurrent();
     expect(snapshot(counterpartiesStore).selectedId).toBe("cp-2");
-    expect(snapshot(counterpartiesStore).message).toBe("РљРѕРЅС‚СЂР°РіРµРЅС‚Р° Р°СЂС…С–РІРѕРІР°РЅРѕ");
+    expect(snapshot(counterpartiesStore).message).toBe("Контрагента архівовано");
 
     await counterpartiesStore.createDocument();
     expect(snapshot(navigationStore)).toBe("documents");
     expect(snapshot(documentsStore).draftContext).toEqual({
       counterpartyId: "cp-2",
-      counterpartyName: "РљРѕРЅС‚СЂР°РіРµРЅС‚ cp-2"
+      counterpartyName: "Контрагент cp-2"
     });
   });
 
@@ -270,7 +270,7 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
           list = makePayments(["pay-1", "pay-2"]);
           return {
             ok: true,
-            message: "РџР»Р°С‚С–Р¶ Р·Р±РµСЂРµР¶РµРЅРѕ"
+            message: "Платіж збережено"
           };
         case "payment_match_preview":
           expect(payload).toEqual({ request: { paymentId: "pay-2" } });
@@ -282,8 +282,8 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
               {
                 documentId: "act-1",
                 documentKind: "act",
-                title: "РђРєС‚ ACT-001",
-                openAmountStr: "1 000,00 РіСЂРЅ",
+                title: "Акт ACT-001",
+                openAmountStr: "1 000,00 грн",
                 totalScore: 0.98,
                 sameIban: true,
                 referenceHit: true,
@@ -294,36 +294,36 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
             autoMatch: {
               documentId: "act-1",
               documentKind: "act",
-              title: "РђРєС‚ ACT-001",
-              amountStr: "1 000,00 РіСЂРЅ"
+              title: "Акт ACT-001",
+              amountStr: "1 000,00 грн"
             }
           };
         case "payment_match_apply_auto":
           return {
             ok: true,
-            message: "РђРІС‚РѕР·С–СЃС‚Р°РІР»РµРЅРЅСЏ РїР»Р°С‚РµР¶Сѓ Р·Р°СЃС‚РѕСЃРѕРІР°РЅРѕ"
+            message: "Автозіставлення платежу застосовано"
           };
         case "payment_unreconcile_all":
           return {
             ok: true,
-            message: "Р—РІРµРґРµРЅРЅСЏ СЃРєР°СЃРѕРІР°РЅРѕ"
+            message: "Зведення скасовано"
           };
         case "payments_import_latest_csv":
           list = makePayments(["pay-1", "pay-2", "pay-3"]);
           return {
             ok: true,
-            message: "CSV С–РјРїРѕСЂС‚РѕРІР°РЅРѕ"
+            message: "CSV імпортовано"
           };
         case "payments_sync_bank":
           return {
             ok: true,
-            message: "Р‘Р°РЅРє СЃРёРЅС…СЂРѕРЅС–Р·РѕРІР°РЅРѕ"
+            message: "Банк синхронізовано"
           };
         case "payments_open_manual_template":
           return {
             ok: true,
             path: "storage/import/bank/manual-template.csv",
-            message: "РЁР°Р±Р»РѕРЅ РІС–РґРєСЂРёС‚Рѕ"
+            message: "Шаблон відкрито"
           };
         default:
           throw new Error(`unexpected command: ${command}`);
@@ -343,7 +343,7 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     paymentsStore.updateFormField("amount", "1000.00");
     await paymentsStore.save();
     expect(snapshot(paymentsStore).list?.items).toHaveLength(2);
-    expect(snapshot(paymentsStore).message).toBe("РџР»Р°С‚С–Р¶ Р·Р±РµСЂРµР¶РµРЅРѕ");
+    expect(snapshot(paymentsStore).message).toBe("Платіж збережено");
 
     const openedById = await paymentsStore.openById("pay-1");
     expect(openedById).toBe(true);
@@ -352,14 +352,14 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
 
     await paymentsStore.reconcile("pay-2");
     expect(snapshot(paymentsStore).matchPreview?.decisionKind).toBe("exact");
-    expect(snapshot(paymentsStore).matchPreview?.autoMatch?.title).toBe("РђРєС‚ ACT-001");
+    expect(snapshot(paymentsStore).matchPreview?.autoMatch?.title).toBe("Акт ACT-001");
 
     await paymentsStore.confirmPreviewAutoMatch();
-    expect(snapshot(paymentsStore).message).toBe("РђРІС‚РѕР·С–СЃС‚Р°РІР»РµРЅРЅСЏ РїР»Р°С‚РµР¶Сѓ Р·Р°СЃС‚РѕСЃРѕРІР°РЅРѕ");
+    expect(snapshot(paymentsStore).message).toBe("Автозіставлення платежу застосовано");
     expect(snapshot(paymentsStore).matchPreview).toBeNull();
 
     await paymentsStore.unreconcile("pay-2");
-    expect(snapshot(paymentsStore).message).toBe("Р—РІРµРґРµРЅРЅСЏ СЃРєР°СЃРѕРІР°РЅРѕ");
+    expect(snapshot(paymentsStore).message).toBe("Зведення скасовано");
 
     const importResult = await paymentsStore.importCsv();
     expect(importResult.ok).toBe(true);
@@ -367,7 +367,7 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
 
     const syncResult = await paymentsStore.syncBank();
     expect(syncResult.ok).toBe(true);
-    expect(snapshot(paymentsStore).message).toBe("Р‘Р°РЅРє СЃРёРЅС…СЂРѕРЅС–Р·РѕРІР°РЅРѕ");
+    expect(snapshot(paymentsStore).message).toBe("Банк синхронізовано");
 
     expect(invokeMock.mock.calls.filter(([command]) => command === "payments_list")).toHaveLength(6);
 
@@ -400,8 +400,8 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
                 {
                   documentId: "act-1",
                   documentKind: "act",
-                  title: "РђРєС‚ ACT-001",
-                  openAmountStr: "1 000,00 РіСЂРЅ",
+                  title: "Акт ACT-001",
+                  openAmountStr: "1 000,00 грн",
                   totalScore: 0.99,
                   sameIban: true,
                   referenceHit: true,
@@ -412,8 +412,8 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
               autoMatch: {
                 documentId: "act-1",
                 documentKind: "act",
-                title: "РђРєС‚ ACT-001",
-                amountStr: "1 000,00 РіСЂРЅ"
+                title: "Акт ACT-001",
+                amountStr: "1 000,00 грн"
               }
             };
           }
@@ -427,8 +427,8 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
                 {
                   documentId: "inv-1",
                   documentKind: "invoice",
-                  title: "РќР°РєР»Р°РґРЅР° INV-001",
-                  openAmountStr: "2 000,00 РіСЂРЅ",
+                  title: "Накладна INV-001",
+                  openAmountStr: "2 000,00 грн",
                   totalScore: 0.83,
                   sameIban: true,
                   referenceHit: false,
@@ -438,8 +438,8 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
                 {
                   documentId: "act-2",
                   documentKind: "act",
-                  title: "РђРєС‚ ACT-002",
-                  openAmountStr: "2 000,00 РіСЂРЅ",
+                  title: "Акт ACT-002",
+                  openAmountStr: "2 000,00 грн",
                   totalScore: 0.74,
                   sameIban: false,
                   referenceHit: true,
@@ -464,12 +464,12 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
           list = {
             ...list,
             items: list.items.map((item) =>
-              item.id === "pay-1" ? { ...item, matchedDoc: "РђРєС‚ ACT-001" } : item
+              item.id === "pay-1" ? { ...item, matchedDoc: "Акт ACT-001" } : item
             )
           };
           return {
             ok: true,
-            message: "РђРІС‚РѕР·С–СЃС‚Р°РІР»РµРЅРЅСЏ РїР»Р°С‚РµР¶Сѓ Р·Р°СЃС‚РѕСЃРѕРІР°РЅРѕ"
+            message: "Автозіставлення платежу застосовано"
           };
         case "payment_reconcile":
           expect((payload as { request: { paymentId: string; documentKind: string; documentId: string; amount: string } }).request).toMatchObject({
@@ -498,12 +498,12 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     await paymentsStore.reconcile("pay-1");
     expect(snapshot(paymentsStore).matchPreview?.paymentId).toBe("pay-1");
     expect(snapshot(paymentsStore).matchPreview?.decisionKind).toBe("exact");
-    expect(snapshot(paymentsStore).matchPreview?.autoMatch?.title).toBe("РђРєС‚ ACT-001");
+    expect(snapshot(paymentsStore).matchPreview?.autoMatch?.title).toBe("Акт ACT-001");
     expect(invokeMock.mock.calls.filter(([command]) => command === "payment_match_apply_auto")).toHaveLength(0);
 
     await paymentsStore.confirmPreviewAutoMatch();
     expect(snapshot(paymentsStore).matchPreview).toBeNull();
-    expect(snapshot(paymentsStore).message).toBe("РђРІС‚РѕР·С–СЃС‚Р°РІР»РµРЅРЅСЏ РїР»Р°С‚РµР¶Сѓ Р·Р°СЃС‚РѕСЃРѕРІР°РЅРѕ");
+    expect(snapshot(paymentsStore).message).toBe("Автозіставлення платежу застосовано");
 
     await paymentsStore.reconcile("pay-2");
     expect(snapshot(paymentsStore).matchPreview?.decisionKind).toBe("ambiguous");
@@ -545,8 +545,8 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
               {
                 documentId: "inv-1",
                 documentKind: "invoice",
-                title: "Р СњР В°Р С”Р В»Р В°Р Т‘Р Р…Р В° INV-001",
-                openAmountStr: "2 000,00 Р С–РЎР‚Р Р…",
+                title: "Накладна INV-001",
+                openAmountStr: "2 000,00 грн",
                 totalScore: 0.83,
                 sameIban: true,
                 referenceHit: false,
@@ -1235,8 +1235,8 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
                 {
                   documentId: "act-1",
                   documentKind: "act",
-                  title: "РђРєС‚ ACT-001",
-                  openAmountStr: "1 000,00 РіСЂРЅ",
+                  title: "Акт ACT-001",
+                  openAmountStr: "1 000,00 грн",
                   totalScore: 0.99,
                   sameIban: true,
                   referenceHit: true,
@@ -1247,8 +1247,8 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
               autoMatch: {
                 documentId: "act-1",
                 documentKind: "act",
-                title: "РђРєС‚ ACT-001",
-                amountStr: "1 000,00 РіСЂРЅ"
+                title: "Акт ACT-001",
+                amountStr: "1 000,00 грн"
               }
             };
           }
@@ -1289,7 +1289,7 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
           };
           return {
             ok: true,
-            message: "РќР°Р»Р°С€С‚СѓРІР°РЅРЅСЏ РІРёРіР»СЏРґСѓ Р·Р±РµСЂРµР¶РµРЅРѕ",
+            message: "Налаштування вигляду збережено",
             screen
           };
         case "settings_save_company":
@@ -1297,12 +1297,12 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
             ...screen,
             company: {
               ...screen.company,
-              fullName: "РўРћР’ РђРєС‚ РџР»СЋСЃ"
+              fullName: "ТОВ Акт Плюс"
             }
           };
           return {
             ok: true,
-            message: "РљРѕРјРїР°РЅС–СЋ Р·Р±РµСЂРµР¶РµРЅРѕ",
+            message: "Компанію збережено",
             screen
           };
         case "settings_configure_integration":
@@ -1314,7 +1314,7 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
           };
           return {
             ok: true,
-            message: "Р†РЅС‚РµРіСЂР°С†С–СЋ РѕРЅРѕРІР»РµРЅРѕ",
+            message: "Інтеграцію оновлено",
             screen
           };
         case "settings_team_invite":
@@ -1322,28 +1322,28 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
             ...screen,
             team: [
               {
-                name: "РћР»РµРЅР°",
+                name: "Олена",
                 email: "olena@example.com",
                 role: "admin",
-                lastActive: "С‰РѕР№РЅРѕ"
+                lastActive: "щойно"
               }
             ]
           };
           return {
             ok: true,
-            message: "Р—Р°РїСЂРѕС€РµРЅРЅСЏ СЃС‚РІРѕСЂРµРЅРѕ",
+            message: "Запрошення створено",
             screen
           };
         case "settings_backup_now":
           return {
             ok: true,
-            message: "Р РµР·РµСЂРІРЅСѓ РєРѕРїС–СЋ СЃС‚РІРѕСЂРµРЅРѕ",
+            message: "Резервну копію створено",
             screen
           };
         case "settings_backup_open_latest":
           return {
             ok: true,
-            message: "Р РµР·РµСЂРІРЅСѓ РєРѕРїС–СЋ РІС–РґРєСЂРёС‚Рѕ",
+            message: "Резервну копію відкрито",
             path: "storage/backups/latest.zip"
           };
         default:
@@ -1352,7 +1352,7 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     });
 
     await settingsStore.load();
-    expect(snapshot(settingsStore).screen?.company.fullName).toBe("РўРћР’ РђРєС‚");
+    expect(snapshot(settingsStore).screen?.company.fullName).toBe("ТОВ Акт");
 
     settingsStore.updatePreference("darkMode", true);
     await settingsStore.savePreferences();
@@ -1360,9 +1360,9 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
       darkMode: true
     });
 
-    settingsStore.updateCompanyField("fullName", "РўРћР’ РђРєС‚ РџР»СЋСЃ");
+    settingsStore.updateCompanyField("fullName", "ТОВ Акт Плюс");
     await settingsStore.saveCompany();
-    expect(snapshot(settingsStore).screen?.company.fullName).toBe("РўРћР’ РђРєС‚ РџР»СЋСЃ");
+    expect(snapshot(settingsStore).screen?.company.fullName).toBe("ТОВ Акт Плюс");
 
     await settingsStore.configureIntegration("bas");
     expect(snapshot(settingsStore).screen?.integrations[0]?.enabled).toBe(true);
@@ -1371,19 +1371,16 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     expect(snapshot(settingsStore).screen?.team).toHaveLength(1);
 
     await settingsStore.backupNow();
-    expect(snapshot(settingsStore).message).toBe("Р РµР·РµСЂРІРЅСѓ РєРѕРїС–СЋ СЃС‚РІРѕСЂРµРЅРѕ");
+    expect(snapshot(settingsStore).message).toBe("Резервну копію створено");
 
     await settingsStore.openLatestBackup();
     expect(snapshot(settingsStore).message).toContain("storage/backups/latest.zip");
   });
 
-  it("keeps the sidebar theme toggle on the persisted settings flow", () => {
-    expect(appSource).toContain("async function onQuickThemeToggle()");
-    expect(appSource).toContain("settings.savePreferences()");
+  it("theme toggle is removed from topbar — only available in settings", () => {
+    expect(appSource).not.toContain("onQuickThemeToggle");
+    expect(appSource).not.toContain('data-testid="theme-toggle"');
     expect(appSource).toContain("appShell.bootstrap()");
-    expect(appSource).toContain("appShell.syncThemeFromSettings");
-    expect(appSource).toContain("on:click={onQuickThemeToggle}");
-    expect(appSource).not.toContain("on:click={() => theme.toggle()}");
   });
 
   it("keeps unused document commands out of the public Tauri invoke surface", () => {

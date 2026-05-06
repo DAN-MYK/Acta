@@ -114,48 +114,31 @@
     }
   }
 
-  async function confirmCloseIfDirty() {
-    if (!$documents.editor) {
-      documents.closeEditor();
-      return;
+  function closeEditor(force = false) {
+    const result = documents.closeEditor(force);
+    if (result && result.ok === false && result.reason === "dirty") {
+      pendingDirtyClose = true;
+      return result;
     }
 
-    if (!documents.isEditorDirty()) {
-      documents.closeEditor();
-      return;
-    }
+    pendingDirtyClose = false;
+    return result;
+  }
 
-    const confirmed = window.confirm("Є незбережені зміни. Закрити редактор без збереження?");
-    if (!confirmed) {
-      return;
-    }
-
-    documents.closeEditor(true);
+  function confirmCloseIfDirty() {
+    closeEditor();
   }
 
   function onDrawerBackdropClick() {
-    requestCloseDrawer();
+    confirmCloseIfDirty();
   }
 
   function requestCloseDrawer() {
-    if (!$documents.editor) {
-      documents.closeEditor();
-      pendingDirtyClose = false;
-      return;
-    }
-
-    if (!documents.isEditorDirty()) {
-      documents.closeEditor();
-      pendingDirtyClose = false;
-      return;
-    }
-
-    pendingDirtyClose = true;
+    confirmCloseIfDirty();
   }
 
   function confirmDiscardChanges() {
-    pendingDirtyClose = false;
-    documents.closeEditor(true);
+    closeEditor(true);
   }
 
   function cancelDiscardChanges() {

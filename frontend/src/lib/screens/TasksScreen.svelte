@@ -62,18 +62,23 @@
 
   let pendingDirtyClose = false;
 
-  function requestClose() {
-    const result = tasks.closeEditor();
+  function closeEditor(force = false) {
+    const result = tasks.closeEditor(force);
     if (result && result.ok === false && result.reason === "dirty") {
       pendingDirtyClose = true;
-      return;
+      return result;
     }
+
     pendingDirtyClose = false;
+    return result;
+  }
+
+  function requestClose() {
+    closeEditor();
   }
 
   function confirmDiscardChanges() {
-    pendingDirtyClose = false;
-    tasks.closeEditor(true);
+    closeEditor(true);
   }
 
   function cancelDiscardChanges() {
@@ -245,6 +250,7 @@
   <div
     class="editor-backdrop"
     on:click={onBackdropClick}
+    on:keydown={(e) => { if (e.key === "Enter" || e.key === " ") onBackdropClick(); }}
     role="button"
     tabindex="-1"
     aria-label="Закрити редактор"
