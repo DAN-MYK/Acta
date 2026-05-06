@@ -237,5 +237,7 @@ mod dashboard;
 mod documents_tasks_companies;
 #[path = "db_integration/payments.rs"]
 mod payments;
+#[path = "db_integration/pdf_paths.rs"]
+mod pdf_paths;
 #[path = "db_integration/reports.rs"]
 mod reports;

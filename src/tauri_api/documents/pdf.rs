@@ -41,19 +41,23 @@ pub(super) async fn load_existing_pdf_path(
 }
 
 pub(super) async fn persist_existing_pdf_path(
+    storage_dir: &Path,
     pool: &PgPool,
+    company_id: Uuid,
     doc_ref: DocumentRef,
     path: String,
 ) -> Result<()> {
+    let path = managed_pdf_storage_path(storage_dir, Path::new(&path))?;
+
     match doc_ref {
         DocumentRef::Act(_) => anyhow::bail!("Для актів flow існуючого PDF поки не підтримується"),
         DocumentRef::Invoice(id) => {
-            db::invoices::set_pdf_path(pool, id, Some(path))
+            db::invoices::set_pdf_path(pool, company_id, id, Some(path))
                 .await?
                 .ok_or_else(|| anyhow!("Рахунок не знайдено"))?;
         }
         DocumentRef::Waybill(id) => {
-            db::waybills::set_pdf_path(pool, id, Some(path))
+            db::waybills::set_pdf_path(pool, company_id, id, Some(path))
                 .await?
                 .ok_or_else(|| anyhow!("Накладну не знайдено"))?;
         }
@@ -162,6 +166,29 @@ pub(super) fn resolve_stored_pdf_path(storage_dir: &Path, stored_path: &str) -> 
 
 fn normalize_stored_pdf_path(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
+}
+
+pub(super) fn managed_pdf_storage_path(storage_dir: &Path, path: &Path) -> Result<String> {
+    let relative = if path.is_absolute() {
+        path.strip_prefix(storage_dir)
+            .with_context(|| format!("Керований PDF path лежить поза storage_dir: {}", path.display()))?
+            .to_path_buf()
+    } else {
+        path.to_path_buf()
+    };
+
+    anyhow::ensure!(
+        !relative.is_absolute(),
+        "У БД можна зберігати лише relative PDF paths"
+    );
+
+    let normalized = normalize_stored_pdf_path(&relative);
+    anyhow::ensure!(
+        normalized == "existing_pdf" || normalized.starts_with("existing_pdf/"),
+        "У БД можна зберігати лише керовані PDF paths з existing_pdf/"
+    );
+
+    Ok(normalized)
 }
 
 /// Перевіряє що `source_path` має розширення PDF і не перетинається з керованою
@@ -741,5 +768,28 @@ mod pdf_tests {
             resolve_stored_pdf_path(storage_dir, absolute.to_string_lossy().as_ref());
 
         assert_eq!(resolved_absolute, absolute);
+    }
+
+    #[test]
+    fn managed_pdf_storage_path_converts_absolute_path_to_relative() {
+        let storage_dir = std::env::temp_dir().join(format!("acta_pdf_storage_{}", Uuid::new_v4()));
+        let relative = PathBuf::from("existing_pdf/invoice/test-doc/working.pdf");
+        let absolute = storage_dir.join(&relative);
+
+        let stored = managed_pdf_storage_path(&storage_dir, &absolute)
+            .expect("absolute managed path має конвертуватися у відносний");
+
+        assert_eq!(stored, "existing_pdf/invoice/test-doc/working.pdf");
+    }
+
+    #[test]
+    fn managed_pdf_storage_path_rejects_absolute_path_outside_storage() {
+        let storage_dir = std::env::temp_dir().join(format!("acta_pdf_storage_{}", Uuid::new_v4()));
+        let outside = std::env::temp_dir().join(format!("acta_outside_{}.pdf", Uuid::new_v4()));
+
+        let error = managed_pdf_storage_path(&storage_dir, &outside)
+            .expect_err("absolute path поза storage має відхилятися");
+
+        assert!(error.to_string().contains("поза storage_dir"));
     }
 }

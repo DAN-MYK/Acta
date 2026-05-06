@@ -224,24 +224,26 @@ pub async fn get_for_edit(pool: &PgPool, id: Uuid) -> Result<Option<(Invoice, Ve
     get_by_id(pool, id).await
 }
 
-/// Оновити шлях до керованої PDF-копії для документа.
+/// Оновити шлях до керованої PDF-копії для документа в межах активної компанії.
 pub async fn set_pdf_path(
     pool: &PgPool,
+    company_id: Uuid,
     id: Uuid,
     pdf_path: Option<String>,
 ) -> Result<Option<Invoice>> {
     let invoice = sqlx::query_as::<_, Invoice>(
         r#"
         UPDATE invoices
-        SET pdf_path = $2,
+        SET pdf_path = $3,
             updated_at = NOW()
-        WHERE id = $1
+        WHERE id = $1 AND company_id = $2
         RETURNING id, company_id, number, counterparty_id, contract_id, category_id, direction,
                   date, expected_payment_date, total_amount, vat_amount,
                   status, notes, pdf_path, bas_id, created_at, updated_at
         "#,
     )
     .bind(id)
+    .bind(company_id)
     .bind(pdf_path)
     .fetch_optional(pool)
     .await?;

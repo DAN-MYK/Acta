@@ -209,7 +209,6 @@ pub fn header_layout_from_strs(headers: &[&str]) -> HeaderLayout {
                 "documentno",
                 "operationid",
                 "txnid",
-                "edrpou",
                 "референс",
                 "номердокумента",
                 "кодоперації",

@@ -901,8 +901,14 @@ pub async fn document_pdf_attach_existing(
         safe_source.to_string_lossy().into_owned(),
     )
     .await?;
-    persist_existing_pdf_path(ctx.storage_dir(), ctx.pool(), doc_ref, managed_path.clone())
-        .await?;
+    persist_existing_pdf_path(
+        ctx.storage_dir(),
+        ctx.pool(),
+        ctx.company_id(),
+        doc_ref,
+        managed_path.clone(),
+    )
+    .await?;
 
     Ok(DocumentPdfActionResultDto {
         editor: document_open(ctx, doc_id).await?,
