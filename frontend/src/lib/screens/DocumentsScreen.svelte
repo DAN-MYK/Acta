@@ -288,6 +288,19 @@
     return resolveDocumentKindMeta(kind).label;
   }
 
+  const navTabs: Array<{ value: "all" | "outgoing" | "incoming"; label: string }> = [
+    { value: "all", label: "Всі" },
+    { value: "outgoing", label: "Вихідні" },
+    { value: "incoming", label: "Вхідні" },
+  ];
+
+  const kindChips: Array<{ value: DocumentKind | null; label: string }> = [
+    { value: null, label: "Всі" },
+    { value: "act", label: "Акти" },
+    { value: "invoice", label: "Рахунки" },
+    { value: "waybill", label: "Накладні" },
+  ];
+
   const directionLabels: Record<string, string> = {
     outgoing: "↑ Вихідний",
     incoming: "↓ Вхідний"
@@ -338,17 +351,13 @@
   </div>
 
   <div class="documents-nav-tabs" role="tablist" aria-label="Напрямок документів">
-    {#each [
-      { value: "all",      label: "Всі" },
-      { value: "outgoing", label: "Вихідні" },
-      { value: "incoming", label: "Вхідні" }
-    ] as tab}
+    {#each navTabs as tab}
       <button
         role="tab"
         type="button"
         class="nav-tab"
         class:nav-tab-active={$documents.activeTab === tab.value}
-        on:click={() => documents.setTab(tab.value as "all" | "outgoing" | "incoming")}
+        on:click={() => documents.setTab(tab.value)}
         disabled={$documents.loading}
       >
         {tab.label}
@@ -357,17 +366,12 @@
   </div>
 
   <div class="documents-kind-chips" role="group" aria-label="Тип документа">
-    {#each [
-      { value: null,       label: "Всі" },
-      { value: "act",      label: "Акти" },
-      { value: "invoice",  label: "Рахунки" },
-      { value: "waybill",  label: "Накладні" }
-    ] as chip}
+    {#each kindChips as chip}
       <button
         type="button"
         class="kind-chip"
         class:kind-chip-active={$documents.kindFilter === chip.value}
-        on:click={() => documents.setKindFilter(chip.value as DocumentKind | null)}
+        on:click={() => documents.setKindFilter(chip.value)}
         disabled={$documents.loading}
       >
         {chip.label}
