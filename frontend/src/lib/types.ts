@@ -9,6 +9,7 @@ export type ScreenId =
 
 export type DocumentKind = "invoice" | "act" | "waybill";
 export type DocumentStatus = "draft" | "issued" | "signed" | "paid" | "delivered";
+export type DocumentDirection = "outgoing" | "incoming";
 
 export interface ShellChromeDto {
   companyName: string;
@@ -66,6 +67,7 @@ export interface DocumentItemDto {
   status: DocumentStatus;
   statusLabel: string;
   linkedId: string;
+  direction: DocumentDirection;
 }
 
 export interface DocumentDraftFormDto {
@@ -77,6 +79,7 @@ export interface DocumentDraftFormDto {
   number: string;
   date: string;
   notes: string;
+  direction: DocumentDirection;
 }
 
 export interface DocumentDraftItemDto {
