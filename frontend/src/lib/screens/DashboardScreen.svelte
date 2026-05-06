@@ -29,12 +29,9 @@
   }
 </script>
 
-<section class="panel dashboard-panel" data-testid="dashboard-screen">
-  <div class="panel-header">
-    <div>
-      <h2>Дашборд</h2>
-      <p>Операційна картина по активній компанії</p>
-    </div>
+<section class="dashboard-v1" data-testid="dashboard-screen">
+  <div class="dashboard-header">
+    <p>Операційна картина по активній компанії</p>
     <button class="btn-ghost" on:click={() => dashboard.load()} disabled={$dashboard.loading}>
       {$dashboard.loading ? "Оновлення..." : "Оновити"}
     </button>
@@ -49,11 +46,11 @@
       <SkeletonCard count={4} />
     {:else}
       {#each $dashboard.screen?.kpis ?? [] as kpi}
-        <article class:positive={kpi.tone === "positive"} class:warning={kpi.tone === "warning"} class:danger={kpi.tone === "danger"} class="dashboard-kpi-card">
+        <div class:positive={kpi.tone === "positive"} class:warning={kpi.tone === "warning"} class:danger={kpi.tone === "danger"} class="dashboard-kpi-card">
           <span>{kpi.label}</span>
           <strong>{kpi.value}</strong>
           <small>{kpi.detail}</small>
-        </article>
+        </div>
       {/each}
     {/if}
   </div>

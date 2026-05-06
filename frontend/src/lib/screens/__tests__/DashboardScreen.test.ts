@@ -167,7 +167,7 @@ describe("DashboardScreen component", () => {
   it("renders operational dashboard sections from the screen store", () => {
     const { component, target } = renderDashboard();
 
-    expect(target.textContent).toContain("Дашборд");
+    expect(target.textContent).toContain("Операційна картина по активній компанії");
     expect(target.textContent).toContain("Документи");
     expect(target.textContent).toContain("Грошовий потік");
     expect(target.textContent).toContain("ACT-42");
@@ -223,7 +223,7 @@ describe("DashboardScreen component", () => {
 
     const { component, target } = renderDashboard();
 
-    expect(target.textContent).toContain("Дашборд");
+    expect(target.textContent).toContain("Операційна картина по активній компанії");
     expect(buttonByText(target, "Оновити")).toBeTruthy();
     expect(target.querySelector('[data-testid="dashboard-kpis"] [data-testid="skeleton-card-grid"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="dashboard-cashflow"] [data-testid="skeleton-row-item"]')).toBeTruthy();
