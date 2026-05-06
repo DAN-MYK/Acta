@@ -571,6 +571,7 @@ async fn create_draft_form(
     counterparty_id: Uuid,
     counterparty_name: String,
     kind: &str,
+    direction: DocumentDirection,
 ) -> Result<DocumentDraftFormDto> {
     let today = Utc::now().date_naive();
 
@@ -585,7 +586,7 @@ async fn create_draft_form(
                     counterparty_id,
                     contract_id: None,
                     category_id: None,
-                    direction: DocumentDirection::Outgoing,
+                    direction,
                     date: today,
                     expected_payment_date: None,
                     status: ActStatus::Draft,
@@ -605,7 +606,7 @@ async fn create_draft_form(
                 number,
                 date: date_to_str(today),
                 notes: String::new(),
-                direction: DocumentDirection::Outgoing.as_str().to_string(),
+                direction: direction.as_str().to_string(),
             })
         }
         "invoice" => {
@@ -618,7 +619,7 @@ async fn create_draft_form(
                     counterparty_id,
                     contract_id: None,
                     category_id: None,
-                    direction: DocumentDirection::Outgoing,
+                    direction,
                     date: today,
                     expected_payment_date: None,
                     notes: None,
@@ -637,7 +638,7 @@ async fn create_draft_form(
                 number,
                 date: date_to_str(today),
                 notes: String::new(),
-                direction: DocumentDirection::Outgoing.as_str().to_string(),
+                direction: direction.as_str().to_string(),
             })
         }
         "waybill" => {
@@ -650,7 +651,7 @@ async fn create_draft_form(
                     counterparty_id,
                     contract_id: None,
                     category_id: None,
-                    direction: DocumentDirection::Outgoing,
+                    direction,
                     date: today,
                     notes: None,
                     bas_id: None,
@@ -668,7 +669,7 @@ async fn create_draft_form(
                 number,
                 date: date_to_str(today),
                 notes: String::new(),
-                direction: DocumentDirection::Outgoing.as_str().to_string(),
+                direction: direction.as_str().to_string(),
             })
         }
         _ => Err(anyhow!("Невідомий тип документа: {kind}")),
@@ -983,6 +984,8 @@ pub async fn document_create_draft(
             request.counterparty_id
         )
     })?;
+    let direction = DocumentDirection::try_from(request.direction.clone())
+        .map_err(|e| anyhow!("Невідома направленість документа: {e}"))?;
     let counterparty_name =
         load_counterparty_name(ctx.pool(), ctx.company_id(), counterparty_id).await?;
     let form = create_draft_form(
@@ -991,6 +994,7 @@ pub async fn document_create_draft(
         counterparty_id,
         counterparty_name,
         &request.kind,
+        direction,
     )
     .await?;
 
