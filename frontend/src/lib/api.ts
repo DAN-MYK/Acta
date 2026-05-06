@@ -89,11 +89,16 @@ export function dashboardLoad(): Promise<DashboardScreenDto> {
   return appInvoke("dashboard_load");
 }
 
-export function documentsList(query = "", tab?: string): Promise<DocumentsListDto> {
+export function documentsList(
+  query = "",
+  direction?: "outgoing" | "incoming",
+  kind?: string
+): Promise<DocumentsListDto> {
   return appInvoke("documents_list", {
     request: {
       query: query || null,
-      tab: tab || null
+      direction: direction ?? null,
+      kind: kind ?? null
     }
   });
 }
@@ -102,11 +107,16 @@ export function documentOpen(docId: string): Promise<DocumentEditorDto> {
   return appInvoke("document_open", { docId });
 }
 
-export function documentCreateDraft(counterpartyId: string, kind: string): Promise<DocumentEditorDto> {
+export function documentCreateDraft(
+  counterpartyId: string,
+  kind: string,
+  direction: "outgoing" | "incoming" = "outgoing"
+): Promise<DocumentEditorDto> {
   return appInvoke("document_create_draft", {
     request: {
       counterpartyId,
-      kind
+      kind,
+      direction
     }
   });
 }
