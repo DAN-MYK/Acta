@@ -13,7 +13,7 @@
   import { counterpartiesStore } from "../stores/counterparties";
   import { formatDocumentDraftTotal, formatDocumentItemTotal } from "../documentMoney";
   import { isFormattedMoneyNegative } from "../money";
-  import type { DocumentDraftItemDto, DocumentKind } from "../types";
+  import type { DocumentDraftItemDto, DocumentDirection, DocumentKind } from "../types";
 
   const documents = documentsStore;
   const counterparties = counterpartiesStore;
@@ -301,7 +301,7 @@
     { value: "waybill", label: "Накладні" },
   ];
 
-  const directionLabels: Record<string, string> = {
+  const directionLabels: Record<DocumentDirection, string> = {
     outgoing: "↑ Вихідний",
     incoming: "↓ Вхідний"
   };

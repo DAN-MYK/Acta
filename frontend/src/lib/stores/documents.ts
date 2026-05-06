@@ -71,6 +71,8 @@ async function loadEditorAndChain(docId: string): Promise<{
 function createDocumentsStore() {
   const { subscribe, update } = writable<DocumentsState>(initialState);
 
+  let filterSeq = 0;
+
   function tabToDirection(tab: "all" | "outgoing" | "incoming"): "outgoing" | "incoming" | undefined {
     if (tab === "outgoing") return "outgoing";
     if (tab === "incoming") return "incoming";
@@ -589,19 +591,25 @@ function createDocumentsStore() {
     },
     setTab(tab: "all" | "outgoing" | "incoming") {
       update((state) => ({ ...state, activeTab: tab, loading: true, error: null }));
+      const seq = ++filterSeq;
       const snap = get({ subscribe });
       reloadList(snap).then((list) => {
+        if (seq !== filterSeq) return;
         update((state) => ({ ...state, list, loading: false }));
       }).catch((error) => {
+        if (seq !== filterSeq) return;
         update((state) => ({ ...state, loading: false, error: String(error) }));
       });
     },
     setKindFilter(kind: DocumentKind | null) {
       update((state) => ({ ...state, kindFilter: kind, loading: true, error: null }));
+      const seq = ++filterSeq;
       const snap = get({ subscribe });
       reloadList(snap).then((list) => {
+        if (seq !== filterSeq) return;
         update((state) => ({ ...state, list, loading: false }));
       }).catch((error) => {
+        if (seq !== filterSeq) return;
         update((state) => ({ ...state, loading: false, error: String(error) }));
       });
     }

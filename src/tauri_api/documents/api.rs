@@ -753,6 +753,7 @@ pub async fn documents_list(
     let search = request.query.as_deref();
     let direction_filter = request.direction;
 
+    // None = include all kinds; Some(k) skips the other two DB calls (cheaper than SQL filter)
     let include_acts     = request.kind.as_deref().map_or(true, |k| k == "act");
     let include_invoices = request.kind.as_deref().map_or(true, |k| k == "invoice");
     let include_waybills = request.kind.as_deref().map_or(true, |k| k == "waybill");
