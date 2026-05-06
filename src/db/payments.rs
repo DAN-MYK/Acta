@@ -467,14 +467,17 @@ async fn ensure_act_in_company_tx(
     company_id: Uuid,
     act_id: Uuid,
 ) -> Result<()> {
-    let exists = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM acts WHERE id = $1 AND company_id = $2)",
+    let exists = sqlx::query_scalar::<_, i32>(
+        "SELECT 1 FROM acts WHERE id = $1 AND company_id = $2 FOR UPDATE",
     )
     .bind(act_id)
     .bind(company_id)
-    .fetch_one(&mut **tx)
+    .fetch_optional(&mut **tx)
     .await?;
-    anyhow::ensure!(exists, "Документ не знайдено в межах компанії");
+    anyhow::ensure!(
+        exists.is_some(),
+        "Документ не знайдено в межах компанії"
+    );
     Ok(())
 }
 
@@ -499,14 +502,17 @@ async fn ensure_invoice_in_company_tx(
     company_id: Uuid,
     invoice_id: Uuid,
 ) -> Result<()> {
-    let exists = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM invoices WHERE id = $1 AND company_id = $2)",
+    let exists = sqlx::query_scalar::<_, i32>(
+        "SELECT 1 FROM invoices WHERE id = $1 AND company_id = $2 FOR UPDATE",
     )
     .bind(invoice_id)
     .bind(company_id)
-    .fetch_one(&mut **tx)
+    .fetch_optional(&mut **tx)
     .await?;
-    anyhow::ensure!(exists, "Документ не знайдено в межах компанії");
+    anyhow::ensure!(
+        exists.is_some(),
+        "Документ не знайдено в межах компанії"
+    );
     Ok(())
 }
 
@@ -581,52 +587,17 @@ pub async fn reconcile_document_scoped(
     doc_id: Uuid,
     amount: rust_decimal::Decimal,
 ) -> Result<()> {
-    let owns_payment = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM payments WHERE id = $1 AND company_id = $2)",
+    reconcile_split_scoped(
+        pool,
+        company_id,
+        payment_id,
+        &[PaymentReconcileAllocation {
+            document_kind: doc_kind.to_string(),
+            document_id: doc_id,
+            amount,
+        }],
     )
-    .bind(payment_id)
-    .bind(company_id)
-    .fetch_one(pool)
-    .await?;
-    anyhow::ensure!(owns_payment, "Платіж не знайдено в межах компанії");
-
-    match doc_kind {
-        "act" => {
-            ensure_act_in_company(pool, company_id, doc_id).await?;
-            sqlx::query(
-                r#"
-                INSERT INTO payment_acts (payment_id, act_id, amount)
-                VALUES ($1, $2, $3)
-                ON CONFLICT (payment_id, act_id) DO UPDATE SET amount = $3
-                "#,
-            )
-            .bind(payment_id)
-            .bind(doc_id)
-            .bind(amount)
-            .execute(pool)
-            .await?;
-        }
-        "invoice" => {
-            ensure_invoice_in_company(pool, company_id, doc_id).await?;
-            sqlx::query(
-                r#"
-                INSERT INTO payment_invoices (payment_id, invoice_id, amount)
-                VALUES ($1, $2, $3)
-                ON CONFLICT (payment_id, invoice_id) DO UPDATE SET amount = $3
-                "#,
-            )
-            .bind(payment_id)
-            .bind(doc_id)
-            .bind(amount)
-            .execute(pool)
-            .await?;
-        }
-        other => anyhow::bail!("Невідомий тип документу: {other}"),
-    }
-
-    refresh_reconciled_state(pool, payment_id).await?;
-
-    Ok(())
+    .await
 }
 
 /// Від'єднати платіж від документа і перерахувати статус звірки.
@@ -938,11 +909,7 @@ pub async fn complete_schedule(pool: &PgPool, id: Uuid) -> Result<()> {
 }
 
 /// Позначити запланований платіж як виконаний лише в межах конкретної компанії.
-pub async fn complete_schedule_scoped(
-    pool: &PgPool,
-    company_id: Uuid,
-    id: Uuid,
-) -> Result<bool> {
+pub async fn complete_schedule_scoped(pool: &PgPool, company_id: Uuid, id: Uuid) -> Result<bool> {
     let affected = sqlx::query(
         r#"
         UPDATE payment_schedule
@@ -959,3 +926,5 @@ pub async fn complete_schedule_scoped(
     .rows_affected();
     Ok(affected > 0)
 }
+
+

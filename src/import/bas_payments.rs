@@ -76,9 +76,9 @@ pub async fn newest_statement_path() -> Result<PathBuf> {
         }
     }
 
-    newest.map(|(_, path)| path).ok_or_else(|| {
-        anyhow!("У `storage/import/bank/` не знайдено CSV або XLSX для імпорту")
-    })
+    newest
+        .map(|(_, path)| path)
+        .ok_or_else(|| anyhow!("У `storage/import/bank/` не знайдено CSV або XLSX для імпорту"))
 }
 
 /// Аліас для зворотної сумісності зі старим API.

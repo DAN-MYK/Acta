@@ -383,26 +383,18 @@ mod tests {
 
     #[test]
     fn amount_and_direction_explicit_direction_wins_over_amount_sign() {
-        let (amount, direction) = amount_and_direction_from_strings(
-            Some("expense"),
-            Some("100,00"),
-            None,
-            None,
-        )
-        .expect("expected ok");
+        let (amount, direction) =
+            amount_and_direction_from_strings(Some("expense"), Some("100,00"), None, None)
+                .expect("expected ok");
         assert_eq!(amount, dec!(100.00));
         assert_eq!(direction, PaymentDirection::Expense);
     }
 
     #[test]
     fn amount_and_direction_uses_debit_credit_pair() {
-        let (amount, direction) = amount_and_direction_from_strings(
-            None,
-            None,
-            Some("0"),
-            Some("250,00"),
-        )
-        .expect("expected ok");
+        let (amount, direction) =
+            amount_and_direction_from_strings(None, None, Some("0"), Some("250,00"))
+                .expect("expected ok");
         assert_eq!(amount, dec!(250.00));
         assert_eq!(direction, PaymentDirection::Income);
     }

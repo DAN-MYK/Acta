@@ -281,7 +281,10 @@ mod tests {
     fn make_range(rows: Vec<Vec<Data>>) -> Range<Data> {
         let total_rows = rows.len() as u32;
         let total_cols = rows.iter().map(|r| r.len()).max().unwrap_or(0) as u32;
-        let mut range = Range::new((0, 0), (total_rows.saturating_sub(1), total_cols.saturating_sub(1)));
+        let mut range = Range::new(
+            (0, 0),
+            (total_rows.saturating_sub(1), total_cols.saturating_sub(1)),
+        );
         for (r, row) in rows.into_iter().enumerate() {
             for (c, cell) in row.into_iter().enumerate() {
                 range.set_value((r as u32, c as u32), cell);
@@ -325,7 +328,10 @@ mod tests {
         let range = make_range(rows);
         let parsed = parse_xlsx_range("ПриватБанк", &range).expect("should parse");
         assert_eq!(parsed.len(), 2);
-        assert_eq!(parsed[0].date, NaiveDate::from_ymd_opt(2026, 4, 15).unwrap());
+        assert_eq!(
+            parsed[0].date,
+            NaiveDate::from_ymd_opt(2026, 4, 15).unwrap()
+        );
         assert_eq!(parsed[0].amount, dec!(2500.5));
         assert_eq!(parsed[0].direction, PaymentDirection::Income);
         assert_eq!(parsed[0].bank_ref.as_deref(), Some("REF-XLSX-1"));

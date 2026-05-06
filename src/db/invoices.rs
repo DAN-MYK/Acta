@@ -192,6 +192,33 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<(Invoice, Vec<I
     Ok(Some((invoice, items)))
 }
 
+pub async fn find_by_notes_marker(
+    pool: &PgPool,
+    company_id: Uuid,
+    marker: &str,
+) -> Result<Option<(Invoice, Vec<InvoiceItem>)>> {
+    let pattern = format!("%{marker}%");
+    let id = sqlx::query_scalar::<_, Uuid>(
+        r#"
+        SELECT id
+        FROM invoices
+        WHERE company_id = $1
+          AND notes LIKE $2
+        ORDER BY updated_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(company_id)
+    .bind(pattern)
+    .fetch_optional(pool)
+    .await?;
+
+    match id {
+        Some(id) => get_by_id(pool, id).await,
+        None => Ok(None),
+    }
+}
+
 /// Завантажити накладну з позиціями для форми редагування.
 pub async fn get_for_edit(pool: &PgPool, id: Uuid) -> Result<Option<(Invoice, Vec<InvoiceItem>)>> {
     get_by_id(pool, id).await

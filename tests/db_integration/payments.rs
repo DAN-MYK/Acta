@@ -1159,6 +1159,231 @@ async fn payments_reconcile_split_is_atomic_on_failure() -> Result<()> {
 }
 
 #[tokio::test]
+async fn payments_reconcile_split_waits_for_locked_document_row() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let suffix = unique_suffix();
+    let cp = db::counterparties::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewCounterparty {
+            name: format!("ІТ Locked Split Контрагент {suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("it-locked-split-cp-{suffix}")),
+        },
+    )
+    .await?;
+
+    let act = db::acts::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewAct {
+            number: format!("IT-LOCKED-SPLIT-ACT-{suffix}"),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: models::DocumentDirection::Outgoing,
+            date: Utc::now().date_naive(),
+            expected_payment_date: None,
+            status: models::ActStatus::Issued,
+            notes: None,
+            bas_id: None,
+            items: vec![models::NewActItem {
+                description: "Послуга".to_string(),
+                quantity: dec!(1.0000),
+                unit: "шт".to_string(),
+                unit_price: dec!(2000.00),
+            }],
+        },
+    )
+    .await?;
+
+    let payment = db::payments::create(
+        &pool,
+        models::payment::NewPayment {
+            company_id: DEFAULT_COMPANY_ID,
+            date: Utc::now().date_naive(),
+            amount: dec!(500.00),
+            direction: models::payment::PaymentDirection::Income,
+            counterparty_id: Some(cp.id),
+            bank_name: Some("Тест Банк".to_string()),
+            bank_ref: Some(format!("LOCKED-SPLIT-{suffix}")),
+            description: Some("Перевірка блокування документа".to_string()),
+        },
+    )
+    .await?;
+
+    let mut lock_tx = pool.begin().await?;
+    sqlx::query("SELECT 1 FROM acts WHERE id = $1 AND company_id = $2 FOR UPDATE")
+        .bind(act.id)
+        .bind(DEFAULT_COMPANY_ID)
+        .execute(&mut *lock_tx)
+        .await?;
+
+    let reconcile_pool = pool.clone();
+    let mut reconcile_task = tokio::spawn(async move {
+        db::payments::reconcile_split_scoped(
+            &reconcile_pool,
+            DEFAULT_COMPANY_ID,
+            payment.id,
+            &[db::payments::PaymentReconcileAllocation {
+                document_kind: "act".to_string(),
+                document_id: act.id,
+                amount: dec!(500.00),
+            }],
+        )
+        .await
+    });
+
+    let blocked =
+        tokio::time::timeout(std::time::Duration::from_millis(200), &mut reconcile_task).await;
+    assert!(
+        blocked.is_err(),
+        "split reconcile має чекати, поки інша транзакція тримає FOR UPDATE lock на документі"
+    );
+
+    lock_tx.rollback().await?;
+
+    reconcile_task.await??;
+
+    let payment_after_lock = db::payments::get_by_id_scoped(&pool, DEFAULT_COMPANY_ID, payment.id)
+        .await?
+        .expect("payment exists after locked split reconcile");
+    assert!(payment_after_lock.is_reconciled);
+
+    db::payments::delete(&pool, payment.id).await?;
+    sqlx::query("DELETE FROM acts WHERE id = $1")
+        .bind(act.id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn payments_reconcile_document_waits_for_locked_document_row() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let suffix = unique_suffix();
+    let cp = db::counterparties::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewCounterparty {
+            name: format!("ІТ Locked Single Документ {suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("it-locked-single-cp-{suffix}")),
+        },
+    )
+    .await?;
+
+    let act = db::acts::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewAct {
+            number: format!("IT-LOCKED-SINGLE-ACT-{suffix}"),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: models::DocumentDirection::Outgoing,
+            date: Utc::now().date_naive(),
+            expected_payment_date: None,
+            status: models::ActStatus::Issued,
+            notes: None,
+            bas_id: None,
+            items: vec![models::NewActItem {
+                description: "Послуга".to_string(),
+                quantity: dec!(1.0000),
+                unit: "шт".to_string(),
+                unit_price: dec!(2000.00),
+            }],
+        },
+    )
+    .await?;
+
+    let payment = db::payments::create(
+        &pool,
+        models::payment::NewPayment {
+            company_id: DEFAULT_COMPANY_ID,
+            date: Utc::now().date_naive(),
+            amount: dec!(500.00),
+            direction: models::payment::PaymentDirection::Income,
+            counterparty_id: Some(cp.id),
+            bank_name: Some("Тест Банк".to_string()),
+            bank_ref: Some(format!("LOCKED-SINGLE-{suffix}")),
+            description: Some("Перевірка блокування для single reconcile".to_string()),
+        },
+    )
+    .await?;
+
+    let mut lock_tx = pool.begin().await?;
+    sqlx::query("SELECT 1 FROM acts WHERE id = $1 AND company_id = $2 FOR UPDATE")
+        .bind(act.id)
+        .bind(DEFAULT_COMPANY_ID)
+        .execute(&mut *lock_tx)
+        .await?;
+
+    let reconcile_pool = pool.clone();
+    let mut reconcile_task = tokio::spawn(async move {
+        db::payments::reconcile_document_scoped(
+            &reconcile_pool,
+            DEFAULT_COMPANY_ID,
+            payment.id,
+            "act",
+            act.id,
+            dec!(500.00),
+        )
+        .await
+    });
+
+    let blocked =
+        tokio::time::timeout(std::time::Duration::from_millis(200), &mut reconcile_task).await;
+    assert!(
+        blocked.is_err(),
+        "single reconcile має чекати, поки інша транзакція тримає FOR UPDATE lock на документі"
+    );
+
+    lock_tx.rollback().await?;
+    reconcile_task.await??;
+
+    let payment_after_lock = db::payments::get_by_id_scoped(&pool, DEFAULT_COMPANY_ID, payment.id)
+        .await?
+        .expect("payment exists after locked single reconcile");
+    assert!(payment_after_lock.is_reconciled);
+
+    db::payments::delete(&pool, payment.id).await?;
+    sqlx::query("DELETE FROM acts WHERE id = $1")
+        .bind(act.id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn payments_schedule_create_complete_and_list_upcoming_in_db() -> Result<()> {
     let Some(pool) = test_pool().await? else {
         return Ok(());

@@ -178,6 +178,33 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<(Waybill, Vec<W
     Ok(Some((waybill, items)))
 }
 
+pub async fn find_by_notes_marker(
+    pool: &PgPool,
+    company_id: Uuid,
+    marker: &str,
+) -> Result<Option<(Waybill, Vec<WaybillItem>)>> {
+    let pattern = format!("%{marker}%");
+    let id = sqlx::query_scalar::<_, Uuid>(
+        r#"
+        SELECT id
+        FROM waybills
+        WHERE company_id = $1
+          AND notes LIKE $2
+        ORDER BY updated_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(company_id)
+    .bind(pattern)
+    .fetch_optional(pool)
+    .await?;
+
+    match id {
+        Some(id) => get_by_id(pool, id).await,
+        None => Ok(None),
+    }
+}
+
 /// Завантажити накладну з позиціями для форми редагування.
 pub async fn get_for_edit(pool: &PgPool, id: Uuid) -> Result<Option<(Waybill, Vec<WaybillItem>)>> {
     get_by_id(pool, id).await

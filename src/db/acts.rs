@@ -363,6 +363,33 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<(Act, Vec<ActIt
     Ok(Some((act, items)))
 }
 
+pub async fn find_by_notes_marker(
+    pool: &PgPool,
+    company_id: Uuid,
+    marker: &str,
+) -> Result<Option<(Act, Vec<ActItem>)>> {
+    let pattern = format!("%{marker}%");
+    let id = sqlx::query_scalar::<_, Uuid>(
+        r#"
+        SELECT id
+        FROM acts
+        WHERE company_id = $1
+          AND notes LIKE $2
+        ORDER BY updated_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(company_id)
+    .bind(pattern)
+    .fetch_optional(pool)
+    .await?;
+
+    match id {
+        Some(id) => get_by_id(pool, id).await,
+        None => Ok(None),
+    }
+}
+
 /// Знайти акт за bas_id для повторного імпорту без дублювання.
 pub async fn find_by_bas_id(pool: &PgPool, bas_id: &str) -> Result<Option<Act>> {
     let act = sqlx::query_as::<_, Act>(
