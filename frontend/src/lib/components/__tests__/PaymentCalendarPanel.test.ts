@@ -78,13 +78,16 @@ vi.mock("../../stores/payments", () => ({
   }
 }));
 
-function setCalendarState(calendar: PaymentCalendarMonthDto | null, extra: Partial<{
-  calendarInitialLoading: boolean;
-  calendarLoading: boolean;
-  calendarError: string | null;
-  calendarFilter: "all" | "schedule" | "task";
-  selectedCalendarEventId: string | null;
-}> = {}) {
+function setCalendarState(
+  calendar: PaymentCalendarMonthDto | null,
+  extra: Partial<{
+    calendarInitialLoading: boolean;
+    calendarLoading: boolean;
+    calendarError: string | null;
+    calendarFilter: "all" | "schedule" | "task";
+    selectedCalendarEventId: string | null;
+  }> = {}
+) {
   mocks.paymentsState.set({
     list: null,
     calendar,
@@ -176,6 +179,7 @@ describe("PaymentCalendarPanel", () => {
               subtitle: "ТОВ Сервіс",
               date: "2026-05-14",
               amountStr: "12 000,00",
+              amount: "12000",
               direction: "expense",
               statusLabel: "Заплановано",
               recurrenceLabel: "Щомісяця",
@@ -209,6 +213,7 @@ describe("PaymentCalendarPanel", () => {
               subtitle: "Критичний • Рахунок №42",
               date: "2026-05-15",
               amountStr: "",
+              amount: "0",
               direction: "",
               statusLabel: "В роботі",
               recurrenceLabel: "",
@@ -273,13 +278,105 @@ describe("PaymentCalendarPanel", () => {
     expect(target.textContent ?? "").toContain("Оренда офісу");
     expect(target.textContent ?? "").toContain("Погодити оплату");
 
-    const openTaskButton = Array.from(target.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("Відкрити задачу")
+    const openTaskButton = Array.from(target.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Відкрити задачу")
     );
     expect(openTaskButton).toBeTruthy();
     openTaskButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
     expect(mocks.openCalendarTask).toHaveBeenCalledWith("task-1");
+    component.$destroy();
+  });
+
+  it("uses radio semantics for the calendar filter", async () => {
+    setCalendarState(
+      {
+        month: "2026-05",
+        monthLabel: "Травень 2026",
+        selectedDate: "2026-05-15",
+        today: "2026-05-14",
+        days: []
+      },
+      { calendarFilter: "schedule" }
+    );
+
+    const { component, target } = renderCalendar();
+    await tick();
+
+    const filterGroup = target.querySelector('.calendar-filters[role="radiogroup"]');
+    expect(filterGroup).toBeTruthy();
+
+    const radios = Array.from(target.querySelectorAll('.calendar-filters [role="radio"]'));
+    expect(radios).toHaveLength(3);
+    expect(radios.some((node) => node.getAttribute("aria-checked") === "true")).toBe(true);
+    expect(radios.find((node) => node.textContent?.includes("Платежі"))?.getAttribute("aria-checked")).toBe("true");
+
+    component.$destroy();
+  });
+
+  it("adds aria-label to day buttons with the visible event count", async () => {
+    setCalendarState({
+      month: "2026-05",
+      monthLabel: "Травень 2026",
+      selectedDate: "2026-05-15",
+      today: "2026-05-14",
+      days: [
+        {
+          date: "2026-05-14",
+          dayNumber: 14,
+          weekdayShort: "Чт",
+          inCurrentMonth: true,
+          today: true,
+          selected: false,
+          hasOverdue: false,
+          incomeTotalStr: "",
+          expenseTotalStr: "",
+          eventCount: 0,
+          events: []
+        },
+        {
+          date: "2026-05-15",
+          dayNumber: 15,
+          weekdayShort: "Пт",
+          inCurrentMonth: true,
+          today: false,
+          selected: true,
+          hasOverdue: false,
+          incomeTotalStr: "",
+          expenseTotalStr: "",
+          eventCount: 1,
+          events: [
+            {
+              id: "task-1",
+              kind: "task",
+              title: "Погодити оплату",
+              subtitle: "Критичний",
+              date: "2026-05-15",
+              amountStr: "",
+              amount: "0",
+              direction: "",
+              statusLabel: "В роботі",
+              recurrenceLabel: "",
+              counterpartyId: "",
+              counterpartyName: "",
+              linkKind: "task",
+              linkId: "task-1",
+              note: "",
+              actionable: true,
+              overdue: false,
+              done: false
+            }
+          ]
+        }
+      ]
+    });
+
+    const { component, target } = renderCalendar();
+    await tick();
+
+    const dayButton = target.querySelector('.calendar-day[aria-label*="2026-05-15"]');
+    expect(dayButton?.getAttribute("aria-label")).toContain("2026-05-15, вибрано, 1 подія");
+
     component.$destroy();
   });
 

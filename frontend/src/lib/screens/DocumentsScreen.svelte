@@ -6,6 +6,7 @@
   import { documentsStore } from "../stores/documents";
   import { counterpartiesStore } from "../stores/counterparties";
   import { formatDocumentDraftTotal, formatDocumentItemTotal } from "../documentMoney";
+  import { isFormattedMoneyNegative } from "../money";
   import type { DocumentDraftItemDto, DocumentKind } from "../types";
 
   const documents = documentsStore;
@@ -26,6 +27,8 @@
   let chainMenuOpen = false;
   let chainMenuButton: HTMLButtonElement | null = null;
   let chainMenuPopover: HTMLElement | null = null;
+  let pendingDirtyClose = false;
+  let panelElement: HTMLElement | null = null;
 
   const documentKindLabels: Record<DocumentKind, string> = {
     invoice: "Рахунок",
@@ -107,12 +110,56 @@
 
     if ($documents.editor) {
       event.preventDefault();
-      void documents.closeEditor();
+      requestCloseDrawer();
     }
   }
 
+  async function confirmCloseIfDirty() {
+    if (!$documents.editor) {
+      documents.closeEditor();
+      return;
+    }
+
+    if (!documents.isEditorDirty()) {
+      documents.closeEditor();
+      return;
+    }
+
+    const confirmed = window.confirm("Є незбережені зміни. Закрити редактор без збереження?");
+    if (!confirmed) {
+      return;
+    }
+
+    documents.closeEditor(true);
+  }
+
   function onDrawerBackdropClick() {
-    void documents.closeEditor();
+    requestCloseDrawer();
+  }
+
+  function requestCloseDrawer() {
+    if (!$documents.editor) {
+      documents.closeEditor();
+      pendingDirtyClose = false;
+      return;
+    }
+
+    if (!documents.isEditorDirty()) {
+      documents.closeEditor();
+      pendingDirtyClose = false;
+      return;
+    }
+
+    pendingDirtyClose = true;
+  }
+
+  function confirmDiscardChanges() {
+    pendingDirtyClose = false;
+    documents.closeEditor(true);
+  }
+
+  function cancelDiscardChanges() {
+    pendingDirtyClose = false;
   }
 
   function toggleChainMenu() {
@@ -151,6 +198,20 @@
     const editorDocId = $documents.editor?.form.id ?? "";
     if (!editorDocId && chainMenuOpen) {
       chainMenuOpen = false;
+    }
+  }
+
+  $: if (!$documents.editor && pendingDirtyClose) {
+    pendingDirtyClose = false;
+  }
+
+  $: if (panelElement) {
+    if ($documents.editor) {
+      panelElement.setAttribute("inert", "");
+      panelElement.setAttribute("aria-hidden", "true");
+    } else {
+      panelElement.removeAttribute("inert");
+      panelElement.removeAttribute("aria-hidden");
     }
   }
 
@@ -332,7 +393,11 @@
   }
 </script>
 
-<section class="panel" data-testid="documents-screen">
+<section
+  bind:this={panelElement}
+  class="panel"
+  data-testid="documents-screen"
+>
   <div class="panel-header">
     <div>
       <h2>Документи</h2>
@@ -467,7 +532,7 @@
               </div>
               <div class="doc-row-meta">
                 <span>{item.date}</span>
-                <span class="money-value" data-negative={item.amountStr.trim().startsWith("-")}>{item.amountStr}</span>
+                <span class="money-value" data-negative={isFormattedMoneyNegative(item.amountStr)}>{item.amountStr}</span>
                 <span class="doc-kind-badge">
                   <AppIcon name={getDocumentKindIcon(item.kind)} size={14} />
                   <span>{getDocumentKindLabel(item.kind)}</span>
@@ -500,6 +565,38 @@
     aria-labelledby="documents-drawer-title"
     data-testid="documents-drawer"
   >
+    {#if pendingDirtyClose}
+      <div
+        class="editor-dirty-banner"
+        role="alertdialog"
+        aria-live="assertive"
+        aria-labelledby="documents-dirty-banner-title"
+        data-testid="documents-dirty-banner"
+      >
+        <div>
+          <strong id="documents-dirty-banner-title">У вас є незбережені зміни</strong>
+          <p>Скасувати їх і закрити форму?</p>
+        </div>
+        <div class="editor-dirty-actions">
+          <button
+            type="button"
+            class="btn-ghost btn-sm"
+            on:click={cancelDiscardChanges}
+            data-testid="documents-dirty-banner-cancel"
+          >
+            Залишитися
+          </button>
+          <button
+            type="button"
+            class="btn-danger btn-sm"
+            on:click={confirmDiscardChanges}
+            data-testid="documents-dirty-banner-discard"
+          >
+            Так, закрити
+          </button>
+        </div>
+      </div>
+    {/if}
     <div class="editor-header">
       <div>
         <div class="editor-header-meta">
@@ -574,7 +671,7 @@
         <button class="btn-danger" on:click={onDeleteCurrent} disabled={$documents.loading}>
           Видалити
         </button>
-        <button class="btn-ghost" on:click={() => documents.closeEditor()} disabled={$documents.loading}>
+        <button class="btn-ghost" on:click={requestCloseDrawer} disabled={$documents.loading}>
           Закрити
         </button>
       </div>

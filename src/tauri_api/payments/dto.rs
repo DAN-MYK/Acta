@@ -205,7 +205,6 @@ pub struct PaymentCalendarEventDto {
     pub subtitle: String,
     pub date: String,
     pub amount_str: String,
-    #[serde(skip)]
     pub amount: rust_decimal::Decimal,
     pub direction: String,
     pub status_label: String,

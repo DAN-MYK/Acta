@@ -56,6 +56,16 @@
     return event.direction === "income" ? "Надходження" : "Витрата";
   }
 
+  function dayAriaLabel(day: PaymentCalendarDayDto) {
+    const eventCount = filteredEvents(day).length;
+    const eventLabel =
+      eventCount === 0 ? "без подій" : eventCount === 1 ? "1 подія" : `${eventCount} подій`;
+    const todayLabel = day.today ? ", сьогодні" : "";
+    const selectedLabel = day.selected ? ", вибрано" : "";
+
+    return `${day.date}${todayLabel}${selectedLabel}, ${eventLabel}`;
+  }
+
   function onGridKeydown(event: KeyboardEvent) {
     if (!$payments.calendar) {
       return;
@@ -114,13 +124,13 @@
           Наступний
         </button>
       </div>
-      <div class="calendar-filters" role="tablist" aria-label="Фільтр подій календаря">
+      <div class="calendar-filters" role="radiogroup" aria-label="Фільтр подій календаря">
         {#each filterOptions as option}
           <button
             class:active={$payments.calendarFilter === option.kind}
             on:click={() => payments.setCalendarFilter(option.kind)}
-            role="tab"
-            aria-selected={$payments.calendarFilter === option.kind}
+            role="radio"
+            aria-checked={$payments.calendarFilter === option.kind}
           >
             {option.label}
           </button>
@@ -184,6 +194,7 @@
               class:has-overdue={day.hasOverdue}
               on:click={() => payments.selectCalendarDate(day.date)}
               aria-pressed={day.selected}
+              aria-label={dayAriaLabel(day)}
             >
               <div class="calendar-day-top">
                 <strong>{day.dayNumber}</strong>

@@ -313,6 +313,7 @@ export interface PaymentCalendarEventDto {
   subtitle: string;
   date: string;
   amountStr: string;
+  amount: string;
   direction: string;
   statusLabel: string;
   recurrenceLabel: string;

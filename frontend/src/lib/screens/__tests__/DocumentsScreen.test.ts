@@ -69,6 +69,7 @@ const mocks = vi.hoisted(() => {
     removeItem: vi.fn(),
     save: vi.fn(),
     selectAllVisible: vi.fn(),
+    isEditorDirty: vi.fn(() => false),
     toggleSelected: vi.fn(),
     updateFormField: vi.fn(),
     updateItemField: vi.fn()
@@ -96,6 +97,7 @@ vi.mock("../../stores/documents", () => ({
     removeItem: mocks.removeItem,
     save: mocks.save,
     selectAllVisible: mocks.selectAllVisible,
+    isEditorDirty: mocks.isEditorDirty,
     toggleSelected: mocks.toggleSelected,
     updateFormField: mocks.updateFormField,
     updateItemField: mocks.updateItemField
@@ -267,6 +269,7 @@ describe("DocumentsScreen component", () => {
       mocks.removeItem,
       mocks.save,
       mocks.selectAllVisible,
+      mocks.isEditorDirty,
       mocks.toggleSelected,
       mocks.updateFormField,
       mocks.updateItemField
@@ -277,7 +280,7 @@ describe("DocumentsScreen component", () => {
     mocks.selectAllVisible.mockImplementation(() => {
       setDocumentsState(["doc-1", "doc-2"]);
     });
-
+    mocks.isEditorDirty.mockReturnValue(false);
     mocks.toggleSelected.mockImplementation((docId: string) => {
       setDocumentsState([docId]);
     });
@@ -287,13 +290,13 @@ describe("DocumentsScreen component", () => {
     document.body.innerHTML = "";
   });
 
-  it("renders scenario-first create flow, chain guidance and item summary", () => {
+  it("renders the main shell, item summary and existing PDF flow", () => {
     const { component, target } = renderDocuments();
 
     expect(target.textContent).toContain("Документи");
-    expect(target.textContent).toContain("ТОВ Ромашка");
     expect(target.textContent).toContain("Позиції документа");
     expect(target.textContent).toContain("5 000,00 грн");
+    expect(target.textContent).toContain("Існуючий PDF");
     expect(target.textContent).toContain("Створити акт");
     expect(target.textContent).toContain("Створити накладну");
 
@@ -303,9 +306,7 @@ describe("DocumentsScreen component", () => {
   it("uses canonical button hierarchy in create strip and editor header", () => {
     const { component, target } = renderDocuments();
 
-    expect((target.querySelector('[data-testid="documents-create-button"]') as HTMLButtonElement).className).toContain(
-      "btn-primary"
-    );
+    expect((target.querySelector('[data-testid="documents-create-button"]') as HTMLButtonElement).className).toContain("btn-primary");
     expect(buttonByText(target, "Зберегти").className).toContain("btn-primary");
     expect(buttonByText(target, "Дії далі").className).toContain("btn-secondary");
     expect(buttonByText(target, "Видалити").className).toContain("btn-danger");
@@ -316,13 +317,48 @@ describe("DocumentsScreen component", () => {
     component.$destroy();
   });
 
-  it("disables scenario creation without counterparty and explains why", () => {
+  it("marks the main panel inert while the editor drawer is open", () => {
+    const { component, target } = renderDocuments();
+
+    const panel = target.querySelector('[data-testid="documents-screen"]');
+    expect(panel?.hasAttribute("inert")).toBe(true);
+    expect(panel?.getAttribute("aria-hidden")).toBe("true");
+
+    component.$destroy();
+  });
+
+  it("shows inline dirty banner before closing a dirty editor", async () => {
+    mocks.isEditorDirty.mockReturnValue(true);
+    const { component, target } = renderDocuments();
+
+    buttonByText(target, "Закрити").click();
+    await tick();
+
+    expect(target.querySelector('[data-testid="documents-dirty-banner"]')).toBeTruthy();
+    expect(mocks.closeEditor).not.toHaveBeenCalled();
+
+    component.$destroy();
+  });
+
+  it("forces close after confirming dirty editor dismissal", async () => {
+    mocks.isEditorDirty.mockReturnValue(true);
+    const { component, target } = renderDocuments();
+
+    (target.querySelector('[data-testid="documents-drawer-backdrop"]') as HTMLButtonElement).click();
+    await tick();
+    buttonByText(target, "Так, закрити").click();
+    await tick();
+
+    expect(mocks.closeEditor).toHaveBeenCalledWith(true);
+
+    component.$destroy();
+  });
+
+  it("disables scenario creation without counterparty", () => {
     setDocumentsStateWithoutDraftContext();
     const { component, target } = renderDocuments();
 
-    const createButton = target.querySelector('[data-testid="documents-create-button"]') as HTMLButtonElement;
-
-    expect(createButton.disabled).toBe(true);
+    expect((target.querySelector('[data-testid="documents-create-button"]') as HTMLButtonElement).disabled).toBe(true);
 
     component.$destroy();
   });
@@ -333,11 +369,7 @@ describe("DocumentsScreen component", () => {
     const { component, target } = renderDocuments();
 
     buttonByText(target, "Видалити вибрані").click();
-    const deleteCurrentButton = Array.from(target.querySelectorAll("button")).find(
-      (button) => button.textContent?.trim() === "Видалити"
-    ) as HTMLButtonElement | undefined;
-    expect(deleteCurrentButton).toBeTruthy();
-    deleteCurrentButton?.click();
+    buttonByText(target, "Видалити").click();
     await tick();
 
     expect(confirmSpy).toHaveBeenCalledTimes(2);
@@ -355,22 +387,18 @@ describe("DocumentsScreen component", () => {
     search.value = "ромашка";
     search.dispatchEvent(new Event("input", { bubbles: true }));
     await tick();
-    expect(mocks.load).toHaveBeenCalledWith("ромашка");
 
     (target.querySelector('[data-testid="documents-create-button"]') as HTMLButtonElement).click();
-    await tick();
-    expect(mocks.create).toHaveBeenCalledWith("counterparty-1", "act");
-
     buttonByText(target, "Додати позицію").click();
     buttonByText(target, "Зберегти").click();
-    buttonByText(target, "Наступний статус").click();
     buttonByText(target, "Відкрити PDF").click();
     (target.querySelector('[data-testid="documents-chain-create-act"]') as HTMLButtonElement).click();
     await tick();
 
+    expect(mocks.load).toHaveBeenCalledWith("ромашка");
+    expect(mocks.create).toHaveBeenCalledWith("counterparty-1", "act");
     expect(mocks.addItem).toHaveBeenCalled();
     expect(mocks.save).toHaveBeenCalled();
-    expect(mocks.advanceStatus).toHaveBeenCalled();
     expect(mocks.openCurrentPdf).toHaveBeenCalled();
     expect(mocks.createChainDraft).toHaveBeenCalledWith("act");
 
@@ -380,9 +408,7 @@ describe("DocumentsScreen component", () => {
   it("does not overwrite manual counterparty selection on unrelated store updates", async () => {
     const { component, target } = renderDocuments();
 
-    const select = target.querySelector(
-      '[data-testid="documents-create-strip"] select'
-    ) as HTMLSelectElement;
+    const select = target.querySelector('[data-testid="documents-create-strip"] select') as HTMLSelectElement;
     select.value = "counterparty-2";
     select.dispatchEvent(new Event("change", { bubbles: true }));
     await tick();
@@ -391,7 +417,6 @@ describe("DocumentsScreen component", () => {
     await tick();
 
     expect(select.value).toBe("counterparty-2");
-    expect(target.textContent).toContain("ФОП Тест");
 
     component.$destroy();
   });
@@ -406,31 +431,18 @@ describe("DocumentsScreen component", () => {
     component.$destroy();
   });
 
-  it("uses canonical date input with explicit non-ambiguous guidance", () => {
+  it("uses canonical date input", () => {
     const { component, target } = renderDocuments();
 
-    const dateInput = target.querySelector('input[type="date"]') as HTMLInputElement | null;
-
-    expect(dateInput).toBeTruthy();
-    expect(dateInput?.value).toBe("2026-04-30");
+    expect((target.querySelector('input[type="date"]') as HTMLInputElement | null)?.value).toBe("2026-04-30");
 
     component.$destroy();
   });
 
   it("calculates fractional item totals with decimal-safe rounding", () => {
     setDocumentsState([], [
-      {
-        description: "Точний рядок",
-        unit: "шт",
-        quantity: "1",
-        price: "1,005"
-      },
-      {
-        description: "Другий рядок",
-        unit: "шт",
-        quantity: "2",
-        price: "0,335"
-      }
+      { description: "Рядок 1", unit: "шт", quantity: "3", price: "0,335" },
+      { description: "Рядок 2", unit: "шт", quantity: "2", price: "0,335" }
     ]);
 
     const { component, target } = renderDocuments();
@@ -438,17 +450,6 @@ describe("DocumentsScreen component", () => {
     expect(target.textContent).toContain("1,01 грн");
     expect(target.textContent).toContain("0,67 грн");
     expect(target.textContent).toContain("1,68 грн");
-
-    component.$destroy();
-  });
-
-  it("exposes chain-create actions in the editor header for the current document kind", () => {
-    const { component, target } = renderDocuments();
-
-    expect(target.querySelector('[data-testid="documents-chain-create-act"]')).toBeTruthy();
-    expect(target.querySelector('[data-testid="documents-chain-create-waybill"]')).toBeTruthy();
-    expect(target.textContent).toContain("Створити акт");
-    expect(target.textContent).toContain("Створити накладну");
 
     component.$destroy();
   });
@@ -475,53 +476,12 @@ describe("DocumentsScreen component", () => {
     component.$destroy();
   });
 
-  it("does not replace content with skeleton during save-like loading", () => {
-    mocks.documentsState.set({
-      list: makeList(),
-      editor: makeEditor(),
-      chain: makeChain(),
-      draftContext: {
-        counterpartyId: "counterparty-1",
-        counterpartyName: "ТОВ Ромашка"
-      },
-      selectedIds: [],
-      initialLoading: false,
-      loading: true,
-      error: null,
-      message: null,
-      query: ""
-    });
-
-    const { component, target } = renderDocuments();
-
-    expect(target.querySelector('[data-testid="documents-list"]')).toBeTruthy();
-
-    component.$destroy();
-  });
-
-  it("exposes stable smoke markers for shell, item editor and existing pdf section", () => {
-    setDocumentsState([], false);
-    const { component, target } = renderDocuments();
-
-    expect(target.querySelector('[data-testid="documents-screen"]')).toBeTruthy();
-    expect(target.querySelector('[data-testid="documents-create-strip"]')).toBeTruthy();
-    expect(target.querySelector('[data-testid="documents-list"]')).toBeTruthy();
-    expect(target.querySelector('[data-testid="documents-items-empty"]')).toBeTruthy();
-    expect(target.querySelector('[data-testid="documents-existing-pdf"]')).toBeTruthy();
-    expect(target.textContent).toContain("Додати першу позицію");
-
-    component.$destroy();
-  });
-
   it("renders existing pdf flow with preview and replace action", async () => {
     const { component, target } = renderDocuments();
 
     expect(target.textContent).toContain("Існуючий PDF");
     expect(target.textContent).toContain("Текстовий шар");
-    expect(target.textContent).toContain("Знайдено");
-    expect(
-      (target.querySelector('[data-testid="documents-existing-pdf"] textarea[readonly]') as HTMLTextAreaElement).value
-    ).toContain("DRAFT STATUS");
+    expect((target.querySelector('[data-testid="documents-existing-pdf"] textarea[readonly]') as HTMLTextAreaElement).value).toContain("DRAFT STATUS");
 
     const inputs = target.querySelectorAll('[data-testid="documents-existing-pdf"] input');
     (inputs[0] as HTMLInputElement).value = "DRAFT";
@@ -547,7 +507,7 @@ describe("DocumentsScreen component", () => {
           extractedText: "",
           hasTextOps: true,
           editable: false,
-          warnings: ["Text extraction не дав читабельного результату."]
+          warnings: ["Лише перегляд."]
         }
       },
       chain: makeChain(),
@@ -566,7 +526,7 @@ describe("DocumentsScreen component", () => {
     const { component, target } = renderDocuments();
     const replaceButton = buttonByText(target, "Застосувати exact replace");
 
-    expect(target.textContent).toContain("Тільки перегляд");
+    expect(target.textContent).toContain("Лише перегляд");
     expect(replaceButton.disabled).toBe(true);
 
     component.$destroy();

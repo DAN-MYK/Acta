@@ -15,11 +15,23 @@ import {
   documentsBulkDelete,
   documentsList
 } from "../api";
+import {
+  cloneSnapshot,
+  isEditorFormDirty,
+  type CloseEditorResult
+} from "../editorDirty";
 import type { DocumentChainDto, DocumentEditorDto, DocumentsListDto } from "../types";
+
+type EditorPayload = Pick<DocumentEditorDto, "form" | "items">;
+
+function snapshotEditor(editor: DocumentEditorDto): EditorPayload {
+  return cloneSnapshot({ form: editor.form, items: editor.items });
+}
 
 interface DocumentsState {
   list: DocumentsListDto | null;
   editor: DocumentEditorDto | null;
+  editorSnapshot: EditorPayload | null;
   chain: DocumentChainDto | null;
   draftContext: { counterpartyId: string; counterpartyName: string } | null;
   selectedIds: string[];
@@ -33,6 +45,7 @@ interface DocumentsState {
 const initialState: DocumentsState = {
   list: null,
   editor: null,
+  editorSnapshot: null,
   chain: null,
   draftContext: null,
   selectedIds: [],
@@ -83,7 +96,13 @@ function createDocumentsStore() {
 
       try {
         const { editor, chain } = await loadEditorAndChain(docId);
-        update((state) => ({ ...state, editor, chain, loading: false }));
+        update((state) => ({
+          ...state,
+          editor,
+          editorSnapshot: snapshotEditor(editor),
+          chain,
+          loading: false
+        }));
       } catch (error) {
         update((state) => ({ ...state, loading: false, error: String(error) }));
       }
@@ -102,7 +121,14 @@ function createDocumentsStore() {
           loadEditorAndChain(documentId),
           documentsList(snapshot.query)
         ]);
-        update((state) => ({ ...state, editor, chain, list, loading: false }));
+        update((state) => ({
+          ...state,
+          editor,
+          editorSnapshot: snapshotEditor(editor),
+          chain,
+          list,
+          loading: false
+        }));
       } catch (error) {
         update((state) => ({ ...state, loading: false, error: String(error) }));
       }
@@ -123,8 +149,36 @@ function createDocumentsStore() {
         update((state) => ({ ...state, loading: false, error: String(error) }));
       }
     },
-    closeEditor() {
-      update((state) => ({ ...state, editor: null, chain: null, message: null }));
+    closeEditor(force = false): CloseEditorResult {
+      const snapshot = get({ subscribe });
+      if (!snapshot.editor) {
+        return { ok: true };
+      }
+
+      const dirty = isEditorFormDirty(
+        snapshot.editorSnapshot,
+        { form: snapshot.editor.form, items: snapshot.editor.items }
+      );
+      if (dirty && !force) {
+        return { ok: false, reason: "dirty" };
+      }
+
+      update((state) => ({
+        ...state,
+        editor: null,
+        editorSnapshot: null,
+        chain: null,
+        message: null
+      }));
+      return { ok: true };
+    },
+    isEditorDirty(): boolean {
+      const snapshot = get({ subscribe });
+      if (!snapshot.editor) return false;
+      return isEditorFormDirty(
+        snapshot.editorSnapshot,
+        { form: snapshot.editor.form, items: snapshot.editor.items }
+      );
     },
     setDraftContext(counterpartyId: string, counterpartyName: string) {
       update((state) => ({
@@ -169,7 +223,11 @@ function createDocumentsStore() {
       update((state) => ({ ...state, selectedIds: [] }));
     },
     setEditor(editor: DocumentEditorDto) {
-      update((state) => ({ ...state, editor }));
+      update((state) => ({
+        ...state,
+        editor,
+        editorSnapshot: snapshotEditor(editor)
+      }));
     },
     async create(counterpartyId: string, kind: string) {
       update((state) => ({ ...state, loading: true, error: null, message: null }));
@@ -183,6 +241,7 @@ function createDocumentsStore() {
         update((state) => ({
           ...state,
           editor,
+          editorSnapshot: snapshotEditor(editor),
           chain,
           list,
           loading: false,
@@ -272,6 +331,7 @@ function createDocumentsStore() {
         update((state) => ({
           ...state,
           editor,
+          editorSnapshot: snapshotEditor(editor),
           chain,
           list,
           loading: false,
@@ -299,6 +359,7 @@ function createDocumentsStore() {
         update((state) => ({
           ...state,
           editor,
+          editorSnapshot: snapshotEditor(editor),
           chain,
           list,
           loading: false,
@@ -334,6 +395,7 @@ function createDocumentsStore() {
         update((state) => ({
           ...state,
           editor: response.editor,
+          editorSnapshot: snapshotEditor(response.editor),
           loading: false,
           message: response.message
         }));
@@ -354,6 +416,7 @@ function createDocumentsStore() {
         update((state) => ({
           ...state,
           editor: response.editor,
+          editorSnapshot: snapshotEditor(response.editor),
           loading: false,
           message: response.message
         }));
@@ -396,6 +459,7 @@ function createDocumentsStore() {
           ...state,
           list,
           editor: null,
+          editorSnapshot: null,
           chain: null,
           loading: false,
           message: response.message
@@ -422,6 +486,7 @@ function createDocumentsStore() {
         update((state) => ({
           ...state,
           editor,
+          editorSnapshot: snapshotEditor(editor),
           chain,
           list,
           loading: false,
@@ -450,6 +515,7 @@ function createDocumentsStore() {
           ...state,
           list,
           editor: deletedCurrent ? null : state.editor,
+          editorSnapshot: deletedCurrent ? null : state.editorSnapshot,
           chain: deletedCurrent ? null : state.chain,
           selectedIds: [],
           loading: false,
@@ -476,17 +542,20 @@ function createDocumentsStore() {
 
         let nextEditor = snapshot.editor;
         let nextChain = snapshot.chain;
+        let nextEditorSnapshot = snapshot.editorSnapshot;
 
         if (reopenedCurrent && snapshot.editor) {
           const { editor, chain } = await loadEditorAndChain(snapshot.editor.form.id);
           nextEditor = editor;
           nextChain = chain;
+          nextEditorSnapshot = snapshotEditor(editor);
         }
 
         update((state) => ({
           ...state,
           list,
           editor: nextEditor,
+          editorSnapshot: nextEditorSnapshot,
           chain: nextChain,
           selectedIds: [],
           loading: false,

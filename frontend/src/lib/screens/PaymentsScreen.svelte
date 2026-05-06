@@ -2,11 +2,14 @@
   import PaymentCalendarPanel from "../components/PaymentCalendarPanel.svelte";
   import SkeletonCard from "../components/SkeletonCard.svelte";
   import SkeletonRow from "../components/SkeletonRow.svelte";
+  import { isFormattedMoneyNegative } from "../money";
   import { paymentsStore } from "../stores/payments";
   import type { PaymentDraftFormDto, PaymentMatchCandidateDto } from "../types";
 
   const payments = paymentsStore;
   let importButton: HTMLButtonElement | null = null;
+  let pendingDirtyClose = false;
+  let panelElement: HTMLElement | null = null;
 
   function onPaymentFieldChange(field: keyof PaymentDraftFormDto, event: Event) {
     const input = event.currentTarget as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
@@ -25,6 +28,24 @@
 
   function focusImportButton() {
     importButton?.focus();
+  }
+
+  function requestCloseEditor() {
+    const result = payments.closeEditor();
+    if (result && result.ok === false && result.reason === "dirty") {
+      pendingDirtyClose = true;
+      return;
+    }
+    pendingDirtyClose = false;
+  }
+
+  function confirmDiscardChanges() {
+    pendingDirtyClose = false;
+    payments.closeEditor(true);
+  }
+
+  function cancelDiscardChanges() {
+    pendingDirtyClose = false;
   }
 
   function getPaymentStateLabel(matchedDoc: string): string {
@@ -114,109 +135,65 @@
     }
   }
 
-  function getFlowTitle(): string | null {
-    if ($payments.loading && $payments.activeAction === "import") {
-      return "Імпорт триває";
+  const FLOW_COPY: Record<string, { title: string; description: string }> = {
+    "import": {
+      title: "Імпорт триває",
+      description: "Імпортуємо виписку та оновлюємо список платежів, щоб одразу показати незведені рухи."
+    },
+    "import-pick": {
+      title: "Готуємо preview виписки",
+      description: "Розбираємо файл виписки і будуємо список платежів, що чекають на імпорт."
+    },
+    "import-commit": {
+      title: "Імпортуємо нові платежі",
+      description: "Записуємо нові платежі у БД на основі підтвердженого preview."
+    },
+    "sync": {
+      title: "Оновлюємо рухи з банку",
+      description: "Підтягуємо свіжі банківські рухи та готуємо їх до наступного кроку звірки."
+    },
+    "reconcile": {
+      title: "Готуємо preview звірки",
+      description: "Шукаємо документи-кандидати й готуємо наступний крок для цього платежу."
+    },
+    "manual-search": {
+      title: "Шукаємо документи для ручної звірки",
+      description: "Формуємо повний список відкритих актів і накладних для ручного вибору."
+    },
+    "unreconcile": {
+      title: "Знімаємо зведення",
+      description: "Знімаємо зв'язок із документом та повертаємо платіж у чергу на повторну звірку."
+    },
+    "save": {
+      title: "Зберігаємо платіж",
+      description: "Фіксуємо зміни в картці платежу та оновлюємо список."
+    },
+    "confirm-auto-match": {
+      title: "Підтверджуємо автозвірку",
+      description: "Підтверджуємо рекомендоване автозіставлення і оновлюємо статус платежу."
+    },
+    "confirm-candidate": {
+      title: "Підтверджуємо ручну звірку",
+      description: "Прив'язуємо платіж до вибраного кандидата з preview."
+    },
+    "confirm-manual-picker": {
+      title: "Фіксуємо ручний вибір документа",
+      description: "Прив'язуємо платіж до документа, обраного через ручний пошук."
+    },
+    "confirm-split": {
+      title: "Зберігаємо розподіл платежу",
+      description: "Записуємо розподіл платежу між кількома документами і оновлюємо статуси."
+    }
+  };
+
+  function getFlowCopy(): { title: string; description: string } | null {
+    if (!$payments.loading || !$payments.activeAction) {
+      return null;
     }
 
-    if ($payments.loading && $payments.activeAction === "import-pick") {
-      return "Готуємо preview виписки";
-    }
-
-    if ($payments.loading && $payments.activeAction === "import-commit") {
-      return "Імпортуємо нові платежі";
-    }
-
-    if ($payments.loading && $payments.activeAction === "sync") {
-      return "Оновлюємо рухи з банку";
-    }
-
-    if ($payments.loading && $payments.activeAction === "reconcile") {
-      return "Готуємо preview звірки";
-    }
-
-    if ($payments.loading && $payments.activeAction === "manual-search") {
-      return "Шукаємо документи для ручної звірки";
-    }
-
-    if ($payments.loading && $payments.activeAction === "unreconcile") {
-      return "Знімаємо зведення";
-    }
-
-    if ($payments.loading && $payments.activeAction === "save") {
-      return "Зберігаємо платіж";
-    }
-
-    if ($payments.loading && $payments.activeAction === "confirm-auto-match") {
-      return "Підтверджуємо автозвірку";
-    }
-
-    if ($payments.loading && $payments.activeAction === "confirm-candidate") {
-      return "Підтверджуємо ручну звірку";
-    }
-
-    if ($payments.loading && $payments.activeAction === "confirm-manual-picker") {
-      return "Фіксуємо ручний вибір документа";
-    }
-
-    if ($payments.loading && $payments.activeAction === "confirm-split") {
-      return "Зберігаємо розподіл платежу";
-    }
-
-    return null;
+    return FLOW_COPY[$payments.activeAction] ?? null;
   }
 
-  function getFlowDescription(): string | null {
-    if ($payments.loading && $payments.activeAction === "import") {
-      return "Імпортуємо виписку та оновлюємо список платежів, щоб одразу показати незведені рухи.";
-    }
-
-    if ($payments.loading && $payments.activeAction === "import-pick") {
-      return "Розбираємо файл виписки і будуємо список платежів, що чекають на імпорт.";
-    }
-
-    if ($payments.loading && $payments.activeAction === "import-commit") {
-      return "Записуємо нові платежі у БД на основі підтвердженого preview.";
-    }
-
-    if ($payments.loading && $payments.activeAction === "sync") {
-      return "Підтягуємо свіжі банківські рухи та готуємо їх до наступного кроку звірки.";
-    }
-
-    if ($payments.loading && $payments.activeAction === "reconcile") {
-      return "Шукаємо документи-кандидати й готуємо наступний крок для цього платежу.";
-    }
-
-    if ($payments.loading && $payments.activeAction === "manual-search") {
-      return "Формуємо повний список відкритих актів і накладних для ручного вибору.";
-    }
-
-    if ($payments.loading && $payments.activeAction === "unreconcile") {
-      return "Знімаємо зв'язок із документом та повертаємо платіж у чергу на повторну звірку.";
-    }
-
-    if ($payments.loading && $payments.activeAction === "save") {
-      return "Фіксуємо зміни в картці платежу та оновлюємо список.";
-    }
-
-    if ($payments.loading && $payments.activeAction === "confirm-auto-match") {
-      return "Підтверджуємо рекомендоване автозіставлення і оновлюємо статус платежу.";
-    }
-
-    if ($payments.loading && $payments.activeAction === "confirm-candidate") {
-      return "Прив'язуємо платіж до вибраного кандидата з preview.";
-    }
-
-    if ($payments.loading && $payments.activeAction === "confirm-manual-picker") {
-      return "Прив'язуємо платіж до документа, обраного через ручний пошук.";
-    }
-
-    if ($payments.loading && $payments.activeAction === "confirm-split") {
-      return "Записуємо розподіл платежу між кількома документами і оновлюємо статуси.";
-    }
-
-    return null;
-  }
 
   $: items = $payments.list?.items ?? [];
   $: unmatchedPayments = items.filter((item) => !item.matchedDoc);
@@ -233,11 +210,28 @@
     !$payments.manualPicker || $payments.manualPicker.candidates.length > 0
       ? ""
       : "Спершу знайдіть хоча б одного кандидата, щоб підтвердити документ.";
-  $: flowTitle = getFlowTitle();
-  $: flowDescription = getFlowDescription();
+  $: flowCopy = getFlowCopy();
+  $: flowTitle = flowCopy?.title ?? null;
+  $: flowDescription = flowCopy?.description ?? null;
+  $: if (!$payments.editor && pendingDirtyClose) {
+    pendingDirtyClose = false;
+  }
+  $: if (panelElement) {
+    if ($payments.editor) {
+      panelElement.setAttribute("inert", "");
+      panelElement.setAttribute("aria-hidden", "true");
+    } else {
+      panelElement.removeAttribute("inert");
+      panelElement.removeAttribute("aria-hidden");
+    }
+  }
 </script>
 
-<section class="panel" data-testid="payments-screen">
+<section
+  bind:this={panelElement}
+  class="panel"
+  data-testid="payments-screen"
+>
   <div class="panel-header">
     <div>
       <h2>Платежі</h2>
@@ -338,12 +332,29 @@
           <strong>Попередній перегляд: {$payments.importPreview.bankName || "виписка"}</strong>
           <p>{$payments.importPreview.message}</p>
           <p class="payment-import-preview-path"><code>{$payments.importPreview.path}</code></p>
+          {#if $payments.importPreviewStale}
+            <div class="status-banner is-warning" role="status" aria-live="polite" data-testid="payments-import-preview-stale">
+              <div>
+                <strong>Файл виписки змінився</strong>
+                <p>Перечитайте виписку, щоб оновити план імпорту перед підтвердженням.</p>
+              </div>
+            </div>
+          {/if}
         </div>
         <div class="editor-actions">
+          {#if $payments.importPreviewStale}
+            <button
+              class="btn-secondary"
+              on:click={() => payments.refreshImportPreview()}
+              disabled={busyImportPick || busyImportCommit}
+            >
+              Перечитати файл
+            </button>
+          {/if}
           <button
             class="btn-primary"
             on:click={() => payments.commitImportPreview()}
-            disabled={busyImportCommit || $payments.importPreview.willCreate === 0}
+            disabled={busyImportCommit || $payments.importPreview.willCreate === 0 || $payments.importPreviewStale}
           >
             {busyImportCommit
               ? "Імпортуємо..."
@@ -488,7 +499,7 @@
               <div class="task-row-main">
                 <div>
                   <strong>{candidate.title}</strong>
-                  <p>{getDocumentKindLabel(candidate.documentKind)} вЂў {candidate.openAmountStr}</p>
+                  <p>{getDocumentKindLabel(candidate.documentKind)} • {candidate.openAmountStr}</p>
                   <p>{getCandidateHint(candidate)}</p>
                 </div>
                 <div class="task-row-meta">
@@ -503,7 +514,7 @@
             Інший документ
           </button>
           <div class="empty-state-actions">
-            <button class="btn-primary" type="button" on:click={focusImportButton}>Р†РјРїРѕСЂС‚СѓРІР°С‚Рё РІРёРїРёСЃРєСѓ</button>
+            <button class="btn-primary" type="button" on:click={focusImportButton}>Імпортувати виписку</button>
           </div>
         </div>
       {:else}
@@ -535,7 +546,7 @@
               Оновити пошук
             </button>
               <button class="btn-secondary" on:click={() => payments.addSelectedManualPickerCandidateToSplit()} disabled={$payments.loading}>
-                Р”РѕРґР°С‚Рё РґРѕ СЂРѕР·РїРѕРґС–Р»Сѓ
+                Додати до розподілу
               </button>
               <button
                 class="btn-primary"
@@ -591,14 +602,14 @@
 
       {#if $payments.splitDraft}
         <section class="editor-items-empty" data-testid="payments-split-draft">
-          <strong>Р§РµСЂРЅРµС‚РєР° СЂРѕР·РїРѕРґС–Р»Сѓ</strong>
+          <strong>Чернетка розподілу</strong>
           <p>
-            РЎСѓРјР° РїР»Р°С‚РµР¶Сѓ: {$payments.splitDraft.paymentAmountStr}
-            вЂў Р—Р°Р»РёС€РѕРє: {$payments.splitDraft.remainingAmountStr}
+            Сума платежу: {$payments.splitDraft.paymentAmountStr}
+            • Залишок: {$payments.splitDraft.remainingAmountStr}
           </p>
 
           {#if $payments.splitDraft.allocations.length === 0}
-            <p>Р”РѕРґР°Р№С‚Рµ РґРѕРєСѓРјРµРЅС‚Рё Р· manual picker, С‰РѕР± СЃС„РѕСЂРјСѓРІР°С‚Рё СЂРѕР·РїРѕРґС–Р».</p>
+            <p>Додайте документи з manual picker, щоб сформувати розподіл.</p>
           {:else}
             <div class="documents-list">
               {#each $payments.splitDraft.allocations as allocation}
@@ -606,11 +617,11 @@
                   <div class="task-row-main">
                     <div>
                       <strong>{allocation.title}</strong>
-                      <p>{getDocumentKindLabel(allocation.documentKind)} вЂў Р—Р°Р»РёС€РѕРє РґРѕРєСѓРјРµРЅС‚Р°: {allocation.openAmountStr}</p>
+                      <p>{getDocumentKindLabel(allocation.documentKind)} • Залишок документа: {allocation.openAmountStr}</p>
                     </div>
                     <div class="task-row-meta">
                       <label>
-                        <span>РЎСѓРјР°</span>
+                        <span>Сума</span>
                         <input
                           value={allocation.amount}
                           on:input={(event) => onSplitAllocationInput(allocation.documentId, event)}
@@ -620,7 +631,7 @@
                   </div>
                   <div>
                     <button class="btn-ghost" on:click={() => payments.removeSplitAllocation(allocation.documentId)} disabled={$payments.loading}>
-                      РџСЂРёР±СЂР°С‚Рё
+                      Прибрати
                     </button>
                   </div>
                 </div>
@@ -630,7 +641,7 @@
 
           <div class="editor-actions">
             <button class="btn-primary" on:click={() => payments.confirmSplitDraft()} disabled={$payments.loading || $payments.splitDraft.allocations.length === 0}>
-              РџС–РґС‚РІРµСЂРґРёС‚Рё СЂРѕР·РїРѕРґС–Р»
+              Підтвердити розподіл
             </button>
           </div>
         </section>
@@ -667,7 +678,7 @@
                 </div>
                 <div class="task-row-meta">
                   <span class="task-pill">{item.direction === "in" ? "Надходження" : "Витрата"}</span>
-                  <span class="money-value" data-negative={item.amountStr.trim().startsWith("-")}>{item.amountStr}</span>
+                  <span class="money-value" data-negative={isFormattedMoneyNegative(item.amountStr)}>{item.amountStr}</span>
                   <span class="payment-state payment-state-unmatched">{getPaymentStateLabel(item.matchedDoc)}</span>
                 </div>
               </button>
@@ -713,7 +724,7 @@
                 </div>
                 <div class="task-row-meta">
                   <span class="task-pill">{item.direction === "in" ? "Надходження" : "Витрата"}</span>
-                  <span class="money-value" data-negative={item.amountStr.trim().startsWith("-")}>{item.amountStr}</span>
+                  <span class="money-value" data-negative={isFormattedMoneyNegative(item.amountStr)}>{item.amountStr}</span>
                   <span class="payment-state payment-state-matched">{getPaymentStateLabel(item.matchedDoc)}</span>
                 </div>
               </button>
@@ -736,6 +747,38 @@
 
 {#if $payments.editor}
   <section class="editor-sheet">
+    {#if pendingDirtyClose}
+      <div
+        class="editor-dirty-banner"
+        role="alertdialog"
+        aria-live="assertive"
+        aria-labelledby="payments-dirty-banner-title"
+        data-testid="payments-dirty-banner"
+      >
+        <div>
+          <strong id="payments-dirty-banner-title">У вас є незбережені зміни</strong>
+          <p>Скасувати їх і закрити форму?</p>
+        </div>
+        <div class="editor-dirty-actions">
+          <button
+            type="button"
+            class="btn-ghost btn-sm"
+            on:click={cancelDiscardChanges}
+            data-testid="payments-dirty-banner-cancel"
+          >
+            Залишитися
+          </button>
+          <button
+            type="button"
+            class="btn-danger btn-sm"
+            on:click={confirmDiscardChanges}
+            data-testid="payments-dirty-banner-discard"
+          >
+            Так, закрити
+          </button>
+        </div>
+      </div>
+    {/if}
     <div class="editor-header">
       <div>
         <h3>{$payments.editor.id ? "Редагувати платіж" : "Новий платіж"}</h3>
@@ -743,7 +786,7 @@
       </div>
       <div class="editor-actions">
         <button class="btn-primary" on:click={() => payments.save()} disabled={busySave}>Зберегти</button>
-        <button class="btn-ghost" on:click={() => payments.closeEditor()} disabled={busySave}>Закрити</button>
+        <button class="btn-ghost" on:click={requestCloseEditor} disabled={busySave}>Закрити</button>
       </div>
     </div>
 
@@ -906,7 +949,6 @@
     font-weight: 700;
   }
 
-  .doc-kind-badge,
   .payment-state {
     display: inline-flex;
     align-items: center;
@@ -915,11 +957,6 @@
     border-radius: 999px;
     font-size: var(--font-sm);
     font-weight: 600;
-  }
-
-  .doc-kind-badge {
-    background: color-mix(in srgb, var(--bg-subtle) 88%, var(--bg-card));
-    color: var(--text-muted);
   }
 
   .payment-row {

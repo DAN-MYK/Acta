@@ -19,6 +19,11 @@ import {
 } from "../api";
 import { counterpartiesStore } from "./counterparties";
 import { navigationStore } from "./navigation";
+import {
+  cloneSnapshot,
+  isEditorFormDirty,
+  type CloseEditorResult
+} from "../editorDirty";
 import { formatMinorMoney, parseMoneyToMinor } from "../money";
 import {
   filterCalendarEvents,
@@ -94,12 +99,14 @@ interface PaymentsStoreState {
   loading: boolean;
   error: string | null;
   editor: PaymentDraftFormDto | null;
+  editorSnapshot: PaymentDraftFormDto | null;
   message: string | null;
   matchPreview: PaymentMatchPreviewDto | null;
   selectedCandidateId: string | null;
   manualPicker: PaymentManualPickerState | null;
   splitDraft: PaymentSplitDraftState | null;
   importPreview: PaymentImportPreviewDto | null;
+  importPreviewStale: boolean;
   activeAction: PaymentsActiveAction;
   activePaymentId: string | null;
 }
@@ -116,12 +123,14 @@ const initialState: PaymentsStoreState = {
   loading: false,
   error: null,
   editor: null,
+  editorSnapshot: null,
   message: null,
   matchPreview: null,
   selectedCandidateId: null,
   manualPicker: null,
   splitDraft: null,
   importPreview: null,
+  importPreviewStale: false,
   activeAction: null,
   activePaymentId: null
 };
@@ -274,6 +283,8 @@ function createPaymentsStore() {
   };
 
   const failMutation = (message: string): MutationResultDto => ({ ok: false, message });
+  const isImportPreviewStaleMessage = (message: string): boolean =>
+    message.includes("Файл виписки змінився") || message.includes("Вміст файлу виписки змінився");
 
   const runMutationAction = async <T extends MutationResultDto>(
     action: PaymentsActiveAction,
@@ -561,13 +572,20 @@ function createPaymentsStore() {
         update((state) => ({
           ...state,
           importPreview: preview,
+          importPreviewStale: false,
           message: preview.message,
           error: null
         }));
         return preview;
       } catch (error) {
         const message = String(error);
-        update((state) => ({ ...state, message, error: message, importPreview: null }));
+        update((state) => ({
+          ...state,
+          message,
+          error: message,
+          importPreview: null,
+          importPreviewStale: false
+        }));
         return null;
       } finally {
         finishAction();
@@ -591,15 +609,25 @@ function createPaymentsStore() {
           fileHash: preview.fileHash,
         });
         if (result.ok) {
-          update((state) => ({ ...state, importPreview: null }));
+          update((state) => ({ ...state, importPreview: null, importPreviewStale: false }));
           await refreshAfterMutation(result.message);
         } else {
-          update((state) => ({ ...state, message: result.message, error: result.message }));
+          update((state) => ({
+            ...state,
+            message: result.message,
+            error: result.message,
+            importPreviewStale: isImportPreviewStaleMessage(result.message)
+          }));
         }
         return result;
       } catch (error) {
         const message = String(error);
-        update((state) => ({ ...state, message, error: message }));
+        update((state) => ({
+          ...state,
+          message,
+          error: message,
+          importPreviewStale: isImportPreviewStaleMessage(message)
+        }));
         return { ok: false, message };
       } finally {
         finishAction();
@@ -611,6 +639,7 @@ function createPaymentsStore() {
       update((state) => ({
         ...state,
         importPreview: null,
+        importPreviewStale: false,
         message: "Попередній перегляд імпорту відкладено.",
         error: null
       }));
@@ -626,12 +655,18 @@ function createPaymentsStore() {
         update((state) => ({
           ...state,
           importPreview: preview,
+          importPreviewStale: false,
           message: preview.message,
           error: null
         }));
       } catch (error) {
         const message = String(error);
-        update((state) => ({ ...state, message, error: message }));
+        update((state) => ({
+          ...state,
+          message,
+          error: message,
+          importPreviewStale: isImportPreviewStaleMessage(message)
+        }));
       } finally {
         finishAction();
       }
@@ -1151,9 +1186,11 @@ function createPaymentsStore() {
 
     openEditor(payment?: PaymentItemDto) {
       if (!payment) {
+        const blank = createBlankForm();
         update((state) => ({
           ...state,
-          editor: createBlankForm(),
+          editor: blank,
+          editorSnapshot: cloneSnapshot(blank),
           message: null
         }));
         return;
@@ -1174,6 +1211,7 @@ function createPaymentsStore() {
       update((state) => ({
         ...state,
         editor,
+        editorSnapshot: cloneSnapshot(editor),
         message: null
       }));
     },
@@ -1205,12 +1243,29 @@ function createPaymentsStore() {
       return true;
     },
 
-    closeEditor() {
+    closeEditor(force = false): CloseEditorResult {
+      const snapshot = get({ subscribe });
+      if (!snapshot.editor) {
+        return { ok: true };
+      }
+
+      const dirty = isEditorFormDirty(snapshot.editorSnapshot, snapshot.editor);
+      if (dirty && !force) {
+        return { ok: false, reason: "dirty" };
+      }
+
       update((state) => ({
         ...state,
         editor: null,
+        editorSnapshot: null,
         message: null
       }));
+      return { ok: true };
+    },
+    isEditorDirty(): boolean {
+      const snapshot = get({ subscribe });
+      if (!snapshot.editor) return false;
+      return isEditorFormDirty(snapshot.editorSnapshot, snapshot.editor);
     },
 
     closeMatchPreview() {
@@ -1249,7 +1304,8 @@ function createPaymentsStore() {
           update((state) => ({
             ...state,
             message: result.message,
-            editor: null
+            editor: null,
+            editorSnapshot: null
           }));
           await loadPayments();
         } else {

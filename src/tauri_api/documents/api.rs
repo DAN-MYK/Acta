@@ -469,6 +469,7 @@ async fn find_document_by_parent_ref(
 }
 
 async fn build_existing_document_form(
+    storage_dir: &Path,
     pool: &PgPool,
     company_id: Uuid,
     doc_ref: DocumentRef,
@@ -503,7 +504,7 @@ async fn build_existing_document_form(
                 .ok_or_else(|| anyhow!("Рахунок не знайдено"))?;
             let counterparty_name =
                 load_counterparty_name(pool, company_id, invoice.counterparty_id).await?;
-            let pdf = match invoice.pdf_path.clone() {
+            let pdf = match load_existing_pdf_path(storage_dir, pool, doc_ref).await? {
                 Some(path) => Some(inspect_document_pdf_state(path).await),
                 None => None,
             };
@@ -530,7 +531,7 @@ async fn build_existing_document_form(
                 .ok_or_else(|| anyhow!("Накладну не знайдено"))?;
             let counterparty_name =
                 load_counterparty_name(pool, company_id, waybill.counterparty_id).await?;
-            let pdf = match waybill.pdf_path.clone() {
+            let pdf = match load_existing_pdf_path(storage_dir, pool, doc_ref).await? {
                 Some(path) => Some(inspect_document_pdf_state(path).await),
                 None => None,
             };
@@ -830,7 +831,7 @@ pub async fn documents_list(
 pub async fn document_open(ctx: &AppCtx, doc_id: String) -> Result<DocumentEditorDto> {
     let doc_ref = parse_document_ref(&doc_id)
         .ok_or_else(|| anyhow!("Некоректний ідентифікатор документа"))?;
-    build_existing_document_form(ctx.pool(), ctx.company_id(), doc_ref).await
+    build_existing_document_form(ctx.storage_dir(), ctx.pool(), ctx.company_id(), doc_ref).await
 }
 
 pub async fn document_pdf_attach_existing(
@@ -875,7 +876,7 @@ pub async fn document_pdf_apply_text_replace(
         .ok_or_else(|| anyhow!("Некоректний ідентифікатор документа"))?;
     let doc_uuid = document_ref_uuid(doc_ref);
     let (kind, number) = load_document_kind_and_number(ctx.pool(), doc_ref).await?;
-    let file_path = load_existing_pdf_path(ctx.pool(), doc_ref)
+    let file_path = load_existing_pdf_path(ctx.storage_dir(), ctx.pool(), doc_ref)
         .await?
         .ok_or_else(|| anyhow!("Спочатку прив’яжіть існуючий PDF до документа"))?;
 
@@ -918,7 +919,7 @@ pub async fn document_pdf_apply_text_replace(
 pub async fn document_pdf_open_current(ctx: &AppCtx, doc_id: String) -> Result<MutationResultDto> {
     let doc_ref = parse_document_ref(&doc_id)
         .ok_or_else(|| anyhow!("Некоректний ідентифікатор документа"))?;
-    let file_path = load_existing_pdf_path(ctx.pool(), doc_ref)
+    let file_path = load_existing_pdf_path(ctx.storage_dir(), ctx.pool(), doc_ref)
         .await?
         .ok_or_else(|| anyhow!("Для цього документа ще не прив’язано PDF"))?;
 

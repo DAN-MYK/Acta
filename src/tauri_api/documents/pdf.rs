@@ -19,18 +19,25 @@ use crate::pdf::generator::{
 use crate::pdf::reader::inspect_pdf;
 
 pub(super) async fn load_existing_pdf_path(
+    storage_dir: &Path,
     pool: &PgPool,
     doc_ref: DocumentRef,
 ) -> Result<Option<String>> {
-    match doc_ref {
-        DocumentRef::Act(_) => Ok(None),
-        DocumentRef::Invoice(id) => Ok(db::invoices::get_by_id(pool, id)
+    let stored_path = match doc_ref {
+        DocumentRef::Act(_) => None,
+        DocumentRef::Invoice(id) => db::invoices::get_by_id(pool, id)
             .await?
-            .and_then(|(invoice, _)| invoice.pdf_path)),
-        DocumentRef::Waybill(id) => Ok(db::waybills::get_by_id(pool, id)
+            .and_then(|(invoice, _)| invoice.pdf_path),
+        DocumentRef::Waybill(id) => db::waybills::get_by_id(pool, id)
             .await?
-            .and_then(|(waybill, _)| waybill.pdf_path)),
-    }
+            .and_then(|(waybill, _)| waybill.pdf_path),
+    };
+
+    Ok(stored_path.map(|path| {
+        resolve_stored_pdf_path(storage_dir, &path)
+            .display()
+            .to_string()
+    }))
 }
 
 pub(super) async fn persist_existing_pdf_path(
@@ -127,10 +134,34 @@ pub(super) fn managed_existing_pdf_dir(
     doc_id: Uuid,
     number: &str,
 ) -> PathBuf {
-    storage_dir
-        .join("existing_pdf")
+    storage_dir.join(managed_existing_pdf_relative_dir(kind, doc_id, number))
+}
+
+pub(super) fn managed_existing_pdf_relative_dir(kind: &str, doc_id: Uuid, number: &str) -> PathBuf {
+    PathBuf::from("existing_pdf")
         .join(kind)
         .join(format!("{doc_id}_{}", sanitize_pdf_fragment(number)))
+}
+
+pub(super) fn managed_existing_pdf_relative_path(
+    kind: &str,
+    doc_id: Uuid,
+    number: &str,
+) -> PathBuf {
+    managed_existing_pdf_relative_dir(kind, doc_id, number).join("working.pdf")
+}
+
+pub(super) fn resolve_stored_pdf_path(storage_dir: &Path, stored_path: &str) -> PathBuf {
+    let path = PathBuf::from(stored_path);
+    if path.is_absolute() {
+        path
+    } else {
+        storage_dir.join(path)
+    }
+}
+
+fn normalize_stored_pdf_path(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
 }
 
 /// Перевіряє що `source_path` має розширення PDF і не перетинається з керованою
@@ -290,7 +321,9 @@ pub(super) async fn attach_existing_pdf_copy(
             )
         })?;
 
-        Ok(working_path.display().to_string())
+        Ok(normalize_stored_pdf_path(&managed_existing_pdf_relative_path(
+            &kind, doc_id, &number,
+        )))
     })
     .await
     .context("PDF copy thread error")?
@@ -681,5 +714,32 @@ mod pdf_tests {
         assert_ne!(first, second);
         assert!(first.to_string_lossy().contains(&first_id.to_string()));
         assert!(second.to_string_lossy().contains(&second_id.to_string()));
+    }
+
+    #[test]
+    fn managed_existing_pdf_relative_path_targets_working_copy() {
+        let doc_id = Uuid::new_v4();
+        let path = managed_existing_pdf_relative_path("invoice", doc_id, "INV-001");
+        let normalized = path.to_string_lossy().replace('\\', "/");
+
+        assert!(normalized.starts_with("existing_pdf/invoice/"));
+        assert!(normalized.ends_with("/working.pdf"));
+        assert!(normalized.contains(&doc_id.to_string()));
+    }
+
+    #[test]
+    fn resolve_stored_pdf_path_joins_relative_and_preserves_absolute() {
+        let storage_dir = Path::new("storage/documents");
+        let relative = "existing_pdf/invoice/test/working.pdf";
+        let resolved_relative = resolve_stored_pdf_path(storage_dir, relative);
+        let expected_relative = storage_dir.join(PathBuf::from(relative));
+
+        assert_eq!(resolved_relative, expected_relative);
+
+        let absolute = std::env::temp_dir().join("acta-working.pdf");
+        let resolved_absolute =
+            resolve_stored_pdf_path(storage_dir, absolute.to_string_lossy().as_ref());
+
+        assert_eq!(resolved_absolute, absolute);
     }
 }

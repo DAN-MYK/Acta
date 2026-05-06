@@ -44,6 +44,7 @@ describe("paymentsUtils", () => {
           subtitle: "",
           date: "2026-05-05",
           amountStr: "100,00",
+          amount: "100",
           direction: "income",
           statusLabel: "",
           recurrenceLabel: "",
@@ -63,6 +64,7 @@ describe("paymentsUtils", () => {
           subtitle: "",
           date: "2026-05-05",
           amountStr: "50,00",
+          amount: "50",
           direction: "expense",
           statusLabel: "",
           recurrenceLabel: "",
@@ -82,3 +84,5 @@ describe("paymentsUtils", () => {
     expect(filterCalendarEvents(day, "schedule")).toEqual([day.events[0]]);
   });
 });
+
+
