@@ -2,7 +2,13 @@
   import { tick } from "svelte";
   import AppIcon from "../components/AppIcon.svelte";
   import SkeletonRow from "../components/SkeletonRow.svelte";
-  import type { AppIconName } from "../icons";
+  import {
+    DOCUMENTS_COPY,
+    DOCUMENT_KIND_META,
+    DOCUMENT_KIND_OPTIONS,
+    formatDocumentItemsLabel,
+    resolveDocumentKindMeta
+  } from "../config/ui";
   import { documentsStore } from "../stores/documents";
   import { counterpartiesStore } from "../stores/counterparties";
   import { formatDocumentDraftTotal, formatDocumentItemTotal } from "../documentMoney";
@@ -29,24 +35,6 @@
   let chainMenuPopover: HTMLElement | null = null;
   let pendingDirtyClose = false;
   let panelElement: HTMLElement | null = null;
-
-  const documentKindLabels: Record<DocumentKind, string> = {
-    invoice: "Рахунок",
-    act: "Акт",
-    waybill: "Накладна"
-  };
-
-  const documentKindIcons: Record<DocumentKind, AppIconName> = {
-    invoice: "invoice",
-    act: "act",
-    waybill: "waybill"
-  };
-
-  const documentKindActionLabels: Record<DocumentKind, string> = {
-    invoice: "рахунок",
-    act: "акт",
-    waybill: "накладну"
-  };
 
   $: {
     const nextDraftContextCounterpartyId = $documents.draftContext?.counterpartyId ?? "";
@@ -177,6 +165,8 @@
     closeChainMenu();
   }
 
+  const documentKindMeta = DOCUMENT_KIND_META;
+
   $: {
     const editorDocId = $documents.editor?.form.id ?? "";
     if (!editorDocId && chainMenuOpen) {
@@ -241,7 +231,7 @@
   }
 
   function onDeleteCurrent() {
-    if (!window.confirm("Видалити поточний документ? Цю дію не можна скасувати.")) {
+    if (!window.confirm(DOCUMENTS_COPY.confirmDeleteCurrent)) {
       return;
     }
 
@@ -273,7 +263,7 @@
   }
 
   function onBulkDelete() {
-    if (!window.confirm("Видалити вибрані документи? Цю дію не можна скасувати.")) {
+    if (!window.confirm(DOCUMENTS_COPY.confirmDeleteBulk)) {
       return;
     }
 
@@ -294,72 +284,25 @@
     return [];
   }
 
-  function getDocumentKindIcon(kind: string): AppIconName {
-    const normalized = kind.toLowerCase();
-
-    if (normalized === "invoice" || normalized.includes("рах")) {
-      return "invoice";
-    }
-    if (normalized === "act" || normalized.includes("акт")) {
-      return "act";
-    }
-    if (normalized === "waybill" || normalized.includes("наклад")) {
-      return "waybill";
-    }
-    if (normalized.includes("догов")) {
-      return "contract";
-    }
-    if (normalized.includes("pdf")) {
-      return "pdf";
-    }
-    if (normalized.includes("excel") || normalized.includes("xls")) {
-      return "excel";
-    }
-    return "documents";
-  }
-
   function getDocumentKindLabel(kind: string): string {
-    const normalized = kind.toLowerCase();
-
-    if (normalized === "invoice" || normalized.includes("рах")) {
-      return "Рахунок";
-    }
-    if (normalized === "act" || normalized.includes("акт")) {
-      return "Акт";
-    }
-    if (normalized === "waybill" || normalized.includes("наклад")) {
-      return "Накладна";
-    }
-    if (normalized.includes("догов")) {
-      return "Договір";
-    }
-    if (normalized.includes("pdf")) {
-      return "PDF";
-    }
-    if (normalized.includes("excel") || normalized.includes("xls")) {
-      return "Excel";
-    }
-    return kind;
+    return resolveDocumentKindMeta(kind).label;
   }
+
+  const directionLabels: Record<string, string> = {
+    outgoing: "↑ Вихідний",
+    incoming: "↓ Вхідний"
+  };
 
   function getCreateButtonLabel(kind: DocumentKind): string {
-    if (kind === "invoice") {
-      return "Створити рахунок";
-    }
-    if (kind === "waybill") {
-      return "Створити накладну";
-    }
-    return "Створити акт";
+    const tab = $documents.activeTab;
+    const dirSuffix = tab === "incoming" ? " (вхідний)" : tab === "outgoing" ? " (вихідний)" : "";
+    if (kind === "invoice") return `Створити рахунок${dirSuffix}`;
+    if (kind === "waybill") return `Створити накладну${dirSuffix}`;
+    return `Створити акт${dirSuffix}`;
   }
 
   function getItemsCountLabel(count: number): string {
-    if (count === 1) {
-      return "1 позиція";
-    }
-    if (count >= 2 && count <= 4) {
-      return `${count} позиції`;
-    }
-    return `${count} позицій`;
+    return formatDocumentItemsLabel(count);
   }
 
   function getCurrentChainStatus() {
@@ -367,8 +310,8 @@
     return steps.length > 0 ? steps[steps.length - 1].status : "Чернетка";
   }
 
-  function getEditorKindIcon(kind: string): AppIconName {
-    return getDocumentKindIcon(kind);
+  function getEditorKindIcon(kind: string) {
+    return resolveDocumentKindMeta(kind).icon;
   }
 
   function supportsExistingPdfFlow(kind: string): boolean {
@@ -394,6 +337,44 @@
     />
   </div>
 
+  <div class="documents-nav-tabs" role="tablist" aria-label="Напрямок документів">
+    {#each [
+      { value: "all",      label: "Всі" },
+      { value: "outgoing", label: "Вихідні" },
+      { value: "incoming", label: "Вхідні" }
+    ] as tab}
+      <button
+        role="tab"
+        type="button"
+        class="nav-tab"
+        class:nav-tab-active={$documents.activeTab === tab.value}
+        on:click={() => documents.setTab(tab.value as "all" | "outgoing" | "incoming")}
+        disabled={$documents.loading}
+      >
+        {tab.label}
+      </button>
+    {/each}
+  </div>
+
+  <div class="documents-kind-chips" role="group" aria-label="Тип документа">
+    {#each [
+      { value: null,       label: "Всі" },
+      { value: "act",      label: "Акти" },
+      { value: "invoice",  label: "Рахунки" },
+      { value: "waybill",  label: "Накладні" }
+    ] as chip}
+      <button
+        type="button"
+        class="kind-chip"
+        class:kind-chip-active={$documents.kindFilter === chip.value}
+        on:click={() => documents.setKindFilter(chip.value as DocumentKind | null)}
+        disabled={$documents.loading}
+      >
+        {chip.label}
+      </button>
+    {/each}
+  </div>
+
   <div class="documents-create-bar" data-testid="documents-create-strip">
     <select
       bind:this={createCounterpartySelect}
@@ -407,9 +388,9 @@
       {/each}
     </select>
     <select bind:value={createKind} disabled={$documents.loading} aria-label="Тип документа">
-      <option value="act">Акт</option>
-      <option value="invoice">Рахунок</option>
-      <option value="waybill">Накладна</option>
+      {#each DOCUMENT_KIND_OPTIONS as option}
+        <option value={option.value}>{option.label}</option>
+      {/each}
     </select>
     <button
       bind:this={createButton}
@@ -420,7 +401,7 @@
       on:click={onCreateDraft}
       aria-busy={$documents.loading ? "true" : "false"}
     >
-      <AppIcon name={documentKindIcons[createKind]} surface={true} />
+      <AppIcon name={documentKindMeta[createKind].icon} surface={true} />
       <span>{getCreateButtonLabel(createKind)}</span>
     </button>
   </div>
@@ -473,8 +454,8 @@
   {:else if ($documents.list?.items.length ?? 0) === 0}
     <div class="empty-state-card" data-testid="documents-empty-state">
       <span class="empty-state-eyebrow">Почніть зі сценарію</span>
-      <strong>Поки що документів немає</strong>
-      <p>Почніть зі створення першого рахунку, акта або накладної, щоб запустити повний сценарій документа.</p>
+      <strong>{DOCUMENTS_COPY.emptyTitle}</strong>
+      <p>{DOCUMENTS_COPY.emptyDescription}</p>
       <div class="empty-state-actions">
         <button
           class="btn-primary"
@@ -482,7 +463,7 @@
           data-testid="documents-empty-primary-action"
           on:click={focusCreateButton}
         >
-          Створити перший документ
+          {DOCUMENTS_COPY.emptyAction}
         </button>
       </div>
     </div>
@@ -508,7 +489,7 @@
             <div class="doc-row-body">
               <div>
                 <strong class="doc-row-title">
-                  <AppIcon name={getDocumentKindIcon(item.kind)} surface={true} size={16} />
+                  <AppIcon name={resolveDocumentKindMeta(item.kind).icon} surface={true} size={16} />
                   <span>{item.number}</span>
                 </strong>
                 <p>{item.counterparty}</p>
@@ -517,10 +498,13 @@
                 <span>{item.date}</span>
                 <span class="money-value" data-negative={isFormattedMoneyNegative(item.amountStr)}>{item.amountStr}</span>
                 <span class="doc-kind-badge">
-                  <AppIcon name={getDocumentKindIcon(item.kind)} size={14} />
+                  <AppIcon name={resolveDocumentKindMeta(item.kind).icon} size={14} />
                   <span>{getDocumentKindLabel(item.kind)}</span>
                 </span>
                 <span class="doc-status-chip">{item.statusLabel}</span>
+                <span class="doc-direction-badge" data-direction={item.direction}>
+                  {directionLabels[item.direction] ?? item.direction}
+                </span>
               </div>
             </div>
           </button>
@@ -557,8 +541,8 @@
         data-testid="documents-dirty-banner"
       >
         <div>
-          <strong id="documents-dirty-banner-title">У вас є незбережені зміни</strong>
-          <p>Скасувати їх і закрити форму?</p>
+          <strong id="documents-dirty-banner-title">{DOCUMENTS_COPY.dirtyTitle}</strong>
+          <p>{DOCUMENTS_COPY.dirtyDescription}</p>
         </div>
         <div class="editor-dirty-actions">
           <button
@@ -567,7 +551,7 @@
             on:click={cancelDiscardChanges}
             data-testid="documents-dirty-banner-cancel"
           >
-            Залишитися
+            {DOCUMENTS_COPY.dirtyStay}
           </button>
           <button
             type="button"
@@ -575,7 +559,7 @@
             on:click={confirmDiscardChanges}
             data-testid="documents-dirty-banner-discard"
           >
-            Так, закрити
+            {DOCUMENTS_COPY.dirtyDiscard}
           </button>
         </div>
       </div>
@@ -639,8 +623,8 @@
                 on:click={() => onChainMenuCreateChain(targetKind)}
                 disabled={$documents.loading}
               >
-                <AppIcon name={documentKindIcons[targetKind]} size={16} />
-                <span>Створити {documentKindActionLabels[targetKind]}</span>
+                <AppIcon name={documentKindMeta[targetKind].icon} size={16} />
+                <span>Створити {documentKindMeta[targetKind].actionLabel}</span>
               </button>
             {/each}
           </div>
@@ -683,6 +667,31 @@
           disabled={$documents.loading}
         ></textarea>
       </label>
+      <fieldset class="editor-direction-fieldset editor-grid-span">
+        <legend>Напрямок</legend>
+        <label class="editor-direction-option">
+          <input
+            type="radio"
+            name="direction"
+            value="outgoing"
+            checked={$documents.editor?.form.direction === "outgoing"}
+            on:change={() => documents.updateFormField("direction", "outgoing")}
+            disabled={$documents.loading}
+          />
+          ↑ Вихідний
+        </label>
+        <label class="editor-direction-option">
+          <input
+            type="radio"
+            name="direction"
+            value="incoming"
+            checked={$documents.editor?.form.direction === "incoming"}
+            on:change={() => documents.updateFormField("direction", "incoming")}
+            disabled={$documents.loading}
+          />
+          ↓ Вхідний
+        </label>
+      </fieldset>
     </div>
 
     <div class="editor-items-card">
@@ -700,8 +709,8 @@
       <div class="editor-items">
         {#if $documents.editor.items.length === 0}
           <div class="editor-items-empty" data-testid="documents-items-empty">
-            <strong>Поки що без позицій</strong>
-            <p>Додайте першу позицію, щоб менеджер одразу бачив номенклатуру, кількість, ціну й підсумок документа.</p>
+            <strong>{DOCUMENTS_COPY.itemsEmptyTitle}</strong>
+            <p>{DOCUMENTS_COPY.itemsEmptyDescription}</p>
             <button class="btn-primary" on:click={() => documents.addItem()} disabled={$documents.loading}>
               Додати першу позицію
             </button>
@@ -846,3 +855,83 @@
     {/if}
   </section>
 {/if}
+
+<style>
+  .documents-nav-tabs {
+    display: flex;
+    gap: 2px;
+    border-bottom: 1px solid var(--color-border);
+    padding: 0 16px;
+  }
+
+  .nav-tab {
+    padding: 8px 16px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: var(--color-text-sub);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+
+  .nav-tab-active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+    font-weight: 500;
+  }
+
+  .documents-kind-chips {
+    display: flex;
+    gap: 6px;
+    padding: 8px 16px;
+  }
+
+  .kind-chip {
+    padding: 4px 12px;
+    border-radius: 12px;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--color-text-sub);
+  }
+
+  .kind-chip-active {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: #fff;
+  }
+
+  .doc-direction-badge {
+    font-size: 11px;
+    color: var(--color-text-muted);
+  }
+
+  .doc-direction-badge[data-direction="outgoing"] {
+    color: var(--color-success);
+  }
+
+  .doc-direction-badge[data-direction="incoming"] {
+    color: var(--color-warning);
+  }
+
+  .editor-direction-fieldset {
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    padding: 8px 12px;
+  }
+
+  .editor-direction-fieldset legend {
+    font-size: 12px;
+    color: var(--color-text-sub);
+    padding: 0 4px;
+  }
+
+  .editor-direction-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: 16px;
+    cursor: pointer;
+  }
+</style>
