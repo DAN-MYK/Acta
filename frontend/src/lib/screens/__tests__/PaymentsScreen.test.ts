@@ -68,6 +68,7 @@ const mocks = vi.hoisted(() => {
         }
       | null,
     importPreview: null as PaymentImportPreviewDto | null,
+    importPreviewStale: false,
     activeAction: null as string | null,
     activePaymentId: null as string | null
   });
@@ -75,7 +76,7 @@ const mocks = vi.hoisted(() => {
   return {
     paymentsState,
     cancelImportPreview: vi.fn(),
-    closeEditor: vi.fn(),
+    closeEditor: vi.fn(() => ({ ok: true })),
     closeManualMatchPicker: vi.fn(),
     closeMatchPreview: vi.fn(),
     commitImportPreview: vi.fn(),
@@ -85,6 +86,7 @@ const mocks = vi.hoisted(() => {
     confirmManualPickerCandidate: vi.fn(),
     confirmPreviewAutoMatch: vi.fn(),
     confirmSelectedPreviewCandidate: vi.fn(),
+    refreshImportPreview: vi.fn(),
     importCsv: vi.fn(),
     pickAndPreviewImport: vi.fn(),
     loadCalendar: vi.fn(),
@@ -127,6 +129,7 @@ vi.mock("../../stores/payments", () => ({
     confirmManualPickerCandidate: mocks.confirmManualPickerCandidate,
     confirmPreviewAutoMatch: mocks.confirmPreviewAutoMatch,
     confirmSelectedPreviewCandidate: mocks.confirmSelectedPreviewCandidate,
+    refreshImportPreview: mocks.refreshImportPreview,
     importCsv: mocks.importCsv,
     pickAndPreviewImport: mocks.pickAndPreviewImport,
     loadCalendar: mocks.loadCalendar,
@@ -241,6 +244,7 @@ function setPaymentsState(
         }
       | null;
     importPreview: PaymentImportPreviewDto | null;
+    importPreviewStale: boolean;
     activeAction: string | null;
     activePaymentId: string | null;
   }> = {}
@@ -263,6 +267,7 @@ function setPaymentsState(
     manualPicker: null,
     splitDraft: null,
     importPreview: null,
+    importPreviewStale: false,
     activeAction: null,
     activePaymentId: null,
     ...overrides
@@ -292,6 +297,7 @@ describe("PaymentsScreen component", () => {
       mocks.confirmManualPickerCandidate,
       mocks.confirmPreviewAutoMatch,
       mocks.confirmSelectedPreviewCandidate,
+      mocks.refreshImportPreview,
       mocks.importCsv,
       mocks.openEditor,
       mocks.openManualMatchPicker,
@@ -312,6 +318,7 @@ describe("PaymentsScreen component", () => {
     ]) {
       fn.mockReset();
     }
+    mocks.closeEditor.mockReturnValue({ ok: true });
   });
 
   afterEach(() => {
@@ -512,6 +519,38 @@ describe("PaymentsScreen component", () => {
     component.$destroy();
   });
 
+  it("shows stale import preview CTA and routes reread action", async () => {
+    setPaymentsState({
+      importPreview: {
+        ok: true,
+        message: "Файл потребує повторного preview",
+        path: "/tmp/stale.csv",
+        bankName: "ПриватБанк",
+        parsed: 2,
+        willCreate: 1,
+        willSkip: 1,
+        conflicts: 0,
+        fileSize: 4096,
+        fileMtimeSecs: 1746355200,
+        fileHash: "stale-hash",
+        rows: [
+          { action: "create", bankRef: "REF-1", description: "Платіж", note: "create" }
+        ]
+      },
+      importPreviewStale: true
+    });
+
+    const { component, target } = renderPayments();
+
+    expect(target.textContent).toContain("Файл виписки змінився");
+    buttonByText(target, "Перечитати файл").click();
+    await tick();
+
+    expect(mocks.refreshImportPreview).toHaveBeenCalledTimes(1);
+
+    component.$destroy();
+  });
+
   it("keeps chrome visible and skeletonizes payment lists during initial loading", () => {
     setPaymentsState({
       list: null,
@@ -640,6 +679,62 @@ describe("PaymentsScreen component", () => {
     expect(mocks.searchManualMatchCandidates).toHaveBeenCalled();
     expect(mocks.confirmManualPickerCandidate).toHaveBeenCalled();
     expect(mocks.selectManualPickerCandidate).toHaveBeenCalledWith("act-1");
+
+    component.$destroy();
+  });
+
+  it("marks the main panel inert while the editor drawer is open", () => {
+    setPaymentsState({
+      editor: {
+        id: "payment-1",
+        date: "2026-05-01",
+        amount: "1000,00",
+        direction: "income",
+        counterpartyId: "",
+        counterpartyName: "",
+        bankName: "ПриватБанк",
+        reference: "REF-1",
+        description: "Тестовий платіж"
+      }
+    });
+
+    const { component, target } = renderPayments();
+
+    const panel = target.querySelector('[data-testid="payments-screen"]');
+    expect(panel?.hasAttribute("inert")).toBe(true);
+    expect(panel?.getAttribute("aria-hidden")).toBe("true");
+
+    component.$destroy();
+  });
+
+  it("shows inline dirty banner before closing a dirty editor", async () => {
+    mocks.closeEditor.mockReturnValue({ ok: false, reason: "dirty" });
+    setPaymentsState({
+      editor: {
+        id: "payment-1",
+        date: "2026-05-01",
+        amount: "1000,00",
+        direction: "income",
+        counterpartyId: "",
+        counterpartyName: "",
+        bankName: "ПриватБанк",
+        reference: "REF-1",
+        description: "Тестовий платіж"
+      }
+    });
+
+    const { component, target } = renderPayments();
+
+    buttonByText(target, "Закрити").click();
+    await tick();
+
+    expect(target.querySelector('[data-testid="payments-dirty-banner"]')).toBeTruthy();
+    expect(mocks.closeEditor).toHaveBeenCalledWith();
+
+    buttonByText(target, "Так, закрити").click();
+    await tick();
+
+    expect(mocks.closeEditor).toHaveBeenCalledWith(true);
 
     component.$destroy();
   });

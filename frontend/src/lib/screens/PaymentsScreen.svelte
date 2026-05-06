@@ -864,7 +864,7 @@
   .editor-sheet {
     margin-top: 18px;
     padding: 18px;
-    border-radius: var(--radius-3xl);
+    border-radius: var(--acta-radius-2xl);
     border: 1px solid var(--border-hairline);
     background: var(--bg-card);
   }
@@ -908,9 +908,9 @@
     display: grid;
     gap: 10px;
     padding: 16px;
-    border-radius: var(--radius-2xl);
+    border-radius: var(--acta-radius-2xl);
     border: 1px solid var(--border-hairline);
-    background: color-mix(in srgb, var(--bg-subtle) 72%, var(--bg-card));
+    background: color-mix(in srgb, var(--acta-color-bg-subtle) 72%, var(--bg-card));
   }
 
   .task-kpi-card-alert,
@@ -924,7 +924,7 @@
   .payment-group-count,
   .task-kpi-card span,
   .chain-summary-block span {
-    font-size: var(--font-sm);
+    font-size: 12px;
     color: var(--text-muted);
   }
 
@@ -945,7 +945,7 @@
     min-height: 40px;
     padding: 0 12px;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--bg-subtle) 82%, var(--bg-card));
+    background: color-mix(in srgb, var(--acta-color-bg-subtle) 82%, var(--bg-card));
     font-weight: 700;
   }
 
@@ -955,7 +955,7 @@
     min-height: 30px;
     padding: 0 10px;
     border-radius: 999px;
-    font-size: var(--font-sm);
+    font-size: 12px;
     font-weight: 600;
   }
 
@@ -965,9 +965,9 @@
     justify-content: space-between;
     align-items: center;
     padding: 12px;
-    border-radius: var(--radius-2xl);
+    border-radius: var(--acta-radius-2xl);
     border: 1px solid var(--border-hairline);
-    background: color-mix(in srgb, var(--bg-subtle) 62%, var(--bg-card));
+    background: color-mix(in srgb, var(--acta-color-bg-subtle) 62%, var(--bg-card));
   }
 
   .payment-row-unmatched {
@@ -994,21 +994,21 @@
 
   .payment-state-unmatched {
     background: color-mix(in srgb, var(--danger, #c2410c) 12%, var(--bg-card));
-    color: color-mix(in srgb, var(--danger, #c2410c) 72%, var(--text));
+    color: color-mix(in srgb, var(--danger, #c2410c) 72%, var(--acta-color-text));
   }
 
   .payment-state-matched {
     background: color-mix(in srgb, var(--accent-soft) 70%, var(--bg-card));
-    color: var(--accent-text);
+    color: var(--acta-color-accent-text);
   }
 
   .editor-items-empty {
     display: grid;
     gap: 10px;
     padding: 20px;
-    border-radius: var(--radius-2xl);
+    border-radius: var(--acta-radius-2xl);
     border: 1px dashed color-mix(in srgb, var(--accent) 26%, var(--border-hairline));
-    background: color-mix(in srgb, var(--bg-subtle) 72%, var(--bg-card));
+    background: color-mix(in srgb, var(--acta-color-bg-subtle) 72%, var(--bg-card));
   }
 
   .chain-summary {
@@ -1021,9 +1021,9 @@
     display: grid;
     gap: 6px;
     padding: 14px 16px;
-    border-radius: var(--radius-2xl);
+    border-radius: var(--acta-radius-2xl);
     border: 1px solid var(--border-hairline);
-    background: color-mix(in srgb, var(--bg-subtle) 76%, var(--bg-card));
+    background: color-mix(in srgb, var(--acta-color-bg-subtle) 76%, var(--bg-card));
   }
 
   .editor-grid {
@@ -1059,7 +1059,7 @@
 
   .payment-import-preview-path {
     font-size: 0.85em;
-    color: var(--color-text-muted, #888);
+    color: var(--acta-color-text-muted);
     margin: 0.25rem 0 0 0;
     overflow-wrap: anywhere;
   }
@@ -1083,7 +1083,7 @@
     font-size: 0.78em;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    color: var(--color-text-muted, #888);
+    color: var(--acta-color-text-muted);
   }
 
   .payment-import-preview-summary li strong {
@@ -1091,7 +1091,7 @@
   }
 
   .payment-import-preview-summary li.payment-import-preview-conflict strong {
-    color: var(--color-danger, #c0392b);
+    color: var(--acta-color-danger);
   }
 
   .payment-import-preview-table {
@@ -1102,25 +1102,25 @@
   }
 
   .payment-import-preview-table thead {
-    background: var(--color-surface-alt, #f3f5f8);
+    background: var(--acta-color-bg-subtle);
   }
 
   .payment-import-preview-table th,
   .payment-import-preview-table td {
     text-align: left;
     padding: 0.5rem 0.75rem;
-    border-bottom: 1px solid var(--color-border-subtle, #e6e8ec);
+    border-bottom: 1px solid var(--acta-color-border);
     vertical-align: top;
   }
 
   .payment-import-preview-table tr.is-skipped {
-    color: var(--color-text-muted, #888);
+    color: var(--acta-color-text-muted);
   }
 
   .payment-import-preview-more,
   .payment-import-preview-empty {
     margin: 0.5rem 0 0 0;
     font-size: 0.88rem;
-    color: var(--color-text-muted, #888);
+    color: var(--acta-color-text-muted);
   }
 </style>
