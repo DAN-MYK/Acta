@@ -984,8 +984,8 @@ pub async fn document_create_draft(
             request.counterparty_id
         )
     })?;
-    let direction = DocumentDirection::try_from(request.direction.clone())
-        .map_err(|e| anyhow!("Невідома направленість документа: {e}"))?;
+    let direction = DocumentDirection::try_from(request.direction)
+        .map_err(|_| anyhow!("Невідома направленість документа"))?;
     let counterparty_name =
         load_counterparty_name(ctx.pool(), ctx.company_id(), counterparty_id).await?;
     let form = create_draft_form(
