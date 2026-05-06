@@ -31,6 +31,7 @@
 
 <section class="dashboard-v1" data-testid="dashboard-screen">
   <div class="dashboard-header">
+    <h2 class="sr-only">Дашборд</h2>
     <p>Операційна картина по активній компанії</p>
     <button class="btn-ghost" on:click={() => dashboard.load()} disabled={$dashboard.loading}>
       {$dashboard.loading ? "Оновлення..." : "Оновити"}
@@ -46,11 +47,11 @@
       <SkeletonCard count={4} />
     {:else}
       {#each $dashboard.screen?.kpis ?? [] as kpi}
-        <div class:positive={kpi.tone === "positive"} class:warning={kpi.tone === "warning"} class:danger={kpi.tone === "danger"} class="dashboard-kpi-card">
+        <article class:positive={kpi.tone === "positive"} class:warning={kpi.tone === "warning"} class:danger={kpi.tone === "danger"} class="dashboard-kpi-card">
           <span>{kpi.label}</span>
           <strong>{kpi.value}</strong>
           <small>{kpi.detail}</small>
-        </div>
+        </article>
       {/each}
     {/if}
   </div>
@@ -66,10 +67,10 @@
       {:else}
         <div class="cashflow-list">
           <div class="cashflow-row cashflow-head">
-            <span style="text-align:left">Місяць</span>
-            <span style="text-align:right">Нетто</span>
-            <span style="text-align:right">Надходження</span>
-            <span style="text-align:right">Витрати</span>
+            <span class="cashflow-col-label">Місяць</span>
+            <span class="cashflow-col-value">Нетто</span>
+            <span class="cashflow-col-value">Надходження</span>
+            <span class="cashflow-col-value">Витрати</span>
           </div>
           {#each $dashboard.screen?.cashflowRows ?? [] as row}
             <div class="cashflow-row">

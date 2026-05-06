@@ -151,6 +151,14 @@
   padding-bottom: 6px;
 }
 
+.cashflow-col-label {
+  text-align: left;
+}
+
+.cashflow-col-value {
+  text-align: right;
+}
+
 .cashflow-income {
   color: var(--acta-color-success);
   text-align: right;

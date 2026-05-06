@@ -559,7 +559,7 @@ pub async fn payments_sync_bank(ctx: &AppCtx) -> Result<MutationResultDto> {
     Ok(MutationResultDto {
         ok: true,
         message: format!(
-            "Р С›Р В±РЎР‚Р С•Р В±Р В»Р ВµР Р…Р С• РЎвЂћР В°Р в„–Р В» {}. Р СњР С•Р Р†Р С‘РЎвЂ¦ Р С—Р В»Р В°РЎвЂљР ВµР В¶РЎвЂ“Р Р†: {imported}",
+            "Оброблено файл {}. Нових платежів: {imported}",
             path.display()
         ),
     })
@@ -574,7 +574,7 @@ pub async fn payments_open_manual_template(_ctx: &AppCtx) -> Result<OpenTemplate
     Ok(OpenTemplateResultDto {
         ok: true,
         path: path.to_string_lossy().into_owned(),
-        message: "Р РЃР В°Р В±Р В»Р С•Р Р… CSV Р Р†РЎвЂ“Р Т‘Р С”РЎР‚Р С‘РЎвЂљР С•".to_string(),
+        message: "Шаблон CSV відкрито".to_string(),
     })
 }
 

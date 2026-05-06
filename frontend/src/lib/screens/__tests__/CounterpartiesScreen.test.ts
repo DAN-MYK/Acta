@@ -47,7 +47,6 @@ const mocks = vi.hoisted(() => {
     closeEditor: vi.fn(() => ({ ok: true })),
     counterpartiesState,
     createDocument: vi.fn(),
-    isEditorDirty: vi.fn(() => false),
     load: vi.fn(),
     navigationGo: vi.fn(),
     open: vi.fn(),
@@ -64,7 +63,6 @@ vi.mock("../../stores/counterparties", () => ({
     archiveCurrent: mocks.archiveCurrent,
     closeEditor: mocks.closeEditor,
     createDocument: mocks.createDocument,
-    isEditorDirty: mocks.isEditorDirty,
     load: mocks.load,
     open: mocks.open,
     openEditor: mocks.openEditor,
@@ -203,7 +201,6 @@ describe("CounterpartiesScreen component", () => {
       mocks.archiveCurrent,
       mocks.closeEditor,
       mocks.createDocument,
-      mocks.isEditorDirty,
       mocks.load,
       mocks.navigationGo,
       mocks.open,
@@ -215,7 +212,6 @@ describe("CounterpartiesScreen component", () => {
       fn.mockReset();
     }
     mocks.closeEditor.mockReturnValue({ ok: true });
-    mocks.isEditorDirty.mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -362,8 +358,8 @@ describe("CounterpartiesScreen component", () => {
 
     const { component, target } = renderCounterparties();
 
-    const panel = target.querySelector('[data-testid="counterparties-screen"]');
-    expect(panel?.hasAttribute("inert")).toBe(true);
+    const panel = target.querySelector('[data-testid="counterparties-screen"]') as HTMLElement | null;
+    expect(panel?.inert).toBe(true);
     expect(panel?.getAttribute("aria-hidden")).toBe("true");
 
     component.$destroy();

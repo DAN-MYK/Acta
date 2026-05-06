@@ -95,7 +95,7 @@ describe("money — addMinor / subMinor / compareMinor", () => {
   });
 });
 
-describe("money вЂ” isFormattedMoneyNegative", () => {
+describe("money — isFormattedMoneyNegative", () => {
   it("recognizes dash-prefixed values as negative", () => {
     expect(isFormattedMoneyNegative("-1 234,56")).toBe(true);
   });

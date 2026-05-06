@@ -278,6 +278,14 @@
   color: var(--acta-color-text-muted);
 }
 
+.cp-empty-padded {
+  margin: 28px;
+}
+
+.counterparty-metric-value-sm {
+  font-size: 18px;
+}
+
 @media (max-width: 1100px) {
   .counterparties-layout {
     grid-template-columns: 1fr;

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import AppIcon from "../components/AppIcon.svelte";
   import SkeletonRow from "../components/SkeletonRow.svelte";
   import { tasksStore } from "../stores/tasks";
@@ -47,12 +47,18 @@
     return "none";
   }
 
-  function getDayLabel(): string {
+  function computeDayLabel(): string {
     const days = ["нд", "пн", "вт", "ср", "чт", "пт", "сб"];
     const months = ["січ", "лют", "бер", "кві", "тра", "чер", "лип", "сер", "вер", "жов", "лис", "гру"];
     const now = new Date();
     return `${days[now.getDay()]} · ${now.getDate()} ${months[now.getMonth()]}`;
   }
+
+  let dayLabel = computeDayLabel();
+  const dayLabelTimer = setInterval(() => {
+    dayLabel = computeDayLabel();
+  }, 60_000);
+  onDestroy(() => clearInterval(dayLabelTimer));
 
   let pendingDirtyClose = false;
 
@@ -78,8 +84,8 @@
     requestClose();
   }
 
-  function onBackdropKeydown(event: KeyboardEvent) {
-    if (event.key === "Escape") {
+  function onWindowKeydown(event: KeyboardEvent) {
+    if ($tasks.editor && event.key === "Escape") {
       requestClose();
     }
   }
@@ -97,7 +103,7 @@
   <!-- KPI strip -->
   <div class="task-kpis">
     {#if $tasks.initialLoading}
-      <div class="sk" style="height: 64px; border-radius: 10px; grid-column: 1 / -1;" />
+      <div class="sk tasks-kpi-skeleton" />
     {:else}
       <div class="kpi-cell">
         <span class="kpi-label">Відкритих</span>
@@ -147,8 +153,7 @@
             Усі
           </button>
         </div>
-        <div style="flex: 1" />
-        <button class="btn-primary btn-sm" on:click={() => tasks.openEditor()}>
+        <button class="btn-primary btn-sm tasks-new-btn" on:click={() => tasks.openEditor()}>
           <AppIcon name="add" size={13} />
           Нове завдання
         </button>
@@ -156,7 +161,7 @@
 
       <div class="tasks-list" data-testid="tasks-list">
         {#if $tasks.initialLoading}
-          <div style="padding: 12px 16px;">
+          <div class="tasks-skeleton-wrapper">
             <SkeletonRow count={5} variant="compact" />
           </div>
         {:else if focusTaskItems($tasks.screen?.items ?? [], $tasks.tab).length === 0}
@@ -204,7 +209,7 @@
     <aside class="tasks-side-panel task-today-panel tasks-card" data-testid="tasks-today-panel">
       <div class="today-header">
         <h3>На сьогодні</h3>
-        <span class="today-day">{getDayLabel()}</span>
+        <span class="today-day">{dayLabel}</span>
       </div>
 
       <div class="linked-list">
@@ -233,6 +238,8 @@
   </div>
 </section>
 
+<svelte:window on:keydown={onWindowKeydown} />
+
 <!-- Editor drawer -->
 {#if $tasks.editor}
   <div
@@ -241,7 +248,6 @@
     role="button"
     tabindex="-1"
     aria-label="Закрити редактор"
-    on:keydown={onBackdropKeydown}
   />
   <section class="editor-sheet" role="dialog" aria-modal="true">
     {#if pendingDirtyClose}
@@ -725,91 +731,18 @@
     margin: 0;
   }
 
-  /* Buttons */
-  .btn-sm {
-    padding: 4px 11px;
-    font-size: 12.5px;
-    height: 28px;
+  .tasks-new-btn {
+    margin-left: auto;
   }
 
-  .btn-primary {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    background: var(--accent);
-    color: var(--text-on-accent);
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    font-weight: 500;
-    transition: background 100ms;
+  .tasks-kpi-skeleton {
+    height: 64px;
+    border-radius: 10px;
+    grid-column: 1 / -1;
   }
 
-  .btn-primary:hover:not(:disabled) {
-    background: var(--accent-hover);
-  }
-
-  .btn-primary:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .btn-secondary {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    background: transparent;
-    color: var(--text-muted);
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    cursor: pointer;
-    font-weight: 500;
-    transition: background 100ms, color 100ms;
-  }
-
-  .btn-secondary:hover {
-    background: var(--bg-subtle);
-    color: var(--text);
-  }
-
-  .btn-ghost {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    background: transparent;
-    color: var(--text-muted);
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    font-weight: 500;
-    transition: background 100ms, color 100ms;
-  }
-
-  .btn-ghost:hover {
-    background: var(--bg-subtle);
-    color: var(--text);
-  }
-
-  .btn-danger {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    background: transparent;
-    color: var(--danger);
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    cursor: pointer;
-    font-weight: 500;
-    transition: background 100ms;
-  }
-
-  .btn-danger:hover:not(:disabled) {
-    background: var(--danger-soft);
-  }
-
-  .btn-danger:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+  .tasks-skeleton-wrapper {
+    padding: 12px 16px;
   }
 
   /* Editor drawer */
@@ -817,7 +750,7 @@
     position: fixed;
     inset: 0;
     z-index: 200;
-    background: rgba(10, 12, 16, 0.38);
+    background: var(--acta-color-bg-overlay);
     backdrop-filter: blur(2px);
     border: none;
     padding: 0;

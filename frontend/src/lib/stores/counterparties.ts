@@ -119,11 +119,6 @@ function createCounterpartiesStore() {
       update((state) => ({ ...state, editor: null, editorSnapshot: null }));
       return { ok: true };
     },
-    isEditorDirty(): boolean {
-      const snapshot = get({ subscribe });
-      if (!snapshot.editor) return false;
-      return isEditorFormDirty(snapshot.editorSnapshot, snapshot.editor.form);
-    },
     updateFormField(field: keyof CounterpartyDraftFormDto, value: string) {
       update((state) => ({
         ...state,

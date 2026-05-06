@@ -17,7 +17,6 @@ interface TasksState {
   loading: boolean;
   error: string | null;
   message: string | null;
-  query: string;
   tab: TaskTab;
 }
 
@@ -29,7 +28,6 @@ const initialState: TasksState = {
   loading: false,
   error: null,
   message: null,
-  query: "",
   tab: "open"
 };
 
@@ -38,11 +36,11 @@ function createTasksStore() {
 
   return {
     subscribe,
-    async load(query = get({ subscribe }).query) {
-      update((state) => ({ ...state, loading: true, error: null, query }));
+    async load() {
+      update((state) => ({ ...state, loading: true, error: null }));
 
       try {
-        const screen = await tasksList(query);
+        const screen = await tasksList();
         update((state) => ({ ...state, screen, initialLoading: false, loading: false }));
       } catch (error) {
         update((state) => ({ ...state, loading: false, error: String(error) }));
@@ -79,11 +77,6 @@ function createTasksStore() {
 
       update((state) => ({ ...state, editor: null, editorSnapshot: null }));
       return { ok: true };
-    },
-    isEditorDirty(): boolean {
-      const snapshot = get({ subscribe });
-      if (!snapshot.editor) return false;
-      return isEditorFormDirty(snapshot.editorSnapshot, snapshot.editor.form);
     },
     updateFormField(field: keyof TaskDraftFormDto, value: string) {
       update((state) => ({
@@ -132,7 +125,7 @@ function createTasksStore() {
 
       try {
         const result = await taskDelete(taskId);
-        const screen = await tasksList(snapshot.query);
+        const screen = await tasksList();
         update((state) => ({
           ...state,
           screen,
@@ -151,7 +144,7 @@ function createTasksStore() {
 
       try {
         const result = await taskSetStatus(taskId, status);
-        const screen = await tasksList(snapshot.query);
+        const screen = await tasksList();
         const editor =
           snapshot.editor?.form.id === taskId ? await taskOpenEditor(taskId) : snapshot.editor;
         const editorSnapshot =

@@ -10,7 +10,8 @@ const mojibakePatterns = [
   /(?:\u00d0|\u00d1|\u0432\u0402|\u0432\u045a|\u0432\u045c|\u0432\u201d){2,}/,
   /(?:[\u0420\u0421\u00d0\u00d1][\u0080-\u00ff]){3,}/,
   /(?:[\u0420\u0421][\u00b0-\u00b7\u0451\u0402-\u040f\u0452-\u045f\u2026]){2,}/,
-  /\?{4,}/
+  /\?{4,}/,
+  /\u0432\u0402[\u201c\u201d\u2018\u2019\u2013\u2014]/
 ];
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 const ignoreDirs = new Set([

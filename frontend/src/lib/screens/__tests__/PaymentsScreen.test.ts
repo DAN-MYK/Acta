@@ -700,8 +700,8 @@ describe("PaymentsScreen component", () => {
 
     const { component, target } = renderPayments();
 
-    const panel = target.querySelector('[data-testid="payments-screen"]');
-    expect(panel?.hasAttribute("inert")).toBe(true);
+    const panel = target.querySelector('[data-testid="payments-screen"]') as HTMLElement | null;
+    expect(panel?.inert).toBe(true);
     expect(panel?.getAttribute("aria-hidden")).toBe("true");
 
     component.$destroy();

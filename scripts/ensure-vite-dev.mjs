@@ -1,10 +1,12 @@
 import { spawn } from "node:child_process";
 import http from "node:http";
 import https from "node:https";
+import { createRequire } from "node:module";
 
 const devUrl = process.env.TAURI_DEV_URL ?? "http://localhost:1420";
 const expectedTitle = "<title>Acta</title>";
 const expectedViteClient = "/@vite/client";
+const viteCliPath = createRequire(import.meta.url).resolve("vite/bin/vite.js");
 
 function fetchText(url) {
   const client = url.startsWith("https:") ? https : http;
@@ -53,10 +55,11 @@ async function hasRunningActaDevServer() {
 }
 
 function runViteDev() {
-  const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+  // На Windows під Node 25 запуск `.cmd` через `spawn()` може падати з EINVAL,
+  // тому стартуємо локальний Vite CLI напряму через поточний Node runtime.
   const child = spawn(
-    npmCommand,
-    ["run", "dev", "--", "--host", "0.0.0.0", "--port", "1420"],
+    process.execPath,
+    [viteCliPath, "--host", "0.0.0.0", "--port", "1420"],
     {
       stdio: "inherit",
       shell: false

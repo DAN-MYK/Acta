@@ -9,7 +9,6 @@
   const payments = paymentsStore;
   let importButton: HTMLButtonElement | null = null;
   let pendingDirtyClose = false;
-  let panelElement: HTMLElement | null = null;
 
   function onPaymentFieldChange(field: keyof PaymentDraftFormDto, event: Event) {
     const input = event.currentTarget as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
@@ -216,21 +215,14 @@
   $: if (!$payments.editor && pendingDirtyClose) {
     pendingDirtyClose = false;
   }
-  $: if (panelElement) {
-    if ($payments.editor) {
-      panelElement.setAttribute("inert", "");
-      panelElement.setAttribute("aria-hidden", "true");
-    } else {
-      panelElement.removeAttribute("inert");
-      panelElement.removeAttribute("aria-hidden");
-    }
-  }
+
 </script>
 
 <section
-  bind:this={panelElement}
   class="panel"
   data-testid="payments-screen"
+  inert={$payments.editor ? true : undefined}
+  aria-hidden={$payments.editor ? "true" : undefined}
 >
   <div class="panel-header">
     <div>
@@ -865,15 +857,15 @@
     margin-top: 18px;
     padding: 18px;
     border-radius: var(--acta-radius-2xl);
-    border: 1px solid var(--border-hairline);
-    background: var(--bg-card);
+    border: 1px solid var(--acta-color-border);
+    background: var(--acta-color-bg-elevated);
   }
 
   .flow-banner,
   .chain-panel {
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 32%, transparent), transparent 74%),
-      var(--bg-card);
+      linear-gradient(180deg, color-mix(in srgb, var(--acta-color-accent-soft) 32%, transparent), transparent 74%),
+      var(--acta-color-bg-elevated);
   }
 
   .payments-group-header,
@@ -889,7 +881,7 @@
   .chain-panel-header p,
   .flow-banner p {
     margin: 6px 0 0;
-    color: var(--text-muted);
+    color: var(--acta-color-text-muted);
   }
 
   .payments-groups,
@@ -909,23 +901,23 @@
     gap: 10px;
     padding: 16px;
     border-radius: var(--acta-radius-2xl);
-    border: 1px solid var(--border-hairline);
-    background: color-mix(in srgb, var(--acta-color-bg-subtle) 72%, var(--bg-card));
+    border: 1px solid var(--acta-color-border);
+    background: color-mix(in srgb, var(--acta-color-bg-subtle) 72%, var(--acta-color-bg-elevated));
   }
 
   .task-kpi-card-alert,
   .payments-group-unmatched {
-    border-color: color-mix(in srgb, var(--accent) 22%, var(--border-hairline));
+    border-color: color-mix(in srgb, var(--acta-color-accent) 22%, var(--acta-color-border));
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 36%, transparent), transparent 80%),
-      var(--bg-card);
+      linear-gradient(180deg, color-mix(in srgb, var(--acta-color-accent-soft) 36%, transparent), transparent 80%),
+      var(--acta-color-bg-elevated);
   }
 
   .payment-group-count,
   .task-kpi-card span,
   .chain-summary-block span {
     font-size: 12px;
-    color: var(--text-muted);
+    color: var(--acta-color-text-muted);
   }
 
   .payment-row-actions,
@@ -945,7 +937,7 @@
     min-height: 40px;
     padding: 0 12px;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--acta-color-bg-subtle) 82%, var(--bg-card));
+    background: color-mix(in srgb, var(--acta-color-bg-subtle) 82%, var(--acta-color-bg-elevated));
     font-weight: 700;
   }
 
@@ -966,16 +958,16 @@
     align-items: center;
     padding: 12px;
     border-radius: var(--acta-radius-2xl);
-    border: 1px solid var(--border-hairline);
-    background: color-mix(in srgb, var(--acta-color-bg-subtle) 62%, var(--bg-card));
+    border: 1px solid var(--acta-color-border);
+    background: color-mix(in srgb, var(--acta-color-bg-subtle) 62%, var(--acta-color-bg-elevated));
   }
 
   .payment-row-unmatched {
-    border-color: color-mix(in srgb, var(--danger, #c2410c) 24%, var(--border-hairline));
+    border-color: color-mix(in srgb, var(--acta-color-danger) 24%, var(--acta-color-border));
   }
 
   .payment-row-matched {
-    border-color: color-mix(in srgb, var(--accent) 20%, var(--border-hairline));
+    border-color: color-mix(in srgb, var(--acta-color-accent) 20%, var(--acta-color-border));
   }
 
   .payment-row-main {
@@ -993,12 +985,12 @@
   }
 
   .payment-state-unmatched {
-    background: color-mix(in srgb, var(--danger, #c2410c) 12%, var(--bg-card));
-    color: color-mix(in srgb, var(--danger, #c2410c) 72%, var(--acta-color-text));
+    background: color-mix(in srgb, var(--acta-color-danger) 12%, var(--acta-color-bg-elevated));
+    color: color-mix(in srgb, var(--acta-color-danger) 72%, var(--acta-color-text));
   }
 
   .payment-state-matched {
-    background: color-mix(in srgb, var(--accent-soft) 70%, var(--bg-card));
+    background: color-mix(in srgb, var(--acta-color-accent-soft) 70%, var(--acta-color-bg-elevated));
     color: var(--acta-color-accent-text);
   }
 
@@ -1007,8 +999,8 @@
     gap: 10px;
     padding: 20px;
     border-radius: var(--acta-radius-2xl);
-    border: 1px dashed color-mix(in srgb, var(--accent) 26%, var(--border-hairline));
-    background: color-mix(in srgb, var(--acta-color-bg-subtle) 72%, var(--bg-card));
+    border: 1px dashed color-mix(in srgb, var(--acta-color-accent) 26%, var(--acta-color-border));
+    background: color-mix(in srgb, var(--acta-color-bg-subtle) 72%, var(--acta-color-bg-elevated));
   }
 
   .chain-summary {
@@ -1022,8 +1014,8 @@
     gap: 6px;
     padding: 14px 16px;
     border-radius: var(--acta-radius-2xl);
-    border: 1px solid var(--border-hairline);
-    background: color-mix(in srgb, var(--acta-color-bg-subtle) 76%, var(--bg-card));
+    border: 1px solid var(--acta-color-border);
+    background: color-mix(in srgb, var(--acta-color-bg-subtle) 76%, var(--acta-color-bg-elevated));
   }
 
   .editor-grid {

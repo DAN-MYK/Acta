@@ -9,7 +9,6 @@
   const documents = documentsStore;
   const navigation = navigationStore;
   let pendingDirtyClose = false;
-  let panelElement: HTMLElement | null = null;
 
   function onCounterpartySearch(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
@@ -146,21 +145,14 @@
     pendingDirtyClose = false;
   }
 
-  $: if (panelElement) {
-    if ($counterparties.editor) {
-      panelElement.setAttribute("inert", "");
-      panelElement.setAttribute("aria-hidden", "true");
-    } else {
-      panelElement.removeAttribute("inert");
-      panelElement.removeAttribute("aria-hidden");
-    }
-  }
+
 </script>
 
 <section
-  bind:this={panelElement}
   class="panel"
   data-testid="counterparties-screen"
+  inert={$counterparties.editor ? true : undefined}
+  aria-hidden={$counterparties.editor ? "true" : undefined}
 >
   <div class="panel-header">
     <div>
@@ -220,7 +212,7 @@
 
     <div class="counterparty-detail">
       {#if $counterparties.initialLoading}
-        <div class="empty-screen empty-state-card compact" aria-live="polite" style="margin: 28px;">
+        <div class="empty-screen empty-state-card compact cp-empty-padded" aria-live="polite">
           <strong>Завантажуємо картку контрагента</strong>
           <p>Список уже готується. Деталі з'являться тут, щойно підтягнемо перші дані.</p>
         </div>
@@ -282,7 +274,7 @@
             <div class="counterparty-metric-divider"></div>
             <div class="counterparty-metric">
               <div class="counterparty-metric-label">Останній контакт</div>
-              <div class="counterparty-metric-value" style="font-size: 18px;">{$counterparties.detail.info.lastContactDate || "—"}</div>
+              <div class="counterparty-metric-value counterparty-metric-value-sm">{$counterparties.detail.info.lastContactDate || "—"}</div>
               <div class="counterparty-metric-sub">{getLastContactLabel($counterparties.detail.info.lastContactDays)}</div>
             </div>
           </div>
@@ -407,7 +399,7 @@
           </div><!-- counterparty-detail-scroll -->
         </div>
       {:else}
-        <div class="empty-screen empty-state-card compact" data-testid="counterparties-empty-state" style="margin: 28px;">
+        <div class="empty-screen empty-state-card compact cp-empty-padded" data-testid="counterparties-empty-state">
           <strong>Оберіть контрагента</strong>
           <p>
             Оберіть зліва вже відомого контрагента або створіть нового, щоб одразу побачити баланс, прострочки та
