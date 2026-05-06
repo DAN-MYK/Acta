@@ -841,9 +841,9 @@ pub async fn document_pdf_attach_existing(
 ) -> Result<DocumentPdfActionResultDto> {
     let doc_ref = parse_document_ref(&doc_id)
         .ok_or_else(|| anyhow!("Некоректний ідентифікатор документа"))?;
+
     let doc_uuid = document_ref_uuid(doc_ref);
     let (kind, number) = load_document_kind_and_number(ctx.pool(), doc_ref).await?;
-
     if !supports_existing_pdf_flow(&kind) {
         return Err(anyhow!(
             "Для документа типу {kind} прив’язка існуючого PDF поки не підтримується"
@@ -860,7 +860,8 @@ pub async fn document_pdf_attach_existing(
         safe_source.to_string_lossy().into_owned(),
     )
     .await?;
-    persist_existing_pdf_path(ctx.pool(), doc_ref, managed_path.clone()).await?;
+    persist_existing_pdf_path(ctx.storage_dir(), ctx.pool(), doc_ref, managed_path.clone())
+        .await?;
 
     Ok(DocumentPdfActionResultDto {
         editor: document_open(ctx, doc_id).await?,
@@ -874,12 +875,12 @@ pub async fn document_pdf_apply_text_replace(
 ) -> Result<DocumentPdfActionResultDto> {
     let doc_ref = parse_document_ref(&request.doc_id)
         .ok_or_else(|| anyhow!("Некоректний ідентифікатор документа"))?;
-    let doc_uuid = document_ref_uuid(doc_ref);
-    let (kind, number) = load_document_kind_and_number(ctx.pool(), doc_ref).await?;
     let file_path = load_existing_pdf_path(ctx.storage_dir(), ctx.pool(), doc_ref)
         .await?
         .ok_or_else(|| anyhow!("Спочатку прив’яжіть існуючий PDF до документа"))?;
 
+    let doc_uuid = document_ref_uuid(doc_ref);
+    let (kind, number) = load_document_kind_and_number(ctx.pool(), doc_ref).await?;
     let safe_path = ensure_managed_pdf_path(
         ctx.storage_dir(),
         &kind,
@@ -917,13 +918,31 @@ pub async fn document_pdf_apply_text_replace(
 }
 
 pub async fn document_pdf_open_current(ctx: &AppCtx, doc_id: String) -> Result<MutationResultDto> {
+    let doc_uuid = document_ref_uuid(
+        parse_document_ref(&doc_id)
+            .ok_or_else(|| anyhow!("РќРµРєРѕСЂРµРєС‚РЅРёР№ С–РґРµРЅС‚РёС„С–РєР°С‚РѕСЂ РґРѕРєСѓРјРµРЅС‚Р°"))?,
+    );
+    let (kind, number) = load_document_kind_and_number(
+        ctx.pool(),
+        parse_document_ref(&doc_id)
+            .ok_or_else(|| anyhow!("РќРµРєРѕСЂРµРєС‚РЅРёР№ С–РґРµРЅС‚РёС„С–РєР°С‚РѕСЂ РґРѕРєСѓРјРµРЅС‚Р°"))?,
+    )
+    .await?;
     let doc_ref = parse_document_ref(&doc_id)
         .ok_or_else(|| anyhow!("Некоректний ідентифікатор документа"))?;
     let file_path = load_existing_pdf_path(ctx.storage_dir(), ctx.pool(), doc_ref)
         .await?
         .ok_or_else(|| anyhow!("Для цього документа ще не прив’язано PDF"))?;
 
-    open_pdf_file(file_path.clone()).await?;
+    let safe_path = ensure_managed_pdf_path(
+        ctx.storage_dir(),
+        &kind,
+        doc_uuid,
+        &number,
+        Path::new(&file_path),
+    )?;
+
+    open_pdf_file(safe_path.display().to_string()).await?;
 
     Ok(MutationResultDto {
         ok: true,
@@ -1001,6 +1020,7 @@ pub async fn document_save(
                     counterparty_id: act.counterparty_id,
                     contract_id: act.contract_id,
                     category_id: act.category_id,
+                    direction: act.direction,
                     date,
                     expected_payment_date: act.expected_payment_date,
                     notes: compose_notes_with_chain_parent(
@@ -1031,6 +1051,7 @@ pub async fn document_save(
                     counterparty_id: invoice.counterparty_id,
                     contract_id: invoice.contract_id,
                     category_id: invoice.category_id,
+                    direction: invoice.direction,
                     date,
                     expected_payment_date: invoice.expected_payment_date,
                     notes: compose_notes_with_chain_parent(
@@ -1061,6 +1082,7 @@ pub async fn document_save(
                     counterparty_id: waybill.counterparty_id,
                     contract_id: waybill.contract_id,
                     category_id: waybill.category_id,
+                    direction: waybill.direction,
                     date,
                     notes: compose_notes_with_chain_parent(
                         &request.form.notes,

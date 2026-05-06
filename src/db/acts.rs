@@ -688,6 +688,7 @@ pub async fn update_with_items(
             date                   = $6,
             expected_payment_date  = $7,
             notes                  = $8,
+            direction              = $9,
             updated_at             = NOW()
         WHERE id = $1
         RETURNING id, number, counterparty_id, contract_id, category_id, direction,
@@ -703,6 +704,7 @@ pub async fn update_with_items(
     .bind(data.date)
     .bind(data.expected_payment_date)
     .bind(&data.notes)
+    .bind(data.direction)
     .fetch_optional(&mut *tx)
     .await?;
 
