@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::models::act::ActStatus;
 use crate::models::invoice::InvoiceStatus;
 use crate::models::waybill::WaybillStatus;
+use crate::models::DocumentDirection;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -63,6 +64,7 @@ pub struct DocumentItemDto {
     pub status: DocumentStatusDto,
     pub status_label: String,
     pub linked_id: String,
+    pub direction: String,  // "outgoing" | "incoming"
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -76,6 +78,7 @@ pub struct DocumentDraftFormDto {
     pub number: String,
     pub date: String,
     pub notes: String,
+    pub direction: String,  // "outgoing" | "incoming"
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -154,7 +157,8 @@ pub struct DocumentChainDto {
 #[serde(rename_all = "camelCase")]
 pub struct DocumentsListRequest {
     pub query: Option<String>,
-    pub tab: Option<String>,
+    pub direction: Option<DocumentDirection>,
+    pub kind: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -162,6 +166,7 @@ pub struct DocumentsListRequest {
 pub struct CreateDocumentDraftRequest {
     pub counterparty_id: String,
     pub kind: String,
+    pub direction: String,  // "outgoing" | "incoming"
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

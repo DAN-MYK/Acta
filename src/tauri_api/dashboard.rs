@@ -272,6 +272,7 @@ async fn dashboard_recent_documents(
         counterparty: String,
         amount: Decimal,
         status: String,
+        direction: String,
     }
 
     impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for RowDto {
@@ -284,6 +285,7 @@ async fn dashboard_recent_documents(
                 counterparty: row.try_get("counterparty")?,
                 amount: row.try_get("amount")?,
                 status: row.try_get("status")?,
+                direction: row.try_get("direction")?,
             })
         }
     }
@@ -299,6 +301,7 @@ async fn dashboard_recent_documents(
                 cp.name AS counterparty,
                 a.total_amount AS amount,
                 a.status::text AS status,
+                a.direction::text AS direction,
                 a.created_at
             FROM acts a
             JOIN counterparties cp ON cp.id = a.counterparty_id
@@ -312,6 +315,7 @@ async fn dashboard_recent_documents(
                 cp.name AS counterparty,
                 i.total_amount AS amount,
                 i.status::text AS status,
+                i.direction::text AS direction,
                 i.created_at
             FROM invoices i
             JOIN counterparties cp ON cp.id = i.counterparty_id
@@ -325,6 +329,7 @@ async fn dashboard_recent_documents(
                 cp.name AS counterparty,
                 w.total_amount AS amount,
                 w.status::text AS status,
+                w.direction::text AS direction,
                 w.created_at
             FROM waybills w
             JOIN counterparties cp ON cp.id = w.counterparty_id
@@ -358,6 +363,7 @@ async fn dashboard_recent_documents(
                 status,
                 status_label,
                 linked_id: String::new(),
+                direction: row.direction,
             })
         })
         .collect()

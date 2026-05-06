@@ -292,6 +292,7 @@ pub async fn shell_palette_activate(
                         CreateDocumentDraftRequest {
                             counterparty_id: counterparty_id.to_string(),
                             kind: kind.as_str().to_string(),
+                            direction: "outgoing".to_string(),
                         },
                     )
                     .await?;

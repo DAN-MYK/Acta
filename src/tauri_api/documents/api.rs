@@ -44,6 +44,7 @@ struct DocumentSnapshot {
     status: String,
     notes: Option<String>,
     items: Vec<DocumentDraftItemDto>,
+    direction: DocumentDirection,
 }
 
 fn date_to_str(date: NaiveDate) -> String {
@@ -324,6 +325,7 @@ async fn load_document_snapshot(
                 status: act.status.as_str().to_string(),
                 notes: act.notes.clone(),
                 items: act_items_to_draft(items),
+                direction: act.direction,
             })
         }
         DocumentRef::Invoice(id) => {
@@ -346,6 +348,7 @@ async fn load_document_snapshot(
                 status: invoice.status.as_str().to_string(),
                 notes: invoice.notes.clone(),
                 items: invoice_items_to_draft(items),
+                direction: invoice.direction,
             })
         }
         DocumentRef::Waybill(id) => {
@@ -368,6 +371,7 @@ async fn load_document_snapshot(
                 status: waybill.status.as_str().to_string(),
                 notes: waybill.notes.clone(),
                 items: waybill_items_to_draft(items),
+                direction: waybill.direction,
             })
         }
     }
@@ -390,6 +394,7 @@ async fn snapshot_from_act(
         status: act.status.as_str().to_string(),
         notes: act.notes,
         items: act_items_to_draft(items),
+        direction: act.direction,
     })
 }
 
@@ -411,6 +416,7 @@ async fn snapshot_from_invoice(
         status: invoice.status.as_str().to_string(),
         notes: invoice.notes,
         items: invoice_items_to_draft(items),
+        direction: invoice.direction,
     })
 }
 
@@ -432,6 +438,7 @@ async fn snapshot_from_waybill(
         status: waybill.status.as_str().to_string(),
         notes: waybill.notes,
         items: waybill_items_to_draft(items),
+        direction: waybill.direction,
     })
 }
 
@@ -491,6 +498,7 @@ async fn build_existing_document_form(
                     number: act.number,
                     date: date_to_str(act.date),
                     notes: split_visible_notes_and_chain_parent(act.notes.as_deref()).0,
+                    direction: act.direction.as_str().to_string(),
                 },
                 items: act_items_to_draft(items),
                 pdf: None,
@@ -518,6 +526,7 @@ async fn build_existing_document_form(
                     number: invoice.number,
                     date: date_to_str(invoice.date),
                     notes: split_visible_notes_and_chain_parent(invoice.notes.as_deref()).0,
+                    direction: invoice.direction.as_str().to_string(),
                 },
                 items: invoice_items_to_draft(items),
                 pdf,
@@ -545,6 +554,7 @@ async fn build_existing_document_form(
                     number: waybill.number,
                     date: date_to_str(waybill.date),
                     notes: split_visible_notes_and_chain_parent(waybill.notes.as_deref()).0,
+                    direction: waybill.direction.as_str().to_string(),
                 },
                 items: waybill_items_to_draft(items),
                 pdf,
@@ -595,6 +605,7 @@ async fn create_draft_form(
                 number,
                 date: date_to_str(today),
                 notes: String::new(),
+                direction: DocumentDirection::Outgoing.as_str().to_string(),
             })
         }
         "invoice" => {
@@ -626,6 +637,7 @@ async fn create_draft_form(
                 number,
                 date: date_to_str(today),
                 notes: String::new(),
+                direction: DocumentDirection::Outgoing.as_str().to_string(),
             })
         }
         "waybill" => {
@@ -656,6 +668,7 @@ async fn create_draft_form(
                 number,
                 date: date_to_str(today),
                 notes: String::new(),
+                direction: DocumentDirection::Outgoing.as_str().to_string(),
             })
         }
         _ => Err(anyhow!("Невідомий тип документа: {kind}")),
@@ -759,6 +772,7 @@ pub async fn documents_list(
                 status: document_status_from_act(&row.status),
                 status_label: row.status.label().to_string(),
                 linked_id: String::new(),
+                direction: row.direction.as_str().to_string(),
             },
         ));
     }
@@ -776,6 +790,7 @@ pub async fn documents_list(
                 status: document_status_from_invoice(&row.status),
                 status_label: row.status.label().to_string(),
                 linked_id: String::new(),
+                direction: row.direction.as_str().to_string(),
             },
         ));
     }
@@ -793,6 +808,7 @@ pub async fn documents_list(
                 status: document_status_from_waybill(&row.status),
                 status_label: row.status.label().to_string(),
                 linked_id: String::new(),
+                direction: row.direction.as_str().to_string(),
             },
         ));
     }
@@ -1238,6 +1254,7 @@ pub async fn document_chain_create_draft(
                 number,
                 date: date_to_str(source.date),
                 notes: visible_notes.clone(),
+                direction: DocumentDirection::Outgoing.as_str().to_string(),
             }
         }
         "invoice" => {
@@ -1269,6 +1286,7 @@ pub async fn document_chain_create_draft(
                 number,
                 date: date_to_str(source.date),
                 notes: visible_notes.clone(),
+                direction: DocumentDirection::Outgoing.as_str().to_string(),
             }
         }
         "waybill" => {
@@ -1299,6 +1317,7 @@ pub async fn document_chain_create_draft(
                 number,
                 date: date_to_str(source.date),
                 notes: visible_notes.clone(),
+                direction: DocumentDirection::Outgoing.as_str().to_string(),
             }
         }
         _ => return Err(anyhow!("Невідомий тип документа для ланцюжка")),

@@ -1,5 +1,7 @@
 use anyhow::{anyhow, Result};
 use chrono::{TimeZone, Utc};
+use lopdf::content::{Content, Operation};
+use lopdf::{dictionary, Document, Object, Stream};
 use rust_decimal_macros::dec;
 use std::sync::Arc;
 use std::sync::OnceLock;
@@ -35,6 +37,304 @@ fn newest_file_path(dir: &str) -> Result<Option<std::path::PathBuf>> {
     }
 
     Ok(newest.map(|(_, path)| path))
+}
+
+fn save_supported_pdf(path: &std::path::Path) -> Result<()> {
+    let mut doc = Document::with_version("1.5");
+    let pages_id = doc.new_object_id();
+    let page_id = doc.new_object_id();
+
+    let font_id = doc.add_object(dictionary! {
+        "Type" => "Font",
+        "Subtype" => "Type1",
+        "BaseFont" => "Helvetica",
+    });
+    let resources_id = doc.add_object(dictionary! {
+        "Font" => dictionary! {
+            "F1" => font_id,
+        }
+    });
+    let content = Content {
+        operations: vec![
+            Operation::new("BT", vec![]),
+            Operation::new("Tf", vec![Object::Name(b"F1".to_vec()), 12.into()]),
+            Operation::new("Td", vec![50.into(), 750.into()]),
+            Operation::new("Tj", vec![Object::string_literal("DRAFT STATUS")]),
+            Operation::new("ET", vec![]),
+        ],
+    }
+    .encode()?;
+    let content_id = doc.add_object(Stream::new(dictionary! {}, content));
+
+    doc.objects.insert(
+        page_id,
+        Object::Dictionary(dictionary! {
+            "Type" => "Page",
+            "Parent" => pages_id,
+            "Contents" => content_id,
+            "Resources" => resources_id,
+            "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()],
+        }),
+    );
+    doc.objects.insert(
+        pages_id,
+        Object::Dictionary(dictionary! {
+            "Type" => "Pages",
+            "Kids" => vec![page_id.into()],
+            "Count" => 1,
+        }),
+    );
+
+    let catalog_id = doc.add_object(dictionary! {
+        "Type" => "Catalog",
+        "Pages" => pages_id,
+    });
+    doc.trailer.set("Root", catalog_id);
+    doc.compress();
+    doc.save(path)?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn tauri_vertical_slice_existing_pdf_flow_stores_relative_paths_and_blocks_unsafe_reuse(
+) -> Result<()> {
+    let _guard = tauri_vertical_slice_lock().lock().await;
+    let _ = dotenvy::dotenv();
+
+    let pool = acta::runtime::connect_pool().await?;
+    let company_id = acta::runtime::get_first_company_id(&pool).await;
+    let suffix = Uuid::new_v4().simple().to_string();
+    let temp_root = std::env::temp_dir().join(format!("acta-existing-pdf-flow-{suffix}"));
+    let storage_dir = temp_root.join("storage").join("documents");
+    std::fs::create_dir_all(&storage_dir)?;
+    let ctx = Arc::new(acta::app_ctx::AppCtx::with_dirs(
+        pool,
+        company_id,
+        std::env::current_dir()?.join("templates"),
+        storage_dir.clone(),
+    ));
+
+    let counterparty = acta::db::counterparties::create(
+        ctx.pool(),
+        ctx.company_id(),
+        &acta::models::NewCounterparty {
+            name: format!("Existing Pdf Counterparty {suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("existing-pdf-cp-{suffix}")),
+        },
+    )
+    .await?;
+
+    let invoice = acta::db::invoices::create(
+        ctx.pool(),
+        ctx.company_id(),
+        &acta::models::NewInvoice {
+            number: format!("VERT-PDF-INV-{suffix}"),
+            counterparty_id: counterparty.id,
+            contract_id: None,
+            category_id: None,
+            direction: acta::models::DocumentDirection::Outgoing,
+            date: Utc::now().date_naive(),
+            expected_payment_date: None,
+            notes: None,
+            bas_id: Some(format!("existing-pdf-invoice-{suffix}")),
+            items: vec![acta::models::NewInvoiceItem {
+                position: 1,
+                description: "Invoice PDF".to_string(),
+                unit: Some("шт".to_string()),
+                quantity: dec!(1.0000),
+                price: dec!(250.00),
+            }],
+        },
+    )
+    .await?;
+
+    let waybill = acta::db::waybills::create(
+        ctx.pool(),
+        ctx.company_id(),
+        &acta::models::NewWaybill {
+            number: format!("VERT-PDF-WBL-{suffix}"),
+            counterparty_id: counterparty.id,
+            contract_id: None,
+            category_id: None,
+            direction: acta::models::DocumentDirection::Outgoing,
+            date: Utc::now().date_naive(),
+            notes: None,
+            bas_id: Some(format!("existing-pdf-waybill-{suffix}")),
+            items: vec![acta::models::NewWaybillItem {
+                position: 1,
+                description: "Waybill PDF".to_string(),
+                unit: Some("шт".to_string()),
+                quantity: dec!(1.0000),
+                price: dec!(175.00),
+            }],
+        },
+    )
+    .await?;
+
+    let invoice_doc_id = format!("inv:{}", invoice.id);
+    let waybill_doc_id = format!("wbl:{}", waybill.id);
+    let source_pdf = temp_root.join("source.pdf");
+    save_supported_pdf(&source_pdf)?;
+
+    let invoice_attach = acta::tauri_api::documents::document_pdf_attach_existing(
+        &ctx,
+        invoice_doc_id.clone(),
+        source_pdf.display().to_string(),
+    )
+    .await?;
+    let waybill_attach = acta::tauri_api::documents::document_pdf_attach_existing(
+        &ctx,
+        waybill_doc_id.clone(),
+        source_pdf.display().to_string(),
+    )
+    .await?;
+
+    let stored_invoice_path = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT pdf_path FROM invoices WHERE id = $1",
+    )
+    .bind(invoice.id)
+    .fetch_one(ctx.pool())
+    .await?;
+    let stored_waybill_path = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT pdf_path FROM waybills WHERE id = $1",
+    )
+    .bind(waybill.id)
+    .fetch_one(ctx.pool())
+    .await?;
+
+    assert_eq!(
+        stored_invoice_path.as_deref(),
+        Some(
+            format!(
+                "existing_pdf/invoice/{}_VERT-PDF-INV-{suffix}/working.pdf",
+                invoice.id
+            )
+            .as_str()
+        )
+    );
+    assert_eq!(
+        stored_waybill_path.as_deref(),
+        Some(
+            format!(
+                "existing_pdf/waybill/{}_VERT-PDF-WBL-{suffix}/working.pdf",
+                waybill.id
+            )
+            .as_str()
+        )
+    );
+    assert!(
+        invoice_attach
+            .editor
+            .pdf
+            .as_ref()
+            .is_some_and(|pdf| pdf.extracted_text.contains("DRAFT"))
+    );
+    assert!(
+        waybill_attach
+            .editor
+            .pdf
+            .as_ref()
+            .is_some_and(|pdf| pdf.extracted_text.contains("DRAFT"))
+    );
+
+    let invoice_replace = acta::tauri_api::documents::document_pdf_apply_text_replace(
+        &ctx,
+        acta::tauri_api::documents::ReplaceDocumentPdfTextRequest {
+            doc_id: invoice_doc_id.clone(),
+            find_text: "DRAFT".to_string(),
+            replace_text: "PAID".to_string(),
+        },
+    )
+    .await?;
+    let waybill_replace = acta::tauri_api::documents::document_pdf_apply_text_replace(
+        &ctx,
+        acta::tauri_api::documents::ReplaceDocumentPdfTextRequest {
+            doc_id: waybill_doc_id.clone(),
+            find_text: "DRAFT".to_string(),
+            replace_text: "SIGNED".to_string(),
+        },
+    )
+    .await?;
+    assert!(
+        invoice_replace
+            .editor
+            .pdf
+            .as_ref()
+            .is_some_and(|pdf| pdf.extracted_text.contains("PAID"))
+    );
+    assert!(
+        waybill_replace
+            .editor
+            .pdf
+            .as_ref()
+            .is_some_and(|pdf| pdf.extracted_text.contains("SIGNED"))
+    );
+
+    let managed_invoice_path = storage_dir.join(
+        stored_invoice_path
+            .clone()
+            .expect("invoice pdf path має існувати після attach"),
+    );
+    let reuse_err = acta::tauri_api::documents::document_pdf_attach_existing(
+        &ctx,
+        invoice_doc_id.clone(),
+        managed_invoice_path.display().to_string(),
+    )
+    .await
+    .expect_err("attach не має приймати вже керований working.pdf як source");
+    assert!(reuse_err.to_string().contains("керованої директорії"));
+
+    let outside_pdf = temp_root.join("outside.pdf");
+    save_supported_pdf(&outside_pdf)?;
+    sqlx::query("UPDATE invoices SET pdf_path = $2 WHERE id = $1")
+        .bind(invoice.id)
+        .bind(outside_pdf.display().to_string())
+        .execute(ctx.pool())
+        .await?;
+    sqlx::query("UPDATE waybills SET pdf_path = $2 WHERE id = $1")
+        .bind(waybill.id)
+        .bind(outside_pdf.display().to_string())
+        .execute(ctx.pool())
+        .await?;
+
+    let invoice_replace_err = acta::tauri_api::documents::document_pdf_apply_text_replace(
+        &ctx,
+        acta::tauri_api::documents::ReplaceDocumentPdfTextRequest {
+            doc_id: invoice_doc_id.clone(),
+            find_text: "PAID".to_string(),
+            replace_text: "DONE".to_string(),
+        },
+    )
+    .await
+    .expect_err("replace має відхиляти pdf path поза керованою директорією");
+    assert!(invoice_replace_err
+        .to_string()
+        .contains("поза керованою директорією"));
+
+    let waybill_open_err =
+        acta::tauri_api::documents::document_pdf_open_current(&ctx, waybill_doc_id.clone())
+            .await
+            .expect_err("open має відхиляти pdf path поза керованою директорією");
+    assert!(waybill_open_err
+        .to_string()
+        .contains("поза керованою директорією"));
+
+    let _ = acta::db::invoices::delete(ctx.pool(), invoice.id).await;
+    let _ = acta::db::waybills::delete(ctx.pool(), waybill.id).await;
+    let _ = sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(counterparty.id)
+        .execute(ctx.pool())
+        .await;
+    let _ = std::fs::remove_dir_all(&temp_root);
+
+    Ok(())
 }
 
 #[tokio::test]
@@ -104,6 +404,7 @@ async fn tauri_vertical_slice_shell_and_documents_smoke() -> Result<()> {
             acta::tauri_api::documents::CreateDocumentDraftRequest {
                 counterparty_id: counterparty.id.to_string(),
                 kind: "invoice".to_string(),
+                direction: "outgoing".to_string(),
             },
         )
         .await?;
@@ -186,6 +487,7 @@ async fn tauri_vertical_slice_shell_and_documents_smoke() -> Result<()> {
             acta::tauri_api::documents::CreateDocumentDraftRequest {
                 counterparty_id: counterparty.id.to_string(),
                 kind: "invoice".to_string(),
+                direction: "outgoing".to_string(),
             },
         )
         .await?;
@@ -211,6 +513,7 @@ async fn tauri_vertical_slice_shell_and_documents_smoke() -> Result<()> {
             acta::tauri_api::documents::CreateDocumentDraftRequest {
                 counterparty_id: counterparty.id.to_string(),
                 kind: "invoice".to_string(),
+                direction: "outgoing".to_string(),
             },
         )
         .await?;

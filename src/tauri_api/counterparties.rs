@@ -284,6 +284,7 @@ fn act_to_document_item(row: &crate::models::act::ActListRow) -> DocumentItemDto
         status: DocumentStatusDto::from_act_status(&row.status),
         status_label: row.status.label().to_string(),
         linked_id: String::new(),
+        direction: row.direction.as_str().to_string(),
     }
 }
 
@@ -298,6 +299,7 @@ fn invoice_to_document_item(row: &crate::models::invoice::InvoiceListRow) -> Doc
         status: DocumentStatusDto::from_invoice_status(&row.status),
         status_label: row.status.label().to_string(),
         linked_id: String::new(),
+        direction: row.direction.as_str().to_string(),
     }
 }
 
