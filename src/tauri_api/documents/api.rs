@@ -751,11 +751,34 @@ pub async fn documents_list(
 ) -> Result<DocumentsListDto> {
     let company_id = ctx.company_id();
     let search = request.query.as_deref();
+    let direction_filter = request.direction;
+
+    let include_acts     = request.kind.as_deref().map_or(true, |k| k == "act");
+    let include_invoices = request.kind.as_deref().map_or(true, |k| k == "invoice");
+    let include_waybills = request.kind.as_deref().map_or(true, |k| k == "waybill");
 
     let (acts, invoices, waybills) = tokio::join!(
-        db::acts::list_filtered(ctx.pool(), company_id, None, None, search, None, None, None),
-        db::invoices::list_filtered(ctx.pool(), company_id, None, None, search, None, None, None),
-        db::waybills::list_filtered(ctx.pool(), company_id, None, None, search, None, None, None),
+        async {
+            if include_acts {
+                db::acts::list_filtered(ctx.pool(), company_id, None, direction_filter, search, None, None, None).await
+            } else {
+                Ok(vec![])
+            }
+        },
+        async {
+            if include_invoices {
+                db::invoices::list_filtered(ctx.pool(), company_id, None, direction_filter, search, None, None, None).await
+            } else {
+                Ok(vec![])
+            }
+        },
+        async {
+            if include_waybills {
+                db::waybills::list_filtered(ctx.pool(), company_id, None, direction_filter, search, None, None, None).await
+            } else {
+                Ok(vec![])
+            }
+        },
     );
 
     let mut combined: Vec<(NaiveDate, DocumentItemDto)> = Vec::new();
