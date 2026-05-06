@@ -1,6 +1,7 @@
 <script lang="ts">
   import {
     CALENDAR_EVENT_KIND_LABELS,
+    PAYMENT_CALENDAR_COPY,
     CALENDAR_FILTER_OPTIONS,
     formatCalendarDayAriaLabel,
     getCalendarEventDirectionLabel
@@ -110,17 +111,17 @@
 <section class="calendar-shell" data-testid="payments-calendar">
   <div class="calendar-shell-header">
     <div>
-      <h3>Платіжний календар</h3>
+      <h3>{PAYMENT_CALENDAR_COPY.title}</h3>
       <p>Місячна сітка показує планові платежі та дедлайни задач в одному часовому контексті.</p>
     </div>
     <div class="calendar-toolbar">
       <div class="calendar-nav">
         <button class="btn-ghost" on:click={() => payments.shiftCalendarMonth(-1)} disabled={$payments.calendarLoading}>
-          Попередній
+          {PAYMENT_CALENDAR_COPY.previousMonth}
         </button>
-        <strong>{$payments.calendar?.monthLabel ?? "Завантажуємо місяць"}</strong>
+        <strong>{$payments.calendar?.monthLabel ?? PAYMENT_CALENDAR_COPY.loadingMonth}</strong>
         <button class="btn-ghost" on:click={() => payments.shiftCalendarMonth(1)} disabled={$payments.calendarLoading}>
-          Наступний
+          {PAYMENT_CALENDAR_COPY.nextMonth}
         </button>
       </div>
       <div class="calendar-filters" role="radiogroup" aria-label="Фільтр подій календаря">
@@ -149,15 +150,15 @@
     </div>
     <div class="calendar-summary-card">
       <strong>{visibleEventCount}</strong>
-      <span>Подій у поточному фільтрі</span>
+      <span>{PAYMENT_CALENDAR_COPY.visibleEventsSummary}</span>
     </div>
   </div>
 
   {#if $payments.calendarError && !$payments.calendar}
     <div class="empty-state-card" data-testid="payments-calendar-error" role="alert">
-      <strong>Календар не завантажився</strong>
+      <strong>{PAYMENT_CALENDAR_COPY.errorTitle}</strong>
       <p>{$payments.calendarError}</p>
-      <button class="btn-secondary" on:click={() => payments.loadCalendar()}>Спробувати ще раз</button>
+      <button class="btn-secondary" on:click={() => payments.loadCalendar()}>{PAYMENT_CALENDAR_COPY.retryAction}</button>
     </div>
   {:else if $payments.calendarInitialLoading && !$payments.calendar}
     <div class="calendar-loading" data-testid="payments-calendar-loading">
@@ -166,7 +167,7 @@
     </div>
   {:else if !$payments.calendar}
     <div class="empty-state-card" data-testid="payments-calendar-empty">
-      <strong>Календар поки порожній</strong>
+      <strong>{PAYMENT_CALENDAR_COPY.emptyTitle}</strong>
       <p>Коли з’являться події графіка платежів або задачі з дедлайнами, вони відобразяться тут.</p>
     </div>
   {:else}
@@ -227,7 +228,7 @@
 
         {#if visibleEventCount === 0}
           <div class="empty-state-card compact" data-testid="payments-calendar-filter-empty">
-            <strong>У цьому місяці немає подій для поточного фільтра</strong>
+            <strong>{PAYMENT_CALENDAR_COPY.filterEmptyTitle}</strong>
             <p>Перемкніть фільтр або перейдіть на інший місяць, щоб подивитися інші записи.</p>
           </div>
         {/if}
@@ -236,12 +237,12 @@
       <aside class="calendar-side-panel" data-testid="payments-calendar-details">
         <div class="calendar-side-header">
           <div>
-            <strong>{selectedDay?.date ?? "День не вибрано"}</strong>
+            <strong>{selectedDay?.date ?? PAYMENT_CALENDAR_COPY.emptyDayLabel}</strong>
             <p>
               {#if selectedEvents.length > 0}
                 {selectedEvents.length} подій у вибраному дні
               {:else}
-                На цей день немає подій у поточному фільтрі
+                {PAYMENT_CALENDAR_COPY.emptyDayFiltered}
               {/if}
             </p>
           </div>
@@ -354,7 +355,7 @@
           {/if}
         {:else}
           <div class="empty-state-card compact">
-            <strong>На цей день подій не знайдено</strong>
+            <strong>{PAYMENT_CALENDAR_COPY.emptyDayEvents}</strong>
             <p>Оберіть інший день, змініть фільтр або перейдіть на інший місяць.</p>
           </div>
         {/if}

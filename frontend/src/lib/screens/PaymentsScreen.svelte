@@ -4,6 +4,7 @@
   import SkeletonRow from "../components/SkeletonRow.svelte";
   import {
     EDITOR_DIRTY_COPY,
+    PAYMENT_SCREEN_COPY,
     PAYMENT_FLOW_COPY,
     PAYMENT_MANUAL_PICKER_DISABLED_REASON,
     PAYMENT_PREVIEW_COPY,
@@ -70,7 +71,7 @@
   }
 
   function getPaymentStateLabel(matchedDoc: string): string {
-    return matchedDoc ? `Зв'язано з ${matchedDoc}` : "Не зведено";
+    return matchedDoc ? PAYMENT_SCREEN_COPY.stateMatched(matchedDoc) : PAYMENT_SCREEN_COPY.stateUnmatched;
   }
 
   function getDocumentKindLabel(kind: PaymentMatchCandidateDto["documentKind"]): string {
@@ -185,7 +186,7 @@
       on:click={() => payments.pickAndPreviewImport()}
       disabled={busyImportPick || busyImport || busyImportCommit}
     >
-      {busyImportPick ? "Готуємо preview..." : "Імпортувати виписку"}
+      {busyImportPick ? PAYMENT_SCREEN_COPY.prepareImportPreview : PAYMENT_SCREEN_COPY.importStatement}
     </button>
     <button class="btn-secondary" on:click={() => payments.openEditor()} disabled={$payments.loading}>
       Створити платіж
@@ -202,10 +203,10 @@
       on:click={() => payments.importCsv()}
       disabled={busyImport || busyImportPick || busyImportCommit}
     >
-      {busyImport ? "Імпортуємо..." : "Імпорт з storage"}
+      {busyImport ? PAYMENT_SCREEN_COPY.importing : PAYMENT_SCREEN_COPY.importFromStorage}
     </button>
     <button class="btn-ghost" on:click={() => payments.syncBank()} disabled={busyImport || busySync || busyImportPick}>
-      {busySync ? "Оновлюємо..." : "Оновити з банку"}
+      {busySync ? PAYMENT_SCREEN_COPY.syncing : PAYMENT_SCREEN_COPY.syncWithBank}
     </button>
     <button class="btn-ghost" on:click={() => payments.openManualTemplate()} disabled={busyImport || busySync}>
       Шаблон CSV
@@ -366,7 +367,7 @@
               on:click={() => payments.confirmPreviewAutoMatch()}
               disabled={$payments.loading}
             >
-              Підтвердити автозіставлення
+              {PAYMENT_SCREEN_COPY.confirmAutoMatch}
             </button>
           {:else if $payments.matchPreview.decisionKind === "ambiguous"}
             <button
@@ -374,14 +375,14 @@
               on:click={() => payments.confirmSelectedPreviewCandidate()}
               disabled={$payments.loading}
             >
-              Підтвердити вибраний варіант
+              {PAYMENT_SCREEN_COPY.confirmPreviewCandidate}
             </button>
             <button class="btn-secondary" on:click={openManualPickerForCurrentPreview} disabled={$payments.loading}>
-              Інший документ
+              {PAYMENT_SCREEN_COPY.chooseAnotherDocument}
             </button>
           {/if}
           <button class="btn-ghost" on:click={() => payments.closeMatchPreview()} disabled={$payments.loading}>
-            Закрити preview
+            {PAYMENT_SCREEN_COPY.closePreview}
           </button>
         </div>
       </div>
@@ -442,7 +443,7 @@
                   <p>{getCandidateHint(candidate)}</p>
                 </div>
                 <div class="task-row-meta">
-                  <span class="task-pill">Рекомендація для розподілу</span>
+                  <span class="task-pill">{PAYMENT_SCREEN_COPY.splitRecommendationBadge}</span>
                 </div>
               </div>
             </div>
@@ -450,7 +451,7 @@
         </div>
         <div class="editor-actions">
           <button class="btn-secondary" on:click={openManualPickerForCurrentPreview} disabled={$payments.loading}>
-            Інший документ
+            {PAYMENT_SCREEN_COPY.chooseAnotherDocument}
           </button>
           <div class="empty-state-actions">
             <button class="btn-primary" type="button" on:click={focusImportButton}>Імпортувати виписку</button>
@@ -458,18 +459,18 @@
         </div>
       {:else}
         <div class="editor-items-empty">
-          <strong>Автоматична звірка не знайшла точного документа</strong>
-          <p>Перевірте референс платежу, контрагента або відкрийте ручний пошук документа.</p>
+          <strong>{PAYMENT_SCREEN_COPY.emptyNoMatchTitle}</strong>
+          <p>{PAYMENT_SCREEN_COPY.emptyNoMatchDescription}</p>
           <button class="btn-secondary" on:click={openManualPickerForCurrentPreview} disabled={$payments.loading}>
-            Ручний пошук документа
+            {PAYMENT_SCREEN_COPY.openManualSearch}
           </button>
         </div>
       {/if}
 
       {#if $payments.manualPicker}
         <section class="editor-items-empty" data-testid="payments-manual-picker">
-          <strong>Ручний вибір документа</strong>
-          <p>Знайдіть акт або накладну за номером, назвою чи призначенням платежу.</p>
+          <strong>{PAYMENT_SCREEN_COPY.manualPickerTitle}</strong>
+          <p>{PAYMENT_SCREEN_COPY.manualPickerDescription}</p>
           <div class="editor-grid">
             <label class="editor-grid-span">
               Пошук
@@ -482,7 +483,7 @@
           </div>
           <div class="editor-actions">
             <button class="btn-secondary" on:click={() => payments.searchManualMatchCandidates()} disabled={$payments.loading}>
-              Оновити пошук
+              {PAYMENT_SCREEN_COPY.refreshManualSearch}
             </button>
               <button class="btn-secondary" on:click={() => payments.addSelectedManualPickerCandidateToSplit()} disabled={$payments.loading}>
                 Додати до розподілу
@@ -493,10 +494,10 @@
                 aria-describedby={!manualPickerCanConfirm && manualPickerDisabledReason ? "payments-manual-picker-hint" : undefined}
                 disabled={$payments.loading || !manualPickerCanConfirm}
             >
-              Підтвердити вибраний документ
+              {PAYMENT_SCREEN_COPY.confirmManualDocument}
             </button>
             <button class="btn-ghost" on:click={() => payments.closeManualMatchPicker()} disabled={$payments.loading}>
-              Закрити пошук
+              {PAYMENT_SCREEN_COPY.closeManualSearch}
             </button>
           </div>
 
@@ -505,7 +506,7 @@
           {/if}
 
           {#if $payments.manualPicker.candidates.length === 0}
-            <p>За цим запитом кандидатів поки немає.</p>
+            <p>{PAYMENT_SCREEN_COPY.emptyManualSearch}</p>
           {:else}
             <div class="documents-list">
               {#each $payments.manualPicker.candidates as candidate}
@@ -541,7 +542,7 @@
 
       {#if $payments.splitDraft}
         <section class="editor-items-empty" data-testid="payments-split-draft">
-          <strong>Чернетка розподілу</strong>
+          <strong>{PAYMENT_SCREEN_COPY.splitDraftTitle}</strong>
           <p>
             Сума платежу: {$payments.splitDraft.paymentAmountStr}
             • Залишок: {$payments.splitDraft.remainingAmountStr}
@@ -580,7 +581,7 @@
 
           <div class="editor-actions">
             <button class="btn-primary" on:click={() => payments.confirmSplitDraft()} disabled={$payments.loading || $payments.splitDraft.allocations.length === 0}>
-              Підтвердити розподіл
+              {PAYMENT_SCREEN_COPY.confirmSplit}
             </button>
           </div>
         </section>
@@ -603,8 +604,8 @@
       {:else if unmatchedPayments.length === 0}
         <div class="editor-items-empty">
           <span class="empty-state-eyebrow">Додайте перший рух</span>
-          <strong>Ще немає жодного платежу</strong>
-          <p>Імпортуйте виписку або створіть ручний платіж, щоб почати звірку руху грошей.</p>
+          <strong>{PAYMENT_SCREEN_COPY.emptyUnmatchedTitle}</strong>
+          <p>{PAYMENT_SCREEN_COPY.emptyUnmatchedDescription}</p>
         </div>
       {:else}
         <div class="documents-list">
@@ -627,7 +628,7 @@
                   on:click={() => payments.reconcile(item.id)}
                   disabled={isPaymentBusy(item.id)}
                 >
-                  {isPaymentBusy(item.id) ? "Зводимо..." : "Звести"}
+                  {isPaymentBusy(item.id) ? PAYMENT_SCREEN_COPY.reconcileAction : PAYMENT_SCREEN_COPY.reconcileIdle}
                 </button>
               </div>
             </div>
@@ -649,8 +650,8 @@
         <SkeletonRow count={3} />
       {:else if matchedPayments.length === 0}
         <div class="editor-items-empty">
-          <strong>Ще немає зведених платежів</strong>
-          <p>Проведіть першу звірку в лівому блоці, щоб тут з'явився готовий результат.</p>
+          <strong>{PAYMENT_SCREEN_COPY.emptyMatchedTitle}</strong>
+          <p>{PAYMENT_SCREEN_COPY.emptyMatchedDescription}</p>
         </div>
       {:else}
         <div class="documents-list">

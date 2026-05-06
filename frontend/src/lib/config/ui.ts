@@ -201,6 +201,59 @@ export const EDITOR_DIRTY_COPY = {
   dirtyDiscard: "Так, закрити"
 } as const;
 
+export const PAYMENT_SCREEN_COPY = {
+  stateUnmatched: "Не зведено",
+  stateMatched: (matchedDoc: string) => `Зв'язано з ${matchedDoc}`,
+  prepareImportPreview: "Готуємо preview...",
+  importStatement: "Імпортувати виписку",
+  importFromStorage: "Імпорт з storage",
+  importing: "Імпортуємо...",
+  syncWithBank: "Оновити з банку",
+  syncing: "Оновлюємо...",
+  confirmAutoMatch: "Підтвердити автозіставлення",
+  confirmPreviewCandidate: "Підтвердити вибраний варіант",
+  chooseAnotherDocument: "Інший документ",
+  closePreview: "Закрити preview",
+  splitRecommendationBadge: "Рекомендація для розподілу",
+  emptyNoMatchTitle: "Автоматична звірка не знайшла точного документа",
+  emptyNoMatchDescription:
+    "Перевірте референс платежу, контрагента або відкрийте ручний пошук документа.",
+  openManualSearch: "Ручний пошук документа",
+  manualPickerTitle: "Ручний вибір документа",
+  manualPickerDescription:
+    "Знайдіть акт або накладну за номером, назвою чи призначенням платежу.",
+  refreshManualSearch: "Оновити пошук",
+  confirmManualDocument: "Підтвердити вибраний документ",
+  closeManualSearch: "Закрити пошук",
+  emptyManualSearch: "За цим запитом кандидатів поки немає.",
+  splitDraftTitle: "Чернетка розподілу",
+  confirmSplit: "Підтвердити розподіл",
+  emptyUnmatchedTitle: "Ще немає жодного платежу",
+  emptyUnmatchedDescription:
+    "Імпортуйте виписку або створіть ручний платіж, щоб почати звірку руху грошей.",
+  emptyMatchedTitle: "Ще немає зведених платежів",
+  emptyMatchedDescription:
+    "Проведіть першу звірку в лівому блоці, щоб тут з'явився готовий результат.",
+  reconcileAction: "Зводимо...",
+  reconcileIdle: "Звести"
+} as const;
+
+export const PAYMENT_CALENDAR_COPY = {
+  title: "Платіжний календар",
+  loadingMonth: "Завантажуємо місяць",
+  previousMonth: "Попередній",
+  nextMonth: "Наступний",
+  visibleEventsSummary: "Подій у поточному фільтрі",
+  errorTitle: "Календар не завантажився",
+  retryAction: "Спробувати ще раз",
+  emptyTitle: "Календар поки порожній",
+  filterEmptyTitle: "У цьому місяці немає подій для поточного фільтра",
+  emptyDayLabel: "День не вибрано",
+  emptyDayEvents: "На цей день подій не знайдено",
+  emptyDayFiltered: "На цей день немає подій у поточному фільтрі"
+} as const;
+
+
 export const PAYMENT_MANUAL_MATCH_COPY = {
   missingAutoMatch: "Немає рекомендованої звірки для автоматичного підтвердження.",
   previewCandidateUnavailable: "Ручне підтвердження доступне лише для preview з кількома кандидатами.",
