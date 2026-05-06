@@ -1,6 +1,7 @@
 <script lang="ts">
   import SkeletonRow from "../components/SkeletonRow.svelte";
-  import { compareMinor, parseMoneyToMinor } from "../money";
+  import { daysUntil } from "../date";
+  import { compareMinor, isFormattedMoneyNegative, parseMoneyToMinor } from "../money";
   import { counterpartiesStore } from "../stores/counterparties";
   import { navigationStore } from "../stores/navigation";
   import { reportsStore } from "../stores/reports";
@@ -58,7 +59,6 @@
     if (event.key === "ArrowRight" || event.key === "ArrowDown") {
       event.preventDefault();
       const nextIndex = (index + 1) % reportTabs.length;
-      onReportsTabChange(reportTabs[nextIndex].id);
       focusReportTab(nextIndex);
       return;
     }
@@ -66,14 +66,12 @@
     if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
       event.preventDefault();
       const nextIndex = (index - 1 + reportTabs.length) % reportTabs.length;
-      onReportsTabChange(reportTabs[nextIndex].id);
       focusReportTab(nextIndex);
       return;
     }
 
     if (event.key === "Home") {
       event.preventDefault();
-      onReportsTabChange(reportTabs[0].id);
       focusReportTab(0);
       return;
     }
@@ -81,8 +79,14 @@
     if (event.key === "End") {
       event.preventDefault();
       const nextIndex = reportTabs.length - 1;
-      onReportsTabChange(reportTabs[nextIndex].id);
       focusReportTab(nextIndex);
+      return;
+    }
+
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onReportsTabChange(reportTabs[index].id);
+      focusReportTab(index);
     }
   }
 
@@ -181,19 +185,6 @@
 
       return compareStrings(left.title, right.title);
     });
-  }
-
-  function daysUntil(dateValue: string): number | null {
-    if (!dateValue) {
-      return null;
-    }
-
-    const parsed = Date.parse(dateValue);
-    if (Number.isNaN(parsed)) {
-      return null;
-    }
-
-    return Math.ceil((parsed - Date.now()) / (24 * 60 * 60 * 1000));
   }
 
   function dueSoonReceivables(rows: ReceivableRowDto[]): number {
@@ -585,7 +576,7 @@
               </span>
               <span
                 class="reports-top-cp-amount money-value"
-                data-negative={row.primaryAmountStr.trim().startsWith("-")}
+                data-negative={isFormattedMoneyNegative(row.primaryAmountStr)}
               >{row.primaryAmountStr}</span>
               <span class="reports-top-cp-share">{row.sharePercent}%</span>
               <span class="reports-top-cp-secondary">{row.secondaryLabel}: {row.secondaryValue}</span>
@@ -694,9 +685,9 @@
           {#each $reports.screen?.bankRows ?? [] as row}
             <div class="reports-table-row reports-table-row-bank">
               <span class="reports-cell-title">{row.label}</span>
-              <span class="reports-cell-money money-value" data-negative={row.incomeStr.trim().startsWith("-")}>{row.incomeStr}</span>
-              <span class="reports-cell-money money-value" data-negative={row.expenseStr.trim().startsWith("-")}>{row.expenseStr}</span>
-              <span class="reports-cell-money money-value" data-negative={row.netStr.trim().startsWith("-")}>{row.netStr}</span>
+              <span class="reports-cell-money money-value" data-negative={isFormattedMoneyNegative(row.incomeStr)}>{row.incomeStr}</span>
+              <span class="reports-cell-money money-value" data-negative={isFormattedMoneyNegative(row.expenseStr)}>{row.expenseStr}</span>
+              <span class="reports-cell-money money-value" data-negative={isFormattedMoneyNegative(row.netStr)}>{row.netStr}</span>
             </div>
           {/each}
         </div>
@@ -721,9 +712,9 @@
           {#each $reports.screen?.pnlRows ?? [] as row}
             <div class="reports-table-row reports-table-row-bank">
               <span class="reports-cell-title">{row.label}</span>
-              <span class="reports-cell-money money-value" data-negative={row.incomeStr.trim().startsWith("-")}>{row.incomeStr}</span>
-              <span class="reports-cell-money money-value" data-negative={row.expenseStr.trim().startsWith("-")}>{row.expenseStr}</span>
-              <span class="reports-cell-money money-value" data-negative={row.netStr.trim().startsWith("-")}>{row.netStr}</span>
+              <span class="reports-cell-money money-value" data-negative={isFormattedMoneyNegative(row.incomeStr)}>{row.incomeStr}</span>
+              <span class="reports-cell-money money-value" data-negative={isFormattedMoneyNegative(row.expenseStr)}>{row.expenseStr}</span>
+              <span class="reports-cell-money money-value" data-negative={isFormattedMoneyNegative(row.netStr)}>{row.netStr}</span>
             </div>
           {/each}
         </div>
@@ -757,7 +748,7 @@
               <span class="reports-cell-date">{row.docDate}</span>
               <span class="reports-cell-company">{row.companyName}</span>
               <span class="reports-cell-company">{row.counterparty}</span>
-              <span class="reports-cell-money money-value" data-negative={row.amountStr.trim().startsWith("-")}>{row.amountStr}</span>
+              <span class="reports-cell-money money-value" data-negative={isFormattedMoneyNegative(row.amountStr)}>{row.amountStr}</span>
               <span class="reports-cell-date">{row.expectedDate || "—"}</span>
               <span class="reports-cell-status">
                 {row.overdueDays > 0 ? `Прострочено ${row.overdueDays} дн.` : "Без прострочки"}
@@ -794,7 +785,7 @@
               <span class="reports-cell-title">{row.title}</span>
               <span class="reports-cell-company">{row.companyName}</span>
               <span class="reports-cell-company">{row.counterparty || "—"}</span>
-              <span class="reports-cell-money money-value" data-negative={row.amountStr.trim().startsWith("-")}>{row.amountStr}</span>
+              <span class="reports-cell-money money-value" data-negative={isFormattedMoneyNegative(row.amountStr)}>{row.amountStr}</span>
               <span class="reports-cell-date">{row.dueDate}</span>
               <span class="reports-cell-status">
                 {row.overdueDays > 0 ? `Прострочено ${row.overdueDays} дн.` : "Без прострочки"}

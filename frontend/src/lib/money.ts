@@ -98,3 +98,7 @@ export function compareMinor(a: bigint, b: bigint): number {
   if (a > b) return 1;
   return 0;
 }
+
+export function isFormattedMoneyNegative(value: string): boolean {
+  return /^[-(]/.test(value.trim());
+}

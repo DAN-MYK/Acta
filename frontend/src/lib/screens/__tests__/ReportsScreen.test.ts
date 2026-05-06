@@ -374,7 +374,7 @@ describe("ReportsScreen", () => {
     component.$destroy();
   });
 
-  it("supports arrow-key navigation between report tabs", async () => {
+  it("moves focus with arrow keys without activating another report tab", async () => {
     const { component, target } = renderReports();
     await tick();
 
@@ -387,8 +387,71 @@ describe("ReportsScreen", () => {
     bankTab!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
     await tick();
 
-    expect(mocks.load).toHaveBeenCalledWith({ tab: "pnl" });
+    expect(mocks.load).not.toHaveBeenCalledWith({ tab: "pnl" });
     expect(document.activeElement?.textContent).toContain("Дохід");
+
+    component.$destroy();
+  });
+
+  it("marks parenthesized amounts as negative in report tables", () => {
+    mocks.reportsState.set({
+      screen: {
+        ...makeReportsScreen(),
+        bankRows: [
+          {
+            key: "ops",
+            label: "Операційна діяльність",
+            incomeStr: "48 200,00 грн",
+            expenseStr: "(19 000,00 грн)",
+            netStr: "(29 200,00 грн)"
+          }
+        ]
+      },
+      initialLoading: false,
+      loading: false,
+      error: null,
+      message: null
+    });
+
+    const { component, target } = renderReports();
+    const negativeCells = Array.from(target.querySelectorAll('.money-value[data-negative="true"]'));
+
+    expect(negativeCells).toHaveLength(2);
+    expect(negativeCells[0]?.textContent).toContain("(19 000,00 грн)");
+    expect(negativeCells[1]?.textContent).toContain("(29 200,00 грн)");
+
+    component.$destroy();
+  });
+
+  it("activates the focused report tab only on Enter or Space", async () => {
+    const { component, target } = renderReports();
+    await tick();
+
+    const bankTab = Array.from(target.querySelectorAll('[role="tab"]')).find((button) =>
+      button.textContent?.includes("Гроші")
+    ) as HTMLButtonElement | undefined;
+    const pnlTab = Array.from(target.querySelectorAll('[role="tab"]')).find((button) =>
+      button.textContent?.includes("Дохід")
+    ) as HTMLButtonElement | undefined;
+
+    expect(bankTab).toBeTruthy();
+    expect(pnlTab).toBeTruthy();
+
+    bankTab!.focus();
+    bankTab!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    await tick();
+
+    expect(document.activeElement).toBe(pnlTab);
+    expect(mocks.load).not.toHaveBeenCalledWith({ tab: "pnl" });
+
+    pnlTab!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await tick();
+    expect(mocks.load).toHaveBeenCalledWith({ tab: "pnl" });
+
+    mocks.load.mockClear();
+    pnlTab!.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));
+    await tick();
+    expect(mocks.load).toHaveBeenCalledWith({ tab: "pnl" });
 
     component.$destroy();
   });
