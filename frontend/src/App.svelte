@@ -57,13 +57,6 @@
     settings: "Налаштування"
   };
 
-  const savedFilters = [
-    { label: "Прострочені рахунки", count: 1 },
-    { label: "Акти без підпису", count: 2 },
-    { label: "Неприв'язані платежі", count: 2 },
-    { label: "Цей тиждень", count: 7 }
-  ];
-
   onMount(async () => {
     await appShell.bootstrap();
   });
@@ -157,26 +150,6 @@
     await appShell.switchActiveCompany(select.value);
   }
 
-  async function onQuickThemeToggle() {
-    const previousMode = $theme;
-    const darkMode = previousMode === "light";
-    theme.setMode(darkMode ? "dark" : "light");
-    settings.updatePreference("darkMode", darkMode);
-
-    const saved = await settings.savePreferences();
-    if (saved) {
-      appShell.syncThemeFromSettings(saved.screen);
-    } else {
-      const settingsScreen = await settings.load();
-      if (settingsScreen) {
-        appShell.syncThemeFromSettings(settingsScreen);
-      } else {
-        theme.setMode(previousMode);
-      }
-    }
-
-    await appShell.reloadShellChrome();
-  }
 
   function closePalette() {
     palette.close();
@@ -335,7 +308,7 @@
       </button>
       <select
         aria-label="Активна компанія"
-        class="sr-only"
+        class="company-select-overlay"
         disabled={isShellBusy}
         value={shellState?.activeCompanyId}
         on:change={onCompanyChange}
@@ -367,21 +340,6 @@
         </button>
       {/each}
     </nav>
-
-    <!-- Saved filters -->
-    <div class="saved-filters">
-      <div class="saved-filters-header">
-        <span>Збережені фільтри</span>
-        <button class="saved-filters-add" aria-label="Додати фільтр">+</button>
-      </div>
-      {#each savedFilters as f}
-        <button class="saved-filter-item">
-          <span>⭐</span>
-          <span class="saved-filter-label">{f.label}</span>
-          <span class="saved-filter-count">{f.count}</span>
-        </button>
-      {/each}
-    </div>
 
     <div class="sidebar-spacer"></div>
 
@@ -438,21 +396,8 @@
         <span class="topbar-search-kbd"><kbd>Ctrl</kbd><kbd>K</kbd></span>
       </button>
 
-      <!-- RIGHT: theme toggle + user avatar -->
-      <div class="topbar-right">
-        <button
-          class="topbar-icon-btn"
-          data-testid="theme-toggle"
-          disabled={isShellBusy}
-          aria-label="Перемкнути тему"
-          on:click={onQuickThemeToggle}
-        >
-          <AppIcon name="theme" surface={true} />
-        </button>
-        <div class="topbar-user-avatar" aria-hidden="true">
-          {shellState?.chrome.userInitials ?? "АА"}
-        </div>
-      </div>
+      <!-- RIGHT: reserved column for layout balance -->
+      <div class="topbar-right"></div>
     </header>
 
     {#if isShellBusy}
