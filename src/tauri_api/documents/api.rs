@@ -918,18 +918,10 @@ pub async fn document_pdf_apply_text_replace(
 }
 
 pub async fn document_pdf_open_current(ctx: &AppCtx, doc_id: String) -> Result<MutationResultDto> {
-    let doc_uuid = document_ref_uuid(
-        parse_document_ref(&doc_id)
-            .ok_or_else(|| anyhow!("РќРµРєРѕСЂРµРєС‚РЅРёР№ С–РґРµРЅС‚РёС„С–РєР°С‚РѕСЂ РґРѕРєСѓРјРµРЅС‚Р°"))?,
-    );
-    let (kind, number) = load_document_kind_and_number(
-        ctx.pool(),
-        parse_document_ref(&doc_id)
-            .ok_or_else(|| anyhow!("РќРµРєРѕСЂРµРєС‚РЅРёР№ С–РґРµРЅС‚РёС„С–РєР°С‚РѕСЂ РґРѕРєСѓРјРµРЅС‚Р°"))?,
-    )
-    .await?;
     let doc_ref = parse_document_ref(&doc_id)
         .ok_or_else(|| anyhow!("Некоректний ідентифікатор документа"))?;
+    let doc_uuid = document_ref_uuid(doc_ref);
+    let (kind, number) = load_document_kind_and_number(ctx.pool(), doc_ref).await?;
     let file_path = load_existing_pdf_path(ctx.storage_dir(), ctx.pool(), doc_ref)
         .await?
         .ok_or_else(|| anyhow!("Для цього документа ще не прив’язано PDF"))?;
