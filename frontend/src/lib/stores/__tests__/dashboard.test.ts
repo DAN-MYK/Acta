@@ -35,6 +35,7 @@ function makeDashboard(label = "Документи", suffix = "1"): DashboardScr
         date: "2026-04-30",
         counterparty: "ТОВ Ромашка",
         amountStr: "1 234,50 грн",
+        direction: "outgoing",
         status: "issued",
         statusLabel: "Виставлено",
         linkedId: ""

@@ -103,7 +103,7 @@ export async function ensureTauriBuild({
     }
 
     const dependencyMtime = latestDependencyMtimeMs(dependencyPaths);
-    const buildResult = await runBuildWithRetry({
+    await runBuildWithRetry({
       applicationPath,
       repoRoot,
       buildCommand,
@@ -114,10 +114,6 @@ export async function ensureTauriBuild({
       retryDelayMs,
       platform
     });
-
-    if (buildResult.reason === "used-existing-binary-after-lock") {
-      return { built: false, reason: buildResult.reason };
-    }
 
     writeBuildStamp(stampPath, dependencyMtime);
     return { built: true, reason: "rebuilt" };
@@ -172,8 +168,6 @@ function delay(timeoutMs) {
 
 async function runBuildWithRetry({
   applicationPath,
-  stampPath,
-  dependencyPaths,
   repoRoot,
   buildCommand,
   buildArgs,
@@ -187,7 +181,7 @@ async function runBuildWithRetry({
     const result = runBuild(buildCommand, buildArgs, repoRoot);
 
     if (result.status === 0) {
-      return { built: true, reason: "rebuilt" };
+      return;
     }
 
     const buildError = createBuildError(result);
@@ -198,11 +192,10 @@ async function runBuildWithRetry({
       fs.existsSync(applicationPath);
 
     if (!canRetry) {
-      if (platform === "win32" && isTransientWindowsLockError(buildError.message) && fs.existsSync(applicationPath)) {
-        console.warn(
-          "Tauri build лишився заблокованим після повторів. Продовжую smoke з наявним binary без оновлення build stamp."
+      if (platform === "win32" && isTransientWindowsLockError(buildError.message)) {
+        throw new Error(
+          `Tauri build did not converge after ${retryCount} attempts because the Windows binary remained locked.`
         );
-        return { built: false, reason: "used-existing-binary-after-lock" };
       }
 
       throw buildError;
@@ -213,6 +206,8 @@ async function runBuildWithRetry({
     );
     await delayFn(retryDelayMs);
   }
+
+  throw new Error(`Tauri build did not converge after ${retryCount} attempts.`);
 }
 
 function defaultRunBuild(buildCommand, buildArgs, repoRoot) {

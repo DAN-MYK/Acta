@@ -1,19 +1,19 @@
 <script lang="ts">
+  import {
+    CALENDAR_EVENT_KIND_LABELS,
+    CALENDAR_FILTER_OPTIONS,
+    formatCalendarDayAriaLabel,
+    getCalendarEventDirectionLabel
+  } from "../config/ui";
   import { paymentsStore } from "../stores/payments";
   import type {
     PaymentCalendarDayDto,
     PaymentCalendarEventDto,
-    PaymentCalendarEventKind,
-    PaymentCalendarFilterKind
+    PaymentCalendarEventKind
   } from "../types";
 
   const payments = paymentsStore;
-
-  const filterOptions: Array<{ kind: PaymentCalendarFilterKind; label: string }> = [
-    { kind: "all", label: "Усе" },
-    { kind: "schedule", label: "Платежі" },
-    { kind: "task", label: "Задачі" }
-  ];
+  const calendarFilterOptions = CALENDAR_FILTER_OPTIONS;
 
   function filteredEvents(day: PaymentCalendarDayDto) {
     if ($payments.calendarFilter === "all") {
@@ -45,7 +45,7 @@
   }
 
   function eventKindLabel(event: PaymentCalendarEventDto) {
-    return event.kind === "schedule" ? "Платіж" : "Задача";
+    return CALENDAR_EVENT_KIND_LABELS[event.kind];
   }
 
   function eventDirectionLabel(event: PaymentCalendarEventDto) {
@@ -53,17 +53,16 @@
       return "";
     }
 
-    return event.direction === "income" ? "Надходження" : "Витрата";
+    return getCalendarEventDirectionLabel(event.direction);
   }
 
   function dayAriaLabel(day: PaymentCalendarDayDto) {
-    const eventCount = filteredEvents(day).length;
-    const eventLabel =
-      eventCount === 0 ? "без подій" : eventCount === 1 ? "1 подія" : `${eventCount} подій`;
-    const todayLabel = day.today ? ", сьогодні" : "";
-    const selectedLabel = day.selected ? ", вибрано" : "";
-
-    return `${day.date}${todayLabel}${selectedLabel}, ${eventLabel}`;
+    return formatCalendarDayAriaLabel({
+      date: day.date,
+      eventCount: filteredEvents(day).length,
+      today: day.today,
+      selected: day.selected
+    });
   }
 
   function onGridKeydown(event: KeyboardEvent) {
@@ -125,7 +124,7 @@
         </button>
       </div>
       <div class="calendar-filters" role="radiogroup" aria-label="Фільтр подій календаря">
-        {#each filterOptions as option}
+        {#each calendarFilterOptions as option}
           <button
             class:active={$payments.calendarFilter === option.kind}
             on:click={() => payments.setCalendarFilter(option.kind)}
@@ -532,7 +531,7 @@
   }
 
   .calendar-day.has-overdue {
-    background: color-mix(in srgb, var(--acta-color-bg-elevated) 86%, #f7d7d2 14%);
+    background: color-mix(in srgb, var(--acta-color-bg-elevated) 86%, var(--acta-color-danger-soft) 14%);
   }
 
   .calendar-day-top,
@@ -589,18 +588,18 @@
   }
 
   .calendar-pill.is-task {
-    background: color-mix(in srgb, #d8e7ff 76%, white 24%);
-    color: #2d5596;
+    background: color-mix(in srgb, var(--acta-color-info-soft) 76%, white 24%);
+    color: var(--acta-color-info);
   }
 
   .calendar-pill.is-overdue {
-    background: color-mix(in srgb, #f7d7d2 78%, white 22%);
-    color: #9e3f30;
+    background: color-mix(in srgb, var(--acta-color-danger-soft) 78%, white 22%);
+    color: var(--acta-color-danger);
   }
 
   .calendar-pill.is-done {
-    background: color-mix(in srgb, #d7edd8 78%, white 22%);
-    color: #2f6a37;
+    background: color-mix(in srgb, var(--acta-color-success-soft) 78%, white 22%);
+    color: var(--acta-color-success);
   }
 
   .calendar-pill.is-more {

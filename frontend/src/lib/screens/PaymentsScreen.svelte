@@ -2,6 +2,13 @@
   import PaymentCalendarPanel from "../components/PaymentCalendarPanel.svelte";
   import SkeletonCard from "../components/SkeletonCard.svelte";
   import SkeletonRow from "../components/SkeletonRow.svelte";
+  import {
+    EDITOR_DIRTY_COPY,
+    PAYMENT_FLOW_COPY,
+    PAYMENT_MANUAL_PICKER_DISABLED_REASON,
+    PAYMENT_PREVIEW_COPY,
+    resolveDocumentKindMeta
+  } from "../config/ui";
   import { isFormattedMoneyNegative } from "../money";
   import { paymentsStore } from "../stores/payments";
   import type { PaymentDraftFormDto, PaymentMatchCandidateDto } from "../types";
@@ -67,7 +74,7 @@
   }
 
   function getDocumentKindLabel(kind: PaymentMatchCandidateDto["documentKind"]): string {
-    return kind === "act" ? "Акт" : "Накладна";
+    return resolveDocumentKindMeta(kind).label;
   }
 
   function getPreviewTitle(): string {
@@ -75,20 +82,7 @@
     if (!preview) {
       return "";
     }
-
-    if (preview.decisionKind === "exact") {
-      return "Рекомендована звірка";
-    }
-
-    if (preview.decisionKind === "ambiguous") {
-      return "Кілька кандидатів на звірку";
-    }
-
-    if (preview.decisionKind === "split") {
-      return "Рекомендований розподіл платежу";
-    }
-
-    return "Автоматична звірка не знайшла точного документа";
+    return PAYMENT_PREVIEW_COPY[preview.decisionKind].title;
   }
 
   function getPreviewDescription(): string {
@@ -96,20 +90,7 @@
     if (!preview) {
       return "";
     }
-
-    if (preview.decisionKind === "exact") {
-      return "Система знайшла найкращий документ для автозіставлення. Перевірте рекомендацію перед підтвердженням.";
-    }
-
-    if (preview.decisionKind === "ambiguous") {
-      return "Оберіть найкращий варіант у списку, або відкрийте ручний пошук, якщо потрібен інший документ.";
-    }
-
-    if (preview.decisionKind === "split") {
-      return "Система підготувала рекомендований розподіл платежу між кількома документами. Перевірте кандидатів і, за потреби, скоригуйте суми в чернетці нижче.";
-    }
-
-    return "Для цього платежу поки немає точного збігу. Перевірте реквізити або відкрийте ручний пошук документа.";
+    return PAYMENT_PREVIEW_COPY[preview.decisionKind].description;
   }
 
   function getCandidateHint(candidate: PaymentMatchCandidateDto): string {
@@ -149,63 +130,12 @@
     }
   }
 
-  const FLOW_COPY: Record<string, { title: string; description: string }> = {
-    "import": {
-      title: "Імпорт триває",
-      description: "Імпортуємо виписку та оновлюємо список платежів, щоб одразу показати незведені рухи."
-    },
-    "import-pick": {
-      title: "Готуємо preview виписки",
-      description: "Розбираємо файл виписки і будуємо список платежів, що чекають на імпорт."
-    },
-    "import-commit": {
-      title: "Імпортуємо нові платежі",
-      description: "Записуємо нові платежі у БД на основі підтвердженого preview."
-    },
-    "sync": {
-      title: "Оновлюємо рухи з банку",
-      description: "Підтягуємо свіжі банківські рухи та готуємо їх до наступного кроку звірки."
-    },
-    "reconcile": {
-      title: "Готуємо preview звірки",
-      description: "Шукаємо документи-кандидати й готуємо наступний крок для цього платежу."
-    },
-    "manual-search": {
-      title: "Шукаємо документи для ручної звірки",
-      description: "Формуємо повний список відкритих актів і накладних для ручного вибору."
-    },
-    "unreconcile": {
-      title: "Знімаємо зведення",
-      description: "Знімаємо зв'язок із документом та повертаємо платіж у чергу на повторну звірку."
-    },
-    "save": {
-      title: "Зберігаємо платіж",
-      description: "Фіксуємо зміни в картці платежу та оновлюємо список."
-    },
-    "confirm-auto-match": {
-      title: "Підтверджуємо автозвірку",
-      description: "Підтверджуємо рекомендоване автозіставлення і оновлюємо статус платежу."
-    },
-    "confirm-candidate": {
-      title: "Підтверджуємо ручну звірку",
-      description: "Прив'язуємо платіж до вибраного кандидата з preview."
-    },
-    "confirm-manual-picker": {
-      title: "Фіксуємо ручний вибір документа",
-      description: "Прив'язуємо платіж до документа, обраного через ручний пошук."
-    },
-    "confirm-split": {
-      title: "Зберігаємо розподіл платежу",
-      description: "Записуємо розподіл платежу між кількома документами і оновлюємо статуси."
-    }
-  };
-
   function getFlowCopy(): { title: string; description: string } | null {
     if (!$payments.loading || !$payments.activeAction) {
       return null;
     }
 
-    return FLOW_COPY[$payments.activeAction] ?? null;
+    return PAYMENT_FLOW_COPY[$payments.activeAction] ?? null;
   }
 
 
@@ -223,7 +153,7 @@
   $: manualPickerDisabledReason =
     !$payments.manualPicker || $payments.manualPicker.candidates.length > 0
       ? ""
-      : "Спершу знайдіть хоча б одного кандидата, щоб підтвердити документ.";
+      : PAYMENT_MANUAL_PICKER_DISABLED_REASON;
   $: flowCopy = getFlowCopy();
   $: flowTitle = flowCopy?.title ?? null;
   $: flowDescription = flowCopy?.description ?? null;
@@ -772,8 +702,8 @@
         data-testid="payments-dirty-banner"
       >
         <div>
-          <strong id="payments-dirty-banner-title">У вас є незбережені зміни</strong>
-          <p>Скасувати їх і закрити форму?</p>
+          <strong id="payments-dirty-banner-title">{EDITOR_DIRTY_COPY.dirtyTitle}</strong>
+          <p>{EDITOR_DIRTY_COPY.dirtyDescription}</p>
         </div>
         <div class="editor-dirty-actions">
           <button
@@ -782,7 +712,7 @@
             on:click={cancelDiscardChanges}
             data-testid="payments-dirty-banner-cancel"
           >
-            Залишитися
+            {EDITOR_DIRTY_COPY.dirtyStay}
           </button>
           <button
             type="button"
@@ -790,7 +720,7 @@
             on:click={confirmDiscardChanges}
             data-testid="payments-dirty-banner-discard"
           >
-            Так, закрити
+            {EDITOR_DIRTY_COPY.dirtyDiscard}
           </button>
         </div>
       </div>

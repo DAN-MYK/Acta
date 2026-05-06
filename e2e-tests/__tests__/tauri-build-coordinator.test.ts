@@ -196,28 +196,29 @@ describe("tauri build coordinator", () => {
     writeFile(appPath, "binary", 20_000);
     writeFile(dependencyPath, "<div />", 50_000);
 
-    const result = await ensureTauriBuild({
-      applicationPath: appPath,
-      dependencyPaths: [dependencyPath],
-      lockPath,
-      stampPath,
-      repoRoot: root,
-      platform: "win32",
-      retryCount: 2,
-      retryDelayMs: 25,
-      delayFn: async () => {},
-      runBuild: () => {
-        attempts += 1;
-        return {
-          status: 1,
-          stdout: "",
-          stderr:
-            "The process cannot access the file because it is being used by another process. (os error 32)"
-        };
-      }
-    });
+    await expect(
+      ensureTauriBuild({
+        applicationPath: appPath,
+        dependencyPaths: [dependencyPath],
+        lockPath,
+        stampPath,
+        repoRoot: root,
+        platform: "win32",
+        retryCount: 2,
+        retryDelayMs: 25,
+        delayFn: async () => {},
+        runBuild: () => {
+          attempts += 1;
+          return {
+            status: 1,
+            stdout: "",
+            stderr:
+              "The process cannot access the file because it is being used by another process. (os error 32)"
+          };
+        }
+      })
+    ).rejects.toThrow(/did not converge after 2 attempts/i);
 
-    expect(result).toEqual({ built: false, reason: "used-existing-binary-after-lock" });
     expect(attempts).toBe(2);
     expect(fs.existsSync(stampPath)).toBe(false);
   });

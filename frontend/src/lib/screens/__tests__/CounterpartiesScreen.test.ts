@@ -140,6 +140,7 @@ function makeDetail(): CounterpartyDetailScreenDto {
         date: "2026-05-01",
         counterparty: "ФОП Петренко",
         amountStr: "19 000,00 грн",
+        direction: "outgoing",
         status: "issued",
         statusLabel: "Виставлено",
         linkedId: ""
@@ -284,7 +285,7 @@ describe("CounterpartiesScreen component", () => {
     expect(target.textContent).toContain("або створіть нового, щоб одразу побачити");
     expect(target.textContent).toContain("баланс");
     expect(target.textContent).toContain("прострочки");
-    expect(target.textContent).toContain("наступного кроку");
+    expect(target.textContent).toContain("сценарій роботи");
     expect(buttonByText(target, "Новий контрагент").className).toContain("btn-primary");
     buttonByText(target, "Новий контрагент").click();
     await tick();
@@ -399,6 +400,10 @@ describe("CounterpartiesScreen component", () => {
     await tick();
 
     expect(target.querySelector('[data-testid="counterparties-dirty-banner"]')).toBeTruthy();
+    expect(target.textContent).toContain("У вас є незбережені зміни");
+    expect(target.textContent).toContain("Скасувати їх і закрити форму?");
+    expect(target.textContent).toContain("Залишитися");
+    expect(target.textContent).toContain("Так, закрити");
     expect(mocks.closeEditor).toHaveBeenCalledWith(false);
 
     buttonByText(target, "Так, закрити").click();
@@ -483,6 +488,14 @@ describe("CounterpartiesScreen component", () => {
 
     expect(target.querySelector('[data-testid="counterparties-dirty-banner"]')).toBeTruthy();
     expect(mocks.closeEditor).toHaveBeenCalledWith(false);
+
+    component.$destroy();
+  });
+
+  it("keeps overview badges styling in classes instead of inline markup", () => {
+    const { component, target } = renderCounterparties();
+
+    expect(target.querySelector(".counterparty-overview-badges")?.getAttribute("style")).toBeNull();
 
     component.$destroy();
   });

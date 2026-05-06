@@ -101,6 +101,7 @@ function makeDashboard(): DashboardScreenDto {
         date: "2026-04-30",
         counterparty: "ТОВ Ромашка",
         amountStr: "9 600,00 грн",
+        direction: "outgoing",
         status: "issued",
         statusLabel: "Виставлено",
         linkedId: ""

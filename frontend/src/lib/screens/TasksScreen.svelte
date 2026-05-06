@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from "svelte";
   import AppIcon from "../components/AppIcon.svelte";
   import SkeletonRow from "../components/SkeletonRow.svelte";
+  import { EDITOR_DIRTY_COPY, TASK_PRIORITY_OPTIONS, TASK_STATUS_OPTIONS } from "../config/ui";
   import { tasksStore } from "../stores/tasks";
   import type { TaskDraftFormDto, TaskItemDto, TaskStatus } from "../types";
 
@@ -265,8 +266,8 @@
         data-testid="tasks-dirty-banner"
       >
         <div>
-          <strong id="tasks-dirty-banner-title">У вас є незбережені зміни</strong>
-          <p>Скасувати їх і закрити форму?</p>
+          <strong id="tasks-dirty-banner-title">{EDITOR_DIRTY_COPY.dirtyTitle}</strong>
+          <p>{EDITOR_DIRTY_COPY.dirtyDescription}</p>
         </div>
         <div class="editor-dirty-actions">
           <button
@@ -275,7 +276,7 @@
             on:click={cancelDiscardChanges}
             data-testid="tasks-dirty-banner-cancel"
           >
-            Залишитися
+            {EDITOR_DIRTY_COPY.dirtyStay}
           </button>
           <button
             type="button"
@@ -283,7 +284,7 @@
             on:click={confirmDiscardChanges}
             data-testid="tasks-dirty-banner-discard"
           >
-            Так, закрити
+            {EDITOR_DIRTY_COPY.dirtyDiscard}
           </button>
         </div>
       </div>
@@ -344,19 +345,17 @@
       <label>
         Пріоритет
         <select value={$tasks.editor.form.priority} on:change={(event) => onTaskFieldChange("priority", event)}>
-          <option value="low">Низький</option>
-          <option value="normal">Звичайний</option>
-          <option value="high">Високий</option>
-          <option value="critical">Критичний</option>
+          {#each TASK_PRIORITY_OPTIONS as option}
+            <option value={option.value}>{option.label}</option>
+          {/each}
         </select>
       </label>
       <label>
         Статус
         <select value={$tasks.editor.form.status} on:change={(event) => onTaskFieldChange("status", event)}>
-          <option value="open">Відкрите</option>
-          <option value="in_progress">В роботі</option>
-          <option value="done">Виконано</option>
-          <option value="cancelled">Скасовано</option>
+          {#each TASK_STATUS_OPTIONS as option}
+            <option value={option.value}>{option.label}</option>
+          {/each}
         </select>
       </label>
       <label>

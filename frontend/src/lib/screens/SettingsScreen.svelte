@@ -117,25 +117,26 @@
             <button
               type="button"
               role="radio"
+              aria-label="Світла тема"
               aria-checked={!$settings.screen?.preferences.darkMode}
               class:active={!$settings.screen?.preferences.darkMode}
               on:click={() => onSettingsThemeChange(false)}
               disabled={$settings.loading}
             >
-              Світла<span style="display: none;"> тема</span>
+              Світла
             </button>
             <button
               type="button"
               role="radio"
+              aria-label="Темна тема"
               aria-checked={$settings.screen?.preferences.darkMode}
               class:active={$settings.screen?.preferences.darkMode}
               on:click={() => onSettingsThemeChange(true)}
               disabled={$settings.loading}
             >
-              Темна<span style="display: none;"> тема</span>
+              Темна
             </button>
           </div>
-          <span style="display: none;">Налаштування щільності поки прибрано</span>
         </div>
       {:else if $settings.section === "company"}
         <div class="settings-card">

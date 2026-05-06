@@ -1,5 +1,10 @@
 <script lang="ts">
   import SkeletonRow from "../components/SkeletonRow.svelte";
+  import {
+    COUNTERPARTIES_COPY,
+    formatDocumentsLabel,
+    formatLastContactLabel
+  } from "../config/ui";
   import { isFormattedMoneyNegative } from "../money";
   import { counterpartiesStore } from "../stores/counterparties";
   import { documentsStore } from "../stores/documents";
@@ -65,15 +70,7 @@
   }
 
   function getOverdueDocumentsLabel(overdueCount: number): string {
-    if (overdueCount === 1) {
-      return "1 документ";
-    }
-
-    if (overdueCount >= 2 && overdueCount <= 4) {
-      return `${overdueCount} документи`;
-    }
-
-    return `${overdueCount} документів`;
+    return formatDocumentsLabel(overdueCount);
   }
 
   function getRiskLabel(overdueCount: number): string {
@@ -85,19 +82,7 @@
   }
 
   function getLastContactLabel(days: number): string {
-    if (days <= 0) {
-      return "сьогодні";
-    }
-
-    if (days === 1) {
-      return "1 день тому";
-    }
-
-    if (days >= 2 && days <= 4) {
-      return `${days} дні тому`;
-    }
-
-    return `${days} днів тому`;
+    return formatLastContactLabel(days);
   }
 
   function getScenarioTitle(overdueCount: number, lastContactDays: number, docCount: number): string {
@@ -149,7 +134,7 @@
     return "Баланс під контролем, критичних сигналів немає.";
   }
   function onArchiveCurrent() {
-    if (!window.confirm("Архівувати поточного контрагента? Повернення потребуватиме окремої дії.")) {
+    if (!window.confirm(COUNTERPARTIES_COPY.archiveConfirm)) {
       return;
     }
 
@@ -190,13 +175,13 @@
   {/if}
 
   {#if $counterparties.loading}
-    <p class="message">Оновлюємо картку контрагента…</p>
+    <p class="message">{COUNTERPARTIES_COPY.loadingMessage}</p>
   {/if}
 
   <div class="counterparties-layout">
     <div class="counterparties-list-wrap">
       <div class="counterparties-search-bar">
-        <input placeholder="Пошук контрагента…" on:input={onCounterpartySearch} />
+        <input placeholder={COUNTERPARTIES_COPY.searchPlaceholder} on:input={onCounterpartySearch} />
       </div>
       <div class="counterparties-scroll">
         <div class="counterparties-list" data-testid="counterparties-list">
@@ -230,8 +215,8 @@
     <div class="counterparty-detail">
       {#if $counterparties.initialLoading}
         <div class="empty-screen empty-state-card compact cp-empty-padded" aria-live="polite">
-          <strong>Завантажуємо картку контрагента</strong>
-          <p>Список уже готується. Деталі з'являться тут, щойно підтягнемо перші дані.</p>
+          <strong>{COUNTERPARTIES_COPY.loadingTitle}</strong>
+          <p>{COUNTERPARTIES_COPY.loadingDescription}</p>
         </div>
       {:else if $counterparties.detail}
         <div data-testid="counterparty-detail">
@@ -240,7 +225,7 @@
               <div>
                 <div class="scenario-eyebrow">{$counterparties.detail.info.kind === "ФОП" ? "Фізична особа-підприємець" : "Юридична особа"}</div>
                 <h3>{$counterparties.detail.info.name}</h3>
-                <div class="counterparty-overview-badges" style="margin-top: 8px;">
+                <div class="counterparty-overview-badges">
                   <span class="task-pill">{$counterparties.detail.info.kind}</span>
                   <span
                     class:risk-chip-danger={$counterparties.detail.info.overdueCount > 0}
@@ -417,10 +402,9 @@
         </div>
       {:else}
         <div class="empty-screen empty-state-card compact cp-empty-padded" data-testid="counterparties-empty-state">
-          <strong>Оберіть контрагента</strong>
+          <strong>{COUNTERPARTIES_COPY.emptyTitle}</strong>
           <p>
-            Оберіть зліва вже відомого контрагента або створіть нового, щоб одразу побачити баланс, прострочки та
-            підказку наступного кроку.
+            {COUNTERPARTIES_COPY.emptyDescription}
           </p>
           <button class="btn-primary" on:click={() => counterparties.openEditor()}>Новий контрагент</button>
         </div>
@@ -447,8 +431,8 @@
         data-testid="counterparties-dirty-banner"
       >
         <div>
-          <strong id="counterparties-dirty-banner-title">У вас є незбережені зміни</strong>
-          <p>Скасувати їх і закрити форму?</p>
+          <strong id="counterparties-dirty-banner-title">{COUNTERPARTIES_COPY.dirtyTitle}</strong>
+          <p>{COUNTERPARTIES_COPY.dirtyDescription}</p>
         </div>
         <div class="editor-dirty-actions">
           <button
@@ -517,3 +501,12 @@
     </div>
   </section>
 {/if}
+
+<style>
+  .counterparty-overview-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+  }
+</style>

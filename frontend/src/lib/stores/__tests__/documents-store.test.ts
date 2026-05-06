@@ -10,6 +10,7 @@ function makeDocumentsList(ids: string[]): DocumentsListDto {
     date: "2026-04-30",
     counterparty: "ТОВ Ромашка",
     amountStr: "1 234,50 грн",
+    direction: "outgoing" as const,
     status: "draft" as const,
     statusLabel: "Чернетка",
     linkedId: ""
@@ -30,6 +31,7 @@ function makeEditor(id: string, kind = "invoice", notes = ""): DocumentEditorDto
     form: {
       id,
       kind,
+      direction: "outgoing",
       counterpartyId: "cp-1",
       counterpartyName: "ТОВ Ромашка",
       title: `${kind} editor`,

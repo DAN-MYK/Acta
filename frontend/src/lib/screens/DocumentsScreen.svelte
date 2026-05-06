@@ -4,16 +4,23 @@
   import SkeletonRow from "../components/SkeletonRow.svelte";
   import {
     DOCUMENTS_COPY,
+    DOCUMENT_DIRECTION_LABELS,
+    DOCUMENT_DIRECTION_OPTIONS,
+    DOCUMENT_KIND_FILTER_OPTIONS,
     DOCUMENT_KIND_META,
     DOCUMENT_KIND_OPTIONS,
+    DOCUMENT_TAB_OPTIONS,
     formatDocumentItemsLabel,
-    resolveDocumentKindMeta
+    getDocumentChainTargets,
+    getDocumentCreateLabel,
+    resolveDocumentKindMeta,
+    supportsExistingPdfFlow
   } from "../config/ui";
   import { documentsStore } from "../stores/documents";
   import { counterpartiesStore } from "../stores/counterparties";
   import { formatDocumentDraftTotal, formatDocumentItemTotal } from "../documentMoney";
   import { isFormattedMoneyNegative } from "../money";
-  import type { DocumentDraftItemDto, DocumentDirection, DocumentKind } from "../types";
+  import type { DocumentDraftItemDto, DocumentKind } from "../types";
 
   const documents = documentsStore;
   const counterparties = counterpartiesStore;
@@ -274,45 +281,13 @@
     void documents.bulkAdvanceStatus();
   }
 
-  function getChainTargets(kind: string): DocumentKind[] {
-    if (kind === "invoice") {
-      return ["act", "waybill"];
-    }
-    if (kind === "act") {
-      return ["waybill"];
-    }
-    return [];
-  }
-
   function getDocumentKindLabel(kind: string): string {
     return resolveDocumentKindMeta(kind).label;
   }
 
-  const navTabs: Array<{ value: "all" | "outgoing" | "incoming"; label: string }> = [
-    { value: "all", label: "Всі" },
-    { value: "outgoing", label: "Вихідні" },
-    { value: "incoming", label: "Вхідні" },
-  ];
+  const navTabs = DOCUMENT_TAB_OPTIONS;
 
-  const kindChips: Array<{ value: DocumentKind | null; label: string }> = [
-    { value: null, label: "Всі" },
-    { value: "act", label: "Акти" },
-    { value: "invoice", label: "Рахунки" },
-    { value: "waybill", label: "Накладні" },
-  ];
-
-  const directionLabels: Record<DocumentDirection, string> = {
-    outgoing: "↑ Вихідний",
-    incoming: "↓ Вхідний"
-  };
-
-  function getCreateButtonLabel(kind: DocumentKind): string {
-    const tab = $documents.activeTab;
-    const dirSuffix = tab === "incoming" ? " (вхідний)" : tab === "outgoing" ? " (вихідний)" : "";
-    if (kind === "invoice") return `Створити рахунок${dirSuffix}`;
-    if (kind === "waybill") return `Створити накладну${dirSuffix}`;
-    return `Створити акт${dirSuffix}`;
-  }
+  const kindChips = DOCUMENT_KIND_FILTER_OPTIONS;
 
   function getItemsCountLabel(count: number): string {
     return formatDocumentItemsLabel(count);
@@ -327,9 +302,6 @@
     return resolveDocumentKindMeta(kind).icon;
   }
 
-  function supportsExistingPdfFlow(kind: string): boolean {
-    return kind === "invoice" || kind === "waybill";
-  }
 </script>
 
 <section
@@ -406,7 +378,7 @@
       aria-busy={$documents.loading ? "true" : "false"}
     >
       <AppIcon name={documentKindMeta[createKind].icon} surface={true} />
-      <span>{getCreateButtonLabel(createKind)}</span>
+      <span>{getDocumentCreateLabel(createKind, $documents.activeTab)}</span>
     </button>
   </div>
 
@@ -507,7 +479,7 @@
                 </span>
                 <span class="doc-status-chip">{item.statusLabel}</span>
                 <span class="doc-direction-badge" data-direction={item.direction}>
-                  {directionLabels[item.direction] ?? item.direction}
+                  {DOCUMENT_DIRECTION_LABELS[item.direction] ?? item.direction}
                 </span>
               </div>
             </div>
@@ -618,7 +590,7 @@
             >
               Наступний статус
             </button>
-            {#each getChainTargets($documents.editor.form.kind) as targetKind}
+            {#each getDocumentChainTargets($documents.editor.form.kind) as targetKind}
               <button
                 role="menuitem"
                 type="button"
@@ -682,7 +654,7 @@
             on:change={() => documents.updateFormField("direction", "outgoing")}
             disabled={$documents.loading}
           />
-          ↑ Вихідний
+          {DOCUMENT_DIRECTION_OPTIONS[0].label}
         </label>
         <label class="editor-direction-option">
           <input
@@ -693,7 +665,7 @@
             on:change={() => documents.updateFormField("direction", "incoming")}
             disabled={$documents.loading}
           />
-          ↓ Вхідний
+          {DOCUMENT_DIRECTION_OPTIONS[1].label}
         </label>
       </fieldset>
     </div>

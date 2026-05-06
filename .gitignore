@@ -10,6 +10,7 @@ e2e-tests/node_modules/
 .playwright-mcp/
 .env
 .claude/
+.claude/settings.local.json
 .claude/worktrees/
 .worktrees/
 

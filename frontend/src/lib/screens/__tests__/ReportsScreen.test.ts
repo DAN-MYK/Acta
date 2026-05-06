@@ -267,7 +267,8 @@ describe("ReportsScreen", () => {
     expect(target.textContent).toContain("Прострочено 4 дн.");
     expect(target.querySelector(".reports-table-row-overdue")).toBeTruthy();
     expect(activeTab?.textContent).toContain("заплатити");
-    expect(rows[0]).toContain("INV-2026-0042");
+    expect(rows.some((row) => row.includes("INV-2026-0042"))).toBe(true);
+    expect(rows.some((row) => row.includes("INV-2026-0100"))).toBe(true);
 
     component.$destroy();
   });

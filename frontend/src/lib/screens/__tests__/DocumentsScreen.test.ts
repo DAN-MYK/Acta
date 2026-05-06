@@ -118,6 +118,7 @@ function makeList(): DocumentsListDto {
         date: "2026-04-30",
         counterparty: "ТОВ Ромашка",
         amountStr: "5 000,00 грн",
+        direction: "outgoing",
         status: "draft",
         statusLabel: "Чернетка",
         linkedId: ""
@@ -129,6 +130,7 @@ function makeList(): DocumentsListDto {
         date: "2026-05-01",
         counterparty: "ФОП Тест",
         amountStr: "2 500,00 грн",
+        direction: "outgoing",
         status: "issued",
         statusLabel: "Виставлено",
         linkedId: ""
@@ -147,6 +149,7 @@ function makeEditor(items: boolean | DocumentEditorDto["items"] = true): Documen
     form: {
       id: "doc-1",
       kind: "invoice",
+      direction: "outgoing",
       counterpartyId: "counterparty-1",
       counterpartyName: "ТОВ Ромашка",
       title: "Рахунок INV-7",

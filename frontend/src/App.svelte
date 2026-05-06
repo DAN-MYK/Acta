@@ -14,6 +14,7 @@
   import SettingsScreen from "./lib/screens/SettingsScreen.svelte";
   import TasksScreen from "./lib/screens/TasksScreen.svelte";
   import AppIcon from "./lib/components/AppIcon.svelte";
+  import { MAIN_NAV_ITEMS, SCREEN_TITLES } from "./lib/config/ui";
   import type { ScreenId } from "./lib/types";
 
   const navigation = navigationStore;
@@ -32,30 +33,6 @@
   let paletteItemButtons: Array<HTMLButtonElement | null> = [];
   let activePaletteIndex = -1;
   let wasPaletteOpen = false;
-
-  const mainNavItems: Array<{
-    screen: ScreenId;
-    label: string;
-    icon: "dashboard" | "documents" | "counterparties" | "payments" | "reports" | "tasks";
-    badgeKey?: "documentsBadge" | "tasksBadge";
-  }> = [
-    { screen: "dashboard", label: "Головна", icon: "dashboard" },
-    { screen: "documents", label: "Документи", icon: "documents", badgeKey: "documentsBadge" },
-    { screen: "counterparties", label: "Контрагенти", icon: "counterparties" },
-    { screen: "payments", label: "Платежі", icon: "payments" },
-    { screen: "reports", label: "Звіти", icon: "reports" },
-    { screen: "tasks", label: "Завдання", icon: "tasks", badgeKey: "tasksBadge" }
-  ];
-
-  const screenTitles: Record<ScreenId, string> = {
-    dashboard: "Головна",
-    documents: "Документи",
-    counterparties: "Контрагенти",
-    payments: "Платежі",
-    reports: "Звіти",
-    tasks: "Завдання",
-    settings: "Налаштування"
-  };
 
   onMount(async () => {
     await appShell.bootstrap();
@@ -96,7 +73,7 @@
   $: shellState = $shell.state;
   $: isShellBusy = $shell.loading || appShellState.loading;
   $: shellProgressLabel = appShellState.progressLabel ?? $shell.progressLabel;
-  $: screenTitle = screenTitles[currentScreen] ?? "Acta";
+  $: screenTitle = SCREEN_TITLES[currentScreen] ?? "Acta";
   $: activeCompany = shellState?.companyItems.find(c => c.active);
 
   function groupLabel(kind: string): string {
@@ -321,7 +298,7 @@
 
     <!-- Main nav (36px items, з nav-rail для активних) -->
     <nav class="nav">
-      {#each mainNavItems as item}
+      {#each MAIN_NAV_ITEMS as item}
         {@const badge = item.badgeKey ? shellState?.chrome[item.badgeKey] : undefined}
         <button
           class="nav-item"

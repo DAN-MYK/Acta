@@ -556,4 +556,13 @@ describe("SettingsScreen", () => {
 
     component.$destroy();
   });
+
+  it("renders appearance accessibility copy without inline display-none styles", async () => {
+    const { component, target } = renderSettings();
+    await tick();
+
+    expect(target.querySelector('[style*="display: none"]')).toBeNull();
+
+    component.$destroy();
+  });
 });

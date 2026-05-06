@@ -267,6 +267,10 @@ describe("TasksScreen component", () => {
     await tick();
 
     expect(target.querySelector('[data-testid="tasks-dirty-banner"]')).toBeTruthy();
+    expect(target.textContent).toContain("У вас є незбережені зміни");
+    expect(target.textContent).toContain("Скасувати їх і закрити форму?");
+    expect(target.textContent).toContain("Залишитися");
+    expect(target.textContent).toContain("Так, закрити");
     expect(mocks.closeEditor).toHaveBeenCalledWith(false);
 
     component.$destroy();

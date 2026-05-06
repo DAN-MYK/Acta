@@ -88,6 +88,7 @@ const documents: DocumentItemDto[] = [
     date: "2026-05-01",
     counterparty: "ТОВ Ромашка",
     amountStr: "48 200,00 грн",
+    direction: "outgoing",
     status: "issued",
     statusLabel: "Виставлено",
     linkedId: "chain-1"
@@ -99,6 +100,7 @@ const documents: DocumentItemDto[] = [
     date: "2026-04-29",
     counterparty: "ФОП Петренко",
     amountStr: "19 400,00 грн",
+    direction: "outgoing",
     status: "draft",
     statusLabel: "Чернетка",
     linkedId: "chain-2"
@@ -175,6 +177,7 @@ function documentEditor(kind = "invoice", counterpartyId = "cp-1"): DocumentEdit
     form: {
       id: "doc-1",
       kind,
+      direction: "outgoing",
       counterpartyId: counterparty.id,
       counterpartyName: counterparty.name,
       title: kind === "invoice" ? "Рахунок INV-2026-0042" : "Документ у роботі",

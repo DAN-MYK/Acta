@@ -729,6 +729,10 @@ describe("PaymentsScreen component", () => {
     await tick();
 
     expect(target.querySelector('[data-testid="payments-dirty-banner"]')).toBeTruthy();
+    expect(target.textContent).toContain("У вас є незбережені зміни");
+    expect(target.textContent).toContain("Скасувати їх і закрити форму?");
+    expect(target.textContent).toContain("Залишитися");
+    expect(target.textContent).toContain("Так, закрити");
     expect(mocks.closeEditor).toHaveBeenCalledWith(false);
 
     buttonByText(target, "Так, закрити").click();
@@ -1010,6 +1014,8 @@ describe("PaymentsScreen component", () => {
     expect(text).toContain("Рекомендований розподіл платежу");
     expect(text).toContain("INV-001");
     expect(text).toContain("ACT-009");
+    expect(text).toContain("Рахунок");
+    expect(text).toContain("Акт");
     expect(text).toContain("Рекомендація для розподілу");
 
     component.$destroy();

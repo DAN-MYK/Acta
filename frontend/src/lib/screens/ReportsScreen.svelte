@@ -1,31 +1,26 @@
 <script lang="ts">
   import SkeletonRow from "../components/SkeletonRow.svelte";
-  import { daysUntil } from "../date";
-  import { compareMinor, isFormattedMoneyNegative, parseMoneyToMinor } from "../money";
+  import {
+    getReportActiveRowsCount,
+    getReportContextText,
+    getReportHeadline,
+    getReportKpiCards,
+    getReportTopCounterpartiesSubtitle,
+    hasReportActiveRows,
+    REPORT_SCOPE_OPTIONS,
+    REPORT_TABS
+  } from "../config/ui";
+  import { isFormattedMoneyNegative } from "../money";
   import { counterpartiesStore } from "../stores/counterparties";
   import { navigationStore } from "../stores/navigation";
   import { reportsStore } from "../stores/reports";
-  import type { PayableRowDto, ReceivableRowDto, ReportsScope, ReportsScreenDto, ReportsTab, TopCounterpartyRowDto } from "../types";
-
-  interface ReportKpiCard {
-    label: string;
-    value: string;
-    tone?: "default" | "accent" | "warning" | "danger";
-  }
-
-  const sortCollator = new Intl.Collator("uk", {
-    numeric: true,
-    sensitivity: "base"
-  });
+  import type { ReportsScope, ReportsTab, TopCounterpartyRowDto } from "../types";
 
   const reports = reportsStore;
+  const reportTabs = REPORT_TABS;
+  const reportScopeOptions = REPORT_SCOPE_OPTIONS;
   const reportsTabPanelId = "reports-tabpanel";
-  const reportTabs: Array<{ id: ReportsTab; label: string }> = [
-    { id: "bank", label: "Гроші на рахунках і в русі" },
-    { id: "pnl", label: "Дохід, витрати і результат" },
-    { id: "receivables", label: "Нам мають заплатити" },
-    { id: "payables", label: "Ми маємо заплатити" }
-  ];
+
   let dateFromInput: HTMLInputElement | null = null;
   let reportTabButtons: Array<HTMLButtonElement | null> = [];
 
@@ -58,15 +53,13 @@
   function handleReportTabKeydown(event: KeyboardEvent, index: number) {
     if (event.key === "ArrowRight" || event.key === "ArrowDown") {
       event.preventDefault();
-      const nextIndex = (index + 1) % reportTabs.length;
-      focusReportTab(nextIndex);
+      focusReportTab(index + 1);
       return;
     }
 
     if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
       event.preventDefault();
-      const nextIndex = (index - 1 + reportTabs.length) % reportTabs.length;
-      focusReportTab(nextIndex);
+      focusReportTab(index - 1);
       return;
     }
 
@@ -78,8 +71,7 @@
 
     if (event.key === "End") {
       event.preventDefault();
-      const nextIndex = reportTabs.length - 1;
-      focusReportTab(nextIndex);
+      focusReportTab(reportTabs.length - 1);
       return;
     }
 
@@ -102,203 +94,6 @@
 
   function focusReportsDateRange() {
     dateFromInput?.focus();
-  }
-
-  function getReportHeadline(tab: ReportsTab | undefined): string {
-    if (tab === "pnl") {
-      return "Дохід, витрати і результат";
-    }
-    if (tab === "receivables") {
-      return "Нам мають заплатити";
-    }
-    if (tab === "payables") {
-      return "Ми маємо заплатити";
-    }
-    return "Гроші на рахунках і в русі";
-  }
-
-  function overdueReceivables(rows: ReceivableRowDto[]): ReceivableRowDto[] {
-    return rows.filter((row) => row.overdueDays > 0);
-  }
-
-  function overduePayables(rows: PayableRowDto[]): PayableRowDto[] {
-    return rows.filter((row) => row.overdueDays > 0);
-  }
-
-  function compareStrings(left: string, right: string): number {
-    return sortCollator.compare(left || "", right || "");
-  }
-
-  function compareDates(left: string, right: string): number {
-    return compareStrings(left || "9999-12-31", right || "9999-12-31");
-  }
-
-  function compareAmountStrDesc(leftStr: string, rightStr: string): number {
-    return compareMinor(parseMoneyToMinor(rightStr) ?? 0n, parseMoneyToMinor(leftStr) ?? 0n);
-  }
-
-  function stableSortRows<T>(rows: T[], compare: (left: T, right: T) => number): T[] {
-    return rows
-      .map((row, index) => ({ row, index }))
-      .sort((left, right) => {
-        const result = compare(left.row, right.row);
-        return result !== 0 ? result : left.index - right.index;
-      })
-      .map(({ row }) => row);
-  }
-
-  function sortedReceivables(rows: ReceivableRowDto[]): ReceivableRowDto[] {
-    return stableSortRows(rows, (left, right) => {
-      if (left.overdueDays !== right.overdueDays) {
-        return right.overdueDays - left.overdueDays;
-      }
-
-      const dueDateOrder = compareDates(left.expectedDate, right.expectedDate);
-      if (dueDateOrder !== 0) {
-        return dueDateOrder;
-      }
-
-      const amountOrder = compareAmountStrDesc(left.amountStr, right.amountStr);
-      if (amountOrder !== 0) {
-        return amountOrder;
-      }
-
-      return compareStrings(left.docNumber, right.docNumber);
-    });
-  }
-
-  function sortedPayables(rows: PayableRowDto[]): PayableRowDto[] {
-    return stableSortRows(rows, (left, right) => {
-      if (left.overdueDays !== right.overdueDays) {
-        return right.overdueDays - left.overdueDays;
-      }
-
-      const dueDateOrder = compareDates(left.dueDate, right.dueDate);
-      if (dueDateOrder !== 0) {
-        return dueDateOrder;
-      }
-
-      const amountOrder = compareAmountStrDesc(left.amountStr, right.amountStr);
-      if (amountOrder !== 0) {
-        return amountOrder;
-      }
-
-      return compareStrings(left.title, right.title);
-    });
-  }
-
-  function dueSoonReceivables(rows: ReceivableRowDto[]): number {
-    return rows.filter((row) => {
-      const days = daysUntil(row.expectedDate);
-      return days !== null && days >= 0 && days <= 7;
-    }).length;
-  }
-
-  function dueSoonPayables(rows: PayableRowDto[]): number {
-    return rows.filter((row) => {
-      const days = daysUntil(row.dueDate);
-      return days !== null && days >= 0 && days <= 7;
-    }).length;
-  }
-
-  function uniqueCounterpartiesCount(rows: Array<{ counterparty: string }>): number {
-    return new Set(rows.map((row) => row.counterparty || "—")).size;
-  }
-
-  function getKpiCards(tab: ReportsTab | undefined): ReportKpiCard[] {
-    if (tab === "pnl") {
-      return [
-        {
-          label: "Дохід за період",
-          value: $reports.screen?.summary.pnlIncomeStr ?? "0,00 грн",
-          tone: "accent"
-        },
-        {
-          label: "Витрати за період",
-          value: $reports.screen?.summary.pnlExpenseStr ?? "0,00 грн"
-        },
-        {
-          label: "Фінансовий результат за період",
-          value: $reports.screen?.summary.pnlNetResultStr ?? "0,00 грн",
-          tone: "warning"
-        },
-        {
-          label: "Категорій у звіті",
-          value: `${$reports.screen?.pnlRows?.length ?? 0}`
-        }
-      ];
-    }
-
-    if (tab === "receivables") {
-      const rows = sortedReceivables($reports.screen?.receivablesRows ?? []);
-      return [
-        {
-          label: "Очікуємо отримати",
-          value: $reports.screen?.summary.receivablesTotalStr ?? "0,00 грн",
-          tone: "accent"
-        },
-        {
-          label: "Прострочені оплати",
-          value: `${overdueReceivables(rows).length}`,
-          tone: overdueReceivables(rows).length > 0 ? "danger" : "default"
-        },
-        {
-          label: "Оплати цього тижня",
-          value: `${dueSoonReceivables(rows)}`,
-          tone: dueSoonReceivables(rows) > 0 ? "warning" : "default"
-        },
-        {
-          label: "Контрагентів у роботі",
-          value: `${uniqueCounterpartiesCount(rows)}`
-        }
-      ];
-    }
-
-    if (tab === "payables") {
-      const rows = sortedPayables($reports.screen?.payablesRows ?? []);
-      return [
-        {
-          label: "Заплановано до оплати",
-          value: $reports.screen?.summary.payablesTotalStr ?? "0,00 грн",
-          tone: "accent"
-        },
-        {
-          label: "Прострочені виплати",
-          value: `${overduePayables(rows).length}`,
-          tone: overduePayables(rows).length > 0 ? "danger" : "default"
-        },
-        {
-          label: "Виплати цього тижня",
-          value: `${dueSoonPayables(rows)}`,
-          tone: dueSoonPayables(rows) > 0 ? "warning" : "default"
-        },
-        {
-          label: "Регулярних платежів",
-          value: `${rows.filter((row) => row.recurrence && row.recurrence !== "—").length}`
-        }
-      ];
-    }
-
-    return [
-      {
-        label: "Залишок на початок",
-        value: $reports.screen?.summary.openingBalanceStr ?? "0,00 грн"
-      },
-      {
-        label: "Надходження за період",
-        value: $reports.screen?.summary.incomeStr ?? "0,00 грн",
-        tone: "accent"
-      },
-      {
-        label: "Виплати за період",
-        value: $reports.screen?.summary.expenseStr ?? "0,00 грн"
-      },
-      {
-        label: "Залишок на кінець",
-        value: $reports.screen?.summary.closingBalanceStr ?? "0,00 грн",
-        tone: "warning"
-      }
-    ];
   }
 
   function onToggleCounterparty(row: TopCounterpartyRowDto) {
@@ -327,63 +122,6 @@
   function onResetAllFilters() {
     void reports.resetFilters();
   }
-
-  function getTopCounterpartiesSubtitle(tab: string | undefined): string {
-    if (tab === "receivables") {
-      return "Сортовано за сумою дебіторки. % — частка контрагента від лідера, поряд — сума до отримання за період.";
-    }
-    if (tab === "payables") {
-      return "Сортовано за сумою кредиторки. % — частка від лідера, поряд — сума до оплати за період.";
-    }
-    if (tab === "pnl") {
-      return "Сортовано за внеском у фінрезультат. % — частка від лідера, поряд — чистий результат.";
-    }
-    return "Сортовано за загальним рухом грошей. % — частка від лідера, поряд — чистий рух.";
-  }
-
-  function getActiveRowsCount(screen: ReportsScreenDto | null): number {
-    if (!screen) {
-      return 0;
-    }
-    if (screen.filter.tab === "pnl") {
-      return screen.pnlRows?.length ?? 0;
-    }
-    if (screen.filter.tab === "receivables") {
-      return screen.receivablesRows.length;
-    }
-    if (screen.filter.tab === "payables") {
-      return screen.payablesRows.length;
-    }
-    return screen.bankRows.length;
-  }
-
-  function getContextText(screen: ReportsScreenDto | null): string {
-    const selected = screen?.selectedCounterparty;
-    const tab = screen?.filter.tab;
-    if (!selected) {
-      if (tab === "receivables") return "Показано: загальна дебіторка по всіх контрагентах";
-      if (tab === "payables") return "Показано: загальна кредиторка по всіх контрагентах";
-      if (tab === "pnl") return "Показано: загальний фінрезультат по всіх контрагентах";
-      return "Показано: загальний рух грошей по всіх контрагентах";
-    }
-    if (tab === "receivables") return `Показано: дебіторка по контрагенту ${selected.name}`;
-    if (tab === "payables") return `Показано: кредиторка по контрагенту ${selected.name}`;
-    if (tab === "pnl") return `Показано: фінрезультат по контрагенту ${selected.name}`;
-    return `Показано: рух грошей по контрагенту ${selected.name}`;
-  }
-
-  function hasActiveRows(tab: ReportsTab | undefined): boolean {
-    if (tab === "pnl") {
-      return ($reports.screen?.pnlRows?.length ?? 0) > 0;
-    }
-    if (tab === "receivables") {
-      return ($reports.screen?.receivablesRows?.length ?? 0) > 0;
-    }
-    if (tab === "payables") {
-      return ($reports.screen?.payablesRows?.length ?? 0) > 0;
-    }
-    return ($reports.screen?.bankRows?.length ?? 0) > 0;
-  }
 </script>
 
 <section
@@ -397,25 +135,13 @@
       <p>{getReportHeadline($reports.screen?.filter.tab)}</p>
     </div>
     <div class="panel-actions reports-export-actions">
-      <button
-        class="btn-secondary"
-        on:click={() => reports.exportExcelAndOpen()}
-        disabled={$reports.loading}
-      >
+      <button class="btn-secondary" on:click={() => reports.exportExcelAndOpen()} disabled={$reports.loading}>
         Відкрити Excel
       </button>
-      <button
-        class="btn-ghost"
-        on:click={() => reports.exportExcel()}
-        disabled={$reports.loading}
-      >
+      <button class="btn-ghost" on:click={() => reports.exportExcel()} disabled={$reports.loading}>
         Експортувати Excel
       </button>
-      <button
-        class="btn-ghost"
-        on:click={() => reports.exportCsv()}
-        disabled={$reports.loading}
-      >
+      <button class="btn-ghost" on:click={() => reports.exportCsv()} disabled={$reports.loading}>
         Експортувати CSV
       </button>
     </div>
@@ -423,66 +149,30 @@
 
   <div class="reports-filters">
     <div class="task-tabs" role="tablist" aria-label="Режими звіту">
-      <button
-        bind:this={reportTabButtons[0]}
-        class:active={$reports.screen?.filter.tab === "bank"}
-        id={getTabId("bank")}
-        role="tab"
-        aria-selected={$reports.screen?.filter.tab === "bank"}
-        aria-controls={reportsTabPanelId}
-        tabindex={$reports.screen?.filter.tab === "bank" ? 0 : -1}
-        on:click={() => onReportsTabChange("bank")}
-        on:keydown={(event) => handleReportTabKeydown(event, 0)}
-      >
-        Гроші на рахунках і в русі
-      </button>
-      <button
-        bind:this={reportTabButtons[1]}
-        class:active={$reports.screen?.filter.tab === "pnl"}
-        id={getTabId("pnl")}
-        role="tab"
-        aria-selected={$reports.screen?.filter.tab === "pnl"}
-        aria-controls={reportsTabPanelId}
-        tabindex={$reports.screen?.filter.tab === "pnl" ? 0 : -1}
-        on:click={() => onReportsTabChange("pnl")}
-        on:keydown={(event) => handleReportTabKeydown(event, 1)}
-      >
-        Дохід, витрати і результат
-      </button>
-      <button
-        bind:this={reportTabButtons[2]}
-        class:active={$reports.screen?.filter.tab === "receivables"}
-        id={getTabId("receivables")}
-        role="tab"
-        aria-selected={$reports.screen?.filter.tab === "receivables"}
-        aria-controls={reportsTabPanelId}
-        tabindex={$reports.screen?.filter.tab === "receivables" ? 0 : -1}
-        on:click={() => onReportsTabChange("receivables")}
-        on:keydown={(event) => handleReportTabKeydown(event, 2)}
-      >
-        Нам мають заплатити
-      </button>
-      <button
-        bind:this={reportTabButtons[3]}
-        class:active={$reports.screen?.filter.tab === "payables"}
-        id={getTabId("payables")}
-        role="tab"
-        aria-selected={$reports.screen?.filter.tab === "payables"}
-        aria-controls={reportsTabPanelId}
-        tabindex={$reports.screen?.filter.tab === "payables" ? 0 : -1}
-        on:click={() => onReportsTabChange("payables")}
-        on:keydown={(event) => handleReportTabKeydown(event, 3)}
-      >
-        Ми маємо заплатити
-      </button>
+      {#each reportTabs as tab, index}
+        <button
+          bind:this={reportTabButtons[index]}
+          class:active={$reports.screen?.filter.tab === tab.id}
+          id={getTabId(tab.id)}
+          role="tab"
+          aria-selected={$reports.screen?.filter.tab === tab.id}
+          aria-controls={reportsTabPanelId}
+          tabindex={$reports.screen?.filter.tab === tab.id ? 0 : -1}
+          on:click={() => onReportsTabChange(tab.id)}
+          on:keydown={(event) => handleReportTabKeydown(event, index)}
+        >
+          {tab.label}
+        </button>
+      {/each}
     </div>
 
     <div class="reports-filter-grid">
       <label>
         Що показати у звіті
         <select value={$reports.screen?.filter.scope ?? "active"} on:change={onReportsScopeChange}>
-          <option value="active">Лише активну компанію</option>
-          <option value="all">Усі компанії</option>
+          {#each reportScopeOptions as option}
+            <option value={option.value}>{option.label}</option>
+          {/each}
         </select>
       </label>
       <label>
@@ -516,7 +206,7 @@
   </div>
 
   <div class="reports-kpis" data-testid="reports-focus-primary">
-    {#each getKpiCards($reports.screen?.filter.tab) as card}
+    {#each getReportKpiCards($reports.screen, $reports.screen?.filter.tab) as card}
       <div class="task-kpi-card reports-kpi-card" data-tone={card.tone ?? "default"}>
         <strong>{card.value}</strong>
         <span>{card.label}</span>
@@ -528,19 +218,19 @@
     <div class="reports-top-counterparties-header">
       <div>
         <span class="reports-focus-label">Топ контрагентів</span>
-        <p class="reports-top-counterparties-subtitle">{getTopCounterpartiesSubtitle($reports.screen?.filter.tab)}</p>
+        <p class="reports-top-counterparties-subtitle">
+          {getReportTopCounterpartiesSubtitle($reports.screen?.filter.tab)}
+        </p>
       </div>
       {#if $reports.screen?.selectedCounterparty}
         <div class="reports-top-counterparties-focus" data-testid="reports-top-counterparties-focus">
-          <span class="reports-top-counterparties-focus-name">Фокус: {$reports.screen.selectedCounterparty.name}</span>
-          <span class="reports-top-counterparties-focus-meta">
-            У таблиці нижче: {getActiveRowsCount($reports.screen)}
+          <span class="reports-top-counterparties-focus-name">
+            Фокус: {$reports.screen.selectedCounterparty.name}
           </span>
-          <button
-            class="btn-secondary reports-top-counterparties-reset"
-            type="button"
-            on:click={onResetCounterpartyFocus}
-          >
+          <span class="reports-top-counterparties-focus-meta">
+            У таблиці нижче: {getReportActiveRowsCount($reports.screen)}
+          </span>
+          <button class="btn-secondary reports-top-counterparties-reset" type="button" on:click={onResetCounterpartyFocus}>
             Скинути фокус
           </button>
         </div>
@@ -574,10 +264,9 @@
                   <span class="reports-top-cp-tag">без картки</span>
                 {/if}
               </span>
-              <span
-                class="reports-top-cp-amount money-value"
-                data-negative={isFormattedMoneyNegative(row.primaryAmountStr)}
-              >{row.primaryAmountStr}</span>
+              <span class="reports-top-cp-amount money-value" data-negative={isFormattedMoneyNegative(row.primaryAmountStr)}>
+                {row.primaryAmountStr}
+              </span>
               <span class="reports-top-cp-share">{row.sharePercent}%</span>
               <span class="reports-top-cp-secondary">{row.secondaryLabel}: {row.secondaryValue}</span>
               <div
@@ -606,7 +295,7 @@
     {/if}
   </div>
 
-  <p class="reports-context-text">{getContextText($reports.screen)}</p>
+  <p class="reports-context-text">{getReportContextText($reports.screen)}</p>
 
   {#if $reports.message}
     <div class="status-banner is-success" role="status" aria-live="polite">
@@ -636,7 +325,7 @@
     >
       <SkeletonRow count={6} />
     </div>
-  {:else if !hasActiveRows($reports.screen?.filter.tab)}
+  {:else if !hasReportActiveRows($reports.screen, $reports.screen?.filter.tab)}
     <div
       class="empty-state-card reports-empty-state"
       data-testid="reports-empty-state"
@@ -739,7 +428,7 @@
             <span class="reports-cell-date">Очікувана оплата</span>
             <span class="reports-cell-status">Статус строку</span>
           </div>
-          {#each sortedReceivables($reports.screen?.receivablesRows ?? []) as row}
+          {#each $reports.screen?.receivablesRows ?? [] as row}
             <div
               class="reports-table-row reports-table-row-receivables"
               class:reports-table-row-overdue={row.overdueDays > 0}
@@ -777,7 +466,7 @@
             <span class="reports-cell-status">Статус строку</span>
             <span class="reports-cell-title">Повторюваність</span>
           </div>
-          {#each sortedPayables($reports.screen?.payablesRows ?? []) as row}
+          {#each $reports.screen?.payablesRows ?? [] as row}
             <div
               class="reports-table-row reports-table-row-payables"
               class:reports-table-row-overdue={row.overdueDays > 0}

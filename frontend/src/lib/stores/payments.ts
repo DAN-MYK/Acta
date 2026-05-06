@@ -24,6 +24,10 @@ import {
   isEditorFormDirty,
   type CloseEditorResult
 } from "../editorDirty";
+import {
+  PAYMENT_MANUAL_MATCH_COPY,
+  PAYMENT_RECONCILE_MESSAGES
+} from "../config/ui";
 import { formatMinorMoney, parseMoneyToMinor } from "../money";
 import {
   filterCalendarEvents,
@@ -690,19 +694,7 @@ function createPaymentsStore() {
         const preview = await paymentMatchPreview({ paymentId: id });
         const selectedCandidateId = preview.candidates[0]?.documentId ?? preview.autoMatch?.documentId ?? null;
 
-        let message = "Підберіть варіант звірки для платежу.";
-        if (preview.decisionKind === "exact") {
-          message = "Знайдено рекомендовану звірку. Перевірте та підтвердьте автозіставлення.";
-        } else if (preview.decisionKind === "ambiguous") {
-          message = "Знайдено кілька кандидатів. Цей платіж потребує уваги, а ручне підтвердження буде наступним кроком.";
-        } else if (preview.decisionKind === "none") {
-          message = "Точний кандидат не знайдено. Перевірте платіж або підготуйте ручне звіряння.";
-        }
-
-        if (preview.decisionKind === "split") {
-          message =
-            "Знайдено рекомендований розподіл платежу між кількома документами. Перевірте алокації перед підтвердженням.";
-        }
+        const message = PAYMENT_RECONCILE_MESSAGES[preview.decisionKind];
 
         update((state) => ({
           ...state,
@@ -740,7 +732,7 @@ function createPaymentsStore() {
       const preview = get({ subscribe }).matchPreview;
 
       if (!preview?.autoMatch) {
-        const message = "Немає рекомендованої звірки для автоматичного підтвердження.";
+        const message = PAYMENT_MANUAL_MATCH_COPY.missingAutoMatch;
         update((state) => ({ ...state, message, error: message }));
         return { ok: false, message };
       }
@@ -770,14 +762,14 @@ function createPaymentsStore() {
       const { matchPreview, selectedCandidateId } = get({ subscribe });
 
       if (!matchPreview || matchPreview.decisionKind !== "ambiguous") {
-        const message = "Ручне підтвердження доступне лише для preview з кількома кандидатами.";
+        const message = PAYMENT_MANUAL_MATCH_COPY.previewCandidateUnavailable;
         update((state) => ({ ...state, message, error: message }));
         return { ok: false, message };
       }
 
       const candidate = getSelectedPreviewCandidate(matchPreview, selectedCandidateId);
       if (!candidate) {
-        const message = "Виберіть кандидата для підтвердження звірки.";
+        const message = PAYMENT_MANUAL_MATCH_COPY.previewCandidateMissing;
         update((state) => ({ ...state, message, error: message }));
         return { ok: false, message };
       }
@@ -817,7 +809,7 @@ function createPaymentsStore() {
         return {
           ...state,
           selectedCandidateId: documentId,
-          message: "Кандидата вибрано. Ручне підтвердження буде наступним кроком."
+          message: PAYMENT_MANUAL_MATCH_COPY.previewCandidateSelected
         };
       });
     },
@@ -831,8 +823,8 @@ function createPaymentsStore() {
           loading: false,
           error: null,
           message: manualPicker.candidates.length
-            ? "Оберіть документ зі списку або звузьте пошук."
-            : "За цим запитом кандидатів не знайдено.",
+            ? PAYMENT_MANUAL_MATCH_COPY.manualSearchClosed
+            : PAYMENT_MANUAL_MATCH_COPY.manualPickerClosed,
           manualPicker: toManualPickerState(manualPicker),
           splitDraft:
             state.splitDraft?.paymentId === paymentId
@@ -842,8 +834,8 @@ function createPaymentsStore() {
         return {
           ok: true,
           message: manualPicker.candidates.length
-            ? "Кандидатів для ручної звірки оновлено."
-            : "За цим запитом кандидатів не знайдено."
+            ? PAYMENT_MANUAL_MATCH_COPY.manualSearchClosed
+            : PAYMENT_MANUAL_MATCH_COPY.manualPickerClosed
         };
       } catch (error) {
         const message = String(error);
@@ -882,7 +874,7 @@ function createPaymentsStore() {
     async searchManualMatchCandidates(): Promise<MutationResultDto> {
       const manualPicker = get({ subscribe }).manualPicker;
       if (!manualPicker) {
-        const message = "Спершу відкрийте ручний пошук для цього платежу.";
+        const message = PAYMENT_MANUAL_MATCH_COPY.manualSearchClosed;
         update((state) => ({ ...state, message, error: message }));
         return { ok: false, message };
       }
@@ -902,7 +894,7 @@ function createPaymentsStore() {
             ...state.manualPicker,
             selectedCandidateId: documentId
           },
-          message: "Вибрано документ для ручного звіряння."
+          message: PAYMENT_MANUAL_MATCH_COPY.manualCandidateSelected
         };
       });
     },
@@ -912,26 +904,26 @@ function createPaymentsStore() {
       const candidate = getSelectedManualPickerCandidate(manualPicker);
 
       if (!manualPicker || !splitDraft) {
-        const message = "Спершу відкрийте ручний picker для розподілу платежу.";
+        const message = PAYMENT_MANUAL_MATCH_COPY.splitPickerClosed;
         update((state) => ({ ...state, message, error: message }));
         return { ok: false, message };
       }
 
       if (!candidate) {
-        const message = "Виберіть документ, який треба додати до розподілу.";
+        const message = PAYMENT_MANUAL_MATCH_COPY.splitCandidateMissing;
         update((state) => ({ ...state, message, error: message }));
         return { ok: false, message };
       }
 
       if (splitDraft.allocations.some((allocation) => allocation.documentId === candidate.documentId)) {
-        const message = "Цей документ уже додано до розподілу.";
+        const message = PAYMENT_MANUAL_MATCH_COPY.splitCandidateDuplicate;
         update((state) => ({ ...state, message, error: message }));
         return { ok: false, message };
       }
 
       const remainingAmount = parseAmountMinor(splitDraft.remainingAmountStr);
       if (remainingAmount <= 0n) {
-        const message = "Увесь платіж уже розподілено. За потреби змініть суми в чернетці.";
+        const message = PAYMENT_MANUAL_MATCH_COPY.splitFullyAllocated;
         update((state) => ({ ...state, message, error: message }));
         return { ok: false, message };
       }
@@ -959,12 +951,12 @@ function createPaymentsStore() {
               }
             ]
           }),
-          message: "Документ додано до чернетки розподілу.",
+          message: PAYMENT_MANUAL_MATCH_COPY.splitDraftUpdated,
           error: null
         };
       });
 
-      return { ok: true, message: "Документ додано до розподілу" };
+      return { ok: true, message: PAYMENT_MANUAL_MATCH_COPY.splitCandidateAdded };
     },
 
     updateSplitAllocationAmount(documentId: string, amount: string) {
@@ -982,8 +974,8 @@ function createPaymentsStore() {
         if (parsedNext === null) {
           return {
             ...state,
-            message: "Сума розподілу має бути числом у форматі 0,00.",
-            error: "Сума розподілу має бути числом у форматі 0,00."
+            message: PAYMENT_MANUAL_MATCH_COPY.splitAmountInvalid,
+            error: PAYMENT_MANUAL_MATCH_COPY.splitAmountInvalid
           };
         }
 
@@ -997,24 +989,24 @@ function createPaymentsStore() {
         if (nextAmount <= 0n) {
           return {
             ...state,
-            message: "Сума розподілу має бути більшою за нуль.",
-            error: "Сума розподілу має бути більшою за нуль."
+            message: PAYMENT_MANUAL_MATCH_COPY.splitAmountTooSmall,
+            error: PAYMENT_MANUAL_MATCH_COPY.splitAmountTooSmall
           };
         }
 
         if (nextAmount > documentOpenAmount) {
           return {
             ...state,
-            message: "Сума розподілу не може перевищувати залишок документа.",
-            error: "Сума розподілу не може перевищувати залишок документа."
+            message: PAYMENT_MANUAL_MATCH_COPY.splitAmountAboveDocument,
+            error: PAYMENT_MANUAL_MATCH_COPY.splitAmountAboveDocument
           };
         }
 
         if (otherAllocationsTotal + nextAmount > paymentAmount) {
           return {
             ...state,
-            message: "Сума розподілу не може перевищувати залишок платежу.",
-            error: "Сума розподілу не може перевищувати залишок платежу."
+            message: PAYMENT_MANUAL_MATCH_COPY.splitAmountAbovePayment,
+            error: PAYMENT_MANUAL_MATCH_COPY.splitAmountAbovePayment
           };
         }
 
@@ -1047,7 +1039,7 @@ function createPaymentsStore() {
               (allocation) => allocation.documentId !== documentId
             )
           }),
-          message: "Документ прибрано з чернетки розподілу.",
+          message: PAYMENT_MANUAL_MATCH_COPY.splitDraftRemoved,
           error: null
         };
       });
@@ -1065,13 +1057,13 @@ function createPaymentsStore() {
       const candidate = getSelectedManualPickerCandidate(manualPicker);
 
       if (!manualPicker) {
-        const message = "Ручний picker ще не відкрито.";
+        const message = PAYMENT_MANUAL_MATCH_COPY.manualPickerClosed;
         update((state) => ({ ...state, message, error: message }));
         return { ok: false, message };
       }
 
       if (!candidate) {
-        const message = "Виберіть документ для ручного звіряння.";
+        const message = PAYMENT_MANUAL_MATCH_COPY.manualPickerCandidateMissing;
         update((state) => ({ ...state, message, error: message }));
         return { ok: false, message };
       }
@@ -1115,19 +1107,19 @@ function createPaymentsStore() {
       });
 
       if (!splitDraft) {
-        const message = "Немає чернетки розподілу для підтвердження.";
+        const message = PAYMENT_MANUAL_MATCH_COPY.splitDraftMissing;
         update((state) => ({ ...state, message, error: message }));
         return errorResult(message);
       }
 
       if (splitDraft.allocations.length === 0) {
-        const message = "Додайте хоча б один документ до розподілу.";
+        const message = PAYMENT_MANUAL_MATCH_COPY.splitDraftEmpty;
         update((state) => ({ ...state, message, error: message }));
         return errorResult(message);
       }
 
       if (parseAmountMinor(splitDraft.remainingAmountStr) !== 0n) {
-        const message = "Розподіл ще не завершено. Закрийте залишок платежу або зменште суму.";
+        const message = PAYMENT_MANUAL_MATCH_COPY.splitDraftIncomplete;
         update((state) => ({ ...state, message, error: message }));
         return errorResult(message);
       }
