@@ -85,9 +85,26 @@ pub struct DocumentItemDto {
 }
 ```
 
-**Important:** `DocumentItemDto` is constructed in multiple places in `api.rs`, not only in `documents_list`. The dashboard and counterparties mappers also build `DocumentItemDto` instances. All construction sites must set the new `direction` field, populated from the corresponding `row.direction.as_str()`.
+`DocumentItemDto` is constructed in multiple places in `api.rs` — not only in `documents_list`, but also in dashboard and counterparties mappers. Every construction site must set `direction` from `row.direction.as_str()`.
 
-#### 3. Create flow — `CreateDocumentDraftRequest` + `direction`
+#### 3. `DocumentDraftFormDto` — add `direction` field
+
+```rust
+// src/tauri_api/documents/dto.rs
+pub struct DocumentDraftFormDto {
+    // ... existing fields ...
+    pub direction: String,  // "outgoing" | "incoming"
+}
+```
+
+`DocumentDraftFormDto` is constructed in **seven** places in `api.rs`:
+- `document_open` for acts (line 485), invoices (line 512), waybills (line 539)
+- `create_draft_form` for acts (line 589), invoices (line 620), waybills (line 650)
+- `document_chain_create_draft` for acts (line 1227), invoices (line 1258), waybills (line 1288)
+
+Each must populate `direction` from the corresponding model field (`act.direction.as_str()`, etc.).
+
+#### 4. Create flow — `CreateDocumentDraftRequest` + `direction`
 
 ```rust
 pub struct CreateDocumentDraftRequest {
@@ -97,23 +114,33 @@ pub struct CreateDocumentDraftRequest {
 }
 ```
 
-The store's `create()` derives direction from `activeTab` (falls back to `"outgoing"` when tab is `"all"`) and passes it to the invoke. The backend parses the string to `DocumentDirection` and passes it to `NewAct` / `NewInvoice` / `NewWaybill`.
+Two callers must be updated:
 
-#### 4. Save flow — direction must persist end-to-end
+**Documents store** (`documents.ts`): `create()` derives direction from `activeTab` (falls back to `"outgoing"` when tab is `"all"`) and passes it to the invoke.
+
+**Shell / command palette** (`src/tauri_api/shell.rs`, line 292): No tab context is available here. Policy: always default to `"outgoing"`. The palette creates documents from search context where direction is unknown, so Outgoing is the safer default. Update `CreateDocumentDraftRequest { ..., direction: "outgoing".to_string() }`.
+
+In `create_draft_form` (api.rs), the `direction` parameter replaces the hardcoded `DocumentDirection::Outgoing` in all three `New*` struct constructions.
+
+#### 5. Save flow — direction must persist end-to-end
 
 Currently `document_save` does not update direction. Full chain of changes required:
 
-**`DocumentDraftFormDto`** (dto.rs): add `direction: String` field.
-
-**`SaveDocumentRequest`** already embeds `DocumentDraftFormDto` as `form`, so direction travels with it automatically.
+`SaveDocumentRequest` already embeds `DocumentDraftFormDto` as `form`, so `direction` travels with it automatically once step 3 is done.
 
 **Domain update structs** (`src/models/`): add `direction: DocumentDirection` to `UpdateAct`, `UpdateInvoice`, `UpdateWaybill`.
 
 **SQL UPDATE statements** (`src/db/acts.rs:682`, `src/db/invoices.rs`, `src/db/waybills.rs`): add `direction = $N` to each `SET` clause.
 
-**`document_save` in api.rs (~line 951)**: parse `req.form.direction` → `DocumentDirection`, include it in the `UpdateAct` / `UpdateInvoice` / `UpdateWaybill` struct passed to the DB call.
+**`document_save` in api.rs (~line 951)**: parse `req.form.direction` → `DocumentDirection`, include it in the `UpdateAct` / `UpdateInvoice` / `UpdateWaybill` struct.
 
-#### 5. TypeScript types (`frontend/src/lib/types.ts`)
+#### 6. Chain draft direction — inherit from source (not hardcoded)
+
+Currently `document_chain_create_draft` hardcodes `DocumentDirection::Outgoing` for all three document types (api.rs lines 1216, 1248, 1279). This is wrong — a chain draft should inherit the direction of its source document.
+
+Fix: load the source document's direction before constructing the chain and pass it through to `NewAct` / `NewInvoice` / `NewWaybill`. The source direction is already available from the DB query that fetches the source document earlier in `document_chain_create_draft`.
+
+#### 7. TypeScript types (`frontend/src/lib/types.ts`)
 
 ```ts
 export type DocumentDirection = "outgoing" | "incoming";
@@ -122,7 +149,7 @@ export type DocumentDirection = "outgoing" | "incoming";
 - Add `direction: DocumentDirection` to `DocumentItemDto`
 - Add `direction: DocumentDirection` to `DocumentDraftFormDto`
 
-#### 6. Documents store (`frontend/src/lib/stores/documents.ts`)
+#### 8. Documents store (`frontend/src/lib/stores/documents.ts`)
 
 - Add state: `activeTab: "all" | "outgoing" | "incoming"` (default `"all"`)
 - Add state: `kindFilter: DocumentKind | null` (default `null`)
@@ -131,16 +158,10 @@ export type DocumentDirection = "outgoing" | "incoming";
 - `load()`: passes `direction` and `kind` to `documentsList` invoke
 - `create(counterpartyId, kind)`: derives direction from `activeTab`
 
-#### 7. DocumentsScreen UI (`frontend/src/lib/screens/DocumentsScreen.svelte`)
+#### 9. DocumentsScreen UI (`frontend/src/lib/screens/DocumentsScreen.svelte`)
 
 - Tab bar: Всі / Вихідні / Вхідні → calls `documents.setTab()`
 - Kind chips: Всі / Акти / Рахунки / Накладні → calls `documents.setKindFilter()` (list filter only)
 - Create bar: retains existing kind `<select>` (`createKind`); button label becomes `"Створити {kind} ({direction})"`
 - Document row: direction badge ↑/↓ alongside existing status chip
 - Editor: radio toggle Вихідний/Вхідний → `documents.updateFormField("direction", value)`
-
-## Out of scope
-
-- Separate numbering sequences per direction — not requested
-- Automatic direction detection from BAS import — already handled by existing import logic
-- Chain document direction inheritance — chain drafts inherit direction from the source document in the backend; no UI change needed
