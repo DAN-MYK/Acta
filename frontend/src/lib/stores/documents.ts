@@ -20,7 +20,7 @@ import {
   isEditorFormDirty,
   type CloseEditorResult
 } from "../editorDirty";
-import type { DocumentChainDto, DocumentEditorDto, DocumentsListDto } from "../types";
+import type { DocumentChainDto, DocumentEditorDto, DocumentKind, DocumentsListDto } from "../types";
 
 type EditorPayload = Pick<DocumentEditorDto, "form" | "items">;
 
@@ -40,6 +40,8 @@ interface DocumentsState {
   error: string | null;
   message: string | null;
   query: string;
+  activeTab: "all" | "outgoing" | "incoming";
+  kindFilter: DocumentKind | null;
 }
 
 const initialState: DocumentsState = {
@@ -53,7 +55,9 @@ const initialState: DocumentsState = {
   loading: false,
   error: null,
   message: null,
-  query: ""
+  query: "",
+  activeTab: "all",
+  kindFilter: null
 };
 
 async function loadEditorAndChain(docId: string): Promise<{
@@ -67,6 +71,20 @@ async function loadEditorAndChain(docId: string): Promise<{
 function createDocumentsStore() {
   const { subscribe, update } = writable<DocumentsState>(initialState);
 
+  function tabToDirection(tab: "all" | "outgoing" | "incoming"): "outgoing" | "incoming" | undefined {
+    if (tab === "outgoing") return "outgoing";
+    if (tab === "incoming") return "incoming";
+    return undefined;
+  }
+
+  async function reloadList(state: DocumentsState): Promise<DocumentsListDto> {
+    return documentsList(
+      state.query,
+      tabToDirection(state.activeTab),
+      state.kindFilter ?? undefined
+    );
+  }
+
   return {
     subscribe,
     async load(query = "") {
@@ -79,7 +97,8 @@ function createDocumentsStore() {
       }));
 
       try {
-        const list = await documentsList(query);
+        const snap = get({ subscribe });
+        const list = await reloadList({ ...snap, query });
         update((state) => ({
           ...state,
           list,
@@ -119,7 +138,7 @@ function createDocumentsStore() {
       try {
         const [{ editor, chain }, list] = await Promise.all([
           loadEditorAndChain(documentId),
-          documentsList(snapshot.query)
+          reloadList(snapshot)
         ]);
         update((state) => ({
           ...state,
@@ -231,11 +250,14 @@ function createDocumentsStore() {
     },
     async create(counterpartyId: string, kind: string) {
       update((state) => ({ ...state, loading: true, error: null, message: null }));
+      const snap = get({ subscribe });
+      const direction: "outgoing" | "incoming" =
+        snap.activeTab === "incoming" ? "incoming" : "outgoing";
 
       try {
         const [editor, list] = await Promise.all([
-          documentCreateDraft(counterpartyId, kind),
-          documentsList(get({ subscribe }).query)
+          documentCreateDraft(counterpartyId, kind, direction),
+          reloadList(snap)
         ]);
         const chain = await documentChainGet(editor.form.id);
         update((state) => ({
@@ -326,7 +348,7 @@ function createDocumentsStore() {
         const response = await documentSave(snapshot.editor.form, snapshot.editor.items);
         const [{ editor, chain }, list] = await Promise.all([
           loadEditorAndChain(response.documentId),
-          documentsList(snapshot.query)
+          reloadList(snapshot)
         ]);
         update((state) => ({
           ...state,
@@ -354,7 +376,7 @@ function createDocumentsStore() {
         const response = await documentAdvanceStatus(documentId);
         const [{ editor, chain }, list] = await Promise.all([
           loadEditorAndChain(documentId),
-          documentsList(snapshot.query)
+          reloadList(snapshot)
         ]);
         update((state) => ({
           ...state,
@@ -454,7 +476,7 @@ function createDocumentsStore() {
 
       try {
         const response = await documentDelete(documentId);
-        const list = await documentsList(snapshot.query);
+        const list = await reloadList(snapshot);
         update((state) => ({
           ...state,
           list,
@@ -481,7 +503,7 @@ function createDocumentsStore() {
         const editor = await documentChainCreateDraft(sourceId, targetKind);
         const [chain, list] = await Promise.all([
           documentChainGet(editor.form.id),
-          documentsList(snapshot.query)
+          reloadList(snapshot)
         ]);
         update((state) => ({
           ...state,
@@ -506,7 +528,7 @@ function createDocumentsStore() {
 
       try {
         const response = await documentsBulkDelete(snapshot.selectedIds);
-        const list = await documentsList(snapshot.query);
+        const list = await reloadList(snapshot);
         const deletedCurrent = snapshot.editor
           ? snapshot.selectedIds.includes(snapshot.editor.form.id)
           : false;
@@ -535,7 +557,7 @@ function createDocumentsStore() {
 
       try {
         const response = await documentsBulkAdvanceStatus(snapshot.selectedIds);
-        const list = await documentsList(snapshot.query);
+        const list = await reloadList(snapshot);
         const reopenedCurrent = snapshot.editor
           ? snapshot.selectedIds.includes(snapshot.editor.form.id)
           : false;
@@ -564,6 +586,24 @@ function createDocumentsStore() {
       } catch (error) {
         update((state) => ({ ...state, loading: false, error: String(error) }));
       }
+    },
+    setTab(tab: "all" | "outgoing" | "incoming") {
+      update((state) => ({ ...state, activeTab: tab, loading: true, error: null }));
+      const snap = get({ subscribe });
+      reloadList(snap).then((list) => {
+        update((state) => ({ ...state, list, loading: false }));
+      }).catch((error) => {
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      });
+    },
+    setKindFilter(kind: DocumentKind | null) {
+      update((state) => ({ ...state, kindFilter: kind, loading: true, error: null }));
+      const snap = get({ subscribe });
+      reloadList(snap).then((list) => {
+        update((state) => ({ ...state, list, loading: false }));
+      }).catch((error) => {
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      });
     }
   };
 }
