@@ -1238,7 +1238,7 @@ pub async fn document_chain_create_draft(
                     counterparty_id: source.counterparty_id,
                     contract_id: None,
                     category_id: None,
-                    direction: DocumentDirection::Outgoing,
+                    direction: source.direction,
                     date: source.date,
                     expected_payment_date: None,
                     status: ActStatus::Draft,
@@ -1258,7 +1258,7 @@ pub async fn document_chain_create_draft(
                 number,
                 date: date_to_str(source.date),
                 notes: visible_notes.clone(),
-                direction: DocumentDirection::Outgoing.as_str().to_string(),
+                direction: source.direction.as_str().to_string(),
             }
         }
         "invoice" => {
@@ -1271,7 +1271,7 @@ pub async fn document_chain_create_draft(
                     counterparty_id: source.counterparty_id,
                     contract_id: None,
                     category_id: None,
-                    direction: DocumentDirection::Outgoing,
+                    direction: source.direction,
                     date: source.date,
                     expected_payment_date: None,
                     notes: stored_notes,
@@ -1290,7 +1290,7 @@ pub async fn document_chain_create_draft(
                 number,
                 date: date_to_str(source.date),
                 notes: visible_notes.clone(),
-                direction: DocumentDirection::Outgoing.as_str().to_string(),
+                direction: source.direction.as_str().to_string(),
             }
         }
         "waybill" => {
@@ -1303,7 +1303,7 @@ pub async fn document_chain_create_draft(
                     counterparty_id: source.counterparty_id,
                     contract_id: None,
                     category_id: None,
-                    direction: DocumentDirection::Outgoing,
+                    direction: source.direction,
                     date: source.date,
                     notes: stored_notes,
                     bas_id: None,
@@ -1321,7 +1321,7 @@ pub async fn document_chain_create_draft(
                 number,
                 date: date_to_str(source.date),
                 notes: visible_notes.clone(),
-                direction: DocumentDirection::Outgoing.as_str().to_string(),
+                direction: source.direction.as_str().to_string(),
             }
         }
         _ => return Err(anyhow!("Невідомий тип документа для ланцюжка")),
