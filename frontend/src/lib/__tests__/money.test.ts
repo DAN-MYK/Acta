@@ -3,6 +3,7 @@ import {
   addMinor,
   compareMinor,
   formatMinorMoney,
+  isFormattedMoneyNegative,
   parseMoneyToMinor,
   subMinor
 } from "../money";
@@ -91,5 +92,19 @@ describe("money — addMinor / subMinor / compareMinor", () => {
     expect(compareMinor(0n, 0n)).toBe(0);
     expect(compareMinor(100n, 200n)).toBe(-1);
     expect(compareMinor(200n, 100n)).toBe(1);
+  });
+});
+
+describe("money вЂ” isFormattedMoneyNegative", () => {
+  it("recognizes dash-prefixed values as negative", () => {
+    expect(isFormattedMoneyNegative("-1 234,56")).toBe(true);
+  });
+
+  it("recognizes parenthesized values as negative", () => {
+    expect(isFormattedMoneyNegative("(1 234,56)")).toBe(true);
+  });
+
+  it("ignores positive values", () => {
+    expect(isFormattedMoneyNegative("1 234,56")).toBe(false);
   });
 });

@@ -44,9 +44,10 @@ const mocks = vi.hoisted(() => {
 
   return {
     archiveCurrent: vi.fn(),
-    closeEditor: vi.fn(),
+    closeEditor: vi.fn(() => ({ ok: true })),
     counterpartiesState,
     createDocument: vi.fn(),
+    isEditorDirty: vi.fn(() => false),
     load: vi.fn(),
     navigationGo: vi.fn(),
     open: vi.fn(),
@@ -63,6 +64,7 @@ vi.mock("../../stores/counterparties", () => ({
     archiveCurrent: mocks.archiveCurrent,
     closeEditor: mocks.closeEditor,
     createDocument: mocks.createDocument,
+    isEditorDirty: mocks.isEditorDirty,
     load: mocks.load,
     open: mocks.open,
     openEditor: mocks.openEditor,
@@ -201,6 +203,7 @@ describe("CounterpartiesScreen component", () => {
       mocks.archiveCurrent,
       mocks.closeEditor,
       mocks.createDocument,
+      mocks.isEditorDirty,
       mocks.load,
       mocks.navigationGo,
       mocks.open,
@@ -211,6 +214,8 @@ describe("CounterpartiesScreen component", () => {
     ]) {
       fn.mockReset();
     }
+    mocks.closeEditor.mockReturnValue({ ok: true });
+    mocks.isEditorDirty.mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -324,6 +329,86 @@ describe("CounterpartiesScreen component", () => {
     expect(target.querySelectorAll('[data-testid="skeleton-row-item"]')).toHaveLength(6);
     expect(target.querySelector('[data-testid="counterparties-list"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="counterparties-empty-state"]')).toBeNull();
+
+    component.$destroy();
+  });
+
+  it("marks the main panel inert while the editor drawer is open", () => {
+    mocks.counterpartiesState.set({
+      screen: makeScreen(),
+      detail: makeDetail(),
+      editor: {
+        form: {
+          id: "cp-2",
+          title: "Редагувати контрагента",
+          name: "ФОП Петренко",
+          edrpou: "87654321",
+          ipn: "",
+          iban: "",
+          address: "",
+          phone: "",
+          email: "",
+          notes: ""
+        },
+        showEditor: true
+      },
+      selectedId: "cp-2",
+      initialLoading: false,
+      loading: false,
+      error: null,
+      message: null,
+      query: ""
+    });
+
+    const { component, target } = renderCounterparties();
+
+    const panel = target.querySelector('[data-testid="counterparties-screen"]');
+    expect(panel?.hasAttribute("inert")).toBe(true);
+    expect(panel?.getAttribute("aria-hidden")).toBe("true");
+
+    component.$destroy();
+  });
+
+  it("shows inline dirty banner before closing a dirty editor", async () => {
+    mocks.closeEditor.mockReturnValue({ ok: false, reason: "dirty" });
+    mocks.counterpartiesState.set({
+      screen: makeScreen(),
+      detail: makeDetail(),
+      editor: {
+        form: {
+          id: "cp-2",
+          title: "Редагувати контрагента",
+          name: "ФОП Петренко",
+          edrpou: "87654321",
+          ipn: "",
+          iban: "",
+          address: "",
+          phone: "",
+          email: "",
+          notes: ""
+        },
+        showEditor: true
+      },
+      selectedId: "cp-2",
+      initialLoading: false,
+      loading: false,
+      error: null,
+      message: null,
+      query: ""
+    });
+
+    const { component, target } = renderCounterparties();
+
+    buttonByText(target, "Закрити").click();
+    await tick();
+
+    expect(target.querySelector('[data-testid="counterparties-dirty-banner"]')).toBeTruthy();
+    expect(mocks.closeEditor).toHaveBeenCalledWith();
+
+    buttonByText(target, "Так, закрити").click();
+    await tick();
+
+    expect(mocks.closeEditor).toHaveBeenCalledWith(true);
 
     component.$destroy();
   });

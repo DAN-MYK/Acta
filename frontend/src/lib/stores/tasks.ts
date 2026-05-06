@@ -1,5 +1,10 @@
 import { get, writable } from "svelte/store";
 import { taskDelete, taskOpenEditor, taskSave, taskSetStatus, tasksList } from "../api";
+import {
+  cloneSnapshot,
+  isEditorFormDirty,
+  type CloseEditorResult
+} from "../editorDirty";
 import type { TaskDraftFormDto, TaskEditorDto, TasksScreenDto } from "../types";
 
 export type TaskTab = "open" | "done" | "all";
@@ -7,6 +12,7 @@ export type TaskTab = "open" | "done" | "all";
 interface TasksState {
   screen: TasksScreenDto | null;
   editor: TaskEditorDto | null;
+  editorSnapshot: TaskDraftFormDto | null;
   initialLoading: boolean;
   loading: boolean;
   error: string | null;
@@ -18,6 +24,7 @@ interface TasksState {
 const initialState: TasksState = {
   screen: null,
   editor: null,
+  editorSnapshot: null,
   initialLoading: true,
   loading: false,
   error: null,
@@ -49,13 +56,34 @@ function createTasksStore() {
 
       try {
         const editor = await taskOpenEditor(taskId);
-        update((state) => ({ ...state, editor, loading: false }));
+        update((state) => ({
+          ...state,
+          editor,
+          editorSnapshot: cloneSnapshot(editor.form),
+          loading: false
+        }));
       } catch (error) {
         update((state) => ({ ...state, loading: false, error: String(error) }));
       }
     },
-    closeEditor() {
-      update((state) => ({ ...state, editor: null }));
+    closeEditor(force = false): CloseEditorResult {
+      const snapshot = get({ subscribe });
+      if (!snapshot.editor) {
+        return { ok: true };
+      }
+
+      const dirty = isEditorFormDirty(snapshot.editorSnapshot, snapshot.editor.form);
+      if (dirty && !force) {
+        return { ok: false, reason: "dirty" };
+      }
+
+      update((state) => ({ ...state, editor: null, editorSnapshot: null }));
+      return { ok: true };
+    },
+    isEditorDirty(): boolean {
+      const snapshot = get({ subscribe });
+      if (!snapshot.editor) return false;
+      return isEditorFormDirty(snapshot.editorSnapshot, snapshot.editor.form);
     },
     updateFormField(field: keyof TaskDraftFormDto, value: string) {
       update((state) => ({
@@ -85,6 +113,7 @@ function createTasksStore() {
           ...state,
           screen: result.updatedList,
           editor: result.updatedEditor,
+          editorSnapshot: result.updatedEditor ? cloneSnapshot(result.updatedEditor.form) : null,
           loading: false,
           message: result.message
         }));
@@ -108,6 +137,7 @@ function createTasksStore() {
           ...state,
           screen,
           editor: null,
+          editorSnapshot: null,
           loading: false,
           message: result.message
         }));
@@ -124,10 +154,15 @@ function createTasksStore() {
         const screen = await tasksList(snapshot.query);
         const editor =
           snapshot.editor?.form.id === taskId ? await taskOpenEditor(taskId) : snapshot.editor;
+        const editorSnapshot =
+          snapshot.editor?.form.id === taskId && editor
+            ? cloneSnapshot(editor.form)
+            : snapshot.editorSnapshot;
         update((state) => ({
           ...state,
           screen,
           editor,
+          editorSnapshot,
           loading: false,
           message: result.message
         }));

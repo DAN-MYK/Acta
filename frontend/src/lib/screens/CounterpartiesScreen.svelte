@@ -1,5 +1,6 @@
 <script lang="ts">
   import SkeletonRow from "../components/SkeletonRow.svelte";
+  import { isFormattedMoneyNegative } from "../money";
   import { counterpartiesStore } from "../stores/counterparties";
   import { documentsStore } from "../stores/documents";
   import { navigationStore } from "../stores/navigation";
@@ -7,6 +8,8 @@
   const counterparties = counterpartiesStore;
   const documents = documentsStore;
   const navigation = navigationStore;
+  let pendingDirtyClose = false;
+  let panelElement: HTMLElement | null = null;
 
   function onCounterpartySearch(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
@@ -27,6 +30,24 @@
         | "notes",
       input.value
     );
+  }
+
+  function requestCloseEditor() {
+    const result = counterparties.closeEditor();
+    if (result && result.ok === false && result.reason === "dirty") {
+      pendingDirtyClose = true;
+      return;
+    }
+    pendingDirtyClose = false;
+  }
+
+  function confirmDiscardChanges() {
+    pendingDirtyClose = false;
+    counterparties.closeEditor(true);
+  }
+
+  function cancelDiscardChanges() {
+    pendingDirtyClose = false;
   }
 
   function getOverdueDocumentsLabel(overdueCount: number): string {
@@ -120,16 +141,33 @@
 
     counterparties.archiveCurrent();
   }
+
+  $: if (!$counterparties.editor && pendingDirtyClose) {
+    pendingDirtyClose = false;
+  }
+
+  $: if (panelElement) {
+    if ($counterparties.editor) {
+      panelElement.setAttribute("inert", "");
+      panelElement.setAttribute("aria-hidden", "true");
+    } else {
+      panelElement.removeAttribute("inert");
+      panelElement.removeAttribute("aria-hidden");
+    }
+  }
 </script>
 
-<section class="panel" data-testid="counterparties-screen">
+<section
+  bind:this={panelElement}
+  class="panel"
+  data-testid="counterparties-screen"
+>
   <div class="panel-header">
     <div>
       <h2>Контрагенти</h2>
       <p>{$counterparties.screen?.items.length ?? 0} записів</p>
     </div>
     <div class="panel-actions">
-      <input placeholder="Пошук контрагентів" on:input={onCounterpartySearch} />
       <button class="btn-primary" on:click={() => counterparties.openEditor()}>Новий контрагент</button>
     </div>
   </div>
@@ -147,68 +185,109 @@
   {/if}
 
   <div class="counterparties-layout">
-    <div class="counterparties-list" data-testid="counterparties-list">
-      {#if $counterparties.initialLoading}
-        <SkeletonRow count={6} />
-      {:else}
-        {#each $counterparties.screen?.items ?? [] as item}
-          <button
-            class:active={$counterparties.selectedId === item.id}
-            class="counterparty-row"
-            on:click={() => counterparties.open(item.id)}
-          >
-            <div class="counterparty-row-main">
-              <strong>{item.name}</strong>
-              <p>{item.edrpou || "Без ЄДРПОУ"}</p>
-            </div>
-            <div class="counterparty-row-meta">
-              <span class="task-pill">{item.kind}</span>
-              <span class="money-value" data-negative={item.balanceStr.trim().startsWith("-")}>{item.balanceStr}</span>
-              {#if item.overdueCount > 0}
-                <span class="risk-chip risk-chip-danger">Прострочка {item.overdueCount}</span>
-              {/if}
-            </div>
-          </button>
-        {/each}
-      {/if}
+    <div class="counterparties-list-wrap">
+      <div class="counterparties-search-bar">
+        <input placeholder="Пошук контрагента…" on:input={onCounterpartySearch} />
+      </div>
+      <div class="counterparties-scroll">
+        <div class="counterparties-list" data-testid="counterparties-list">
+          {#if $counterparties.initialLoading}
+            <SkeletonRow count={6} />
+          {:else}
+            {#each $counterparties.screen?.items ?? [] as item}
+              <button
+                class:active={$counterparties.selectedId === item.id}
+                class="counterparty-row"
+                on:click={() => counterparties.open(item.id)}
+              >
+                <div class="counterparty-row-main">
+                  <strong>{item.name}</strong>
+                  <p>{item.edrpou || "Без ЄДРПОУ"}</p>
+                </div>
+                <div class="counterparty-row-meta">
+                  <span class="money-value" data-negative={isFormattedMoneyNegative(item.balanceStr)}>{item.balanceStr}</span>
+                  <span class="task-pill">{item.kind}</span>
+                  {#if item.overdueCount > 0}
+                    <span class="risk-chip risk-chip-danger">{item.overdueCount} простр.</span>
+                  {/if}
+                </div>
+              </button>
+            {/each}
+          {/if}
+        </div>
+      </div>
     </div>
 
     <div class="counterparty-detail">
       {#if $counterparties.initialLoading}
-        <div class="empty-screen empty-state-card compact" aria-live="polite">
+        <div class="empty-screen empty-state-card compact" aria-live="polite" style="margin: 28px;">
           <strong>Завантажуємо картку контрагента</strong>
           <p>Список уже готується. Деталі з'являться тут, щойно підтягнемо перші дані.</p>
         </div>
       {:else if $counterparties.detail}
         <div data-testid="counterparty-detail">
-          <div class="counterparty-detail-header">
-            <div>
-              <h3>{$counterparties.detail.info.name}</h3>
-              <p>{$counterparties.detail.info.edrpou || "Без ЄДРПОУ"}</p>
-              <div class="counterparty-overview-badges">
-                <span class="task-pill">{$counterparties.detail.info.kind}</span>
-                <span
-                  class:risk-chip-danger={$counterparties.detail.info.overdueCount > 0}
-                  class:risk-chip-ok={$counterparties.detail.info.overdueCount <= 0}
-                  class="risk-chip"
-                >
-                  {getRiskLabel($counterparties.detail.info.overdueCount)}
-                </span>
+          <div class="counterparty-detail-main">
+            <div class="counterparty-detail-header">
+              <div>
+                <div class="scenario-eyebrow">{$counterparties.detail.info.kind === "ФОП" ? "Фізична особа-підприємець" : "Юридична особа"}</div>
+                <h3>{$counterparties.detail.info.name}</h3>
+                <div class="counterparty-overview-badges" style="margin-top: 8px;">
+                  <span class="task-pill">{$counterparties.detail.info.kind}</span>
+                  <span
+                    class:risk-chip-danger={$counterparties.detail.info.overdueCount > 0}
+                    class:risk-chip-ok={$counterparties.detail.info.overdueCount <= 0}
+                    class="risk-chip"
+                  >
+                    {getRiskLabel($counterparties.detail.info.overdueCount)}
+                  </span>
+                </div>
               </div>
-            </div>
-            <div class="editor-actions">
-              <button class="btn-secondary" on:click={() => counterparties.openEditor($counterparties.detail?.info.id)}>
-                Редагувати
-              </button>
-              <button class="btn-primary" on:click={() => counterparties.createDocument()}>
-                Створити документ
-              </button>
-              <button class="btn-danger" type="button" on:click={onArchiveCurrent}>
-                Архівувати
-              </button>
+              <div class="editor-actions">
+                <button class="btn-secondary" on:click={() => counterparties.openEditor($counterparties.detail?.info.id)}>
+                  Редагувати
+                </button>
+                <button class="btn-primary" on:click={() => counterparties.createDocument()}>
+                  Створити документ
+                </button>
+                <button class="btn-danger" type="button" on:click={onArchiveCurrent}>
+                  Архівувати
+                </button>
+              </div>
             </div>
           </div>
 
+          <!-- Flat metric strip -->
+          <div class="counterparty-metric-strip">
+            <div class="counterparty-metric">
+              <div class="counterparty-metric-label">Баланс</div>
+              <div class="counterparty-metric-value" class:is-danger={$counterparties.detail.info.balanceIsNegative}>
+                {$counterparties.detail.info.balanceStr}
+              </div>
+              <div class="counterparty-metric-sub">{$counterparties.detail.info.balanceIsNegative ? "ми винні" : "нам винні"}</div>
+            </div>
+            <div class="counterparty-metric-divider"></div>
+            <div class="counterparty-metric">
+              <div class="counterparty-metric-label">Документів</div>
+              <div class="counterparty-metric-value">{$counterparties.detail.info.docCount}</div>
+              <div class="counterparty-metric-sub">{$counterparties.detail.documents.length} активних</div>
+            </div>
+            <div class="counterparty-metric-divider"></div>
+            <div class="counterparty-metric">
+              <div class="counterparty-metric-label">Прострочено</div>
+              <div class="counterparty-metric-value" class:is-danger={$counterparties.detail.info.overdueCount > 0}>
+                {$counterparties.detail.info.overdueCount}
+              </div>
+              <div class="counterparty-metric-sub">{$counterparties.detail.info.overdueCount > 0 ? $counterparties.detail.info.overdueAmountStr : "немає"}</div>
+            </div>
+            <div class="counterparty-metric-divider"></div>
+            <div class="counterparty-metric">
+              <div class="counterparty-metric-label">Останній контакт</div>
+              <div class="counterparty-metric-value" style="font-size: 18px;">{$counterparties.detail.info.lastContactDate || "—"}</div>
+              <div class="counterparty-metric-sub">{getLastContactLabel($counterparties.detail.info.lastContactDays)}</div>
+            </div>
+          </div>
+
+          <div class="counterparty-detail-scroll">
           <div class="counterparty-scenario-grid" data-testid="counterparty-scenario">
             <article class="scenario-card">
               <span class="scenario-eyebrow">Хто це</span>
@@ -325,9 +404,10 @@
               </div>
             </article>
           </div>
+          </div><!-- counterparty-detail-scroll -->
         </div>
       {:else}
-        <div class="empty-screen empty-state-card compact" data-testid="counterparties-empty-state">
+        <div class="empty-screen empty-state-card compact" data-testid="counterparties-empty-state" style="margin: 28px;">
           <strong>Оберіть контрагента</strong>
           <p>
             Оберіть зліва вже відомого контрагента або створіть нового, щоб одразу побачити баланс, прострочки та
@@ -342,6 +422,38 @@
 
 {#if $counterparties.editor}
   <section class="editor-sheet">
+    {#if pendingDirtyClose}
+      <div
+        class="editor-dirty-banner"
+        role="alertdialog"
+        aria-live="assertive"
+        aria-labelledby="counterparties-dirty-banner-title"
+        data-testid="counterparties-dirty-banner"
+      >
+        <div>
+          <strong id="counterparties-dirty-banner-title">У вас є незбережені зміни</strong>
+          <p>Скасувати їх і закрити форму?</p>
+        </div>
+        <div class="editor-dirty-actions">
+          <button
+            type="button"
+            class="btn-ghost btn-sm"
+            on:click={cancelDiscardChanges}
+            data-testid="counterparties-dirty-banner-cancel"
+          >
+            Залишитися
+          </button>
+          <button
+            type="button"
+            class="btn-danger btn-sm"
+            on:click={confirmDiscardChanges}
+            data-testid="counterparties-dirty-banner-discard"
+          >
+            Так, закрити
+          </button>
+        </div>
+      </div>
+    {/if}
     <div class="editor-header">
       <div>
         <h3>{$counterparties.editor.form.title}</h3>
@@ -349,7 +461,7 @@
       </div>
       <div class="editor-actions">
         <button class="btn-primary" on:click={() => counterparties.save()}>Зберегти</button>
-        <button class="btn-ghost" on:click={() => counterparties.closeEditor()}>Закрити</button>
+        <button class="btn-ghost" on:click={requestCloseEditor}>Закрити</button>
       </div>
     </div>
 
