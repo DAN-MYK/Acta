@@ -97,7 +97,7 @@ pub struct DocumentDraftFormDto {
 }
 ```
 
-`DocumentDraftFormDto` is constructed in **seven** places in `api.rs`:
+`DocumentDraftFormDto` is constructed in **nine** places in `api.rs`:
 - `document_open` for acts (line 485), invoices (line 512), waybills (line 539)
 - `create_draft_form` for acts (line 589), invoices (line 620), waybills (line 650)
 - `document_chain_create_draft` for acts (line 1227), invoices (line 1258), waybills (line 1288)
@@ -149,14 +149,32 @@ export type DocumentDirection = "outgoing" | "incoming";
 - Add `direction: DocumentDirection` to `DocumentItemDto`
 - Add `direction: DocumentDirection` to `DocumentDraftFormDto`
 
-#### 8. Documents store (`frontend/src/lib/stores/documents.ts`)
+#### 8. Dashboard query — add `direction` to `RowDto` and SQL
+
+`dashboard_recent_documents` (dashboard.rs line 262) has its own local `RowDto` and a UNION ALL SQL that does **not** select `direction`. This is a separate code path from `documents_list` and must be updated independently.
+
+Changes:
+- Add `direction: String` to the local `RowDto` struct
+- Add `a.direction::text AS direction`, `i.direction::text AS direction`, `w.direction::text AS direction` to each branch of the UNION ALL
+- Populate `direction` in the `DocumentItemDto` mapper at line 351
+
+#### 9. Documents store (`frontend/src/lib/stores/documents.ts`)
 
 - Add state: `activeTab: "all" | "outgoing" | "incoming"` (default `"all"`)
 - Add state: `kindFilter: DocumentKind | null` (default `null`)
-- `setTab(tab)`: updates `activeTab`, reloads list
-- `setKindFilter(kind | null)`: updates `kindFilter`, reloads list
-- `load()`: passes `direction` and `kind` to `documentsList` invoke
-- `create(counterpartyId, kind)`: derives direction from `activeTab`
+- Extract a private helper `reloadList(state)` that calls `documentsList(state.query, tabToDirection(state.activeTab), state.kindFilter ?? undefined)`. All nine existing direct `documentsList(...)` calls in the store must go through this helper so filters are never silently dropped after a mutation:
+  - `load()` (line 82)
+  - `reloadCurrent()` (line 122)
+  - `create()` (line 238)
+  - `save()` (line 329)
+  - `advanceStatus()` (line 357)
+  - `deleteCurrent()` (line 457)
+  - `createChainDraft()` (line 484)
+  - `bulkDelete()` (line 509)
+  - `bulkAdvanceStatus()` (line 538)
+- `setTab(tab)`: updates `activeTab`, calls `reloadList`
+- `setKindFilter(kind | null)`: updates `kindFilter`, calls `reloadList`
+- `create(counterpartyId, kind)`: derives direction from `activeTab` (defaults to `"outgoing"` when `"all"`)
 
 #### 9. DocumentsScreen UI (`frontend/src/lib/screens/DocumentsScreen.svelte`)
 
