@@ -1945,3 +1945,114 @@ async fn tauri_vertical_slice_payment_calendar_load_includes_schedule_and_task_d
 
     Ok(())
 }
+
+#[tokio::test]
+async fn documents_direction_filter() -> Result<()> {
+    use acta::models::DocumentDirection;
+    use acta::tauri_api::documents::{
+        CreateDocumentDraftRequest, DocumentsListRequest, documents_list, document_create_draft,
+        document_delete,
+    };
+
+    let _guard = tauri_vertical_slice_lock().lock().await;
+    let _ = dotenvy::dotenv();
+    std::env::set_var("ACTA_CONFIG_DIR", "storage/test-config");
+
+    let pool = acta::runtime::connect_pool().await?;
+    let company_id = acta::runtime::get_first_company_id(&pool).await;
+    let ctx = Arc::new(acta::app_ctx::AppCtx::new(pool, company_id));
+
+    let counterparty = acta::db::counterparties::list(ctx.pool(), ctx.company_id())
+        .await?
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow!("потрібен хоча б один контрагент"))?;
+
+    // Create one outgoing invoice and one incoming act
+    let outgoing = document_create_draft(
+        &ctx,
+        CreateDocumentDraftRequest {
+            counterparty_id: counterparty.id.to_string(),
+            kind: "invoice".to_string(),
+            direction: "outgoing".to_string(),
+        },
+    )
+    .await?;
+
+    let incoming = document_create_draft(
+        &ctx,
+        CreateDocumentDraftRequest {
+            counterparty_id: counterparty.id.to_string(),
+            kind: "act".to_string(),
+            direction: "incoming".to_string(),
+        },
+    )
+    .await?;
+
+    let cleanup: Vec<String> = vec![outgoing.form.id.clone(), incoming.form.id.clone()];
+
+    let result: Result<()> = async {
+        // direction field is populated
+        assert_eq!(outgoing.form.direction, "outgoing");
+        assert_eq!(incoming.form.direction, "incoming");
+
+        // filter by outgoing — only invoice returned (not the incoming act)
+        let outgoing_list = documents_list(
+            &ctx,
+            DocumentsListRequest { direction: Some(DocumentDirection::Outgoing), ..Default::default() },
+        )
+        .await?;
+        assert!(
+            outgoing_list.items.iter().any(|i| i.id == outgoing.form.id),
+            "outgoing filter must include outgoing invoice"
+        );
+        assert!(
+            !outgoing_list.items.iter().any(|i| i.id == incoming.form.id),
+            "outgoing filter must exclude incoming act"
+        );
+        assert!(
+            outgoing_list.items.iter().all(|i| i.direction == "outgoing"),
+            "all items in outgoing filter must have direction=outgoing"
+        );
+
+        // filter by incoming — only act returned
+        let incoming_list = documents_list(
+            &ctx,
+            DocumentsListRequest { direction: Some(DocumentDirection::Incoming), ..Default::default() },
+        )
+        .await?;
+        assert!(
+            incoming_list.items.iter().any(|i| i.id == incoming.form.id),
+            "incoming filter must include incoming act"
+        );
+        assert!(
+            !incoming_list.items.iter().any(|i| i.id == outgoing.form.id),
+            "incoming filter must exclude outgoing invoice"
+        );
+
+        // filter by kind=act — only acts returned
+        let act_list = documents_list(
+            &ctx,
+            DocumentsListRequest { kind: Some("act".to_string()), ..Default::default() },
+        )
+        .await?;
+        assert!(
+            act_list.items.iter().all(|i| i.direction == "incoming" || i.direction == "outgoing"),
+            "all items must have direction set"
+        );
+        assert!(
+            act_list.items.iter().all(|i| matches!(i.kind, acta::tauri_api::documents::DocumentKindDto::Act)),
+            "kind=act filter must only return acts"
+        );
+
+        Ok(())
+    }
+    .await;
+
+    // cleanup
+    for id in cleanup {
+        let _ = document_delete(&ctx, id).await;
+    }
+
+    result
+}
