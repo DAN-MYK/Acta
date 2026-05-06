@@ -185,7 +185,6 @@ async function runBuildWithRetry({
 }) {
   for (let attempt = 1; attempt <= retryCount; attempt += 1) {
     const result = runBuild(buildCommand, buildArgs, repoRoot);
-    relayBuildOutput(result);
 
     if (result.status === 0) {
       return { built: true, reason: "rebuilt" };
@@ -219,20 +218,10 @@ async function runBuildWithRetry({
 function defaultRunBuild(buildCommand, buildArgs, repoRoot) {
   return spawnSync(buildCommand, buildArgs, {
     cwd: repoRoot,
-    stdio: "pipe",
+    stdio: "inherit",
     encoding: "utf8",
     shell: true
   });
-}
-
-function relayBuildOutput(result) {
-  if (result.stdout) {
-    process.stdout.write(result.stdout);
-  }
-
-  if (result.stderr) {
-    process.stderr.write(result.stderr);
-  }
 }
 
 function createBuildError(result) {

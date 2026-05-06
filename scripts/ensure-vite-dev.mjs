@@ -2,11 +2,20 @@ import { spawn } from "node:child_process";
 import http from "node:http";
 import https from "node:https";
 import { createRequire } from "node:module";
+import path from "node:path";
 
 const devUrl = process.env.TAURI_DEV_URL ?? "http://localhost:1420";
 const expectedTitle = "<title>Acta</title>";
 const expectedViteClient = "/@vite/client";
-const viteCliPath = createRequire(import.meta.url).resolve("vite/bin/vite.js");
+
+// vite/package.json is exported; resolve bin path from it to avoid
+// ERR_PACKAGE_PATH_NOT_EXPORTED on newer Vite versions that don't
+// export ./bin/vite.js in the "exports" field.
+const req = createRequire(import.meta.url);
+const vitePkgPath = req.resolve("vite/package.json");
+const vitePkg = req("vite/package.json");
+const viteBin = typeof vitePkg.bin === "string" ? vitePkg.bin : vitePkg.bin.vite;
+const viteCliPath = path.resolve(path.dirname(vitePkgPath), viteBin);
 
 function fetchText(url) {
   const client = url.startsWith("https:") ? https : http;
