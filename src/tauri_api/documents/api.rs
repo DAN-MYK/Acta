@@ -1024,6 +1024,8 @@ pub async fn document_save(
                 .await?
                 .ok_or_else(|| anyhow!("Акт не знайдено"))?;
             let parent_ref = split_visible_notes_and_chain_parent(act.notes.as_deref()).1;
+            let direction = DocumentDirection::try_from(request.form.direction.clone())
+                .map_err(|_| anyhow!("Невідома направленість документа"))?;
             db::acts::update_with_items(
                 ctx.pool(),
                 id,
@@ -1032,7 +1034,7 @@ pub async fn document_save(
                     counterparty_id: act.counterparty_id,
                     contract_id: act.contract_id,
                     category_id: act.category_id,
-                    direction: act.direction,
+                    direction,
                     date,
                     expected_payment_date: act.expected_payment_date,
                     notes: compose_notes_with_chain_parent(
@@ -1055,6 +1057,8 @@ pub async fn document_save(
                 .await?
                 .ok_or_else(|| anyhow!("Рахунок не знайдено"))?;
             let parent_ref = split_visible_notes_and_chain_parent(invoice.notes.as_deref()).1;
+            let direction = DocumentDirection::try_from(request.form.direction.clone())
+                .map_err(|_| anyhow!("Невідома направленість документа"))?;
             db::invoices::update_with_items(
                 ctx.pool(),
                 id,
@@ -1063,7 +1067,7 @@ pub async fn document_save(
                     counterparty_id: invoice.counterparty_id,
                     contract_id: invoice.contract_id,
                     category_id: invoice.category_id,
-                    direction: invoice.direction,
+                    direction,
                     date,
                     expected_payment_date: invoice.expected_payment_date,
                     notes: compose_notes_with_chain_parent(
@@ -1086,6 +1090,8 @@ pub async fn document_save(
                 .await?
                 .ok_or_else(|| anyhow!("Накладну не знайдено"))?;
             let parent_ref = split_visible_notes_and_chain_parent(waybill.notes.as_deref()).1;
+            let direction = DocumentDirection::try_from(request.form.direction.clone())
+                .map_err(|_| anyhow!("Невідома направленість документа"))?;
             db::waybills::update_with_items(
                 ctx.pool(),
                 id,
@@ -1094,7 +1100,7 @@ pub async fn document_save(
                     counterparty_id: waybill.counterparty_id,
                     contract_id: waybill.contract_id,
                     category_id: waybill.category_id,
-                    direction: waybill.direction,
+                    direction,
                     date,
                     notes: compose_notes_with_chain_parent(
                         &request.form.notes,
