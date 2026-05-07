@@ -559,6 +559,9 @@ describe("User menu", () => {
     });
     mocks.appShellReloadShellChrome.mockResolvedValue(mocks.makeShellState("company-1"));
     mocks.settingsSavePreferences.mockResolvedValue(undefined);
+    mocks.navigationGo.mockReset();
+    mocks.themeSetMode.mockReset();
+    mocks.settingsUpdatePreference.mockReset();
   });
 
   it("opens user menu on ··· click", async () => {
@@ -630,6 +633,7 @@ describe("User menu", () => {
     moreBtn.click();
     await tick();
 
+    expect(target.querySelector(".palette")).toBeNull();
     expect(target.querySelector('[role="menu"]')).toBeTruthy();
 
     // Escape should close user menu (palette is already closed)
@@ -693,11 +697,10 @@ describe("User menu", () => {
     themeItem.click();
     await vi.waitFor(() => {
       expect(mocks.themeSetMode).toHaveBeenCalledWith("dark");
+      expect(mocks.settingsUpdatePreference).toHaveBeenCalledWith("darkMode", true);
+      expect(mocks.settingsSavePreferences).toHaveBeenCalled();
+      expect(mocks.appShellReloadShellChrome).toHaveBeenCalled();
     });
-
-    expect(mocks.settingsUpdatePreference).toHaveBeenCalledWith("darkMode", true);
-    expect(mocks.settingsSavePreferences).toHaveBeenCalled();
-    expect(mocks.appShellReloadShellChrome).toHaveBeenCalled();
     // menu stays open
     expect(target.querySelector('[role="menu"]')).toBeTruthy();
 
