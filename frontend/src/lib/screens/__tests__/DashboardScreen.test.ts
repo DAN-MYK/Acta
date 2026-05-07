@@ -178,6 +178,15 @@ describe("DashboardScreen component", () => {
     component.$destroy();
   });
 
+  it("renders recent-documents card as full-width (wide class)", () => {
+    const { component, target } = renderDashboard();
+
+    const card = target.querySelector('[data-testid="dashboard-recent-documents"]');
+    expect(card?.classList.contains("wide")).toBe(true);
+
+    component.$destroy();
+  });
+
   it("opens dashboard rows through their owning stores", async () => {
     const { component, target } = renderDashboard();
 

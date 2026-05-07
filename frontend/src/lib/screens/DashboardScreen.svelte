@@ -84,7 +84,7 @@
       {/if}
     </article>
 
-    <article class="dashboard-card" data-testid="dashboard-recent-documents">
+    <article class="dashboard-card wide" data-testid="dashboard-recent-documents">
       <div class="card-title">
         <h3>Останні документи</h3>
         <button on:click={() => navigation.go("documents")}>Відкрити</button>
