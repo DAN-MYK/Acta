@@ -658,8 +658,7 @@
   }
 
   .payment-group-count,
-  .task-kpi-card span,
-  .chain-summary-block span {
+  .task-kpi-card span {
     font-size: 12px;
     color: var(--acta-color-text-muted);
   }
@@ -747,24 +746,9 @@
     background: color-mix(in srgb, var(--acta-color-bg-subtle) 72%, var(--acta-color-bg-elevated));
   }
 
-  .chain-summary {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-  }
-
-  .chain-summary-block {
-    display: grid;
-    gap: 6px;
-    padding: 14px 16px;
-    border-radius: var(--acta-radius-2xl);
-    border: 1px solid var(--acta-color-border);
-    background: color-mix(in srgb, var(--acta-color-bg-subtle) 76%, var(--acta-color-bg-elevated));
-  }
 
   @media (max-width: 1080px) {
-    .task-kpis,
-    .chain-summary {
+    .task-kpis {
       grid-template-columns: 1fr;
     }
 
