@@ -89,6 +89,19 @@ const mocks = vi.hoisted(() => {
 
   const themeState = createMockStore("light");
   const navigationState = createMockStore("dashboard" as ScreenId);
+  const settingsState = createMockStore<{
+    screen: { preferences: { darkMode: boolean } } | null;
+    loading: boolean;
+    error: string | null;
+    message: string | null;
+    section: string;
+  }>({
+    screen: { preferences: { darkMode: false } },
+    loading: false,
+    error: null,
+    message: null,
+    section: "appearance"
+  });
 
   const appShellBootstrap = vi.fn().mockResolvedValue(undefined);
   const appShellSwitchActiveCompany = vi.fn();
@@ -178,7 +191,8 @@ const mocks = vi.hoisted(() => {
         }
       }
     }),
-    navigationGo: vi.fn((screen: ScreenId) => navigationState.set(screen))
+    navigationGo: vi.fn((screen: ScreenId) => navigationState.set(screen)),
+    settingsState
   };
 });
 
@@ -267,9 +281,17 @@ vi.mock("../lib/stores/navigation", () => ({
 
 vi.mock("../lib/stores/settings", () => ({
   settingsStore: {
+    subscribe: mocks.settingsState.subscribe,
     load: mocks.settingsLoad,
     updatePreference: mocks.settingsUpdatePreference,
-    savePreferences: mocks.settingsSavePreferences
+    savePreferences: mocks.settingsSavePreferences,
+    setSection: vi.fn(),
+    updateCompanyField: vi.fn(),
+    saveCompany: vi.fn().mockResolvedValue({ ok: true }),
+    configureIntegration: vi.fn(),
+    inviteTeam: vi.fn(),
+    openLatestBackup: vi.fn(),
+    backupNow: vi.fn()
   }
 }));
 
@@ -329,6 +351,13 @@ describe("App shell orchestration", () => {
     });
     mocks.themeState.set("light");
     mocks.navigationState.set("dashboard");
+    mocks.settingsState.set({
+      screen: { preferences: { darkMode: false } },
+      loading: false,
+      error: null,
+      message: null,
+      section: "appearance"
+    });
     document.body.innerHTML = "";
     Object.values(mocks).forEach((value) => {
       if (typeof value === "function" && "mockReset" in value) {
@@ -514,6 +543,163 @@ describe("App shell orchestration", () => {
     mocks.navigationState.set("payments");
     await tick();
     expect(searchPlaceholder?.textContent).toContain("Пошук у платежах");
+
+    component.$destroy();
+  });
+});
+
+describe("User menu", () => {
+  beforeEach(() => {
+    mocks.settingsState.set({
+      screen: { preferences: { darkMode: false } },
+      loading: false,
+      error: null,
+      message: null,
+      section: "appearance"
+    });
+    mocks.appShellReloadShellChrome.mockResolvedValue(mocks.makeShellState("company-1"));
+    mocks.settingsSavePreferences.mockResolvedValue(undefined);
+  });
+
+  it("opens user menu on ··· click", async () => {
+    const { component, target } = renderApp();
+    await tick();
+
+    expect(target.querySelector('[role="menu"]')).toBeNull();
+
+    const moreBtn = target.querySelector(".user-more") as HTMLButtonElement;
+    expect(moreBtn).toBeTruthy();
+    moreBtn.click();
+    await tick();
+
+    expect(target.querySelector('[role="menu"]')).toBeTruthy();
+    expect(moreBtn.getAttribute("aria-expanded")).toBe("true");
+
+    component.$destroy();
+  });
+
+  it("closes user menu on backdrop click", async () => {
+    const { component, target } = renderApp();
+    await tick();
+
+    const moreBtn = target.querySelector(".user-more") as HTMLButtonElement;
+    moreBtn.click();
+    await tick();
+
+    expect(target.querySelector('[role="menu"]')).toBeTruthy();
+
+    const backdrop = target.querySelector(".user-menu-backdrop") as HTMLButtonElement;
+    expect(backdrop).toBeTruthy();
+    backdrop.click();
+    await tick();
+
+    expect(target.querySelector('[role="menu"]')).toBeNull();
+
+    component.$destroy();
+  });
+
+  it("closes user menu on Escape, leaves palette closed", async () => {
+    const { component, target } = renderApp();
+    await tick();
+
+    const moreBtn = target.querySelector(".user-more") as HTMLButtonElement;
+    moreBtn.click();
+    await tick();
+    expect(target.querySelector('[role="menu"]')).toBeTruthy();
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await tick();
+
+    expect(target.querySelector('[role="menu"]')).toBeNull();
+    expect(target.querySelector(".palette")).toBeNull();
+
+    component.$destroy();
+  });
+
+  it("Escape closes user menu before palette when both could be open", async () => {
+    const { component, target } = renderApp();
+    await tick();
+
+    // Open palette first
+    const toggle = target.querySelector('[data-testid="palette-toggle"]') as HTMLButtonElement;
+    toggle.click();
+    await vi.waitFor(() => expect(target.querySelector(".palette")).toBeTruthy());
+
+    // Open user menu (palette should close due to mutual exclusion)
+    const moreBtn = target.querySelector(".user-more") as HTMLButtonElement;
+    moreBtn.click();
+    await tick();
+
+    expect(target.querySelector('[role="menu"]')).toBeTruthy();
+
+    // Escape should close user menu (palette is already closed)
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await tick();
+
+    expect(target.querySelector('[role="menu"]')).toBeNull();
+
+    component.$destroy();
+  });
+
+  it("Ctrl+K closes user menu and opens palette", async () => {
+    const { component, target } = renderApp();
+    await tick();
+
+    const moreBtn = target.querySelector(".user-more") as HTMLButtonElement;
+    moreBtn.click();
+    await tick();
+    expect(target.querySelector('[role="menu"]')).toBeTruthy();
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true }));
+    await tick();
+
+    expect(target.querySelector('[role="menu"]')).toBeNull();
+    await vi.waitFor(() => expect(target.querySelector(".palette")).toBeTruthy());
+
+    component.$destroy();
+  });
+
+  it("navigates to settings and closes menu on Налаштування click", async () => {
+    const { component, target } = renderApp();
+    await tick();
+
+    const moreBtn = target.querySelector(".user-more") as HTMLButtonElement;
+    moreBtn.click();
+    await tick();
+
+    const settingsItem = target.querySelector('[role="menuitem"]') as HTMLButtonElement;
+    expect(settingsItem).toBeTruthy();
+    settingsItem.click();
+    await tick();
+
+    expect(mocks.navigationGo).toHaveBeenCalledWith("settings");
+    expect(target.querySelector('[role="menu"]')).toBeNull();
+
+    component.$destroy();
+  });
+
+  it("toggles theme from light to dark and keeps menu open", async () => {
+    const { component, target } = renderApp();
+    await tick();
+
+    const moreBtn = target.querySelector(".user-more") as HTMLButtonElement;
+    moreBtn.click();
+    await tick();
+
+    const themeItem = target.querySelector('[role="menuitemcheckbox"]') as HTMLButtonElement;
+    expect(themeItem).toBeTruthy();
+    expect(themeItem.getAttribute("aria-checked")).toBe("false");
+
+    themeItem.click();
+    await vi.waitFor(() => {
+      expect(mocks.themeSetMode).toHaveBeenCalledWith("dark");
+    });
+
+    expect(mocks.settingsUpdatePreference).toHaveBeenCalledWith("darkMode", true);
+    expect(mocks.settingsSavePreferences).toHaveBeenCalled();
+    expect(mocks.appShellReloadShellChrome).toHaveBeenCalled();
+    // menu stays open
+    expect(target.querySelector('[role="menu"]')).toBeTruthy();
 
     component.$destroy();
   });
