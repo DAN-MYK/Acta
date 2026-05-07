@@ -286,6 +286,9 @@ textarea {
 }
 
 /* Settings nav at bottom — тепер використовує .nav-item */
+.nav-item-settings {
+  margin-bottom: 4px;
+}
 
 /* User footer */
 .user-footer {
@@ -675,9 +678,20 @@ textarea {
   position: fixed;
   inset: 0;
   background: rgba(10, 10, 12, 0.35);
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(var(--acta-overlay-blur));
   border: 0;
   z-index: 40;
+}
+
+.editor-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: var(--acta-color-bg-overlay);
+  backdrop-filter: blur(var(--acta-overlay-blur-soft));
+  border: none;
+  padding: 0;
+  cursor: default;
 }
 
 .palette {
@@ -804,6 +818,63 @@ textarea {
   display: grid;
   place-items: center;
   min-height: 320px;
+}
+
+.bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 14px;
+}
+
+.task-pill {
+  display: inline-block;
+  color: var(--acta-color-accent-text);
+  background: var(--acta-color-accent-soft);
+  border-radius: var(--acta-radius-md);
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
+.editor-actions-close {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.editor-dirty-banner,
+.confirm-delete-banner {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border-radius: var(--acta-radius-2xl);
+}
+
+.editor-dirty-banner {
+  border: 1px solid color-mix(in srgb, var(--acta-color-warning) 30%, var(--acta-color-border));
+  background: color-mix(in srgb, var(--acta-color-warning-soft) 60%, var(--acta-color-bg-elevated));
+}
+
+.confirm-delete-banner {
+  border: 1px solid color-mix(in srgb, var(--acta-color-danger) 30%, var(--acta-color-border));
+  background: color-mix(in srgb, var(--acta-color-danger-soft) 54%, var(--acta-color-bg-elevated));
+}
+
+.editor-dirty-banner p,
+.confirm-delete-banner p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--acta-color-text-muted);
+}
+
+.editor-dirty-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+  align-items: center;
 }
 
 .empty-state-card {
@@ -983,7 +1054,7 @@ textarea {
 .tabs-pill > button.active {
   background: var(--acta-color-bg-elevated);
   color: var(--acta-color-text);
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--acta-shadow-control-active);
 }
 
 .tabs-pill > button:hover:not(.active):not(:disabled) {
@@ -1018,7 +1089,7 @@ textarea {
 .segmented > button.active {
   background: var(--acta-color-bg-elevated);
   color: var(--acta-color-text);
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--acta-shadow-control-active);
 }
 
 .segmented > button:disabled {
@@ -1106,7 +1177,7 @@ textarea:focus-visible {
   box-sizing: border-box;
   min-height: var(--acta-density-input-h);
   border: 1px solid var(--acta-color-border);
-  border-radius: var(--acta-radius-xl);
+  border-radius: var(--acta-radius-lg);
   padding: 8px 12px;
   background: var(--acta-color-bg-elevated);
   color: inherit;
@@ -1218,7 +1289,7 @@ button[aria-busy="true"] > :not(.button-busy-label) {
   gap: 10px;
   min-height: var(--acta-density-input-h);
   padding: 8px 12px;
-  border-radius: var(--acta-radius-xl);
+  border-radius: var(--acta-radius-lg);
   cursor: pointer;
   font: inherit;
   text-decoration: none;
@@ -1329,7 +1400,7 @@ textarea:disabled:hover {
   box-sizing: border-box;
   background: var(--acta-color-bg-elevated);
   border: 1px solid var(--acta-color-border);
-  border-radius: var(--acta-radius-sm);
+  border-radius: var(--acta-radius-lg);
   font-family: var(--acta-font-sans);
   font-size: 14px;
   color: var(--acta-color-text);

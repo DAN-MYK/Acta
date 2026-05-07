@@ -91,7 +91,7 @@
     position: fixed;
     inset: 0;
     background: var(--acta-color-bg-overlay);
-    backdrop-filter: blur(4px);
+    backdrop-filter: blur(var(--acta-overlay-blur));
     z-index: 50;
     display: flex;
     align-items: center;

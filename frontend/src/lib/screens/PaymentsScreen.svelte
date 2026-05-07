@@ -862,7 +862,7 @@
   .payment-state {
     display: inline-flex;
     align-items: center;
-    min-height: 30px;
+    min-height: var(--acta-density-chip-h);
     padding: 0 10px;
     border-radius: 999px;
     font-size: 12px;

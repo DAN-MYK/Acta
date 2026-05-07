@@ -24,10 +24,11 @@
 
 .task-kpi-card {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   padding: 14px 16px;
   border-radius: var(--acta-radius-2xl);
-  background: var(--acta-color-bg-elevated);
+  border: 1px solid var(--acta-color-border);
+  background: color-mix(in srgb, var(--acta-color-bg-subtle) 72%, var(--acta-color-bg-elevated));
 }
 
 .task-today-panel {
@@ -63,7 +64,7 @@
 .task-tabs button.active {
   background: var(--acta-color-bg-elevated);
   color: var(--acta-color-text);
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--acta-shadow-control-active);
 }
 
 .tasks-list {
@@ -109,13 +110,4 @@
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 12px;
-}
-
-.task-pill {
-  display: inline-block;
-  color: var(--acta-color-accent-text);
-  background: var(--acta-color-accent-soft);
-  border-radius: var(--acta-radius-md);
-  padding: 3px 8px;
-  font-size: 11px;
 }

@@ -125,7 +125,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 30px;
+  min-height: var(--acta-density-chip-h);
   padding: 0 10px;
   border-radius: 999px;
   font-size: 11px;
@@ -157,7 +157,7 @@
   margin: 0;
   cursor: pointer;
   background: color-mix(in srgb, #0b1220 38%, transparent);
-  backdrop-filter: blur(2px);
+  backdrop-filter: blur(var(--acta-overlay-blur-soft));
   z-index: 49;
   animation: documents-drawer-backdrop-in 160ms ease-out;
 }

@@ -33,7 +33,7 @@
   color: inherit;
   font: inherit;
   font-size: 13px;
-  min-height: 30px;
+  min-height: var(--acta-density-chip-h);
 }
 
 .counterparties-scroll {
@@ -87,7 +87,7 @@
 .risk-chip {
   display: inline-flex;
   align-items: center;
-  min-height: 30px;
+  min-height: var(--acta-density-chip-h);
   padding: 0 10px;
   border-radius: 999px;
   font-size: 11px;
@@ -127,6 +127,11 @@
   padding: 24px 28px 20px;
   border-bottom: 1px solid var(--acta-color-border);
   flex-shrink: 0;
+}
+
+.cp-confirm-banner {
+  margin: 0 28px 0;
+  border-bottom: none;
 }
 
 .counterparty-metric-strip {
