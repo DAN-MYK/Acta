@@ -599,8 +599,7 @@
 
   .payments-group,
   .flow-banner,
-  .chain-panel,
-  .editor-sheet {
+  .chain-panel {
     margin-top: 18px;
     padding: 18px;
     border-radius: var(--acta-radius-2xl);
@@ -616,8 +615,7 @@
   }
 
   .payments-group-header,
-  .chain-panel-header,
-  .editor-header {
+  .chain-panel-header {
     display: flex;
     justify-content: space-between;
     gap: 16px;
@@ -633,8 +631,7 @@
 
   .payments-groups,
   .task-kpis,
-  .documents-list,
-  .editor-sheet {
+  .documents-list {
     display: grid;
     gap: 16px;
   }
@@ -773,7 +770,6 @@
 
     .payments-group-header,
     .chain-panel-header,
-    .editor-header,
     .payment-row {
       flex-direction: column;
       align-items: flex-start;
