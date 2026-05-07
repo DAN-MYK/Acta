@@ -1047,4 +1047,39 @@ describe("PaymentsScreen component", () => {
 
     component.$destroy();
   });
+
+  it("shows bank tab content by default and hides calendar panel", () => {
+    const { component, target } = renderPayments();
+
+    expect(target.querySelector('[data-testid="payments-unmatched-group"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="payments-calendar"]')).toBeNull();
+
+    component.$destroy();
+  });
+
+  it("switches to calendar tab on click and hides bank content", async () => {
+    const { component, target } = renderPayments();
+
+    buttonByText(target, "Платіжний календар").click();
+    await tick();
+
+    expect(target.querySelector('[data-testid="payments-unmatched-group"]')).toBeNull();
+    expect(target.querySelector('[data-testid="payments-calendar"]')).toBeTruthy();
+
+    component.$destroy();
+  });
+
+  it("switches back to bank tab from calendar tab", async () => {
+    const { component, target } = renderPayments();
+
+    buttonByText(target, "Платіжний календар").click();
+    await tick();
+    buttonByText(target, "Банк").click();
+    await tick();
+
+    expect(target.querySelector('[data-testid="payments-unmatched-group"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="payments-calendar"]')).toBeNull();
+
+    component.$destroy();
+  });
 });
