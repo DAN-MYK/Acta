@@ -17,9 +17,9 @@
 
 | Файл | Зміна |
 |------|-------|
-| `frontend/src/lib/screens/PaymentsScreen.svelte` | Рефакторинг: лишається оболонкою з tab switcher, заголовком панелі, editor sheet та backdrop |
-| `frontend/src/lib/components/BankTabContent.svelte` | Новий компонент: весь поточний вміст PaymentsScreen (KPI банку, тулбар, import/match preview, manual picker, split draft, дві групи платежів) |
-| `frontend/src/lib/components/PaymentCalendarPanel.svelte` | Додати KPI-картки зверху (3 штуки), стилізовані як `task-kpi-card`, замінюють `calendar-summary-card` |
+| `frontend/src/lib/screens/PaymentsScreen.svelte` | Рефакторинг: лишається оболонкою з tab switcher, заголовком панелі, editor sheet та backdrop. Зі `<style>` лишаються тільки стилі tab switcher та editor sheet/backdrop. |
+| `frontend/src/lib/components/BankTabContent.svelte` | Новий компонент: весь поточний вміст PaymentsScreen (KPI банку, тулбар, import/match preview, manual picker, split draft, дві групи платежів). Усі scoped CSS стилі банківського вмісту (`.payments-toolbar`, `.payments-group`, `.payment-row`, `.payment-state`, `.task-kpi-card`, `.payment-import-preview-*` тощо) переїжджають у `<style>` цього компонента. |
+| `frontend/src/lib/components/PaymentCalendarPanel.svelte` | Додати KPI-картки зверху (3 штуки), стилізовані як `task-kpi-card`. Стиль `task-kpi-card` дублюється у `<style>` цього компонента (не виноситься глобально — обсяг малий, scoped достатньо). Поточні `calendar-summary-card` замінюються. |
 
 ### Стан табу
 
@@ -30,7 +30,8 @@
 ### Data flow
 
 - Обидва компоненти (`BankTabContent`, `PaymentCalendarPanel`) читають `paymentsStore` напряму — без нових props
-- `importButton` bind переноситься всередину `BankTabContent`
+- `importButton` bind, `focusImportButton()` і всі bank-only handler-функції та реактивні змінні (`closeEditor`, `onPaymentFieldChange`, `onManualSearchInput`, `onSplitAllocationInput`, `requestCloseEditor`, `confirmDiscardChanges`, `cancelDiscardChanges`, `runHeaderReconciliation`, `isPaymentBusy`, `openManualPickerForCurrentPreview`, `getFlowCopy`, а також `$: items`, `$: unmatchedPayments`, `$: matchedPayments`, `$: busyImport*`, `$: busySync`, `$: busySave`, `$: manualPickerCanConfirm`, `$: manualPickerDisabledReason`, `$: flowCopy`, `$: previewCopy`) переїжджають у `BankTabContent.svelte`
+- `pendingDirtyClose` лишається в `PaymentsScreen.svelte` разом з editor sheet, бо dirty banner — частина editor overlay
 - Editor sheet і backdrop лишаються в `PaymentsScreen.svelte` — відображаються поверх обох табів через `{#if $payments.editor}`
 
 ---
@@ -44,6 +45,7 @@
 - Активна вкладка: нижня border-line акцентного кольору + `color: var(--acta-color-accent-text)`
 - Неактивна вкладка: `color: var(--acta-color-text-muted)`
 - Клас `.payments-tabs` для контейнера, `.payments-tab` для кнопки, `.payments-tab.active` для активної
+- Доступність: `role="tablist"` на контейнері, `role="tab"` + `aria-selected={activeTab === 'bank'}` на кожній кнопці
 
 ### KPI-картки вкладки "Банк"
 
@@ -67,6 +69,7 @@
 Файл: `frontend/src/lib/screens/__tests__/PaymentsScreen.test.ts`
 
 - `data-testid="payments-screen"` лишається на root `<section>` — наявні тести не ламаються
+- Додати тест: початковий рендер — активна вкладка "Банк", `data-testid="payments-unmatched-group"` присутній у DOM, `data-testid="payments-calendar"` відсутній
 - Додати тест: клік на вкладку "Платіжний календар" приховує `data-testid="payments-unmatched-group"` і показує `data-testid="payments-calendar"`
 - Додати тест: клік на вкладку "Банк" показує `data-testid="payments-unmatched-group"` і приховує `data-testid="payments-calendar"`
 - `BankTabContent` покривається через `PaymentsScreen.test.ts`, окремий тест-файл не потрібен
