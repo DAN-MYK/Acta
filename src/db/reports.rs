@@ -136,7 +136,7 @@ pub async fn load_bank_rows(
               AND p.date BETWEEN $2 AND $3
               AND ($4::uuid IS NULL OR p.counterparty_id = $4::uuid)
               AND ($5::text IS NULL OR COALESCE(NULLIF(p.bank_name, ''), 'uncategorized') = $5)
-            GROUP BY cp.id, cp.name, COALESCE(NULLIF(p.bank_name, ''), 'Без контрагента')
+            GROUP BY cp.id, cp.name, p.bank_name
             ORDER BY label
             "#,
         )
@@ -528,7 +528,7 @@ pub async fn load_top_counterparties_bank(
             LEFT JOIN counterparties cp ON cp.id = p.counterparty_id
             WHERE p.date BETWEEN $1 AND $2
               AND LOWER(COALESCE(cp.name, COALESCE(NULLIF(p.bank_name, ''), 'Без контрагента'))) LIKE $3 ESCAPE '\'
-            GROUP BY cp.id, cp.name, COALESCE(NULLIF(p.bank_name, ''), 'Без контрагента')
+            GROUP BY cp.id, cp.name, p.bank_name
             ORDER BY (COALESCE(SUM(CASE WHEN p.direction = 'income' THEN p.amount ELSE 0 END), 0)
                     + COALESCE(SUM(CASE WHEN p.direction = 'expense' THEN p.amount ELSE 0 END), 0)) DESC,
                      counterparty_name ASC
@@ -552,7 +552,7 @@ pub async fn load_top_counterparties_bank(
             LEFT JOIN counterparties cp ON cp.id = p.counterparty_id
             WHERE p.company_id = $1
               AND p.date BETWEEN $2 AND $3
-            GROUP BY cp.id, cp.name, COALESCE(NULLIF(p.bank_name, ''), 'Без контрагента')
+            GROUP BY cp.id, cp.name, p.bank_name
             HAVING LOWER(COALESCE(cp.name, COALESCE(NULLIF(p.bank_name, ''), 'Без контрагента'))) LIKE $4 ESCAPE '\'
             ORDER BY (COALESCE(SUM(CASE WHEN p.direction = 'income' THEN p.amount ELSE 0 END), 0)
                     + COALESCE(SUM(CASE WHEN p.direction = 'expense' THEN p.amount ELSE 0 END), 0)) DESC,
