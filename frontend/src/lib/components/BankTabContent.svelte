@@ -649,6 +649,10 @@
     background: color-mix(in srgb, var(--acta-color-bg-subtle) 72%, var(--acta-color-bg-elevated));
   }
 
+  .task-kpi-card strong {
+    font-size: 1.35rem;
+  }
+
   .task-kpi-card-alert,
   .payments-group-unmatched {
     border-color: color-mix(in srgb, var(--acta-color-accent) 22%, var(--acta-color-border));

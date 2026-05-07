@@ -4,8 +4,6 @@
     PAYMENT_CALENDAR_COPY,
     CALENDAR_FILTER_OPTIONS,
     formatCalendarDayAriaLabel,
-    formatCalendarEventsLabel,
-    formatCalendarMoreEventsLabel,
     getCalendarEventDirectionLabel
   } from "../config/ui";
   import { paymentsStore } from "../stores/payments";
@@ -141,16 +139,16 @@
     </div>
   </div>
 
-  <div class="task-kpis">
-    <div class="task-kpi-card">
+  <div class="calendar-summary">
+    <div class="calendar-summary-card">
       <strong>{scheduleCount}</strong>
       <span>Планових платежів у місяці</span>
     </div>
-    <div class="task-kpi-card">
+    <div class="calendar-summary-card">
       <strong>{taskCount}</strong>
       <span>Дедлайнів задач у місяці</span>
     </div>
-    <div class="task-kpi-card">
+    <div class="calendar-summary-card">
       <strong>{visibleEventCount}</strong>
       <span>{PAYMENT_CALENDAR_COPY.visibleEventsSummary}</span>
     </div>
@@ -221,9 +219,7 @@
                   </span>
                 {/each}
                 {#if filteredEvents(day).length > 2}
-                  <span class="calendar-pill is-more">
-                    {formatCalendarMoreEventsLabel(filteredEvents(day).length - 2)}
-                  </span>
+                  <span class="calendar-pill is-more">+{filteredEvents(day).length - 2} ще</span>
                 {/if}
               </div>
             </button>
@@ -244,7 +240,7 @@
             <strong>{selectedDay?.date ?? PAYMENT_CALENDAR_COPY.emptyDayLabel}</strong>
             <p>
               {#if selectedEvents.length > 0}
-                {formatCalendarEventsLabel(selectedEvents.length)} у вибраному дні
+                {selectedEvents.length} подій у вибраному дні
               {:else}
                 {PAYMENT_CALENDAR_COPY.emptyDayFiltered}
               {/if}
@@ -383,6 +379,7 @@
   .calendar-shell-header,
   .calendar-toolbar,
   .calendar-nav,
+  .calendar-summary,
   .calendar-layout,
   .calendar-side-header,
   .calendar-event-row,
@@ -447,6 +444,11 @@
     color: var(--acta-color-accent-hover);
   }
 
+  .calendar-summary {
+    flex-wrap: wrap;
+  }
+
+  .calendar-summary-card,
   .calendar-grid-panel,
   .calendar-side-panel {
     border-radius: var(--acta-radius-2xl);
@@ -454,27 +456,18 @@
     background: color-mix(in srgb, var(--acta-color-bg-elevated) 82%, white 18%);
   }
 
-  .task-kpis {
+  .calendar-summary-card {
+    min-width: 180px;
+    padding: 14px 16px;
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 16px;
+    gap: 6px;
   }
 
-  .task-kpi-card {
-    display: grid;
-    gap: 10px;
-    padding: 16px;
-    border-radius: var(--acta-radius-2xl);
-    border: 1px solid var(--acta-color-border);
-    background: color-mix(in srgb, var(--acta-color-bg-subtle) 72%, var(--acta-color-bg-elevated));
-  }
-
-  .task-kpi-card strong {
+  .calendar-summary-card strong {
     font-size: 1.35rem;
   }
 
-  .task-kpi-card span {
-    font-size: 12px;
+  .calendar-summary-card span {
     color: var(--acta-color-text-muted);
   }
 
@@ -696,10 +689,6 @@
 
     .calendar-side-panel {
       flex-basis: auto;
-    }
-
-    .task-kpis {
-      grid-template-columns: 1fr;
     }
   }
 
