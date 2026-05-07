@@ -1,6 +1,8 @@
 /**
  * @vitest-environment jsdom
  */
+// @ts-ignore Node typings are not included in the frontend test tsconfig.
+import { readFileSync } from "fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { tick } from "svelte";
 import SettingsScreen from "../SettingsScreen.svelte";
@@ -185,6 +187,8 @@ function buttonByText(target: HTMLElement, text: string): HTMLButtonElement {
 }
 
 describe("SettingsScreen", () => {
+  const styles = readFileSync("frontend/src/styles/settings.css", "utf8");
+
   beforeEach(() => {
     mocks.settingsState.set({
       section: "appearance",
@@ -564,5 +568,11 @@ describe("SettingsScreen", () => {
     expect(target.querySelector('[style*="display: none"]')).toBeNull();
 
     component.$destroy();
+  });
+
+  it("uses horizontal compact section chips at 720px", () => {
+    expect(styles).toMatch(/@media\s*\(max-width:\s*720px\)[\s\S]*\.settings-nav\s*\{[\s\S]*grid-auto-flow:\s*column/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*720px\)[\s\S]*\.settings-nav-button\s*\{[\s\S]*white-space:\s*nowrap/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*720px\)[\s\S]*\.settings-content\s*\{[\s\S]*max-width:\s*680px/);
   });
 });

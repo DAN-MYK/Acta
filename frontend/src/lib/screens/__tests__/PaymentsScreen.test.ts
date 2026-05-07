@@ -362,6 +362,22 @@ describe("PaymentsScreen component", () => {
     component.$destroy();
   });
 
+  it("groups compact toolbar actions into primary and utility zones", () => {
+    const { component, target } = renderPayments();
+    const mainToolbar = target.querySelector('[data-testid="payments-toolbar-main"]');
+    const utilityToolbar = target.querySelector('[data-testid="payments-toolbar-utility"]');
+    const utilityButtons = Array.from(utilityToolbar?.querySelectorAll("button") ?? []).map((button) =>
+      button.textContent?.trim()
+    );
+
+    expect(mainToolbar).toBeTruthy();
+    expect(utilityToolbar).toBeTruthy();
+    expect(buttonByText(target, "Імпортувати виписку").className).toContain("payments-toolbar-primary-action");
+    expect(utilityButtons).toEqual(["Імпорт з storage", "Оновити з банку", "Шаблон CSV"]);
+
+    component.$destroy();
+  });
+
   it("routes row and reconciliation actions through the payments store", async () => {
     const { component, target } = renderPayments();
 

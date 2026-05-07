@@ -1,6 +1,8 @@
 /**
  * @vitest-environment jsdom
  */
+// @ts-ignore Node typings are not included in the frontend test tsconfig.
+import { readFileSync } from "fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { tick } from "svelte";
 import TasksScreen from "../TasksScreen.svelte";
@@ -144,6 +146,8 @@ function buttonByText(target: HTMLElement, text: string): HTMLButtonElement {
 }
 
 describe("TasksScreen component", () => {
+  const source = readFileSync("frontend/src/lib/screens/TasksScreen.svelte", "utf8");
+
   beforeEach(() => {
     setTasksState([
       makeTask("task-1"),
@@ -287,6 +291,11 @@ describe("TasksScreen component", () => {
     expect(mocks.closeEditor).toHaveBeenCalledWith(false);
 
     component.$destroy();
+  });
+
+  it("collapses the two-column layout on compact widths to avoid page-level horizontal scroll", () => {
+    expect(source).toMatch(/@media\s*\(max-width:\s*1100px\)[\s\S]*\.tasks-layout\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+    expect(source).toMatch(/@media\s*\(max-width:\s*1100px\)[\s\S]*\.tasks-card-header\s*\{[\s\S]*flex-wrap:\s*wrap/);
   });
 
 });

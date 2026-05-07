@@ -2,7 +2,7 @@
   import { onDestroy, onMount } from "svelte";
   import AppIcon from "../components/AppIcon.svelte";
   import SkeletonRow from "../components/SkeletonRow.svelte";
-  import { EDITOR_DIRTY_COPY, TASK_PRIORITY_OPTIONS, TASK_STATUS_OPTIONS } from "../config/ui";
+  import { EDITOR_DIRTY_COPY, TASK_PRIORITY_OPTIONS, TASK_STATUS_OPTIONS, TASK_TAB_OPTIONS } from "../config/ui";
   import { tasksStore } from "../stores/tasks";
   import {
     formatTaskDayLabel,
@@ -121,15 +121,11 @@
       <div class="tasks-card-header">
         <h3>Завдання</h3>
         <div class="task-tabs" data-testid="tasks-focus-primary">
-          <button class:active={$tasks.tab === "open"} on:click={() => tasks.setTab("open")}>
-            У фокусі
-          </button>
-          <button class:active={$tasks.tab === "done"} on:click={() => tasks.setTab("done")}>
-            Завершені
-          </button>
-          <button class:active={$tasks.tab === "all"} on:click={() => tasks.setTab("all")}>
-            Усі
-          </button>
+          {#each TASK_TAB_OPTIONS as tab}
+            <button class:active={$tasks.tab === tab.value} on:click={() => tasks.setTab(tab.value)}>
+              {tab.label}
+            </button>
+          {/each}
         </div>
         <button class="btn-primary btn-sm tasks-new-btn" on:click={() => tasks.openEditor()}>
           <AppIcon name="add" size={13} />
@@ -835,5 +831,83 @@
   .required {
     color: var(--danger);
     font-weight: 400;
+  }
+
+  @media (max-width: 1100px) {
+    .tasks-layout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .tasks-card-header {
+      flex-wrap: wrap;
+      align-items: flex-start;
+    }
+
+    .task-tabs {
+      order: 3;
+      margin-left: 0;
+      max-width: 100%;
+      overflow-x: auto;
+    }
+
+    .tasks-new-btn {
+      margin-left: 0;
+    }
+
+    .tasks-main,
+    .tasks-side-panel {
+      min-width: 0;
+    }
+  }
+
+  @media (max-width: 760px) {
+    .tasks-panel {
+      padding: 16px 16px 28px;
+    }
+
+    .task-kpis {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .kpi-divider {
+      display: none;
+    }
+
+    .kpi-cell {
+      min-width: 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .kpi-cell:nth-child(7),
+    .kpi-cell:last-child {
+      border-bottom: none;
+    }
+
+    .task-row {
+      flex-wrap: wrap;
+    }
+
+    .task-row-main {
+      min-width: 0;
+      width: calc(100% - 3px);
+    }
+
+    .task-row-status {
+      margin: 0 14px 12px auto;
+    }
+
+    .editor-sheet {
+      width: 100%;
+    }
+
+    .editor-header,
+    .editor-actions {
+      flex-wrap: wrap;
+    }
+
+    .editor-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
 </style>

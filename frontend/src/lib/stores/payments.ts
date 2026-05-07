@@ -25,6 +25,7 @@ import {
   type CloseEditorResult
 } from "../editorDirty";
 import {
+  type PaymentActiveAction,
   PAYMENT_MANUAL_MATCH_COPY,
   PAYMENT_RECONCILE_MESSAGES
 } from "../config/ui";
@@ -52,22 +53,6 @@ import type {
   PaymentReconcileSplitResultDto,
   PaymentsScreenDto
 } from "../types";
-
-type PaymentsActiveAction =
-  | "import"
-  | "import-pick"
-  | "import-commit"
-  | "sync"
-  | "reconcile"
-  | "manual-search"
-  | "confirm-auto-match"
-  | "confirm-candidate"
-  | "confirm-manual-picker"
-  | "confirm-split"
-  | "unreconcile"
-  | "calendar-complete"
-  | "save"
-  | null;
 
 interface PaymentManualPickerState {
   paymentId: string;
@@ -111,7 +96,7 @@ interface PaymentsStoreState {
   splitDraft: PaymentSplitDraftState | null;
   importPreview: PaymentImportPreviewDto | null;
   importPreviewStale: boolean;
-  activeAction: PaymentsActiveAction;
+  activeAction: PaymentActiveAction | null;
   activePaymentId: string | null;
 }
 
@@ -267,13 +252,13 @@ function createPaymentsStore() {
     splitDraft: null
   });
 
-  const beginAction = (action: PaymentsActiveAction, paymentId?: string) => {
+  const beginAction = (action: PaymentActiveAction, paymentId: string | null = null) => {
     update((state) => ({
       ...state,
       loading: true,
       error: null,
       activeAction: action,
-      activePaymentId: paymentId ?? null
+      activePaymentId: paymentId
     }));
   };
 
@@ -291,9 +276,9 @@ function createPaymentsStore() {
     message.includes("Файл виписки змінився") || message.includes("Вміст файлу виписки змінився");
 
   const runMutationAction = async <T extends MutationResultDto>(
-    action: PaymentsActiveAction,
+    action: PaymentActiveAction,
     task: () => Promise<T>,
-    paymentId?: string
+    paymentId: string | null = null
   ): Promise<T | MutationResultDto> => {
     beginAction(action, paymentId);
     try {

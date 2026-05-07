@@ -123,6 +123,10 @@
   height: 100%;
 }
 
+.counterparty-detail-section-label {
+  display: none;
+}
+
 .counterparty-detail-main {
   padding: 24px 28px 20px;
   border-bottom: 1px solid var(--acta-color-border);
@@ -294,11 +298,41 @@
 @media (max-width: 1100px) {
   .counterparties-layout {
     grid-template-columns: 1fr;
+    height: auto;
   }
 
   .counterparty-overview,
   .counterparty-scenario-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .counterparties-list-wrap {
+    max-height: 420px;
+  }
+
+  .counterparty-detail {
+    overflow: hidden;
+    height: auto;
+  }
+
+  .counterparty-detail-section-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 28px 0;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--acta-color-text-muted);
+  }
+
+  .counterparty-detail-section-label::before {
+    content: "";
+    width: 32px;
+    height: 1px;
+    background: var(--acta-color-border-strong);
+    flex-shrink: 0;
   }
 }
 
@@ -313,6 +347,54 @@
     text-align: left;
   }
 
+  .counterparty-detail-main {
+    padding: 18px 20px 16px;
+  }
+
+  .cp-confirm-banner {
+    margin-inline: 20px;
+  }
+
+  .counterparty-metric-strip {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    padding: 16px 20px;
+    align-items: stretch;
+  }
+
+  .counterparty-metric {
+    padding-right: 0;
+    padding: 12px;
+    border-radius: var(--acta-radius-xl);
+    background: color-mix(in srgb, var(--acta-color-bg-subtle) 84%, transparent);
+  }
+
+  .counterparty-metric-divider {
+    display: none;
+  }
+
+  .counterparty-detail-scroll {
+    padding: 16px 20px 20px;
+  }
+
+  .counterparty-overview,
+  .counterparty-scenario-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .scenario-card {
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .scenario-facts {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .counterparty-metric-strip,
   .counterparty-overview,
   .counterparty-scenario-grid,
   .scenario-facts {

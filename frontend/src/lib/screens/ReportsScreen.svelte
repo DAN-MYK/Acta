@@ -1,6 +1,7 @@
 <script lang="ts">
   import SkeletonRow from "../components/SkeletonRow.svelte";
   import {
+    formatOverdueDaysLabel,
     getReportActiveRowsCount,
     getReportContextText,
     getReportHeadline,
@@ -440,7 +441,7 @@
               <span class="reports-cell-money money-value" data-negative={isFormattedMoneyNegative(row.amountStr)}>{row.amountStr}</span>
               <span class="reports-cell-date">{row.expectedDate || "—"}</span>
               <span class="reports-cell-status">
-                {row.overdueDays > 0 ? `Прострочено ${row.overdueDays} дн.` : "Без прострочки"}
+                {formatOverdueDaysLabel(row.overdueDays)}
               </span>
             </div>
           {/each}
@@ -477,7 +478,7 @@
               <span class="reports-cell-money money-value" data-negative={isFormattedMoneyNegative(row.amountStr)}>{row.amountStr}</span>
               <span class="reports-cell-date">{row.dueDate}</span>
               <span class="reports-cell-status">
-                {row.overdueDays > 0 ? `Прострочено ${row.overdueDays} дн.` : "Без прострочки"}
+                {formatOverdueDaysLabel(row.overdueDays)}
               </span>
               <span class="reports-cell-title">{row.recurrence}</span>
             </div>

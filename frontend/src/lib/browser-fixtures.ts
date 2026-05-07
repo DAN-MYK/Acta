@@ -408,6 +408,56 @@ function paymentsScreen(): PaymentsScreenDto {
   };
 }
 
+function paymentCalendarMonth(payload?: Record<string, unknown>) {
+  const request = (payload?.request as { month?: string; selectedDate?: string | null } | undefined) ?? {};
+  const month = request.month ?? "2026-05";
+  const selectedDate = request.selectedDate ?? `${month}-03`;
+  const dayNumber = Number.parseInt(selectedDate.slice(-2), 10) || 1;
+
+  return {
+    month,
+    monthLabel: "Травень 2026",
+    selectedDate,
+    today: "2026-05-01",
+    days: [
+      {
+        date: selectedDate,
+        dayNumber,
+        weekdayShort: "сб",
+        inCurrentMonth: true,
+        today: selectedDate === "2026-05-01",
+        selected: true,
+        hasOverdue: false,
+        incomeTotalStr: "0,00 грн",
+        expenseTotalStr: "14 500,00 грн",
+        eventCount: 1,
+        events: [
+          {
+            id: "schedule-1",
+            kind: "schedule",
+            title: "Оплата послуг банку",
+            subtitle: "mono",
+            date: selectedDate,
+            amountStr: "14 500,00 грн",
+            amount: "14500.00",
+            direction: "outgoing",
+            statusLabel: "Заплановано",
+            recurrenceLabel: "Разово",
+            counterpartyId: "cp-2",
+            counterpartyName: "ФОП Петренко",
+            linkKind: "payment",
+            linkId: "pay-2",
+            note: "Плановий платіж із browser fixture",
+            actionable: true,
+            overdue: false,
+            done: false
+          }
+        ]
+      }
+    ]
+  };
+}
+
 function paletteItems(): PaletteItemDto[] {
   return [
     {
@@ -516,6 +566,8 @@ export async function browserFixtureInvoke<T>(command: string, payload?: Record<
       }) as T;
     case "document_pdf_open_current":
       return clone({ ok: true, documentId: "doc-1", message: "PDF відкрито" } satisfies MutationResultDto) as T;
+    case "document_generate_pdf":
+      return clone({ ok: true, documentId: String(payload?.docId ?? "doc-1"), message: "PDF згенеровано" } satisfies MutationResultDto) as T;
     case "documents_bulk_delete":
       return clone({ total: 2, succeeded: 2, failed: 0, errors: [], message: "Вибрані документи видалено" } satisfies BulkMutationResultDto) as T;
     case "documents_bulk_advance_status":
@@ -639,6 +691,8 @@ export async function browserFixtureInvoke<T>(command: string, payload?: Record<
       return clone({ ok: true, message: "Банк синхронізовано" } satisfies MutationResultDto) as T;
     case "payments_open_manual_template":
       return clone({ ok: true, path: "storage/import/bank/manual-template.csv", message: "Шаблон CSV відкрито" } satisfies OpenTemplateResultDto) as T;
+    case "payments_calendar_load":
+      return clone(paymentCalendarMonth(payload)) as T;
     case "payment_create_or_update":
       return clone({ ok: true, message: "Платіж збережено" } satisfies MutationResultDto) as T;
     case "payment_reconcile":

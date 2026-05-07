@@ -259,13 +259,28 @@
   }
 
   .editor-sheet {
-    margin-top: 18px;
-    padding: 18px;
-    border-radius: var(--acta-radius-2xl);
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 201;
+    width: min(560px, 100vw);
+    overflow-y: auto;
+    padding: 20px;
+    border-radius: var(--acta-radius-2xl) 0 0 var(--acta-radius-2xl);
     border: 1px solid var(--acta-color-border);
+    border-right: 0;
     background: var(--acta-color-bg-elevated);
+    box-shadow: -24px 0 60px -20px color-mix(in srgb, #0b1220 35%, transparent);
     display: grid;
     gap: 16px;
+    align-content: start;
+    animation: payments-drawer-in 200ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
+
+  @keyframes payments-drawer-in {
+    from { transform: translateX(40px); opacity: 0; }
+    to   { transform: translateX(0);    opacity: 1; }
   }
 
   .editor-header {

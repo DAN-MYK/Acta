@@ -5,7 +5,8 @@ import {
   getTaskPrioritySortWeight,
   getTaskPriorityTone,
   getTodayTaskItems,
-  getVisibleTaskStatuses
+  getVisibleTaskStatuses,
+  TASK_TAB_OPTIONS
 } from "../tasksPresentation";
 import type { TaskItemDto } from "../types";
 
@@ -27,6 +28,10 @@ function makeTask(id: string, overrides: Partial<TaskItemDto> = {}): TaskItemDto
 }
 
 describe("tasksPresentation", () => {
+  it("exposes task tabs in canonical UI order", () => {
+    expect(TASK_TAB_OPTIONS.map((tab) => tab.value)).toEqual(["open", "done", "all"]);
+  });
+
   it("returns canonical visible statuses for each tasks tab", () => {
     expect(getVisibleTaskStatuses("open")).toEqual(["open", "in_progress"]);
     expect(getVisibleTaskStatuses("done")).toEqual(["done", "cancelled"]);

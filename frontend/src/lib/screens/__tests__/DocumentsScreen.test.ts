@@ -1,6 +1,8 @@
 /**
  * @vitest-environment jsdom
  */
+// @ts-ignore Node typings are not included in the frontend test tsconfig.
+import { readFileSync } from "fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { tick } from "svelte";
 import DocumentsScreen from "../DocumentsScreen.svelte";
@@ -248,6 +250,9 @@ function buttonByText(target: HTMLElement, text: string): HTMLButtonElement {
 }
 
 describe("DocumentsScreen component", () => {
+  const source = readFileSync("frontend/src/lib/screens/DocumentsScreen.svelte", "utf8");
+  const styles = readFileSync("frontend/src/styles/documents.css", "utf8");
+
   beforeEach(() => {
     setDocumentsState();
 
@@ -299,6 +304,8 @@ describe("DocumentsScreen component", () => {
     expect(target.textContent).toContain("Існуючий PDF");
     expect(target.textContent).toContain("Створити акт");
     expect(target.textContent).toContain("Створити накладну");
+
+    expect(target.querySelector('[data-testid="documents-bulk-actions"]')?.classList.contains("bulk-actions-idle")).toBe(true);
 
     component.$destroy();
   });
@@ -404,6 +411,15 @@ describe("DocumentsScreen component", () => {
     expect(mocks.deleteCurrent).not.toHaveBeenCalled();
 
     component.$destroy();
+  });
+
+  it("uses a compact mode that hides duplicated search and de-emphasizes idle bulk actions", () => {
+    expect(source).toContain('data-testid="documents-bulk-actions"');
+    expect(styles).toMatch(/@media\s*\(max-width:\s*980px\)[\s\S]*\.panel-header input\s*\{[\s\S]*display:\s*none/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*980px\)[\s\S]*\.bulk-actions-idle\s+button\s*\{[\s\S]*display:\s*none/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*980px\)[\s\S]*\.documents-create-bar\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*980px\)[\s\S]*\.documents-create-bar\s+\.btn-primary:disabled\s*\{[\s\S]*display:\s*none/);
+    expect(source).toContain('class="documents-create-kind-chips"');
   });
 
   it("routes create, search and editor actions into the documents store", async () => {

@@ -15,6 +15,7 @@
     getDocumentChainTargets,
     getDocumentCreateLabel,
     resolveDocumentKindMeta,
+    supportsDocumentPdfGeneration,
     supportsExistingPdfFlow
   } from "../config/ui";
   import { documentsStore } from "../stores/documents";
@@ -205,6 +206,10 @@
     void documents.create(createCounterpartyId, createKind);
   }
 
+  function onSelectCreateKind(kind: string) {
+    createKind = kind as DocumentKind;
+  }
+
   function focusCreateButton() {
     if (!createCounterpartyId) {
       createCounterpartySelect?.focus();
@@ -371,11 +376,21 @@
         <option value={cp.id}>{cp.name}</option>
       {/each}
     </select>
-    <select bind:value={createKind} disabled={$documents.loading} aria-label="Тип документа">
+
+    <div class="documents-create-kind-chips" role="group" aria-label="Тип документа">
       {#each DOCUMENT_KIND_OPTIONS as option}
-        <option value={option.value}>{option.label}</option>
+        <button
+          type="button"
+          class="kind-chip"
+          class:kind-chip-active={createKind === option.value}
+          on:click={() => onSelectCreateKind(option.value)}
+          disabled={$documents.loading}
+        >
+          {option.label}
+        </button>
       {/each}
-    </select>
+    </div>
+
     <button
       bind:this={createButton}
       class="btn-primary"
@@ -391,7 +406,11 @@
   </div>
 
   {#if ($documents.list?.items.length ?? 0) > 0}
-  <div class="bulk-actions">
+  <div
+    class="bulk-actions"
+    class:bulk-actions-idle={$documents.selectedIds.length === 0}
+    data-testid="documents-bulk-actions"
+  >
     <label class="bulk-select-all">
       <input
         type="checkbox"
@@ -654,7 +673,7 @@
           </div>
         </div>
 
-        {#if ["act", "invoice"].includes($documents.editor.form.kind)}
+        {#if supportsDocumentPdfGeneration($documents.editor.form.kind)}
           <button class="btn-ghost" on:click={() => documents.generatePdf()} disabled={$documents.loading}>
             PDF
           </button>

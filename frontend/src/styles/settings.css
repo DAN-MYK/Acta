@@ -120,3 +120,44 @@
   color: var(--acta-color-text-muted);
   font-size: 11px;
 }
+
+@media (max-width: 720px) {
+  .settings-layout {
+    gap: 12px;
+    margin-top: 14px;
+  }
+
+  .settings-content {
+    max-width: 680px;
+  }
+
+  .settings-nav {
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .settings-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .settings-nav-button {
+    min-height: 34px;
+    padding: 0 12px;
+    white-space: nowrap;
+    justify-content: center;
+    border-radius: var(--acta-radius-pill);
+  }
+
+  .settings-card {
+    padding: 16px;
+    gap: 10px;
+  }
+
+  .settings-section-head {
+    gap: 10px;
+  }
+}

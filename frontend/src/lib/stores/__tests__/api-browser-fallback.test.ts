@@ -85,4 +85,26 @@ describe("browser fallback API", () => {
     expect(result.allocationCount).toBe(2);
     expect(result.allocations.map((allocation) => allocation.documentId)).toEqual(["inv-7", "act-9"]);
   });
+
+  it("returns a browser calendar payload for payments instead of throwing fixture errors", async () => {
+    const { paymentsCalendarLoad } = await import("../../api");
+
+    const result = await paymentsCalendarLoad({
+      month: "2026-05",
+      selectedDate: "2026-05-01"
+    });
+
+    expect(result.month).toBe("2026-05");
+    expect(result.selectedDate).toBe("2026-05-01");
+    expect(result.days.length).toBeGreaterThan(0);
+  });
+
+  it("returns a localized success message for document PDF generation in browser-dev mode", async () => {
+    const { documentGeneratePdf } = await import("../../api");
+
+    const result = await documentGeneratePdf("doc-1");
+
+    expect(result.ok).toBe(true);
+    expect(result.message).toContain("PDF");
+  });
 });

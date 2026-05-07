@@ -96,6 +96,34 @@ function uniqueCounterpartiesCount(rows: Array<{ counterparty: string }>): numbe
   return new Set(rows.map((row) => row.counterparty || "—")).size;
 }
 
+export function formatDaysLabel(count: number): string {
+  const absoluteCount = Math.abs(count);
+  const lastTwoDigits = absoluteCount % 100;
+  const lastDigit = absoluteCount % 10;
+
+  if (lastTwoDigits >= 11 && lastTwoDigits <= 14) {
+    return `${count} днів`;
+  }
+
+  if (lastDigit === 1) {
+    return `${count} день`;
+  }
+
+  if (lastDigit >= 2 && lastDigit <= 4) {
+    return `${count} дні`;
+  }
+
+  return `${count} днів`;
+}
+
+export function formatOverdueDaysLabel(days: number): string {
+  if (days <= 0) {
+    return "Без прострочки";
+  }
+
+  return `Прострочено ${formatDaysLabel(days)}`;
+}
+
 export function sortReceivablesRows(rows: ReceivableRowDto[]): ReceivableRowDto[] {
   return stableSortRows(rows, (left, right) => {
     if (left.overdueDays !== right.overdueDays) {

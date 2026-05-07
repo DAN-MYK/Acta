@@ -1,5 +1,20 @@
 import type { PaymentCalendarEventKind, PaymentCalendarFilterKind, PaymentMatchDecisionKind } from "../types";
 
+export type PaymentActiveAction =
+  | "import"
+  | "import-pick"
+  | "import-commit"
+  | "sync"
+  | "reconcile"
+  | "manual-search"
+  | "confirm-auto-match"
+  | "confirm-candidate"
+  | "confirm-manual-picker"
+  | "confirm-split"
+  | "unreconcile"
+  | "calendar-complete"
+  | "save";
+
 export const CALENDAR_FILTER_OPTIONS: Array<{ kind: PaymentCalendarFilterKind; label: string }> = [
   { kind: "all", label: "Усе" },
   { kind: "schedule", label: "Платежі" },
@@ -20,7 +35,7 @@ export const PAYMENT_PREVIEW_COPY: Record<PaymentMatchDecisionKind, { title: str
   ambiguous: {
     title: "Кілька кандидатів на звірку",
     description:
-      "Оберіть найкращий варіант у списку, або відкрийте ручний пошук, якщо потрібен інший документ."
+      "Оберіть найкращий варіант у списку або відкрийте ручний пошук, якщо потрібен інший документ."
   },
   split: {
     title: "Рекомендований розподіл платежу",
@@ -43,7 +58,27 @@ export const PAYMENT_RECONCILE_MESSAGES: Record<PaymentMatchDecisionKind, string
   none: "Точний кандидат не знайдено. Перевірте платіж або підготуйте ручне звіряння."
 };
 
-export const PAYMENT_FLOW_COPY: Record<string, { title: string; description: string }> = {
+export const PAYMENT_DIRECTION_META = {
+  income: { label: "Надходження" },
+  expense: { label: "Витрата" }
+} as const;
+
+export const PAYMENT_DIRECTION_OPTIONS = [
+  { value: "income", label: PAYMENT_DIRECTION_META.income.label },
+  { value: "expense", label: PAYMENT_DIRECTION_META.expense.label }
+] as const;
+
+export function getPaymentDirectionLabel(direction: string): string {
+  return direction === "in" || direction === "income"
+    ? PAYMENT_DIRECTION_META.income.label
+    : PAYMENT_DIRECTION_META.expense.label;
+}
+
+export function getCalendarEventDirectionLabel(direction: string): string {
+  return getPaymentDirectionLabel(direction);
+}
+
+export const PAYMENT_FLOW_COPY = {
   import: {
     title: "Імпорт триває",
     description: "Імпортуємо виписку та оновлюємо список платежів, щоб одразу показати незведені рухи."
@@ -91,12 +126,15 @@ export const PAYMENT_FLOW_COPY: Record<string, { title: string; description: str
   "confirm-split": {
     title: "Зберігаємо розподіл платежу",
     description: "Записуємо розподіл платежу між кількома документами і оновлюємо статуси."
+  },
+  "calendar-complete": {
+    title: "Позначаємо подію виконаною",
+    description: "Оновлюємо графік платежів і календар, щоб завершена подія більше не потребувала дії."
   }
-};
+} satisfies Record<PaymentActiveAction, { title: string; description: string }>;
 
 export const PAYMENT_MANUAL_PICKER_DISABLED_REASON =
   "Спершу знайдіть хоча б одного кандидата, щоб підтвердити документ.";
-
 
 export const PAYMENT_SCREEN_COPY = {
   stateUnmatched: "Не зведено",
@@ -144,14 +182,15 @@ export const PAYMENT_CALENDAR_COPY = {
   errorTitle: "Календар не завантажився",
   retryAction: "Спробувати ще раз",
   emptyTitle: "Календар поки порожній",
-  emptyDescription: "Коли з’являться події графіка платежів або задачі з дедлайнами, вони відобразяться тут.",
+  emptyDescription:
+    "Коли з'являться події графіка платежів або задачі з дедлайнами, вони відобразяться тут.",
   filterEmptyTitle: "У цьому місяці немає подій для поточного фільтра",
-  filterEmptyDescription: "Перемкніть фільтр або перейдіть на інший місяць, щоб подивитися інші записи.",
+  filterEmptyDescription:
+    "Перемкніть фільтр або перейдіть на інший місяць, щоб подивитися інші записи.",
   emptyDayLabel: "День не вибрано",
   emptyDayEvents: "На цей день подій не знайдено",
   emptyDayFiltered: "На цей день немає подій у поточному фільтрі"
 } as const;
-
 
 export const PAYMENT_MANUAL_MATCH_COPY = {
   missingAutoMatch: "Немає рекомендованої звірки для автоматичного підтвердження.",
@@ -178,14 +217,36 @@ export const PAYMENT_MANUAL_MATCH_COPY = {
   splitDraftIncomplete: "Розподіл ще не завершено. Закрийте залишок платежу або зменште суму."
 } as const;
 
+function formatCalendarEventsNoun(count: number): string {
+  const absoluteCount = Math.abs(count);
+  const lastTwoDigits = absoluteCount % 100;
+  const lastDigit = absoluteCount % 10;
+
+  if (lastTwoDigits >= 11 && lastTwoDigits <= 14) {
+    return "подій";
+  }
+
+  if (lastDigit === 1) {
+    return "подія";
+  }
+
+  if (lastDigit >= 2 && lastDigit <= 4) {
+    return "події";
+  }
+
+  return "подій";
+}
+
 export function formatCalendarEventsLabel(count: number): string {
   if (count === 0) {
     return "без подій";
   }
-  if (count === 1) {
-    return "1 подія";
-  }
-  return `${count} подій`;
+
+  return `${count} ${formatCalendarEventsNoun(count)}`;
+}
+
+export function formatCalendarMoreEventsLabel(count: number): string {
+  return `+${count} ще`;
 }
 
 export function formatCalendarDayAriaLabel(args: {
@@ -197,8 +258,4 @@ export function formatCalendarDayAriaLabel(args: {
   const todayLabel = args.today ? ", сьогодні" : "";
   const selectedLabel = args.selected ? ", вибрано" : "";
   return `${args.date}${todayLabel}${selectedLabel}, ${formatCalendarEventsLabel(args.eventCount)}`;
-}
-
-export function getCalendarEventDirectionLabel(direction: string): string {
-  return direction === "income" ? "Надходження" : "Витрата";
 }

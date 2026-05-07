@@ -170,6 +170,9 @@
         </div>
       {:else if $counterparties.detail}
         <div data-testid="counterparty-detail">
+          <div class="counterparty-detail-section-label" data-testid="counterparty-detail-section-label">
+            Деталі контрагента
+          </div>
           <div class="counterparty-detail-main">
             <div class="counterparty-detail-header">
               <div>

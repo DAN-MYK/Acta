@@ -33,6 +33,11 @@ describe("paymentsPresentation", () => {
     expect(getPaymentDirectionLabel("expense")).toBe("Витрата");
   });
 
+  it("keeps direction labels delegated to shared presentation config", () => {
+    expect(getPaymentDirectionLabel("in")).toBe("Надходження");
+    expect(getPaymentDirectionLabel("expense")).toBe("Витрата");
+  });
+
   it("returns preview copy by decision kind and null without preview", () => {
     expect(getPaymentPreviewCopy(null)).toBeNull();
     expect(getPaymentPreviewCopy(makePreview("exact"))).toEqual({

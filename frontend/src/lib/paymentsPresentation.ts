@@ -1,14 +1,10 @@
 import {
+  getPaymentDirectionLabel,
   PAYMENT_PREVIEW_COPY,
   PAYMENT_SCREEN_COPY,
   resolveDocumentKindMeta
 } from "./config/ui";
-import type {
-  PaymentDraftFormDto,
-  PaymentItemDto,
-  PaymentMatchCandidateDto,
-  PaymentMatchPreviewDto
-} from "./types";
+import type { PaymentMatchCandidateDto, PaymentMatchPreviewDto } from "./types";
 
 export function getPaymentStateLabel(matchedDoc: string): string {
   return matchedDoc ? PAYMENT_SCREEN_COPY.stateMatched(matchedDoc) : PAYMENT_SCREEN_COPY.stateUnmatched;
@@ -16,10 +12,6 @@ export function getPaymentStateLabel(matchedDoc: string): string {
 
 export function getPaymentDocumentKindLabel(kind: PaymentMatchCandidateDto["documentKind"]): string {
   return resolveDocumentKindMeta(kind).label;
-}
-
-export function getPaymentDirectionLabel(direction: PaymentItemDto["direction"] | PaymentDraftFormDto["direction"]): string {
-  return direction === "in" || direction === "income" ? "Надходження" : "Витрата";
 }
 
 export function getPaymentPreviewCopy(
@@ -50,3 +42,5 @@ export function getPaymentCandidateHint(candidate: PaymentMatchCandidateDto): st
   hints.push(`відхилення по даті: ${candidate.daysDistance} дн.`);
   return hints.join(" • ");
 }
+
+export { getPaymentDirectionLabel };

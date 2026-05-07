@@ -1,6 +1,8 @@
 /**
  * @vitest-environment jsdom
  */
+// @ts-ignore Node typings are not included in the frontend test tsconfig.
+import { readFileSync } from "fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { tick } from "svelte";
 import CounterpartiesScreen from "../CounterpartiesScreen.svelte";
@@ -196,6 +198,9 @@ function buttonByText(target: HTMLElement, text: string): HTMLButtonElement {
 }
 
 describe("CounterpartiesScreen component", () => {
+  const source = readFileSync("frontend/src/lib/screens/CounterpartiesScreen.svelte", "utf8");
+  const styles = readFileSync("frontend/src/styles/counterparties.css", "utf8");
+
   beforeEach(() => {
     setCounterpartiesState();
     for (const fn of [
@@ -306,6 +311,7 @@ describe("CounterpartiesScreen component", () => {
     expect(target.querySelector('[data-testid="counterparties-screen"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="counterparties-list"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="counterparty-detail"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="counterparty-detail-section-label"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="counterparty-scenario"]')).toBeTruthy();
 
     component.$destroy();
@@ -503,5 +509,17 @@ describe("CounterpartiesScreen component", () => {
     expect(target.querySelector(".counterparty-overview-badges")?.getAttribute("style")).toBeNull();
 
     component.$destroy();
+  });
+
+  it("adds compact separation between the list and detail pane in stacked layout", () => {
+    expect(source).toContain("Деталі контрагента");
+    expect(styles).toMatch(/@media\s*\(max-width:\s*1100px\)[\s\S]*\.counterparties-list-wrap\s*\{[\s\S]*max-height:\s*420px/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*1100px\)[\s\S]*\.counterparty-detail-section-label\s*\{[\s\S]*display:\s*flex/);
+  });
+
+  it("keeps a tablet-style compact detail layout at 720px before collapsing fully on very small screens", () => {
+    expect(styles).toMatch(/@media\s*\(max-width:\s*720px\)[\s\S]*\.counterparty-metric-strip\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*720px\)[\s\S]*\.counterparty-scenario-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*560px\)[\s\S]*\.counterparty-scenario-grid[\s\S]*grid-template-columns:\s*1fr/);
   });
 });

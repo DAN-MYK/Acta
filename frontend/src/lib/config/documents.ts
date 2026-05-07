@@ -125,3 +125,7 @@ export function getDocumentCreateLabel(
 export function supportsExistingPdfFlow(kind: string): boolean {
   return kind === "invoice" || kind === "waybill";
 }
+
+export function supportsDocumentPdfGeneration(kind: string): boolean {
+  return kind === "act" || kind === "invoice";
+}

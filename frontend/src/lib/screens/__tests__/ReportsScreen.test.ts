@@ -1,6 +1,8 @@
 /**
  * @vitest-environment jsdom
  */
+// @ts-ignore Node typings are not included in the frontend test tsconfig.
+import { readFileSync } from "fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { tick } from "svelte";
 import ReportsScreen from "../ReportsScreen.svelte";
@@ -145,6 +147,8 @@ function makeReportsApiResponse(filter: ReportsScreenDto["filter"]): ReportsScre
 }
 
 describe("ReportsScreen", () => {
+  const styles = readFileSync("frontend/src/styles/reports.css", "utf8");
+
   beforeEach(() => {
     mocks.load.mockReset();
     mocks.toggleCounterparty.mockReset();
@@ -264,7 +268,7 @@ describe("ReportsScreen", () => {
 
     expect(target.textContent).toContain("Нам мають заплатити");
     expect(target.textContent).toContain("Прострочені оплати");
-    expect(target.textContent).toContain("Прострочено 4 дн.");
+    expect(target.textContent).toContain("Прострочено 4 дні");
     expect(target.querySelector(".reports-table-row-overdue")).toBeTruthy();
     expect(activeTab?.textContent).toContain("заплатити");
     expect(rows.some((row) => row.includes("INV-2026-0042"))).toBe(true);
@@ -897,6 +901,13 @@ describe("ReportsScreen", () => {
     expect(mocks.load).toHaveBeenCalledWith({ tab: "pnl" });
 
     component.$destroy();
+  });
+
+  it("uses a denser tablet-style compact layout before collapsing fully on very small widths", () => {
+    expect(styles).toMatch(/@media\s*\(max-width:\s*720px\)[\s\S]*\.reports-filter-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*720px\)[\s\S]*\.reports-kpis\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*720px\)[\s\S]*\.reports-filters\s+\.task-tabs\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*560px\)[\s\S]*\.reports-filter-grid[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
   });
 });
 

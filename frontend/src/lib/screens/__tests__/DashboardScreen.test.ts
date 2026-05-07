@@ -1,6 +1,8 @@
 /**
  * @vitest-environment jsdom
  */
+// @ts-ignore Node typings are not included in the frontend test tsconfig.
+import { readFileSync } from "fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { tick } from "svelte";
 import DashboardScreen from "../DashboardScreen.svelte";
@@ -152,6 +154,8 @@ function buttonByText(target: HTMLElement, text: string): HTMLButtonElement {
 }
 
 describe("DashboardScreen component", () => {
+  const styles = readFileSync("frontend/src/styles/dashboard.css", "utf8");
+
   beforeEach(() => {
     mocks.dashboardState.set({ screen: makeDashboard(), initialLoading: false, loading: false, error: null });
     mocks.dashboardLoad.mockReset();
@@ -243,5 +247,15 @@ describe("DashboardScreen component", () => {
     expect(target.textContent).not.toContain("Очікуваних платежів поки немає.");
 
     component.$destroy();
+  });
+
+  it("uses denser compact KPI and card spacing before collapsing to a single KPI column", () => {
+    expect(styles).toMatch(/@media\s*\(max-width:\s*980px\)[\s\S]*\.dashboard-kpis\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*980px\)[\s\S]*\.dashboard-card\s*\{[\s\S]*padding:\s*16px/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*720px\)[\s\S]*\.dashboard-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*720px\)[\s\S]*\.dashboard-kpis\s*\{[\s\S]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*720px\)[\s\S]*\.cashflow-row\s*\{[\s\S]*border:\s*1px solid/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*560px\)[\s\S]*\.dashboard-grid[\s\S]*grid-template-columns:\s*1fr/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*560px\)[\s\S]*\.dashboard-kpis[\s\S]*grid-template-columns:\s*1fr/);
   });
 });
