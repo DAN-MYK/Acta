@@ -4,8 +4,13 @@
   import SkeletonRow from "../components/SkeletonRow.svelte";
   import { EDITOR_DIRTY_COPY, TASK_PRIORITY_OPTIONS, TASK_STATUS_OPTIONS } from "../config/ui";
   import { tasksStore } from "../stores/tasks";
-  import type { TaskDraftFormDto, TaskItemDto, TaskStatus } from "../types";
-
+  import {
+    formatTaskDayLabel,
+    getFocusedTaskItems,
+    getTaskPriorityTone,
+    getTodayTaskItems
+  } from "../tasksPresentation";
+  import type { TaskDraftFormDto, TaskItemDto } from "../types";
   const tasks = tasksStore;
 
   onMount(() => {
@@ -17,47 +22,14 @@
     tasks.updateFormField(field, input.value);
   }
 
-  function focusTaskItems(items: TaskItemDto[], tab: "open" | "done" | "all") {
-    const scoped =
-      tab === "done"
-        ? items.filter((item) => item.status === "done" || item.status === "cancelled")
-        : tab === "all"
-          ? items
-          : items.filter((item) => item.status === "open" || item.status === "in_progress");
-
-    return scoped.sort((a, b) => {
-      const w = (p: string) => (p === "critical" ? 0 : p === "high" ? 1 : 2);
-      if (w(a.priority) !== w(b.priority)) return w(a.priority) - w(b.priority);
-      return (a.dueDate || "9999-99-99").localeCompare(b.dueDate || "9999-99-99");
-    });
-  }
-
-  function todayTaskItems(items: TaskItemDto[]) {
-    const today = new Date().toISOString().slice(0, 10);
-    return items.filter((item) => item.dueDate === today || item.reminderAt.startsWith(today));
-  }
-
   function toggleTaskStatus(task: TaskItemDto) {
-    const nextStatus: TaskStatus = task.status === "done" ? "open" : "done";
+    const nextStatus = task.status === "done" ? "open" : "done";
     void tasks.setStatus(task.id, nextStatus);
   }
 
-  function priorityBarColor(priority: string): string {
-    if (priority === "critical" || priority === "high") return "danger";
-    if (priority === "normal") return "warning";
-    return "none";
-  }
-
-  function computeDayLabel(): string {
-    const days = ["нд", "пн", "вт", "ср", "чт", "пт", "сб"];
-    const months = ["січ", "лют", "бер", "кві", "тра", "чер", "лип", "сер", "вер", "жов", "лис", "гру"];
-    const now = new Date();
-    return `${days[now.getDay()]} · ${now.getDate()} ${months[now.getMonth()]}`;
-  }
-
-  let dayLabel = computeDayLabel();
+  let dayLabel = formatTaskDayLabel();
   const dayLabelTimer = setInterval(() => {
-    dayLabel = computeDayLabel();
+    dayLabel = formatTaskDayLabel();
   }, 60_000);
   onDestroy(() => clearInterval(dayLabelTimer));
 
@@ -170,12 +142,12 @@
           <div class="tasks-skeleton-wrapper">
             <SkeletonRow count={5} variant="compact" />
           </div>
-        {:else if focusTaskItems($tasks.screen?.items ?? [], $tasks.tab).length === 0}
+        {:else if getFocusedTaskItems($tasks.screen?.items ?? [], $tasks.tab).length === 0}
           <div class="tasks-empty">Задач немає</div>
         {:else}
-          {#each focusTaskItems($tasks.screen?.items ?? [], $tasks.tab) as item (item.id)}
+          {#each getFocusedTaskItems($tasks.screen?.items ?? [], $tasks.tab) as item (item.id)}
             {@const isDone = item.status === "done" || item.status === "cancelled"}
-            {@const barColor = priorityBarColor(item.priority)}
+            {@const barColor = getTaskPriorityTone(item.priority)}
             <div class="task-row" class:task-row-done={isDone}>
               {#if barColor !== "none" && !isDone}
                 <div class="task-priority-bar task-priority-{barColor}" />
@@ -224,7 +196,7 @@
             <SkeletonRow count={3} variant="compact" />
           </div>
         {:else}
-          {#each todayTaskItems($tasks.screen?.items ?? []) as item (item.id)}
+          {#each getTodayTaskItems($tasks.screen?.items ?? []) as item (item.id)}
             <button
               class="linked-row"
               on:click={() => tasks.openEditor(item.id)}
