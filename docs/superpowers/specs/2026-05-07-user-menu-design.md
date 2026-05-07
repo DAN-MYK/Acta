@@ -99,7 +99,7 @@ if (event.key === "Escape") {
       aria-checked={$settings.screen?.preferences.darkMode ?? false}
       on:click={onUserMenuToggleTheme}
     >
-      <AppIcon name="theme" size={14} />
+      <AppIcon name="appearance" size={14} />
       <span>Темна тема</span>
       <span class="user-menu-toggle" class:on={$settings.screen?.preferences.darkMode ?? false}></span>
     </button>
@@ -109,7 +109,7 @@ if (event.key === "Escape") {
       class="user-menu-item user-menu-item-danger"
       on:click={() => { /* TODO: logout */ showUserMenu = false; }}
     >
-      <AppIcon name="open-link" size={14} />
+      <AppIcon name="openLink" size={14} />
       <span>Вийти</span>
     </button>
   </div>
@@ -229,6 +229,51 @@ async function onUserMenuToggleTheme() {
 |---|---|
 | `frontend/src/App.svelte` | Видалення `.nav-item-settings`, додавання state + handlers + dropdown markup |
 | `frontend/src/styles.css` | Нові класи: `.user-menu`, `.user-menu-backdrop`, `.user-menu-item`, `.user-menu-toggle`; `position: relative` для `.user-footer` |
+| `frontend/src/__tests__/AppShell.test.ts` | Оновити regex на рядку 219, додати нові тести |
+
+---
+
+## Тести
+
+### Оновити наявний тест (AppShell.test.ts, рядок 219)
+
+CSS-правило `@media (max-width: 720px)` після видалення `.nav-item-settings` виглядатиме як `.nav-item { font-size: 13px }` без `.nav-item-settings`. Regex треба оновити:
+
+```ts
+// було:
+expect(styles).toMatch(/@media\s*\(max-width:\s*720px\)[\s\S]*\.nav-item,\s*\.nav-item-settings\s*\{[\s\S]*font-size:\s*13px/);
+
+// стане:
+expect(styles).toMatch(/@media\s*\(max-width:\s*720px\)[\s\S]*\.nav-item\s*\{[\s\S]*font-size:\s*13px/);
+```
+
+> Якщо CSS-правило залишить `.nav-item-settings` у селекторі (не видаляючи його там), то тест не треба міняти — але тоді клас `.nav-item-settings` вже не існує в HTML, що семантично неправильно. Рекомендується прибрати клас із CSS-правила разом з HTML.
+
+### Нові тести
+
+Додати до `AppShell.test.ts` або окремий `UserMenu.test.ts`:
+
+| Тест | Що перевіряє |
+|---|---|
+| Відкриття меню | Клік на `.user-more` → `[role="menu"]` з'являється |
+| Закриття через backdrop | Клік на `.user-menu-backdrop` → меню зникає |
+| Escape закриває меню | `keydown Escape` при відкритому меню → `showUserMenu = false` |
+| Escape не закриває palette якщо меню відкрите | Пріоритет: меню закривається, palette залишається |
+| Ctrl+K закриває меню | `keydown Ctrl+K` при відкритому меню → `showUserMenu = false`, palette відкривається |
+| Toggle теми | Клік на пункт теми → `themeStore.setMode` викликається з правильним значенням |
+| Навігація в settings | Клік на «Налаштування» → `navigation.go("settings")` + меню закривається |
+
+---
+
+## Mobile / compact поведінка
+
+`.user-footer` вже прихований на `max-width: 980px` (CSS: `display: none`). Це означає: на вузьких вікнах кнопка `···` недоступна, і після видалення шестерні **Налаштування** не матимуть видимої точки входу в sidebar.
+
+**Рішення для v1:** приймається як є. Проект — desktop-first Tauri, вікно < 980px не є штатним сценарієм. Доступ до налаштувань залишається через:
+- `Ctrl+7` (клавіатурний шорткат)
+- Command Palette (`Ctrl+K` → "Налаштування")
+
+**Spec фіксує це явно:** compact-режим не отримує окремої точки входу до налаштувань у v1. Якщо в майбутньому з'явиться mobile/compact layout — треба окремо передбачити доступ (наприклад, додати settings до bottom nav).
 
 ---
 
