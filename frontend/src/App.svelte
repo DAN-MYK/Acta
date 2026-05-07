@@ -26,6 +26,15 @@
 
   const paletteTitleId = "command-palette-title";
   const paletteListId = "command-palette-items";
+  const SEARCH_PLACEHOLDERS: Record<ScreenId, string> = {
+    dashboard: "Пошук в Acta…",
+    documents: "Пошук у документах…",
+    counterparties: "Пошук у контрагентах…",
+    payments: "Пошук у платежах…",
+    reports: "Пошук у звітах…",
+    tasks: "Пошук у завданнях…",
+    settings: "Пошук у налаштуваннях…"
+  };
 
   let paletteInput: HTMLInputElement | null = null;
   let paletteToggleButton: HTMLButtonElement | null = null;
@@ -33,6 +42,7 @@
   let paletteItemButtons: Array<HTMLButtonElement | null> = [];
   let activePaletteIndex = -1;
   let wasPaletteOpen = false;
+  let showUserMenu = false;
 
   onMount(async () => {
     await appShell.bootstrap();
@@ -74,6 +84,7 @@
   $: isShellBusy = $shell.loading || appShellState.loading;
   $: shellProgressLabel = appShellState.progressLabel ?? $shell.progressLabel;
   $: screenTitle = SCREEN_TITLES[currentScreen] ?? "Acta";
+  $: topbarSearchPlaceholder = SEARCH_PLACEHOLDERS[currentScreen] ?? "Пошук в Acta…";
   $: activeCompany = shellState?.companyItems.find(c => c.active);
 
   function groupLabel(kind: string): string {
@@ -127,6 +138,13 @@
     await appShell.switchActiveCompany(select.value);
   }
 
+  async function onUserMenuToggleTheme() {
+    const darkMode = !($settings.screen?.preferences.darkMode ?? false);
+    theme.setMode(darkMode ? "dark" : "light");
+    settings.updatePreference("darkMode", darkMode);
+    await settings.savePreferences();
+    await appShell.reloadShellChrome();
+  }
 
   function closePalette() {
     palette.close();
@@ -232,10 +250,17 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    if (event.key === "Escape" && $palette.open) {
-      event.preventDefault();
-      closePalette();
-      return;
+    if (event.key === "Escape") {
+      if (showUserMenu) {
+        event.preventDefault();
+        showUserMenu = false;
+        return;
+      }
+      if ($palette.open) {
+        event.preventDefault();
+        closePalette();
+        return;
+      }
     }
 
     if (event.ctrlKey && event.key.toLowerCase() === "k") {
@@ -243,6 +268,7 @@
       if (isShellBusy) {
         return;
       }
+      showUserMenu = false;
       palette.toggle();
     }
 
@@ -320,20 +346,6 @@
 
     <div class="sidebar-spacer"></div>
 
-    <!-- Settings nav -->
-    <button
-      class="nav-item nav-item-settings"
-      class:active={currentScreen === "settings"}
-      data-testid="nav-settings"
-      aria-current={currentScreen === "settings" ? "page" : undefined}
-      disabled={isShellBusy}
-      on:click={() => navigation.go("settings")}
-    >
-      <span class="nav-rail"></span>
-      <AppIcon name="settings" surface={currentScreen === "settings"} />
-      <span>Налаштування</span>
-    </button>
-
     <!-- User pill -->
     <div class="user-footer">
       <div class="user-avatar" aria-hidden="true">{shellState?.chrome.userInitials ?? "АА"}</div>
@@ -341,7 +353,60 @@
         <span class="user-name">{shellState?.chrome.userName ?? "Користувач"}</span>
         <span class="user-role">{shellState?.chrome.userRole ?? ""}</span>
       </div>
-      <button class="user-more" aria-label="Меню користувача">···</button>
+      <button
+        class="user-more"
+        type="button"
+        aria-label="Меню користувача"
+        aria-haspopup="menu"
+        aria-expanded={showUserMenu}
+        on:click={() => {
+          showUserMenu = !showUserMenu;
+          if (showUserMenu) palette.close();
+        }}
+      >···</button>
+
+      {#if showUserMenu}
+        <button
+          type="button"
+          class="user-menu-backdrop"
+          aria-label="Закрити меню"
+          on:click={() => { showUserMenu = false; }}
+        ></button>
+
+        <div class="user-menu" role="menu">
+          <button
+            type="button"
+            role="menuitem"
+            class="user-menu-item"
+            on:click={() => { navigation.go("settings"); showUserMenu = false; }}
+          >
+            <AppIcon name="settings" size={14} />
+            <span>Налаштування</span>
+          </button>
+
+          <button
+            type="button"
+            role="menuitemcheckbox"
+            class="user-menu-item"
+            aria-checked={$settings.screen?.preferences.darkMode ?? false}
+            on:click={onUserMenuToggleTheme}
+          >
+            <AppIcon name="appearance" size={14} />
+            <span>Темна тема</span>
+            <span class="user-menu-toggle" class:on={$settings.screen?.preferences.darkMode ?? false}></span>
+          </button>
+
+          <button
+            type="button"
+            role="menuitem"
+            class="user-menu-item user-menu-item-danger"
+            on:click={() => { console.warn("TODO: logout"); showUserMenu = false; }}
+          >
+            <AppIcon name="openLink" size={14} />
+            <span>Вийти</span>
+          </button>
+        </div>
+      {/if}
     </div>
   </aside>
 
@@ -368,7 +433,7 @@
         on:click={() => palette.toggle()}
       >
         <AppIcon name="search" />
-        <span class="topbar-search-placeholder">Пошук документа…</span>
+        <span class="topbar-search-placeholder">{topbarSearchPlaceholder}</span>
         <span class="topbar-search-kbd"><kbd>Ctrl</kbd><kbd>K</kbd></span>
       </button>
 
