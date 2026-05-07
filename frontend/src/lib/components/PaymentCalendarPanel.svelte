@@ -168,7 +168,7 @@
   {:else if !$payments.calendar}
     <div class="empty-state-card" data-testid="payments-calendar-empty">
       <strong>{PAYMENT_CALENDAR_COPY.emptyTitle}</strong>
-      <p>Коли з’являться події графіка платежів або задачі з дедлайнами, вони відобразяться тут.</p>
+      <p>{PAYMENT_CALENDAR_COPY.emptyDescription}</p>
     </div>
   {:else}
     <div class="calendar-layout">
@@ -229,7 +229,7 @@
         {#if visibleEventCount === 0}
           <div class="empty-state-card compact" data-testid="payments-calendar-filter-empty">
             <strong>{PAYMENT_CALENDAR_COPY.filterEmptyTitle}</strong>
-            <p>Перемкніть фільтр або перейдіть на інший місяць, щоб подивитися інші записи.</p>
+            <p>{PAYMENT_CALENDAR_COPY.filterEmptyDescription}</p>
           </div>
         {/if}
       </div>

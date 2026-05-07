@@ -2,9 +2,16 @@
   import SkeletonRow from "../components/SkeletonRow.svelte";
   import {
     COUNTERPARTIES_COPY,
-    formatDocumentsLabel,
-    formatLastContactLabel
+    EDITOR_DIRTY_COPY
   } from "../config/ui";
+  import {
+    getCounterpartyFinancialSummary,
+    getCounterpartyLastContactLabel,
+    getCounterpartyOverdueDocumentsLabel,
+    getCounterpartyRiskLabel,
+    getCounterpartyScenarioDescription,
+    getCounterpartyScenarioTitle
+  } from "../counterpartyPresentation";
   import { isFormattedMoneyNegative } from "../money";
   import { counterpartiesStore } from "../stores/counterparties";
   import { documentsStore } from "../stores/documents";
@@ -69,12 +76,19 @@
     }
   }
 
-  function onArchiveCurrent() {
-    if (!window.confirm(COUNTERPARTIES_COPY.archiveConfirm)) {
-      return;
-    }
+  let pendingArchive = false;
 
+  function onArchiveCurrent() {
+    pendingArchive = true;
+  }
+
+  function confirmArchive() {
+    pendingArchive = false;
     counterparties.archiveCurrent();
+  }
+
+  function cancelArchive() {
+    pendingArchive = false;
   }
 
   $: if (!$counterparties.editor && pendingDirtyClose) {
@@ -94,11 +108,11 @@
 >
   <div class="panel-header">
     <div>
-      <h2>Контрагенти</h2>
-      <p>{$counterparties.screen?.items.length ?? 0} записів</p>
+      <h2>РљРѕРЅС‚СЂР°РіРµРЅС‚Рё</h2>
+      <p>{$counterparties.screen?.items.length ?? 0} Р·Р°РїРёСЃС–РІ</p>
     </div>
     <div class="panel-actions">
-      <button class="btn-primary" on:click={() => counterparties.openEditor()}>Новий контрагент</button>
+      <button class="btn-primary" on:click={() => counterparties.openEditor()}>РќРѕРІРёР№ РєРѕРЅС‚СЂР°РіРµРЅС‚</button>
     </div>
   </div>
 
@@ -132,13 +146,13 @@
               >
                 <div class="counterparty-row-main">
                   <strong>{item.name}</strong>
-                  <p>{item.edrpou || "Без ЄДРПОУ"}</p>
+                  <p>{item.edrpou || "Р‘РµР· Р„Р”Р РџРћРЈ"}</p>
                 </div>
                 <div class="counterparty-row-meta">
                   <span class="money-value" data-negative={isFormattedMoneyNegative(item.balanceStr)}>{item.balanceStr}</span>
                   <span class="task-pill">{item.kind}</span>
                   {#if item.overdueCount > 0}
-                    <span class="risk-chip risk-chip-danger">{item.overdueCount} простр.</span>
+                    <span class="risk-chip risk-chip-danger">{item.overdueCount} РїСЂРѕСЃС‚СЂ.</span>
                   {/if}
                 </div>
               </button>
@@ -159,7 +173,7 @@
           <div class="counterparty-detail-main">
             <div class="counterparty-detail-header">
               <div>
-                <div class="scenario-eyebrow">{$counterparties.detail.info.kind === "ФОП" ? "Фізична особа-підприємець" : "Юридична особа"}</div>
+                <div class="scenario-eyebrow">{$counterparties.detail.info.kind === "Р¤РћРџ" ? "Р¤С–Р·РёС‡РЅР° РѕСЃРѕР±Р°-РїС–РґРїСЂРёС”РјРµС†СЊ" : "Р®СЂРёРґРёС‡РЅР° РѕСЃРѕР±Р°"}</div>
                 <h3>{$counterparties.detail.info.name}</h3>
                 <div class="counterparty-overview-badges">
                   <span class="task-pill">{$counterparties.detail.info.kind}</span>
@@ -174,45 +188,64 @@
               </div>
               <div class="editor-actions">
                 <button class="btn-secondary" on:click={() => counterparties.openEditor($counterparties.detail?.info.id)}>
-                  Редагувати
+                  Р РµРґР°РіСѓРІР°С‚Рё
                 </button>
                 <button class="btn-primary" on:click={() => counterparties.createDocument()}>
-                  Створити документ
+                  РЎС‚РІРѕСЂРёС‚Рё РґРѕРєСѓРјРµРЅС‚
                 </button>
                 <button class="btn-danger" type="button" on:click={onArchiveCurrent}>
-                  Архівувати
+                  РђСЂС…С–РІСѓРІР°С‚Рё
                 </button>
               </div>
             </div>
           </div>
 
+          {#if pendingArchive}
+            <div
+              class="confirm-delete-banner cp-confirm-banner"
+              role="alertdialog"
+              aria-live="assertive"
+              aria-labelledby="cp-confirm-archive-title"
+              data-testid="counterparties-confirm-archive-banner"
+            >
+              <div>
+                <strong id="cp-confirm-archive-title">РђСЂС…С–РІСѓРІР°С‚Рё РєРѕРЅС‚СЂР°РіРµРЅС‚Р°?</strong>
+                <p>{COUNTERPARTIES_COPY.archiveConfirm}</p>
+              </div>
+              <div class="editor-dirty-actions">
+                <button type="button" class="btn-ghost btn-sm" on:click={cancelArchive}>РЎРєР°СЃСѓРІР°С‚Рё</button>
+                <button type="button" class="btn-danger btn-sm" on:click={confirmArchive} data-testid="counterparties-confirm-archive-confirm">РђСЂС…С–РІСѓРІР°С‚Рё</button>
+              </div>
+            </div>
+          {/if}
+
           <!-- Flat metric strip -->
           <div class="counterparty-metric-strip">
             <div class="counterparty-metric">
-              <div class="counterparty-metric-label">Баланс</div>
+              <div class="counterparty-metric-label">Р‘Р°Р»Р°РЅСЃ</div>
               <div class="counterparty-metric-value" class:is-danger={$counterparties.detail.info.balanceIsNegative}>
                 {$counterparties.detail.info.balanceStr}
               </div>
-              <div class="counterparty-metric-sub">{$counterparties.detail.info.balanceIsNegative ? "ми винні" : "нам винні"}</div>
+              <div class="counterparty-metric-sub">{$counterparties.detail.info.balanceIsNegative ? "РјРё РІРёРЅРЅС–" : "РЅР°Рј РІРёРЅРЅС–"}</div>
             </div>
             <div class="counterparty-metric-divider"></div>
             <div class="counterparty-metric">
-              <div class="counterparty-metric-label">Документів</div>
+              <div class="counterparty-metric-label">Р”РѕРєСѓРјРµРЅС‚С–РІ</div>
               <div class="counterparty-metric-value">{$counterparties.detail.info.docCount}</div>
-              <div class="counterparty-metric-sub">{$counterparties.detail.documents.length} активних</div>
+              <div class="counterparty-metric-sub">{$counterparties.detail.documents.length} Р°РєС‚РёРІРЅРёС…</div>
             </div>
             <div class="counterparty-metric-divider"></div>
             <div class="counterparty-metric">
-              <div class="counterparty-metric-label">Прострочено</div>
+              <div class="counterparty-metric-label">РџСЂРѕСЃС‚СЂРѕС‡РµРЅРѕ</div>
               <div class="counterparty-metric-value" class:is-danger={$counterparties.detail.info.overdueCount > 0}>
                 {$counterparties.detail.info.overdueCount}
               </div>
-              <div class="counterparty-metric-sub">{$counterparties.detail.info.overdueCount > 0 ? $counterparties.detail.info.overdueAmountStr : "немає"}</div>
+              <div class="counterparty-metric-sub">{$counterparties.detail.info.overdueCount > 0 ? $counterparties.detail.info.overdueAmountStr : "РЅРµРјР°С”"}</div>
             </div>
             <div class="counterparty-metric-divider"></div>
             <div class="counterparty-metric">
-              <div class="counterparty-metric-label">Останній контакт</div>
-              <div class="counterparty-metric-value counterparty-metric-value-sm">{$counterparties.detail.info.lastContactDate || "—"}</div>
+              <div class="counterparty-metric-label">РћСЃС‚Р°РЅРЅС–Р№ РєРѕРЅС‚Р°РєС‚</div>
+              <div class="counterparty-metric-value counterparty-metric-value-sm">{$counterparties.detail.info.lastContactDate || "вЂ”"}</div>
               <div class="counterparty-metric-sub">{getCounterpartyLastContactLabel($counterparties.detail.info.lastContactDays)}</div>
             </div>
           </div>
@@ -220,30 +253,30 @@
           <div class="counterparty-detail-scroll">
           <div class="counterparty-scenario-grid" data-testid="counterparty-scenario">
             <article class="scenario-card">
-              <span class="scenario-eyebrow">Хто це</span>
+              <span class="scenario-eyebrow">РҐС‚Рѕ С†Рµ</span>
               <strong>{$counterparties.detail.info.kind} {$counterparties.detail.info.name}</strong>
               <div class="scenario-facts">
                 <div>
-                  <span>Директор</span>
-                  <strong>{$counterparties.detail.info.director || "—"}</strong>
+                  <span>Р”РёСЂРµРєС‚РѕСЂ</span>
+                  <strong>{$counterparties.detail.info.director || "вЂ”"}</strong>
                 </div>
                 <div>
-                  <span>Банк</span>
-                  <strong>{$counterparties.detail.info.bank || "—"}</strong>
+                  <span>Р‘Р°РЅРє</span>
+                  <strong>{$counterparties.detail.info.bank || "вЂ”"}</strong>
                 </div>
                 <div>
                   <span>VAT</span>
-                  <strong>{$counterparties.detail.info.vat || "—"}</strong>
+                  <strong>{$counterparties.detail.info.vat || "вЂ”"}</strong>
                 </div>
                 <div>
                   <span>IBAN</span>
-                  <strong>{$counterparties.detail.info.iban || "—"}</strong>
+                  <strong>{$counterparties.detail.info.iban || "вЂ”"}</strong>
                 </div>
               </div>
             </article>
 
             <article class="scenario-card">
-              <span class="scenario-eyebrow">Фінансовий стан</span>
+              <span class="scenario-eyebrow">Р¤С–РЅР°РЅСЃРѕРІРёР№ СЃС‚Р°РЅ</span>
               <strong>{$counterparties.detail.info.balanceStr}</strong>
               <p>{getCounterpartyFinancialSummary(
                 $counterparties.detail.info.balanceIsNegative,
@@ -251,27 +284,27 @@
               )}</p>
               <div class="scenario-facts">
                 <div>
-                  <span>Баланс</span>
+                  <span>Р‘Р°Р»Р°РЅСЃ</span>
                   <strong>{$counterparties.detail.info.balanceStr}</strong>
                 </div>
                 <div>
-                  <span>Прострочено</span>
+                  <span>РџСЂРѕСЃС‚СЂРѕС‡РµРЅРѕ</span>
                   <strong>{getCounterpartyOverdueDocumentsLabel($counterparties.detail.info.overdueCount)}</strong>
                 </div>
                 <div>
-                  <span>Сума прострочки</span>
+                  <span>РЎСѓРјР° РїСЂРѕСЃС‚СЂРѕС‡РєРё</span>
                   <strong>{$counterparties.detail.info.overdueAmountStr}</strong>
                 </div>
                 <div>
-                  <span>Останній контакт {$counterparties.detail.info.lastContactDate}</span>
+                  <span>РћСЃС‚Р°РЅРЅС–Р№ РєРѕРЅС‚Р°РєС‚ {$counterparties.detail.info.lastContactDate}</span>
                   <strong>{getCounterpartyLastContactLabel($counterparties.detail.info.lastContactDays)}</strong>
                 </div>
               </div>
             </article>
 
             <article class="scenario-card">
-              <span class="scenario-eyebrow">Документи</span>
-              <strong>{$counterparties.detail.info.docCount} в роботі</strong>
+              <span class="scenario-eyebrow">Р”РѕРєСѓРјРµРЅС‚Рё</span>
+              <strong>{$counterparties.detail.info.docCount} РІ СЂРѕР±РѕС‚С–</strong>
               <div class="linked-list">
                 {#if $counterparties.detail.documents.length > 0}
                   {#each $counterparties.detail.documents as item}
@@ -287,30 +320,30 @@
                     </button>
                   {/each}
                 {:else}
-                  <div class="linked-empty">Ще немає документів. Найкращий наступний крок - створити перший документ.</div>
+                  <div class="linked-empty">Р©Рµ РЅРµРјР°С” РґРѕРєСѓРјРµРЅС‚С–РІ. РќР°Р№РєСЂР°С‰РёР№ РЅР°СЃС‚СѓРїРЅРёР№ РєСЂРѕРє - СЃС‚РІРѕСЂРёС‚Рё РїРµСЂС€РёР№ РґРѕРєСѓРјРµРЅС‚.</div>
                 {/if}
               </div>
             </article>
 
             <article class="scenario-card">
-              <span class="scenario-eyebrow">Платежі</span>
-              <strong>{$counterparties.detail.payments.length} останніх рухів</strong>
+              <span class="scenario-eyebrow">РџР»Р°С‚РµР¶С–</span>
+              <strong>{$counterparties.detail.payments.length} РѕСЃС‚Р°РЅРЅС–С… СЂСѓС…С–РІ</strong>
               <div class="linked-list">
                 {#if $counterparties.detail.payments.length > 0}
                   {#each $counterparties.detail.payments as payment}
                     <div class="linked-row static">
-                      <span>{payment.date} • {payment.account}</span>
+                      <span>{payment.date} вЂў {payment.account}</span>
                       <span>{payment.amountStr}</span>
                     </div>
                   {/each}
                 {:else}
-                  <div class="linked-empty">По контрагенту ще немає рухів коштів. Після створення документа зручніше повернутися сюди й перевірити оплату.</div>
+                  <div class="linked-empty">РџРѕ РєРѕРЅС‚СЂР°РіРµРЅС‚Сѓ С‰Рµ РЅРµРјР°С” СЂСѓС…С–РІ РєРѕС€С‚С–РІ. РџС–СЃР»СЏ СЃС‚РІРѕСЂРµРЅРЅСЏ РґРѕРєСѓРјРµРЅС‚Р° Р·СЂСѓС‡РЅС–С€Рµ РїРѕРІРµСЂРЅСѓС‚РёСЃСЏ СЃСЋРґРё Р№ РїРµСЂРµРІС–СЂРёС‚Рё РѕРїР»Р°С‚Сѓ.</div>
                 {/if}
               </div>
             </article>
 
             <article class="scenario-card scenario-card-accent">
-              <span class="scenario-eyebrow">Наступна дія</span>
+              <span class="scenario-eyebrow">РќР°СЃС‚СѓРїРЅР° РґС–СЏ</span>
               <strong>{getCounterpartyScenarioTitle(
                 $counterparties.detail.info.overdueCount,
                 $counterparties.detail.info.lastContactDays,
@@ -324,11 +357,11 @@
               )}</p>
               <div class="scenario-facts">
                 <div>
-                  <span>Контакт</span>
-                  <strong>{$counterparties.detail.info.lastContactDate} • {getCounterpartyLastContactLabel($counterparties.detail.info.lastContactDays)}</strong>
+                  <span>РљРѕРЅС‚Р°РєС‚</span>
+                  <strong>{$counterparties.detail.info.lastContactDate} вЂў {getCounterpartyLastContactLabel($counterparties.detail.info.lastContactDays)}</strong>
                 </div>
                 <div>
-                  <span>Документів</span>
+                  <span>Р”РѕРєСѓРјРµРЅС‚С–РІ</span>
                   <strong>{$counterparties.detail.info.docCount}</strong>
                 </div>
               </div>
@@ -342,7 +375,7 @@
           <p>
             {COUNTERPARTIES_COPY.emptyDescription}
           </p>
-          <button class="btn-primary" on:click={() => counterparties.openEditor()}>Новий контрагент</button>
+          <button class="btn-primary" on:click={() => counterparties.openEditor()}>РќРѕРІРёР№ РєРѕРЅС‚СЂР°РіРµРЅС‚</button>
         </div>
       {/if}
     </div>
@@ -353,7 +386,7 @@
   <button
     type="button"
     class="editor-backdrop"
-    aria-label="Закрити редактор"
+    aria-label="Р—Р°РєСЂРёС‚Рё СЂРµРґР°РєС‚РѕСЂ"
     data-testid="counterparties-editor-backdrop"
     on:click={onEditorBackdropClick}
   ></button>
@@ -367,8 +400,8 @@
         data-testid="counterparties-dirty-banner"
       >
         <div>
-          <strong id="counterparties-dirty-banner-title">{COUNTERPARTIES_COPY.dirtyTitle}</strong>
-          <p>{COUNTERPARTIES_COPY.dirtyDescription}</p>
+          <strong id="counterparties-dirty-banner-title">{EDITOR_DIRTY_COPY.dirtyTitle}</strong>
+          <p>{EDITOR_DIRTY_COPY.dirtyDescription}</p>
         </div>
         <div class="editor-dirty-actions">
           <button
@@ -377,7 +410,7 @@
             on:click={cancelDiscardChanges}
             data-testid="counterparties-dirty-banner-cancel"
           >
-            Залишитися
+            {EDITOR_DIRTY_COPY.dirtyStay}
           </button>
           <button
             type="button"
@@ -385,7 +418,7 @@
             on:click={confirmDiscardChanges}
             data-testid="counterparties-dirty-banner-discard"
           >
-            Так, закрити
+            {EDITOR_DIRTY_COPY.dirtyDiscard}
           </button>
         </div>
       </div>
@@ -393,25 +426,25 @@
     <div class="editor-header">
       <div>
         <h3>{$counterparties.editor.form.title}</h3>
-        <p>Картка контрагента</p>
+        <p>РљР°СЂС‚РєР° РєРѕРЅС‚СЂР°РіРµРЅС‚Р°</p>
       </div>
       <div class="editor-actions">
-        <button class="btn-primary" on:click={() => counterparties.save()}>Зберегти</button>
-        <button class="btn-ghost" on:click={requestCloseEditor}>Закрити</button>
+        <button class="btn-primary" on:click={() => counterparties.save()}>Р—Р±РµСЂРµРіС‚Рё</button>
+        <button class="btn-ghost" on:click={requestCloseEditor}>Р—Р°РєСЂРёС‚Рё</button>
       </div>
     </div>
 
     <div class="editor-grid cp-editor-grid">
       <label>
-        Назва
+        РќР°Р·РІР°
         <input value={$counterparties.editor.form.name} on:input={(event) => onCounterpartyFieldChange("name", event)} />
       </label>
       <label>
-        ЄДРПОУ
+        Р„Р”Р РџРћРЈ
         <input value={$counterparties.editor.form.edrpou} on:input={(event) => onCounterpartyFieldChange("edrpou", event)} />
       </label>
       <label>
-        ІПН
+        Р†РџРќ
         <input value={$counterparties.editor.form.ipn} on:input={(event) => onCounterpartyFieldChange("ipn", event)} />
       </label>
       <label>
@@ -419,7 +452,7 @@
         <input value={$counterparties.editor.form.iban} on:input={(event) => onCounterpartyFieldChange("iban", event)} />
       </label>
       <label>
-        Телефон
+        РўРµР»РµС„РѕРЅ
         <input value={$counterparties.editor.form.phone} on:input={(event) => onCounterpartyFieldChange("phone", event)} />
       </label>
       <label>
@@ -427,11 +460,11 @@
         <input value={$counterparties.editor.form.email} on:input={(event) => onCounterpartyFieldChange("email", event)} />
       </label>
       <label class="editor-grid-span">
-        Адреса
+        РђРґСЂРµСЃР°
         <input value={$counterparties.editor.form.address} on:input={(event) => onCounterpartyFieldChange("address", event)} />
       </label>
       <label class="editor-grid-span">
-        Примітки
+        РџСЂРёРјС–С‚РєРё
         <textarea rows="4" value={$counterparties.editor.form.notes} on:input={(event) => onCounterpartyFieldChange("notes", event)}></textarea>
       </label>
     </div>
