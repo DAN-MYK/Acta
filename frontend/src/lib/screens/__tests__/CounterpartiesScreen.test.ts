@@ -248,7 +248,6 @@ describe("CounterpartiesScreen component", () => {
 
   it("wires key CTA actions and opens detail from the list row", async () => {
     const { component, target } = renderCounterparties();
-    vi.spyOn(window, "confirm").mockReturnValueOnce(true);
 
     buttonByText(target, "ТОВ Ромашка").click();
     buttonByText(target, "Редагувати").click();
@@ -259,6 +258,12 @@ describe("CounterpartiesScreen component", () => {
     expect(mocks.open).toHaveBeenCalledWith("cp-1");
     expect(mocks.openEditor).toHaveBeenCalledWith("cp-2");
     expect(mocks.createDocument).toHaveBeenCalled();
+
+    // Archive shows in-app confirmation banner — action not called yet
+    expect(mocks.archiveCurrent).not.toHaveBeenCalled();
+    (target.querySelector('[data-testid="counterparties-confirm-archive-confirm"]') as HTMLButtonElement).click();
+    await tick();
+
     expect(mocks.archiveCurrent).toHaveBeenCalledTimes(1);
 
     component.$destroy();

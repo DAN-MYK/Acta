@@ -384,18 +384,25 @@ describe("DocumentsScreen component", () => {
 
   it("asks for confirmation before destructive document actions", async () => {
     setDocumentsState(["doc-1"]);
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
     const { component, target } = renderDocuments();
 
+    // Bulk delete: shows in-app banner instead of calling action directly
     buttonByText(target, "Видалити вибрані").click();
-    buttonByText(target, "Видалити").click();
     await tick();
-
-    expect(confirmSpy).toHaveBeenCalledTimes(2);
+    expect(target.querySelector('[data-testid="documents-confirm-bulk-banner"]')).toBeTruthy();
     expect(mocks.bulkDelete).not.toHaveBeenCalled();
+
+    // Cancel hides the banner without acting
+    buttonByText(target, "Скасувати").click();
+    await tick();
+    expect(target.querySelector('[data-testid="documents-confirm-bulk-banner"]')).toBeNull();
+
+    // Single delete: shows in-app banner instead of calling action directly
+    (target.querySelector('[data-testid="documents-delete-current-btn"]') as HTMLButtonElement).click();
+    await tick();
+    expect(target.querySelector('[data-testid="documents-confirm-delete-banner"]')).toBeTruthy();
     expect(mocks.deleteCurrent).not.toHaveBeenCalled();
 
-    confirmSpy.mockRestore();
     component.$destroy();
   });
 

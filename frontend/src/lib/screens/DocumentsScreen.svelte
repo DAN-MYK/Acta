@@ -3,6 +3,7 @@
   import AppIcon from "../components/AppIcon.svelte";
   import SkeletonRow from "../components/SkeletonRow.svelte";
   import {
+    EDITOR_DIRTY_COPY,
     DOCUMENTS_COPY,
     DOCUMENT_DIRECTION_LABELS,
     DOCUMENT_DIRECTION_OPTIONS,
@@ -237,12 +238,23 @@
     documents.updateItemField(index, field, input.value);
   }
 
-  function onDeleteCurrent() {
-    if (!window.confirm(DOCUMENTS_COPY.confirmDeleteCurrent)) {
-      return;
-    }
+  let pendingDeleteKind: 'single' | 'bulk' | null = null;
 
-    void documents.deleteCurrent();
+  function onDeleteCurrent() {
+    pendingDeleteKind = 'single';
+  }
+
+  function confirmDelete() {
+    if (pendingDeleteKind === 'single') {
+      void documents.deleteCurrent();
+    } else if (pendingDeleteKind === 'bulk') {
+      void documents.bulkDelete();
+    }
+    pendingDeleteKind = null;
+  }
+
+  function cancelDelete() {
+    pendingDeleteKind = null;
   }
 
   function onCreateChainDraft(kind: DocumentKind) {
@@ -270,11 +282,7 @@
   }
 
   function onBulkDelete() {
-    if (!window.confirm(DOCUMENTS_COPY.confirmDeleteBulk)) {
-      return;
-    }
-
-    void documents.bulkDelete();
+    pendingDeleteKind = 'bulk';
   }
 
   function onBulkAdvanceStatus() {
@@ -382,6 +390,7 @@
     </button>
   </div>
 
+  {#if ($documents.list?.items.length ?? 0) > 0}
   <div class="bulk-actions">
     <label class="bulk-select-all">
       <input
@@ -411,6 +420,26 @@
       Видалити вибрані
     </button>
   </div>
+  {/if}
+
+  {#if pendingDeleteKind === 'bulk'}
+    <div
+      class="confirm-delete-banner"
+      role="alertdialog"
+      aria-live="assertive"
+      aria-labelledby="documents-confirm-bulk-title"
+      data-testid="documents-confirm-bulk-banner"
+    >
+      <div>
+        <strong id="documents-confirm-bulk-title">Видалити вибрані?</strong>
+        <p>{DOCUMENTS_COPY.confirmDeleteBulk}</p>
+      </div>
+      <div class="editor-dirty-actions">
+        <button type="button" class="btn-ghost btn-sm" on:click={cancelDelete}>Скасувати</button>
+        <button type="button" class="btn-danger btn-sm" on:click={confirmDelete} data-testid="documents-confirm-bulk-confirm">Видалити</button>
+      </div>
+    </div>
+  {/if}
 
   {#if $documents.message}
     <p class="message" role="status" aria-live="polite">{$documents.message}</p>
@@ -517,8 +546,8 @@
         data-testid="documents-dirty-banner"
       >
         <div>
-          <strong id="documents-dirty-banner-title">{DOCUMENTS_COPY.dirtyTitle}</strong>
-          <p>{DOCUMENTS_COPY.dirtyDescription}</p>
+          <strong id="documents-dirty-banner-title">{EDITOR_DIRTY_COPY.dirtyTitle}</strong>
+          <p>{EDITOR_DIRTY_COPY.dirtyDescription}</p>
         </div>
         <div class="editor-dirty-actions">
           <button
@@ -527,7 +556,7 @@
             on:click={cancelDiscardChanges}
             data-testid="documents-dirty-banner-cancel"
           >
-            {DOCUMENTS_COPY.dirtyStay}
+            {EDITOR_DIRTY_COPY.dirtyStay}
           </button>
           <button
             type="button"
@@ -535,8 +564,27 @@
             on:click={confirmDiscardChanges}
             data-testid="documents-dirty-banner-discard"
           >
-            {DOCUMENTS_COPY.dirtyDiscard}
+            {EDITOR_DIRTY_COPY.dirtyDiscard}
           </button>
+        </div>
+      </div>
+    {/if}
+
+    {#if pendingDeleteKind === 'single'}
+      <div
+        class="confirm-delete-banner"
+        role="alertdialog"
+        aria-live="assertive"
+        aria-labelledby="documents-confirm-delete-title"
+        data-testid="documents-confirm-delete-banner"
+      >
+        <div>
+          <strong id="documents-confirm-delete-title">Видалити документ?</strong>
+          <p>{DOCUMENTS_COPY.confirmDeleteCurrent}</p>
+        </div>
+        <div class="editor-dirty-actions">
+          <button type="button" class="btn-ghost btn-sm" on:click={cancelDelete}>Скасувати</button>
+          <button type="button" class="btn-danger btn-sm" on:click={confirmDelete} data-testid="documents-confirm-delete-confirm">Видалити</button>
         </div>
       </div>
     {/if}
@@ -611,12 +659,14 @@
             PDF
           </button>
         {/if}
-        <button class="btn-danger" on:click={onDeleteCurrent} disabled={$documents.loading}>
-          Видалити
-        </button>
-        <button class="btn-ghost" on:click={requestCloseDrawer} disabled={$documents.loading}>
-          Закрити
-        </button>
+        <div class="editor-actions-close">
+          <button class="btn-danger" on:click={onDeleteCurrent} disabled={$documents.loading} data-testid="documents-delete-current-btn">
+            Видалити
+          </button>
+          <button class="btn-ghost" on:click={requestCloseDrawer} disabled={$documents.loading}>
+            Закрити
+          </button>
+        </div>
       </div>
     </div>
 
@@ -836,7 +886,7 @@
   .documents-nav-tabs {
     display: flex;
     gap: 2px;
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--acta-color-border);
     padding: 0 16px;
   }
 
@@ -845,14 +895,14 @@
     border: none;
     background: none;
     cursor: pointer;
-    color: var(--color-text-sub);
+    color: var(--acta-color-text-muted);
     border-bottom: 2px solid transparent;
     margin-bottom: -1px;
   }
 
   .nav-tab-active {
-    color: var(--color-primary);
-    border-bottom-color: var(--color-primary);
+    color: var(--acta-color-accent);
+    border-bottom-color: var(--acta-color-accent);
     font-weight: 500;
   }
 
@@ -864,42 +914,42 @@
 
   .kind-chip {
     padding: 4px 12px;
-    border-radius: 12px;
-    border: 1px solid var(--color-border);
-    background: var(--color-surface);
+    border-radius: var(--acta-radius-pill);
+    border: 1px solid var(--acta-color-border);
+    background: var(--acta-color-bg-subtle);
     cursor: pointer;
     font-size: 13px;
-    color: var(--color-text-sub);
+    color: var(--acta-color-text-muted);
   }
 
   .kind-chip-active {
-    background: var(--color-primary);
-    border-color: var(--color-primary);
+    background: var(--acta-color-accent);
+    border-color: var(--acta-color-accent);
     color: #fff;
   }
 
   .doc-direction-badge {
     font-size: 11px;
-    color: var(--color-text-muted);
+    color: var(--acta-color-text-faint);
   }
 
   .doc-direction-badge[data-direction="outgoing"] {
-    color: var(--color-success);
+    color: var(--acta-color-success);
   }
 
   .doc-direction-badge[data-direction="incoming"] {
-    color: var(--color-warning);
+    color: var(--acta-color-warning);
   }
 
   .editor-direction-fieldset {
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--acta-color-border);
     border-radius: 6px;
     padding: 8px 12px;
   }
 
   .editor-direction-fieldset legend {
     font-size: 12px;
-    color: var(--color-text-sub);
+    color: var(--acta-color-text-muted);
     padding: 0 4px;
   }
 

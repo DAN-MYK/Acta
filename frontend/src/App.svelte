@@ -322,13 +322,12 @@
 
     <!-- Settings nav -->
     <button
-      class="nav-item"
+      class="nav-item nav-item-settings"
       class:active={currentScreen === "settings"}
       data-testid="nav-settings"
       aria-current={currentScreen === "settings" ? "page" : undefined}
       disabled={isShellBusy}
       on:click={() => navigation.go("settings")}
-      style="margin-bottom: 4px"
     >
       <span class="nav-rail"></span>
       <AppIcon name="settings" surface={currentScreen === "settings"} />

@@ -722,18 +722,6 @@
     padding: 12px 16px;
   }
 
-  /* Editor drawer */
-  .editor-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 200;
-    background: var(--acta-color-bg-overlay);
-    backdrop-filter: blur(2px);
-    border: none;
-    padding: 0;
-    cursor: default;
-  }
-
   .editor-sheet {
     position: fixed;
     top: 0;
