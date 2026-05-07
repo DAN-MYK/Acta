@@ -207,6 +207,18 @@ describe("design-system tokens", () => {
   it(".currency utility uses tabular numbers", () => {
     expect(styles).toMatch(/\.currency\s*,?[\s\S]*font-variant-numeric:\s*tabular-nums/);
   });
+
+  it("collapses shell chrome into a compact horizontal navigation on narrow widths", () => {
+    expect(styles).toMatch(/@media\s*\(max-width:\s*980px\)[\s\S]*\.nav\s*\{[\s\S]*flex-direction:\s*row/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*980px\)[\s\S]*\.user-footer,\s*\.sidebar-spacer\s*\{[\s\S]*display:\s*none/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*980px\)[\s\S]*\.topbar\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+minmax\(220px,\s*1fr\)/);
+  });
+
+  it("switches the shell topbar to a single-column mobile layout at 720px", () => {
+    expect(styles).toMatch(/@media\s*\(max-width:\s*720px\)[\s\S]*\.topbar\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*720px\)[\s\S]*\.nav-item\s*\{[\s\S]*font-size:\s*13px/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*720px\)[\s\S]*\.topbar-search\s*\{[\s\S]*width:\s*100%/);
+  });
 });
 
 vi.mock("../lib/stores/app-shell", () => ({
@@ -480,6 +492,28 @@ describe("App shell orchestration", () => {
       progressLabel: null
     });
     await tick();
+
+    component.$destroy();
+  });
+
+  it("updates the topbar search placeholder for the active screen", async () => {
+    const { component, target } = renderApp();
+    await tick();
+
+    const searchPlaceholder = target.querySelector(".topbar-search-placeholder");
+    expect(searchPlaceholder?.textContent).toContain("Пошук в Acta");
+
+    mocks.navigationState.set("documents");
+    await tick();
+    expect(searchPlaceholder?.textContent).toContain("Пошук у документах");
+
+    mocks.navigationState.set("counterparties");
+    await tick();
+    expect(searchPlaceholder?.textContent).toContain("Пошук у контрагентах");
+
+    mocks.navigationState.set("payments");
+    await tick();
+    expect(searchPlaceholder?.textContent).toContain("Пошук у платежах");
 
     component.$destroy();
   });

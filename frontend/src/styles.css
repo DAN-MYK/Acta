@@ -285,11 +285,6 @@ textarea {
   flex: 1;
 }
 
-/* Settings nav at bottom — тепер використовує .nav-item */
-.nav-item-settings {
-  margin-bottom: 4px;
-}
-
 /* User footer */
 .user-footer {
   display: flex;
@@ -1439,10 +1434,58 @@ textarea:disabled:hover {
   .sidebar {
     width: 100%;
     height: auto;
-    padding: var(--acta-space-5);
+    padding: 12px 16px 10px;
     border-right: 0;
     border-bottom: 1px solid var(--acta-color-border);
-    overflow: visible;
+    overflow: hidden;
+    gap: 10px;
+  }
+
+  .company-switcher {
+    margin-bottom: 0;
+  }
+
+  .company-btn {
+    padding: 6px 8px;
+  }
+
+  .company-sub {
+    display: none;
+  }
+
+  .nav {
+    flex-direction: row;
+    gap: 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-item {
+    width: auto;
+    min-width: max-content;
+    flex: 0 0 auto;
+    padding: 0 12px;
+    border: 1px solid var(--acta-color-border);
+    background: var(--acta-color-bg-elevated);
+  }
+
+  .nav-item.active {
+    padding-left: 12px;
+  }
+
+  .nav-rail {
+    display: none;
+  }
+
+  .user-footer,
+  .sidebar-spacer {
+    display: none;
   }
 
   .main {
@@ -1455,10 +1498,27 @@ textarea:disabled:hover {
   }
 
   .topbar {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 1fr);
     height: auto;
-    padding: 12px 16px;
-    gap: 8px;
+    padding: 10px 16px;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .topbar-title {
+    font-size: 16px;
+    line-height: 20px;
+  }
+
+  .topbar-subtitle,
+  .topbar-right,
+  .topbar-search-kbd {
+    display: none;
+  }
+
+  .topbar-search {
+    min-width: 0;
+    width: 100%;
   }
 
   .topbar-right {
@@ -1512,4 +1572,60 @@ textarea:disabled:hover {
     justify-content: flex-start;
   }
 
+}
+
+@media (max-width: 720px) {
+  .sidebar {
+    padding: 10px 12px 8px;
+    gap: 8px;
+  }
+
+  .company-logo {
+    width: 24px;
+    height: 24px;
+  }
+
+  .company-name {
+    font-size: 12.5px;
+  }
+
+  .nav {
+    gap: 6px;
+  }
+
+  .nav-item {
+    height: 34px;
+    padding: 0 10px;
+    font-size: 13px;
+    gap: 8px;
+  }
+
+  .nav-badge {
+    min-width: 16px;
+    height: 16px;
+    padding: 0 5px;
+    font-size: 10px;
+  }
+
+  .topbar {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 8px 12px;
+    gap: 6px;
+  }
+
+  .topbar-left {
+    gap: 0;
+  }
+
+  .topbar-title {
+    font-size: 15px;
+    line-height: 18px;
+  }
+
+  .topbar-search {
+    width: 100%;
+    height: 34px;
+    padding: 0 10px;
+    font-size: 12.5px;
+  }
 }
