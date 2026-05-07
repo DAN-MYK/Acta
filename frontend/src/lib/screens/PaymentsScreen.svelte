@@ -6,13 +6,18 @@
     EDITOR_DIRTY_COPY,
     PAYMENT_SCREEN_COPY,
     PAYMENT_FLOW_COPY,
-    PAYMENT_MANUAL_PICKER_DISABLED_REASON,
-    PAYMENT_PREVIEW_COPY,
-    resolveDocumentKindMeta
+    PAYMENT_MANUAL_PICKER_DISABLED_REASON
   } from "../config/ui";
   import { isFormattedMoneyNegative } from "../money";
+  import {
+    getPaymentCandidateHint,
+    getPaymentDirectionLabel,
+    getPaymentDocumentKindLabel,
+    getPaymentPreviewCopy,
+    getPaymentStateLabel
+  } from "../paymentsPresentation";
   import { paymentsStore } from "../stores/payments";
-  import type { PaymentDraftFormDto, PaymentMatchCandidateDto } from "../types";
+  import type { PaymentDraftFormDto } from "../types";
 
   const payments = paymentsStore;
   let importButton: HTMLButtonElement | null = null;
@@ -70,49 +75,6 @@
     }
   }
 
-  function getPaymentStateLabel(matchedDoc: string): string {
-    return matchedDoc ? PAYMENT_SCREEN_COPY.stateMatched(matchedDoc) : PAYMENT_SCREEN_COPY.stateUnmatched;
-  }
-
-  function getDocumentKindLabel(kind: PaymentMatchCandidateDto["documentKind"]): string {
-    return resolveDocumentKindMeta(kind).label;
-  }
-
-  function getPreviewTitle(): string {
-    const preview = $payments.matchPreview;
-    if (!preview) {
-      return "";
-    }
-    return PAYMENT_PREVIEW_COPY[preview.decisionKind].title;
-  }
-
-  function getPreviewDescription(): string {
-    const preview = $payments.matchPreview;
-    if (!preview) {
-      return "";
-    }
-    return PAYMENT_PREVIEW_COPY[preview.decisionKind].description;
-  }
-
-  function getCandidateHint(candidate: PaymentMatchCandidateDto): string {
-    const hints: string[] = [];
-
-    if (candidate.sameIban) {
-      hints.push("той самий IBAN");
-    }
-
-    if (candidate.referenceHit) {
-      hints.push("є збіг по призначенню");
-    }
-
-    if (candidate.textHits > 0) {
-      hints.push(`текстових збігів: ${candidate.textHits}`);
-    }
-
-    hints.push(`відхилення по даті: ${candidate.daysDistance} дн.`);
-    return hints.join(" • ");
-  }
-
   function runHeaderReconciliation() {
     const target = unmatchedPayments[0];
     if (target) {
@@ -158,6 +120,7 @@
   $: flowCopy = getFlowCopy();
   $: flowTitle = flowCopy?.title ?? null;
   $: flowDescription = flowCopy?.description ?? null;
+  $: previewCopy = getPaymentPreviewCopy($payments.matchPreview);
   $: if (!$payments.editor && pendingDirtyClose) {
     pendingDirtyClose = false;
   }
@@ -357,8 +320,8 @@
     <section class="chain-panel">
       <div class="chain-panel-header">
         <div>
-          <strong>{getPreviewTitle()}</strong>
-          <p>{getPreviewDescription()}</p>
+          <strong>{previewCopy?.title ?? ""}</strong>
+          <p>{previewCopy?.description ?? ""}</p>
         </div>
         <div class="editor-actions">
           {#if $payments.matchPreview.decisionKind === "exact" && $payments.matchPreview.autoMatch}
@@ -392,7 +355,7 @@
           <div class="task-row-main">
             <div>
               <strong>{$payments.matchPreview.autoMatch.title}</strong>
-              <p>{getDocumentKindLabel($payments.matchPreview.autoMatch.documentKind)} • {$payments.matchPreview.autoMatch.amountStr}</p>
+              <p>{getPaymentDocumentKindLabel($payments.matchPreview.autoMatch.documentKind)} • {$payments.matchPreview.autoMatch.amountStr}</p>
             </div>
             <div class="task-row-meta">
               <span class="task-pill">Рекомендація</span>
@@ -410,8 +373,8 @@
               <div class="task-row-main">
                 <div>
                   <strong>{candidate.title}</strong>
-                  <p>{getDocumentKindLabel(candidate.documentKind)} • {candidate.openAmountStr}</p>
-                  <p>{getCandidateHint(candidate)}</p>
+                  <p>{getPaymentDocumentKindLabel(candidate.documentKind)} • {candidate.openAmountStr}</p>
+                  <p>{getPaymentCandidateHint(candidate)}</p>
                 </div>
                 <div class="task-row-meta">
                   <span class="task-pill">Скоринг {candidate.totalScore.toFixed(2)}</span>
@@ -439,8 +402,8 @@
               <div class="task-row-main">
                 <div>
                   <strong>{candidate.title}</strong>
-                  <p>{getDocumentKindLabel(candidate.documentKind)} • {candidate.openAmountStr}</p>
-                  <p>{getCandidateHint(candidate)}</p>
+                  <p>{getPaymentDocumentKindLabel(candidate.documentKind)} • {candidate.openAmountStr}</p>
+                  <p>{getPaymentCandidateHint(candidate)}</p>
                 </div>
                 <div class="task-row-meta">
                   <span class="task-pill">{PAYMENT_SCREEN_COPY.splitRecommendationBadge}</span>
@@ -517,8 +480,8 @@
                   <div class="task-row-main">
                     <div>
                       <strong>{candidate.title}</strong>
-                      <p>{getDocumentKindLabel(candidate.documentKind)} • {candidate.openAmountStr}</p>
-                      <p>{getCandidateHint(candidate)}</p>
+                      <p>{getPaymentDocumentKindLabel(candidate.documentKind)} • {candidate.openAmountStr}</p>
+                      <p>{getPaymentCandidateHint(candidate)}</p>
                     </div>
                     <div class="task-row-meta">
                       <span class="task-pill">Скоринг {candidate.totalScore.toFixed(2)}</span>
@@ -557,7 +520,7 @@
                   <div class="task-row-main">
                     <div>
                       <strong>{allocation.title}</strong>
-                      <p>{getDocumentKindLabel(allocation.documentKind)} • Залишок документа: {allocation.openAmountStr}</p>
+                      <p>{getPaymentDocumentKindLabel(allocation.documentKind)} • Залишок документа: {allocation.openAmountStr}</p>
                     </div>
                     <div class="task-row-meta">
                       <label>
@@ -617,7 +580,7 @@
                   <p>{item.account || "Банк не вказано"}</p>
                 </div>
                 <div class="task-row-meta">
-                  <span class="task-pill">{item.direction === "in" ? "Надходження" : "Витрата"}</span>
+                  <span class="task-pill">{getPaymentDirectionLabel(item.direction)}</span>
                   <span class="money-value" data-negative={isFormattedMoneyNegative(item.amountStr)}>{item.amountStr}</span>
                   <span class="payment-state payment-state-unmatched">{getPaymentStateLabel(item.matchedDoc)}</span>
                 </div>
@@ -663,7 +626,7 @@
                   <p>{item.account || "Банк не вказано"}</p>
                 </div>
                 <div class="task-row-meta">
-                  <span class="task-pill">{item.direction === "in" ? "Надходження" : "Витрата"}</span>
+                  <span class="task-pill">{getPaymentDirectionLabel(item.direction)}</span>
                   <span class="money-value" data-negative={isFormattedMoneyNegative(item.amountStr)}>{item.amountStr}</span>
                   <span class="payment-state payment-state-matched">{getPaymentStateLabel(item.matchedDoc)}</span>
                 </div>
@@ -746,7 +709,7 @@
         <div class="chain-summary">
           <div class="chain-summary-block">
             <span>Напрям</span>
-            <strong>{$payments.editor.direction === "income" ? "Надходження" : "Витрата"}</strong>
+            <strong>{getPaymentDirectionLabel($payments.editor.direction)}</strong>
           </div>
           <div class="chain-summary-block">
             <span>Пов'язаний документ</span>
