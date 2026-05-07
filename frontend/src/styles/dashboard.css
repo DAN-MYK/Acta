@@ -95,6 +95,7 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
   margin-top: 24px;
+  align-items: start;
 }
 
 .dashboard-card {
@@ -176,12 +177,12 @@
 
 .dashboard-list-row {
   width: 100%;
-  margin-top: 10px;
+  margin-top: 7px;
   text-align: left;
   border: 0;
   border-bottom: 1px solid var(--acta-color-border);
   border-radius: 0;
-  padding: 10px 0;
+  padding: 7px 0;
   background: transparent;
   color: inherit;
 }
