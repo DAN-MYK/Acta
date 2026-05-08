@@ -785,30 +785,55 @@ pub async fn documents_list(
         })
         .transpose()?;
 
+    let statuses_owned: Option<Vec<String>> = request.statuses.filter(|v| !v.is_empty());
+    let statuses_slice: Option<&[String]> = statuses_owned.as_deref();
+
+    let amount_min = request.amount_min;
+    let amount_max = request.amount_max;
+    let overdue_only = request.overdue_only.unwrap_or(false);
+    let today = chrono::Utc::now().date_naive();
+
+    let date_from = request.date_from;
+    let date_to = request.date_to;
+
     // None = include all kinds; Some(k) skips the other two DB calls (cheaper than SQL filter)
     let include_acts     = request.kind.as_deref().map_or(true, |k| k == "act");
     let include_invoices = request.kind.as_deref().map_or(true, |k| k == "invoice");
-    let include_waybills = request.kind.as_deref().map_or(true, |k| k == "waybill");
+    let include_waybills = request.kind.as_deref().map_or(true, |k| k == "waybill") && !overdue_only;
 
-    let today = chrono::Utc::now().date_naive();
     let (acts, invoices, waybills) = tokio::join!(
         async {
             if include_acts {
-                db::acts::list_filtered(ctx.pool(), company_id, None, direction_filter, search, counterparty_filter, None, None, None, None, false, today).await
+                db::acts::list_filtered(
+                    ctx.pool(), company_id,
+                    statuses_slice, direction_filter, search, counterparty_filter,
+                    date_from, date_to,
+                    amount_min, amount_max, overdue_only, today,
+                ).await
             } else {
                 Ok(vec![])
             }
         },
         async {
             if include_invoices {
-                db::invoices::list_filtered(ctx.pool(), company_id, None, direction_filter, search, counterparty_filter, None, None, None, None, false, today).await
+                db::invoices::list_filtered(
+                    ctx.pool(), company_id,
+                    statuses_slice, direction_filter, search, counterparty_filter,
+                    date_from, date_to,
+                    amount_min, amount_max, overdue_only, today,
+                ).await
             } else {
                 Ok(vec![])
             }
         },
         async {
             if include_waybills {
-                db::waybills::list_filtered(ctx.pool(), company_id, None, direction_filter, search, counterparty_filter, None, None, None, None).await
+                db::waybills::list_filtered(
+                    ctx.pool(), company_id,
+                    statuses_slice, direction_filter, search, counterparty_filter,
+                    date_from, date_to,
+                    amount_min, amount_max,
+                ).await
             } else {
                 Ok(vec![])
             }

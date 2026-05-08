@@ -402,7 +402,7 @@ async fn tauri_vertical_slice_shell_and_documents_smoke() -> Result<()> {
         let draft = acta::tauri_api::documents::document_create_draft(
             &ctx,
             acta::tauri_api::documents::CreateDocumentDraftRequest {
-                counterparty_id: counterparty.id.to_string(),
+                counterparty_id: Some(counterparty.id.to_string()),
                 kind: "invoice".to_string(),
                 direction: "outgoing".to_string(),
             },
@@ -485,7 +485,7 @@ async fn tauri_vertical_slice_shell_and_documents_smoke() -> Result<()> {
         let bulk_draft = acta::tauri_api::documents::document_create_draft(
             &ctx,
             acta::tauri_api::documents::CreateDocumentDraftRequest {
-                counterparty_id: counterparty.id.to_string(),
+                counterparty_id: Some(counterparty.id.to_string()),
                 kind: "invoice".to_string(),
                 direction: "outgoing".to_string(),
             },
@@ -511,7 +511,7 @@ async fn tauri_vertical_slice_shell_and_documents_smoke() -> Result<()> {
         let bulk_status_draft = acta::tauri_api::documents::document_create_draft(
             &ctx,
             acta::tauri_api::documents::CreateDocumentDraftRequest {
-                counterparty_id: counterparty.id.to_string(),
+                counterparty_id: Some(counterparty.id.to_string()),
                 kind: "invoice".to_string(),
                 direction: "outgoing".to_string(),
             },
@@ -1972,7 +1972,7 @@ async fn documents_direction_filter() -> Result<()> {
     let outgoing = document_create_draft(
         &ctx,
         CreateDocumentDraftRequest {
-            counterparty_id: counterparty.id.to_string(),
+            counterparty_id: Some(counterparty.id.to_string()),
             kind: "invoice".to_string(),
             direction: "outgoing".to_string(),
         },
@@ -1982,7 +1982,7 @@ async fn documents_direction_filter() -> Result<()> {
     let incoming = document_create_draft(
         &ctx,
         CreateDocumentDraftRequest {
-            counterparty_id: counterparty.id.to_string(),
+            counterparty_id: Some(counterparty.id.to_string()),
             kind: "act".to_string(),
             direction: "incoming".to_string(),
         },
@@ -2053,6 +2053,161 @@ async fn documents_direction_filter() -> Result<()> {
     for id in cleanup {
         let _ = document_delete(&ctx, id).await;
     }
+
+    result
+}
+
+#[tokio::test]
+async fn documents_list_filters_date_status_amount() -> Result<()> {
+    use acta::models::{DocumentDirection, InvoiceStatus, NewInvoice, NewInvoiceItem};
+    use acta::tauri_api::documents::{DocumentsListRequest, documents_list};
+
+    let _guard = tauri_vertical_slice_lock().lock().await;
+    let _ = dotenvy::dotenv();
+    std::env::set_var("ACTA_CONFIG_DIR", "storage/test-config");
+
+    let pool = acta::runtime::connect_pool().await?;
+    let company_id = acta::runtime::get_first_company_id(&pool).await;
+    let ctx = Arc::new(acta::app_ctx::AppCtx::new(pool, company_id));
+
+    let suffix = uuid::Uuid::new_v4().simple().to_string();
+
+    let counterparty = acta::db::counterparties::create(
+        ctx.pool(),
+        ctx.company_id(),
+        &acta::models::NewCounterparty {
+            name: format!("VS Filter Test CP {suffix}"),
+            edrpou: None,
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("vs-filter-cp-{suffix}")),
+        },
+    )
+    .await?;
+
+    // lo: amount 500, date 2026-04-01, draft — should be excluded (amount < min, date < from, status not issued)
+    let inv_lo = acta::db::invoices::create(
+        ctx.pool(),
+        ctx.company_id(),
+        &NewInvoice {
+            number: format!("VS-INV-LO-{suffix}"),
+            counterparty_id: counterparty.id,
+            contract_id: None,
+            category_id: None,
+            direction: DocumentDirection::Outgoing,
+            date: chrono::NaiveDate::from_ymd_opt(2026, 4, 1).unwrap(),
+            expected_payment_date: None,
+            notes: None,
+            bas_id: Some(format!("vs-inv-lo-{suffix}")),
+            items: vec![NewInvoiceItem {
+                position: 1,
+                description: "Lo item".to_string(),
+                unit: None,
+                quantity: dec!(1.0000),
+                price: dec!(500.00),
+            }],
+        },
+    )
+    .await?;
+
+    // hit: amount 5000, date 2026-05-01, status issued — should be the one returned
+    let inv_hit = acta::db::invoices::create(
+        ctx.pool(),
+        ctx.company_id(),
+        &NewInvoice {
+            number: format!("VS-INV-HIT-{suffix}"),
+            counterparty_id: counterparty.id,
+            contract_id: None,
+            category_id: None,
+            direction: DocumentDirection::Outgoing,
+            date: chrono::NaiveDate::from_ymd_opt(2026, 5, 1).unwrap(),
+            expected_payment_date: None,
+            notes: None,
+            bas_id: Some(format!("vs-inv-hit-{suffix}")),
+            items: vec![NewInvoiceItem {
+                position: 1,
+                description: "Hit item".to_string(),
+                unit: None,
+                quantity: dec!(1.0000),
+                price: dec!(5000.00),
+            }],
+        },
+    )
+    .await?;
+    // Advance to issued
+    acta::db::invoices::change_status(ctx.pool(), inv_hit.id, InvoiceStatus::Issued).await?;
+
+    // hi: amount 50000, date 2026-05-01, draft — should be excluded (amount > max, status not issued)
+    let inv_hi = acta::db::invoices::create(
+        ctx.pool(),
+        ctx.company_id(),
+        &NewInvoice {
+            number: format!("VS-INV-HI-{suffix}"),
+            counterparty_id: counterparty.id,
+            contract_id: None,
+            category_id: None,
+            direction: DocumentDirection::Outgoing,
+            date: chrono::NaiveDate::from_ymd_opt(2026, 5, 1).unwrap(),
+            expected_payment_date: None,
+            notes: None,
+            bas_id: Some(format!("vs-inv-hi-{suffix}")),
+            items: vec![NewInvoiceItem {
+                position: 1,
+                description: "Hi item".to_string(),
+                unit: None,
+                quantity: dec!(1.0000),
+                price: dec!(50000.00),
+            }],
+        },
+    )
+    .await?;
+
+    let result: Result<()> = async {
+        let list = documents_list(
+            &ctx,
+            DocumentsListRequest {
+                kind: Some("invoice".to_string()),
+                counterparty_id: Some(counterparty.id.to_string()),
+                date_from: Some(chrono::NaiveDate::from_ymd_opt(2026, 4, 15).unwrap()),
+                date_to: Some(chrono::NaiveDate::from_ymd_opt(2026, 5, 31).unwrap()),
+                statuses: Some(vec!["issued".to_string()]),
+                amount_min: Some(dec!(1000)),
+                amount_max: Some(dec!(10000)),
+                overdue_only: Some(false),
+                ..Default::default()
+            },
+        )
+        .await?;
+
+        assert_eq!(
+            list.items.len(),
+            1,
+            "expected exactly 1 item, got {}: {:?}",
+            list.items.len(),
+            list.items.iter().map(|i| &i.number).collect::<Vec<_>>()
+        );
+        assert!(
+            list.items[0].number.starts_with("VS-INV-HIT-"),
+            "expected VS-INV-HIT-*, got {}",
+            list.items[0].number
+        );
+
+        Ok(())
+    }
+    .await;
+
+    // cleanup
+    let _ = acta::db::invoices::delete(ctx.pool(), inv_lo.id).await;
+    let _ = acta::db::invoices::delete(ctx.pool(), inv_hit.id).await;
+    let _ = acta::db::invoices::delete(ctx.pool(), inv_hi.id).await;
+    sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(counterparty.id)
+        .execute(ctx.pool())
+        .await?;
 
     result
 }

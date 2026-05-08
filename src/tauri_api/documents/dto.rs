@@ -153,18 +153,25 @@ pub struct DocumentChainDto {
     pub steps: Vec<ChainStepDto>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct DocumentsListRequest {
     pub query: Option<String>,
     pub direction: Option<DocumentDirection>,
     pub kind: Option<String>,
+    pub counterparty_id: Option<String>,
+    pub date_from: Option<chrono::NaiveDate>,
+    pub date_to: Option<chrono::NaiveDate>,
+    pub statuses: Option<Vec<String>>,
+    pub amount_min: Option<rust_decimal::Decimal>,
+    pub amount_max: Option<rust_decimal::Decimal>,
+    pub overdue_only: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateDocumentDraftRequest {
-    pub counterparty_id: String,
+    pub counterparty_id: Option<String>,
     pub kind: String,
     pub direction: String,  // "outgoing" | "incoming"
 }
