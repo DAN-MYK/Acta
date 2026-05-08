@@ -750,3 +750,249 @@ async fn acts_update_with_items_replaces_positions_and_recalculates_total() -> R
 
     Ok(())
 }
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+async fn seed_counterparty(
+    pool: &sqlx::PgPool,
+    prefix: &str,
+) -> Result<models::Counterparty> {
+    let suffix = unique_suffix();
+    db::counterparties::create(
+        pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewCounterparty {
+            name: format!("{prefix}-{suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("seed-cp-{prefix}-{suffix}")),
+        },
+    )
+    .await
+}
+
+async fn seed_act(
+    pool: &sqlx::PgPool,
+    cp: &models::Counterparty,
+    number: &str,
+    amount: Decimal,
+) -> Result<models::Act> {
+    db::acts::create(
+        pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewAct {
+            number: number.to_string(),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: models::DocumentDirection::Outgoing,
+            date: chrono::Utc::now().date_naive(),
+            expected_payment_date: None,
+            status: models::ActStatus::Draft,
+            notes: None,
+            bas_id: None,
+            items: vec![models::NewActItem {
+                description: "x".into(),
+                quantity: dec!(1.0000),
+                unit: "шт".into(),
+                unit_price: amount,
+            }],
+        },
+    )
+    .await
+}
+
+async fn seed_act_with_due(
+    pool: &sqlx::PgPool,
+    cp: &models::Counterparty,
+    number: &str,
+    amount: Decimal,
+    due: Option<chrono::NaiveDate>,
+) -> Result<models::Act> {
+    db::acts::create(
+        pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewAct {
+            number: number.to_string(),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: models::DocumentDirection::Outgoing,
+            date: chrono::Utc::now().date_naive(),
+            expected_payment_date: due,
+            status: models::ActStatus::Draft,
+            notes: None,
+            bas_id: None,
+            items: vec![models::NewActItem {
+                description: "x".into(),
+                quantity: dec!(1.0000),
+                unit: "шт".into(),
+                unit_price: amount,
+            }],
+        },
+    )
+    .await
+}
+
+// ─── Acts: list_filtered — amount range (Task 2) ─────────────────────────────
+
+#[tokio::test]
+async fn list_filtered_amount_range() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let cp = seed_counterparty(&pool, "AMT-CP").await?;
+    seed_act(&pool, &cp, "AMT-A-500", dec!(500.00)).await?;
+    seed_act(&pool, &cp, "AMT-A-5000", dec!(5000.00)).await?;
+    seed_act(&pool, &cp, "AMT-A-50000", dec!(50000.00)).await?;
+
+    let mid = db::acts::list_filtered(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        None,
+        None,
+        Some("AMT-A-"),
+        Some(cp.id),
+        None,
+        None,
+        Some(dec!(1000)),
+        Some(dec!(10000)),
+        false,
+        chrono::Utc::now().date_naive(),
+    )
+    .await?;
+
+    assert_eq!(mid.len(), 1);
+    assert_eq!(mid[0].number, "AMT-A-5000");
+
+    sqlx::query("DELETE FROM acts WHERE counterparty_id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
+    Ok(())
+}
+
+// ─── Acts: list_filtered — multi-status (Task 3) ─────────────────────────────
+
+#[tokio::test]
+async fn list_filtered_multi_status() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let cp = seed_counterparty(&pool, "MS-CP").await?;
+    seed_act(&pool, &cp, "MS-DRAFT", dec!(100)).await?;
+    let issued = seed_act(&pool, &cp, "MS-ISSUED", dec!(100)).await?;
+    db::acts::change_status(&pool, issued.id, models::ActStatus::Issued)
+        .await?
+        .expect("issued");
+    let paid_act = seed_act(&pool, &cp, "MS-PAID", dec!(100)).await?;
+    db::acts::change_status(&pool, paid_act.id, models::ActStatus::Issued).await?;
+    db::acts::change_status(&pool, paid_act.id, models::ActStatus::Signed).await?;
+    db::acts::change_status(&pool, paid_act.id, models::ActStatus::Paid).await?;
+
+    let filtered = db::acts::list_filtered(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        Some(&["draft".to_string(), "paid".to_string()]),
+        None,
+        Some("MS-"),
+        Some(cp.id),
+        None,
+        None,
+        None,
+        None,
+        false,
+        chrono::Utc::now().date_naive(),
+    )
+    .await?;
+
+    let numbers: Vec<&str> = filtered.iter().map(|r| r.number.as_str()).collect();
+    assert_eq!(numbers.len(), 2);
+    assert!(numbers.contains(&"MS-DRAFT"));
+    assert!(numbers.contains(&"MS-PAID"));
+    assert!(!numbers.contains(&"MS-ISSUED"));
+
+    sqlx::query("DELETE FROM acts WHERE counterparty_id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
+    Ok(())
+}
+
+// ─── Acts: list_filtered — overdue_only (Task 4) ─────────────────────────────
+
+#[tokio::test]
+async fn list_filtered_overdue_only() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let today = chrono::NaiveDate::from_ymd_opt(2026, 5, 8).unwrap();
+    let past = chrono::NaiveDate::from_ymd_opt(2026, 4, 1).unwrap();
+    let future = chrono::NaiveDate::from_ymd_opt(2026, 6, 1).unwrap();
+
+    let cp = seed_counterparty(&pool, "OVD-CP").await?;
+
+    let paid = seed_act_with_due(&pool, &cp, "OVD-PAID", dec!(100), Some(past)).await?;
+    db::acts::change_status(&pool, paid.id, models::ActStatus::Issued).await?;
+    db::acts::change_status(&pool, paid.id, models::ActStatus::Signed).await?;
+    db::acts::change_status(&pool, paid.id, models::ActStatus::Paid).await?;
+
+    let overdue = seed_act_with_due(&pool, &cp, "OVD-ISSUED", dec!(100), Some(past)).await?;
+    db::acts::change_status(&pool, overdue.id, models::ActStatus::Issued).await?;
+
+    let future_due = seed_act_with_due(&pool, &cp, "OVD-FUTURE", dec!(100), Some(future)).await?;
+    db::acts::change_status(&pool, future_due.id, models::ActStatus::Issued).await?;
+
+    seed_act_with_due(&pool, &cp, "OVD-DRAFT", dec!(100), Some(past)).await?;
+
+    let result = db::acts::list_filtered(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        None,
+        None,
+        Some("OVD-"),
+        Some(cp.id),
+        None,
+        None,
+        None,
+        None,
+        true,
+        today,
+    )
+    .await?;
+
+    let numbers: Vec<&str> = result.iter().map(|r| r.number.as_str()).collect();
+    assert_eq!(
+        numbers.len(),
+        1,
+        "Expected only OVD-ISSUED, got: {:?}",
+        numbers
+    );
+    assert_eq!(numbers[0], "OVD-ISSUED");
+
+    sqlx::query("DELETE FROM acts WHERE counterparty_id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
+    Ok(())
+}
