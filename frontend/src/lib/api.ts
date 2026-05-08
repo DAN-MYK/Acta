@@ -10,15 +10,32 @@ import type {
   DashboardScreenDto,
   DocumentChainDto,
   DocumentEditorDto,
+  DocumentPdfActionResultDto,
   DocumentsListDto,
+  DocumentsListRequest,
   ImportPlanDto,
   ImportResultDto,
   MutationResultDto,
   OpenTemplateResultDto,
   PaletteActivationResultDto,
   PaletteSearchResultDto,
+  PaymentMatchApplyAutoRequest,
+  PaymentMatchPreviewDto,
+  PaymentMatchPreviewRequest,
+  PaymentReconcileRequest,
+  PaymentReconcileSplitRequest,
+  PaymentReconcileSplitResultDto,
   PaymentDraftFormDto,
+  PaymentCalendarMonthDto,
+  PaymentCalendarMonthRequest,
+  PaymentImportCommitRequest,
+  PaymentImportPreviewDto,
+  PaymentManualMatchCandidatesDto,
   PaymentsScreenDto,
+  PaymentMatchManualCandidatesRequest,
+  PaymentScheduleCompleteRequest,
+  PaymentUnreconcileAllRequest,
+  PaymentUnreconcileRequest,
   ReportsExportResultDto,
   ReportsFilterDto,
   ReportsScreenDto,
@@ -73,11 +90,21 @@ export function dashboardLoad(): Promise<DashboardScreenDto> {
   return appInvoke("dashboard_load");
 }
 
-export function documentsList(query = "", tab?: string): Promise<DocumentsListDto> {
+export function documentsList(
+  request: DocumentsListRequest = {}
+): Promise<DocumentsListDto> {
   return appInvoke("documents_list", {
     request: {
-      query: query || null,
-      tab: tab || null
+      query: null,
+      direction: request.direction ?? null,
+      kind: request.kind ?? null,
+      counterpartyId: request.counterpartyId ?? null,
+      dateFrom: request.dateFrom ?? null,
+      dateTo: request.dateTo ?? null,
+      statuses: request.statuses && request.statuses.length > 0 ? request.statuses : null,
+      amountMin: request.amountMin ?? null,
+      amountMax: request.amountMax ?? null,
+      overdueOnly: request.overdueOnly ?? false
     }
   });
 }
@@ -86,11 +113,16 @@ export function documentOpen(docId: string): Promise<DocumentEditorDto> {
   return appInvoke("document_open", { docId });
 }
 
-export function documentCreateDraft(counterpartyId: string, kind: string): Promise<DocumentEditorDto> {
+export function documentCreateDraft(
+  counterpartyId: string | undefined,
+  kind: string,
+  direction: "outgoing" | "incoming" = "outgoing"
+): Promise<DocumentEditorDto> {
   return appInvoke("document_create_draft", {
     request: {
-      counterpartyId,
-      kind
+      counterpartyId: counterpartyId || null,
+      kind,
+      direction
     }
   });
 }
@@ -215,7 +247,8 @@ export function reportsLoad(filter: ReportsFilterDto): Promise<ReportsScreenDto>
       scope: filter.scope,
       dateFrom: filter.dateFrom,
       dateTo: filter.dateTo,
-      query: filter.query
+      query: filter.query,
+      selectedCounterpartyId: filter.selectedCounterpartyId ?? null
     }
   });
 }
@@ -227,7 +260,36 @@ export function reportsExportCsv(filter: ReportsFilterDto): Promise<ReportsExpor
       scope: filter.scope,
       dateFrom: filter.dateFrom,
       dateTo: filter.dateTo,
-      query: filter.query
+      query: filter.query,
+      selectedCounterpartyId: filter.selectedCounterpartyId ?? null
+    }
+  });
+}
+
+export function reportsExportExcel(filter: ReportsFilterDto): Promise<ReportsExportResultDto> {
+  return appInvoke("reports_export_excel", {
+    request: {
+      tab: filter.tab,
+      scope: filter.scope,
+      dateFrom: filter.dateFrom,
+      dateTo: filter.dateTo,
+      query: filter.query,
+      selectedCounterpartyId: filter.selectedCounterpartyId ?? null
+    }
+  });
+}
+
+export function reportsExportExcelAndOpen(
+  filter: ReportsFilterDto
+): Promise<ReportsExportResultDto> {
+  return appInvoke("reports_export_excel_and_open", {
+    request: {
+      tab: filter.tab,
+      scope: filter.scope,
+      dateFrom: filter.dateFrom,
+      dateTo: filter.dateTo,
+      query: filter.query,
+      selectedCounterpartyId: filter.selectedCounterpartyId ?? null
     }
   });
 }
@@ -237,13 +299,11 @@ export function settingsLoad(): Promise<SettingsScreenDto> {
 }
 
 export function settingsSavePreferences(
-  darkMode: boolean,
-  density: number
+  darkMode: boolean
 ): Promise<SettingsScreenMutationResultDto> {
   return appInvoke("settings_save_preferences", {
     request: {
-      darkMode,
-      density
+      darkMode
     }
   });
 }
@@ -290,20 +350,102 @@ export function paymentsOpenManualTemplate(): Promise<OpenTemplateResultDto> {
   return appInvoke("payments_open_manual_template");
 }
 
+export function paymentsCalendarLoad(
+  request: PaymentCalendarMonthRequest
+): Promise<PaymentCalendarMonthDto> {
+  return appInvoke("payments_calendar_load", { request });
+}
+
+export function paymentScheduleComplete(
+  request: PaymentScheduleCompleteRequest
+): Promise<MutationResultDto> {
+  return appInvoke("payment_schedule_complete", { request });
+}
+
 export function paymentCreateOrUpdate(form: PaymentDraftFormDto): Promise<MutationResultDto> {
   return appInvoke("payment_create_or_update", { request: form });
 }
 
-export function paymentReconcile(paymentId: string): Promise<MutationResultDto> {
-  return appInvoke("payment_reconcile", { paymentId });
+export function paymentReconcile(request: PaymentReconcileRequest): Promise<MutationResultDto> {
+  return appInvoke("payment_reconcile", { request });
 }
 
-export function paymentUnreconcile(paymentId: string): Promise<MutationResultDto> {
-  return appInvoke("payment_unreconcile", { paymentId });
+export function paymentReconcileSplit(
+  request: PaymentReconcileSplitRequest
+): Promise<PaymentReconcileSplitResultDto> {
+  return appInvoke("payment_reconcile_split", { request });
+}
+
+export function paymentUnreconcile(request: PaymentUnreconcileRequest): Promise<MutationResultDto> {
+  return appInvoke("payment_unreconcile", { request });
+}
+
+export function paymentUnreconcileAll(
+  request: PaymentUnreconcileAllRequest
+): Promise<MutationResultDto> {
+  return appInvoke("payment_unreconcile_all", { request });
+}
+
+export function paymentMatchPreview(request: PaymentMatchPreviewRequest): Promise<PaymentMatchPreviewDto> {
+  return appInvoke("payment_match_preview", { request });
+}
+
+export function paymentMatchApplyAuto(
+  request: PaymentMatchApplyAutoRequest
+): Promise<MutationResultDto> {
+  return appInvoke("payment_match_apply_auto", { request });
+}
+
+export function paymentMatchManualCandidates(
+  request: PaymentMatchManualCandidatesRequest
+): Promise<PaymentManualMatchCandidatesDto> {
+  return appInvoke("payment_match_manual_candidates", { request });
+}
+
+export function paymentsImportPickAndPreview(): Promise<PaymentImportPreviewDto | null> {
+  return appInvoke("payments_import_pick_and_preview");
+}
+
+export function paymentsImportPreview(path: string): Promise<PaymentImportPreviewDto> {
+  return appInvoke("payments_import_preview", { path });
+}
+
+export function paymentsImportCommit(
+  request: PaymentImportCommitRequest
+): Promise<MutationResultDto> {
+  return appInvoke("payments_import_commit", { request });
 }
 
 export function documentGeneratePdf(docId: string): Promise<MutationResultDto> {
   return appInvoke("document_generate_pdf", { docId });
+}
+
+export function documentPdfAttachExisting(
+  docId: string,
+  sourcePath?: string
+): Promise<DocumentPdfActionResultDto> {
+  return appInvoke("document_pdf_attach_existing", {
+    docId,
+    sourcePath: sourcePath || null
+  });
+}
+
+export function documentPdfApplyTextReplace(
+  docId: string,
+  findText: string,
+  replaceText: string
+): Promise<DocumentPdfActionResultDto> {
+  return appInvoke("document_pdf_apply_text_replace", {
+    request: {
+      docId,
+      findText,
+      replaceText
+    }
+  });
+}
+
+export function documentPdfOpenCurrent(docId: string): Promise<MutationResultDto> {
+  return appInvoke("document_pdf_open_current", { docId });
 }
 
 export const importBasPickDirectory = () => appInvoke<string | null>("import_bas_pick_directory");

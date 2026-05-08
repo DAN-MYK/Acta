@@ -1,6 +1,8 @@
 /**
  * @vitest-environment jsdom
  */
+// @ts-ignore Node typings are not included in the frontend test tsconfig.
+import { readFileSync } from "fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { tick } from "svelte";
 import CounterpartiesScreen from "../CounterpartiesScreen.svelte";
@@ -35,6 +37,7 @@ const mocks = vi.hoisted(() => {
     detail: null as CounterpartyDetailScreenDto | null,
     editor: null as CounterpartyEditorDto | null,
     selectedId: null as string | null,
+    initialLoading: false,
     loading: false,
     error: null as string | null,
     message: null as string | null,
@@ -43,7 +46,7 @@ const mocks = vi.hoisted(() => {
 
   return {
     archiveCurrent: vi.fn(),
-    closeEditor: vi.fn(),
+    closeEditor: vi.fn(() => ({ ok: true })),
     counterpartiesState,
     createDocument: vi.fn(),
     load: vi.fn(),
@@ -139,6 +142,7 @@ function makeDetail(): CounterpartyDetailScreenDto {
         date: "2026-05-01",
         counterparty: "ФОП Петренко",
         amountStr: "19 000,00 грн",
+        direction: "outgoing",
         status: "issued",
         statusLabel: "Виставлено",
         linkedId: ""
@@ -168,6 +172,7 @@ function setCounterpartiesState(
     detail,
     editor: null,
     selectedId: detail?.info.id ?? null,
+    initialLoading: false,
     loading: false,
     error: null,
     message: null,
@@ -193,6 +198,9 @@ function buttonByText(target: HTMLElement, text: string): HTMLButtonElement {
 }
 
 describe("CounterpartiesScreen component", () => {
+  const source = readFileSync("frontend/src/lib/screens/CounterpartiesScreen.svelte", "utf8");
+  const styles = readFileSync("frontend/src/styles/counterparties.css", "utf8");
+
   beforeEach(() => {
     setCounterpartiesState();
     for (const fn of [
@@ -209,30 +217,58 @@ describe("CounterpartiesScreen component", () => {
     ]) {
       fn.mockReset();
     }
+    mocks.closeEditor.mockReturnValue({ ok: true });
   });
 
   afterEach(() => {
     document.body.innerHTML = "";
   });
 
-  it("renders the counterparty as an operational risk card with context and CTA hierarchy", () => {
+  it("renders the counterparty as an operational risk card with scenario sections and CTA hierarchy", () => {
     const { component, target } = renderCounterparties();
 
-    expect(target.textContent).toContain("Контрагенти");
     expect(target.textContent).toContain("ФОП Петренко");
     expect(target.textContent).toContain("Потребує уваги: прострочено 1 документ");
-    expect(target.textContent).toContain("Баланс");
-    expect(target.textContent).toContain("Прострочка");
-    expect(target.textContent).toContain("Останній контакт");
+    expect(target.textContent).toContain("Хто це");
+    expect(target.textContent).toContain("Фінансовий стан");
+    expect(target.textContent).toContain("Документи");
+    expect(target.textContent).toContain("Платежі");
+    expect(target.textContent).toContain("Наступна дія");
+    expect(target.textContent).toContain("Останній контакт 25.04.2026");
     expect(target.textContent).toContain("Директор");
     expect(target.textContent).toContain("Банк");
     expect(target.textContent).toContain("VAT");
     expect(target.textContent).toContain("Петренко П.П.");
     expect(target.textContent).toContain("19 000,00 грн");
+    expect(target.textContent).toContain("INV-2026-0042");
+    expect(target.textContent).toContain("mono");
 
     expect(buttonByText(target, "Створити документ").className).toContain("btn-primary");
     expect(buttonByText(target, "Редагувати").className).toContain("btn-secondary");
     expect(buttonByText(target, "Архівувати").className).toContain("btn-danger");
+
+    component.$destroy();
+  });
+
+  it("wires key CTA actions and opens detail from the list row", async () => {
+    const { component, target } = renderCounterparties();
+
+    buttonByText(target, "ТОВ Ромашка").click();
+    buttonByText(target, "Редагувати").click();
+    buttonByText(target, "Створити документ").click();
+    buttonByText(target, "Архівувати").click();
+    await tick();
+
+    expect(mocks.open).toHaveBeenCalledWith("cp-1");
+    expect(mocks.openEditor).toHaveBeenCalledWith("cp-2");
+    expect(mocks.createDocument).toHaveBeenCalled();
+
+    // Archive shows in-app confirmation banner — action not called yet
+    expect(mocks.archiveCurrent).not.toHaveBeenCalled();
+    (target.querySelector('[data-testid="counterparties-confirm-archive-confirm"]') as HTMLButtonElement).click();
+    await tick();
+
+    expect(mocks.archiveCurrent).toHaveBeenCalledTimes(1);
 
     component.$destroy();
   });
@@ -249,13 +285,21 @@ describe("CounterpartiesScreen component", () => {
     component.$destroy();
   });
 
-  it("shows an explicit empty state for the detail panel", () => {
+  it("shows an explicit empty state with a useful next step", async () => {
     setCounterpartiesState(null);
     const { component, target } = renderCounterparties();
 
     expect(target.textContent).toContain("Оберіть контрагента");
-    expect(target.textContent).toContain("Побачите баланс, прострочки, останній контакт і пов'язані документи");
+    expect(target.textContent).toContain("Оберіть зліва вже відомого контрагента");
+    expect(target.textContent).toContain("або створіть нового, щоб одразу побачити");
+    expect(target.textContent).toContain("баланс");
+    expect(target.textContent).toContain("прострочки");
+    expect(target.textContent).toContain("сценарій роботи");
     expect(buttonByText(target, "Новий контрагент").className).toContain("btn-primary");
+    buttonByText(target, "Новий контрагент").click();
+    await tick();
+
+    expect(mocks.openEditor).toHaveBeenCalledWith();
 
     component.$destroy();
   });
@@ -266,8 +310,214 @@ describe("CounterpartiesScreen component", () => {
     expect(target.querySelector('[data-testid="counterparties-screen"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="counterparties-list"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="counterparty-detail"]')).toBeTruthy();
-    expect(target.querySelector('[data-testid="counterparty-overview"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="counterparty-detail-section-label"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="counterparty-scenario"]')).toBeTruthy();
 
     component.$destroy();
+  });
+
+  it("shows list skeletons during initial loading while chrome stays visible", () => {
+    mocks.counterpartiesState.set({
+      screen: null,
+      detail: null,
+      editor: null,
+      selectedId: null,
+      initialLoading: true,
+      loading: false,
+      error: null,
+      message: null,
+      query: ""
+    });
+
+    const { component, target } = renderCounterparties();
+
+    expect(target.textContent).toContain("Новий");
+    expect(target.querySelectorAll('[data-testid="skeleton-row-item"]')).toHaveLength(6);
+    expect(target.querySelector('[data-testid="counterparties-list"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="counterparties-empty-state"]')).toBeNull();
+
+    component.$destroy();
+  });
+
+  it("marks the main panel inert while the editor drawer is open", () => {
+    mocks.counterpartiesState.set({
+      screen: makeScreen(),
+      detail: makeDetail(),
+      editor: {
+        form: {
+          id: "cp-2",
+          title: "Редагувати контрагента",
+          name: "ФОП Петренко",
+          edrpou: "87654321",
+          ipn: "",
+          iban: "",
+          address: "",
+          phone: "",
+          email: "",
+          notes: ""
+        },
+        showEditor: true
+      },
+      selectedId: "cp-2",
+      initialLoading: false,
+      loading: false,
+      error: null,
+      message: null,
+      query: ""
+    });
+
+    const { component, target } = renderCounterparties();
+
+    const panel = target.querySelector('[data-testid="counterparties-screen"]') as HTMLElement | null;
+    expect(panel?.inert).toBe(true);
+    expect(panel?.getAttribute("aria-hidden")).toBe("true");
+
+    component.$destroy();
+  });
+
+  it("shows inline dirty banner before closing a dirty editor", async () => {
+    mocks.closeEditor.mockReturnValue({ ok: false, reason: "dirty" } as any);
+    mocks.counterpartiesState.set({
+      screen: makeScreen(),
+      detail: makeDetail(),
+      editor: {
+        form: {
+          id: "cp-2",
+          title: "Редагувати контрагента",
+          name: "ФОП Петренко",
+          edrpou: "87654321",
+          ipn: "",
+          iban: "",
+          address: "",
+          phone: "",
+          email: "",
+          notes: ""
+        },
+        showEditor: true
+      },
+      selectedId: "cp-2",
+      initialLoading: false,
+      loading: false,
+      error: null,
+      message: null,
+      query: ""
+    });
+
+    const { component, target } = renderCounterparties();
+
+    buttonByText(target, "Закрити").click();
+    await tick();
+
+    expect(target.querySelector('[data-testid="counterparties-dirty-banner"]')).toBeTruthy();
+    expect(target.textContent).toContain("У вас є незбережені зміни");
+    expect(target.textContent).toContain("Скасувати їх і закрити форму?");
+    expect(target.textContent).toContain("Залишитися");
+    expect(target.textContent).toContain("Так, закрити");
+    expect(mocks.closeEditor).toHaveBeenCalledWith(false);
+
+    buttonByText(target, "Так, закрити").click();
+    await tick();
+
+    expect(mocks.closeEditor).toHaveBeenCalledWith(true);
+
+    component.$destroy();
+  });
+
+  it("shows the dirty banner on Escape before closing the editor", async () => {
+    mocks.closeEditor.mockReturnValue({ ok: false, reason: "dirty" } as any);
+    mocks.counterpartiesState.set({
+      screen: makeScreen(),
+      detail: makeDetail(),
+      editor: {
+        form: {
+          id: "cp-2",
+          title: "Редагувати контрагента",
+          name: "ФОП Петренко",
+          edrpou: "87654321",
+          ipn: "",
+          iban: "",
+          address: "",
+          phone: "",
+          email: "",
+          notes: ""
+        },
+        showEditor: true
+      },
+      selectedId: "cp-2",
+      initialLoading: false,
+      loading: false,
+      error: null,
+      message: null,
+      query: ""
+    });
+
+    const { component, target } = renderCounterparties();
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true }));
+    await tick();
+
+    expect(target.querySelector('[data-testid="counterparties-dirty-banner"]')).toBeTruthy();
+    expect(mocks.closeEditor).toHaveBeenCalledWith(false);
+
+    component.$destroy();
+  });
+
+  it("shows the dirty banner on backdrop click before closing the editor", async () => {
+    mocks.closeEditor.mockReturnValue({ ok: false, reason: "dirty" } as any);
+    mocks.counterpartiesState.set({
+      screen: makeScreen(),
+      detail: makeDetail(),
+      editor: {
+        form: {
+          id: "cp-2",
+          title: "Редагувати контрагента",
+          name: "ФОП Петренко",
+          edrpou: "87654321",
+          ipn: "",
+          iban: "",
+          address: "",
+          phone: "",
+          email: "",
+          notes: ""
+        },
+        showEditor: true
+      },
+      selectedId: "cp-2",
+      initialLoading: false,
+      loading: false,
+      error: null,
+      message: null,
+      query: ""
+    });
+
+    const { component, target } = renderCounterparties();
+
+    (target.querySelector('[data-testid="counterparties-editor-backdrop"]') as HTMLButtonElement).click();
+    await tick();
+
+    expect(target.querySelector('[data-testid="counterparties-dirty-banner"]')).toBeTruthy();
+    expect(mocks.closeEditor).toHaveBeenCalledWith(false);
+
+    component.$destroy();
+  });
+
+  it("keeps overview badges styling in classes instead of inline markup", () => {
+    const { component, target } = renderCounterparties();
+
+    expect(target.querySelector(".counterparty-overview-badges")?.getAttribute("style")).toBeNull();
+
+    component.$destroy();
+  });
+
+  it("adds compact separation between the list and detail pane in stacked layout", () => {
+    expect(source).toContain("Деталі контрагента");
+    expect(styles).toMatch(/@media\s*\(max-width:\s*1100px\)[\s\S]*\.counterparties-list-wrap\s*\{[\s\S]*max-height:\s*420px/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*1100px\)[\s\S]*\.counterparty-detail-section-label\s*\{[\s\S]*display:\s*flex/);
+  });
+
+  it("keeps a tablet-style compact detail layout at 720px before collapsing fully on very small screens", () => {
+    expect(styles).toMatch(/@media\s*\(max-width:\s*720px\)[\s\S]*\.counterparty-metric-strip\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*720px\)[\s\S]*\.counterparty-scenario-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*560px\)[\s\S]*\.counterparty-scenario-grid[\s\S]*grid-template-columns:\s*1fr/);
   });
 });

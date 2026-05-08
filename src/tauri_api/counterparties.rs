@@ -284,6 +284,7 @@ fn act_to_document_item(row: &crate::models::act::ActListRow) -> DocumentItemDto
         status: DocumentStatusDto::from_act_status(&row.status),
         status_label: row.status.label().to_string(),
         linked_id: String::new(),
+        direction: row.direction.as_str().to_string(),
     }
 }
 
@@ -298,6 +299,7 @@ fn invoice_to_document_item(row: &crate::models::invoice::InvoiceListRow) -> Doc
         status: DocumentStatusDto::from_invoice_status(&row.status),
         status_label: row.status.label().to_string(),
         linked_id: String::new(),
+        direction: row.direction.as_str().to_string(),
     }
 }
 
@@ -330,6 +332,7 @@ async fn load_detail(ctx: &AppCtx, counterparty_id: Uuid) -> Result<Counterparty
         .await?
         .ok_or_else(|| anyhow!("Контрагента не знайдено"))?;
 
+    let today = chrono::Utc::now().date_naive();
     let (acts, invoices, payments) = tokio::join!(
         db::acts::list_filtered(
             ctx.pool(),
@@ -339,7 +342,11 @@ async fn load_detail(ctx: &AppCtx, counterparty_id: Uuid) -> Result<Counterparty
             None,
             Some(counterparty_id),
             None,
-            None
+            None,
+            None,
+            None,
+            false,
+            today
         ),
         db::invoices::list_filtered(
             ctx.pool(),
@@ -349,7 +356,11 @@ async fn load_detail(ctx: &AppCtx, counterparty_id: Uuid) -> Result<Counterparty
             None,
             Some(counterparty_id),
             None,
-            None
+            None,
+            None,
+            None,
+            false,
+            today
         ),
         db::payments::list_by_counterparty(ctx.pool(), company_id, counterparty_id)
     );

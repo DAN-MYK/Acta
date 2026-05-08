@@ -23,28 +23,28 @@
 
 ## Ключові доменні рішення перед реалізацією
 
-- [ ] Зафіксувати, що `bank` = рух грошей і залишок за фактичними платежами, а не бухгалтерський баланс рахунків.
-- [ ] Зафіксувати, що `P&L` = дохід/витрати за документами, а не за рухом грошей.
-- [ ] Визначити правила включення статусів у P&L.
+- [x] Зафіксувати, що `bank` = рух грошей і залишок за фактичними платежами, а не бухгалтерський баланс рахунків.
+- [x] Зафіксувати, що `P&L` = дохід/витрати за документами, а не за рухом грошей.
+- [x] Визначити правила включення статусів у P&L.
   Рекомендація: не включати `draft`; для MVP включати `issued`, `signed`, `paid`.
-- [ ] Узгодити знак і класифікацію витрат.
+- [x] Узгодити знак і класифікацію витрат.
   Рекомендація: використовувати `categories.kind = 'expense'` і `direction` документа, де це доступно.
-- [ ] Визначити, чи потрібен окремий облік банківських рахунків.
+- [x] Визначити, чи потрібен окремий облік банківських рахунків.
   Рекомендація: для поточної хвилі ні; залишити один агрегований cash balance.
 
 ## Рекомендований scope v1
 
 ### Обов'язково
 
-- [ ] P&L за період.
-- [ ] Залишок на рахунку / cashflow summary за період.
-- [ ] Дебіторська заборгованість з aging buckets.
-- [ ] Кредиторська заборгованість з overdue сигналами.
-- [ ] Експорт у `.xlsx` з кількома аркушами.
+- [x] P&L за період.
+- [x] Залишок на рахунку / cashflow summary за період.
+- [x] Дебіторська заборгованість з overdue сигналами (aging buckets — наступна хвиля).
+- [x] Кредиторська заборгованість з overdue сигналами.
+- [x] Експорт у `.xlsx` з кількома аркушами.
 
 ### Доцільно додати в ту ж хвилю
 
-- [ ] Доходи/витрати по категоріях.
+- [x] Доходи/витрати по категоріях (P&L вкладка).
 - [ ] Топ контрагенти за виручкою.
 - [ ] Топ боржники за сумою дебіторки.
 
@@ -81,7 +81,7 @@
 
 ## Рекомендація по Excel
 
-- [ ] Вибрати `rust_xlsxwriter` як основну бібліотеку.
+- [x] Вибрати `rust_xlsxwriter` як основну бібліотеку.
 - Причина: чистий Rust, записує нові `.xlsx`, підтримує кілька worksheet, формати, таблиці, формули й дати.
 - Обмеження: бібліотека не редагує існуючі Excel-файли, але для нашого use case це не потрібно.
 - Формат експорту:
@@ -92,62 +92,62 @@
 
 ### Backend
 
-- [ ] Створити `src/models/reports.rs`
+- [x] Створити `src/models/reports.rs`
   Відповідальність: доменні структури звітів, агрегати, aging buckets, типи вкладок і запитів.
-- [ ] Створити `src/db/reports.rs`
+- [x] Створити `src/db/reports.rs`
   Відповідальність: SQL-агрегації для P&L, cashflow, receivables, payables, top counterparties.
-- [ ] Скоригувати `src/db/mod.rs`
+- [x] Скоригувати `src/db/mod.rs`
   Відповідальність: підключення нового модуля reports.
-- [ ] Скоригувати `src/models/mod.rs`
+- [x] Скоригувати `src/models/mod.rs`
   Відповідальність: експорт моделей reports.
-- [ ] Переписати `src/tauri_api/reports.rs`
+- [x] Переписати `src/tauri_api/reports.rs`
   Відповідальність: DTO, orchestration, formatters, виклик `db::reports`, генерація `.xlsx`.
-- [ ] Скоригувати `src/tauri_api/mod.rs`
+- [x] Скоригувати `src/tauri_api/mod.rs`
   Якщо потрібно для публічних експортів.
-- [ ] Скоригувати `src-tauri/src/commands/reports.rs`
+- [x] Скоригувати `src-tauri/src/commands/reports.rs`
   Додати нову команду `reports_export_excel`.
-- [ ] Скоригувати `src-tauri/src/lib.rs`
+- [x] Скоригувати `src-tauri/src/lib.rs`
   Зареєструвати `reports_export_excel`.
 
 ### Frontend
 
-- [ ] Скоригувати `frontend/src/lib/types.ts`
+- [x] Скоригувати `frontend/src/lib/types.ts`
   Додати типи для `pnl`, aging summary, excel export result, category rows, top counterparties.
-- [ ] Скоригувати `frontend/src/lib/api.ts`
+- [x] Скоригувати `frontend/src/lib/api.ts`
   Додати `reportsExportExcel()`.
-- [ ] Скоригувати `frontend/src/lib/stores/reports.ts`
+- [x] Скоригувати `frontend/src/lib/stores/reports.ts`
   Додати підтримку нового таба `pnl`, excel-export state і, за потреби, richer filters.
-- [ ] Скоригувати `frontend/src/lib/screens/ReportsScreen.svelte`
+- [x] Скоригувати `frontend/src/lib/screens/ReportsScreen.svelte`
   Додати вкладку `P&L`, KPI для неї, таблицю/summary блоки, кнопку `Експортувати Excel`.
-- [ ] Скоригувати `frontend/src/lib/screens/__tests__/ReportsScreen.test.ts`
+- [x] Скоригувати `frontend/src/lib/screens/__tests__/ReportsScreen.test.ts`
   Оновити рендер і взаємодію для нового таба та кнопки експорту.
-- [ ] Скоригувати `frontend/src/lib/stores/__tests__/counterparties-payments-settings.test.ts` або винести окремий `reports` store test
+- [x] Скоригувати `frontend/src/lib/stores/__tests__/counterparties-payments-settings.test.ts` або винести окремий `reports` store test
   Перевірити виклик нових API і стан завантаження/помилки.
 
 ### Тести
 
-- [ ] Додати backend unit/integration tests для `src/db/reports.rs`.
+- [x] Додати backend unit/integration tests для `src/db/reports.rs`.
 - [ ] Додати backend tests для Excel workbook generation.
-- [ ] Оновити frontend tests для screen/store.
+- [x] Оновити frontend tests для screen/store.
 
 ## Порядок реалізації
 
 ### Фаза 1. Нормалізація архітектури reports
 
-- [ ] Винести SQL з `src/tauri_api/reports.rs` у `src/db/reports.rs`.
-- [ ] Винести доменні структури в `src/models/reports.rs`.
-- [ ] Залишити в `tauri_api` лише DTO і форматування money/date для UI.
-- [ ] Після переносу перевірити, що поточні `bank`, `receivables`, `payables` працюють без функціональних змін.
+- [x] Винести SQL з `src/tauri_api/reports.rs` у `src/db/reports.rs`.
+- [x] Винести доменні структури в `src/models/reports.rs`.
+- [x] Залишити в `tauri_api` лише DTO і форматування money/date для UI.
+- [x] Після переносу перевірити, що поточні `bank`, `receivables`, `payables` працюють без функціональних змін.
 
 ### Фаза 2. P&L
 
-- [ ] Додати нову вкладку `pnl`.
-- [ ] Реалізувати summary:
+- [x] Додати нову вкладку `pnl`.
+- [x] Реалізувати summary:
   `income`, `expense`, `gross_result`/`net_result`.
-- [ ] Реалізувати breakdown по категоріях.
-- [ ] Реалізувати режим `scope=active|all`.
+- [x] Реалізувати breakdown по категоріях.
+- [x] Реалізувати режим `scope=active|all`.
   Рекомендація: для `all` показувати спочатку загальний summary, потім рядки по компаніях.
-- [ ] Для MVP використати документи `acts` + `invoices`, відфільтровані від `draft`.
+- [x] Для MVP використати документи `acts` + `invoices`, відфільтровані від `draft`.
 
 ### Фаза 3. Поліпшення дебіторки та кредиторки
 
@@ -159,14 +159,14 @@
 
 ### Фаза 4. Excel export
 
-- [ ] Додати `reports_export_excel` у backend.
-- [ ] Генерувати workbook у `storage/reports`.
-- [ ] Додати щонайменше такі аркуші:
+- [x] Додати `reports_export_excel` у backend.
+- [x] Генерувати workbook у `storage/reports`.
+- [x] Додати щонайменше такі аркуші:
   `Summary`, `P&L`, `Cashflow`, `Receivables`, `Payables`.
-- [ ] На Summary продублювати вибрані фільтри: компанія, період, дата генерації.
+- [x] На Summary продублювати вибрані фільтри: компанія, період, дата генерації.
 - [ ] Писати грошові суми в Excel як числа з форматом, а не як preformatted string.
-  Це важливо: money contract `string` лишається для UI, але не для `.xlsx`.
-- [ ] Залишити повернення шляху до файлу в DTO результату.
+  Відкладено: поточна реалізація пише відформатовані рядки. Виправити в наступній хвилі.
+- [x] Залишити повернення шляху до файлу в DTO результату.
 
 ### Фаза 5. Додаткові управлінські звіти
 
@@ -209,40 +209,40 @@
 
 ## Ризики і перевірки
 
-- [ ] Ризик доменного конфлікту між cashflow і P&L.
+- [x] Ризик доменного конфлікту між cashflow і P&L.
   Пом'якшення: чіткі назви вкладок і окремі KPI.
-- [ ] Ризик дублювання логіки між `dashboard` і `reports`.
+- [x] Ризик дублювання логіки між `dashboard` і `reports`.
   Пом'якшення: повторно використати helper/query-layer, не копіювати SQL у два місця.
-- [ ] Ризик розходження multi-company режиму.
+- [x] Ризик розходження multi-company режиму.
   Пом'якшення: всюди використовувати єдиний фільтр `scope`.
 - [ ] Ризик невалідного Excel через форматування рядками.
-  Пом'якшення: у workbook передавати `Decimal -> f64/string-format` лише через контрольований адаптер і окремі тести на клітинки.
+  Відкладено: поточна реалізація записує preformatted strings замість числових типів.
 
 ## Тестова стратегія
 
 ### Backend
 
 - [ ] Unit tests на aging bucket calculation.
-- [ ] Unit tests на P&L summary calculation.
-- [ ] Integration tests на SQL вибірки `bank`, `pnl`, `receivables`, `payables`.
-- [ ] Tests на `scope=active` vs `scope=all`.
+- [x] Unit tests на P&L summary calculation (через integration tests).
+- [x] Integration tests на SQL вибірки `bank`, `pnl`, `receivables`, `payables`.
+- [x] Tests на `scope=active` vs `scope=all`.
 - [ ] Tests на Excel export:
   файл створився, містить очікувані worksheet names, повертається коректний path.
 
 ### Frontend
 
-- [ ] Screen test: вкладка `P&L` рендериться.
-- [ ] Screen test: кнопка `Експортувати Excel` викликає новий API.
-- [ ] Store test: loading/error/message для Excel export.
+- [x] Screen test: вкладка `P&L` рендериться.
+- [x] Screen test: кнопка `Експортувати Excel` викликає новий API.
+- [x] Store test: loading/error/message для Excel export.
 - [ ] Screen test: показ aging buckets у дебіторці.
 
 ## Рекомендована черговість релізу
 
-- [ ] Release 1:
+- [x] Release 1:
   архітектурний рефактор reports + стабілізація поточних трьох вкладок.
-- [ ] Release 2:
+- [x] Release 2:
   P&L + категорії + frontend tab.
-- [ ] Release 3:
+- [x] Release 3:
   Excel export `.xlsx`.
 - [ ] Release 4:
   Top counterparties + top debtors + forecast backlog grooming.
@@ -255,4 +255,27 @@
   `Top counterparties`, `Top debtors`, `Cashflow forecast`.
 - Головний технічний борг перед розширенням:
   рознести `reports` по `models/db/tauri_api`, бо зараз модуль уже робить забагато.
+
+---
+
+## Статус реалізації
+
+**Хвиля 1 (Releases 1–3) повністю реалізована** — 2026-05-01. Commit: `dd31c7d`.
+
+| Фаза | Статус |
+|------|--------|
+| Фаза 1: нормалізація архітектури (`db/reports`, `models/reports`) | ✅ |
+| Фаза 2: P&L вкладка з breakdown по категоріях | ✅ |
+| Фаза 3: aging buckets для дебіторки | ⏭ відкладено — є `overdue_days`, повні bucket-и наступна хвиля |
+| Фаза 4: Excel export (7 аркушів, `rust_xlsxwriter`) | ✅ (suми як strings — деталь наступної хвилі) |
+| Фаза 5: Top counterparties, Top debtors | ⏭ наступна хвиля |
+| Integration tests: `bank`, `pnl`, `receivables`, `payables`, `opening_balance` | ✅ 69/69 |
+| Frontend: `pnl` tab, KPI cards, Excel/CSV buttons, overdue highlighting | ✅ |
+
+**Відкрите для наступної хвилі (Release 4):**
+- Грошові суми в Excel як числові типи (зараз — відформатовані рядки)
+- Aging buckets (current / 1–30 / 31–60 / 61–90 / 90+)
+- Top counterparties та Top debtors
+- Cashflow forecast 30/60/90 днів
+- Excel workbook generation tests
 

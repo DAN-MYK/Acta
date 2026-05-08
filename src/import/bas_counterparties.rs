@@ -156,7 +156,7 @@ pub async fn apply_imported_counterparties(
                     name: row.name.clone(),
                     action: ImportAction::Conflict,
                     note: Some(format!(
-                        "conflict: Р·РЅР°Р№РґРµРЅРѕ {} РєРѕРЅС‚СЂР°РіРµРЅС‚С–РІ Р·Р° С‚РѕС‡РЅРѕСЋ РЅР°Р·РІРѕСЋ",
+                        "conflict: знайдено {} контрагентів за точною назвою",
                         matches.len()
                     )),
                 });

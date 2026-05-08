@@ -9,6 +9,11 @@ import {
 } from "../api";
 import { documentsStore } from "./documents";
 import { navigationStore } from "./navigation";
+import {
+  cloneSnapshot,
+  isEditorFormDirty,
+  type CloseEditorResult
+} from "../editorDirty";
 import type {
   CounterpartyDetailScreenDto,
   CounterpartyDraftFormDto,
@@ -20,7 +25,9 @@ interface CounterpartiesState {
   screen: CounterpartiesScreenDto | null;
   detail: CounterpartyDetailScreenDto | null;
   editor: CounterpartyEditorDto | null;
+  editorSnapshot: CounterpartyDraftFormDto | null;
   selectedId: string | null;
+  initialLoading: boolean;
   loading: boolean;
   error: string | null;
   message: string | null;
@@ -31,7 +38,9 @@ const initialState: CounterpartiesState = {
   screen: null,
   detail: null,
   editor: null,
+  editorSnapshot: null,
   selectedId: null,
+  initialLoading: true,
   loading: false,
   error: null,
   message: null,
@@ -39,10 +48,13 @@ const initialState: CounterpartiesState = {
 };
 
 function createCounterpartiesStore() {
-  const { subscribe, update } = writable<CounterpartiesState>(initialState);
+  const { subscribe, set, update } = writable<CounterpartiesState>(initialState);
 
   return {
     subscribe,
+    reset() {
+      set(initialState);
+    },
     async load(query = "") {
       update((state) => ({ ...state, loading: true, error: null, query }));
 
@@ -59,6 +71,7 @@ function createCounterpartiesStore() {
           screen,
           detail,
           selectedId,
+          initialLoading: false,
           loading: false
         }));
       } catch (error) {
@@ -85,13 +98,29 @@ function createCounterpartiesStore() {
 
       try {
         const editor = await counterpartyOpenEditor(counterpartyId);
-        update((state) => ({ ...state, editor, loading: false }));
+        update((state) => ({
+          ...state,
+          editor,
+          editorSnapshot: cloneSnapshot(editor.form),
+          loading: false
+        }));
       } catch (error) {
         update((state) => ({ ...state, loading: false, error: String(error) }));
       }
     },
-    closeEditor() {
-      update((state) => ({ ...state, editor: null }));
+    closeEditor(force = false): CloseEditorResult {
+      const snapshot = get({ subscribe });
+      if (!snapshot.editor) {
+        return { ok: true };
+      }
+
+      const dirty = isEditorFormDirty(snapshot.editorSnapshot, snapshot.editor.form);
+      if (dirty && !force) {
+        return { ok: false, reason: "dirty" };
+      }
+
+      update((state) => ({ ...state, editor: null, editorSnapshot: null }));
+      return { ok: true };
     },
     updateFormField(field: keyof CounterpartyDraftFormDto, value: string) {
       update((state) => ({
@@ -125,6 +154,7 @@ function createCounterpartiesStore() {
           detail: result.updatedDetail,
           selectedId: result.savedId,
           editor: null,
+          editorSnapshot: null,
           loading: false,
           message: result.message
         }));
@@ -179,7 +209,11 @@ function createCounterpartiesStore() {
       }
     },
     setEditor(editor: CounterpartyEditorDto) {
-      update((state) => ({ ...state, editor }));
+      update((state) => ({
+        ...state,
+        editor,
+        editorSnapshot: cloneSnapshot(editor.form)
+      }));
     }
   };
 }
