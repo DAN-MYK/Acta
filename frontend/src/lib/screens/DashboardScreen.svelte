@@ -6,6 +6,7 @@
   import { navigationStore } from "../stores/navigation";
   import { paymentsStore } from "../stores/payments";
   import { tasksStore } from "../stores/tasks";
+  import { formatDate } from "../date";
 
   const dashboard = dashboardStore;
   const documents = documentsStore;
@@ -131,7 +132,7 @@
         {#each $dashboard.screen?.urgentTasks ?? [] as task}
           <button class="dashboard-list-row" on:click={() => openDashboardTask(task.id)}>
             <span>{task.title}</span>
-            <strong>{task.dueDate || task.priorityLabel}</strong>
+            <strong>{formatDate(task.dueDate) !== "—" ? formatDate(task.dueDate) : task.priorityLabel}</strong>
           </button>
         {/each}
       {/if}

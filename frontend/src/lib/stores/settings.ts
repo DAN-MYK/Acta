@@ -27,10 +27,13 @@ const initialState: SettingsState = {
 };
 
 function createSettingsStore() {
-  const { subscribe, update } = writable<SettingsState>(initialState);
+  const { subscribe, set, update } = writable<SettingsState>(initialState);
 
   return {
     subscribe,
+    reset() {
+      set(initialState);
+    },
     async load() {
       update((state) => ({ ...state, loading: true, error: null }));
 

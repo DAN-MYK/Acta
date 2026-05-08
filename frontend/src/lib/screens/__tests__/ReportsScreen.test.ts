@@ -169,11 +169,9 @@ describe("ReportsScreen", () => {
     document.body.innerHTML = "";
   });
 
-  it("uses Ukrainian scenario-first microcopy in the header, focus card and filters", () => {
+  it("uses Ukrainian scenario-first microcopy in the focus card and filters", () => {
     const { component, target } = renderReports();
 
-    expect(target.textContent).toContain("Звіти");
-    expect(target.textContent).toContain("Гроші на рахунках і в русі");
     expect(target.textContent).toContain("Що показати у звіті");
     expect(target.textContent).toContain("Період від");
     expect(target.textContent).not.toContain("Bank / receivables / payables");
@@ -472,7 +470,6 @@ describe("ReportsScreen", () => {
 
     const { component, target } = renderReports();
 
-    expect(target.textContent).toContain("Звіти");
     expect(target.textContent).toContain("Відкрити Excel");
     expect(target.textContent).toContain("Експортувати Excel");
     expect(target.textContent).toContain("Експортувати CSV");

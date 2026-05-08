@@ -400,9 +400,9 @@
             type="button"
             role="menuitem"
             class="user-menu-item user-menu-item-danger"
-            on:click={() => { console.warn("TODO: logout"); showUserMenu = false; }}
+            on:click={() => { showUserMenu = false; appShell.signOut(); }}
           >
-            <AppIcon name="openLink" size={14} />
+            <AppIcon name="arrowRight" size={14} />
             <span>Вийти</span>
           </button>
         </div>

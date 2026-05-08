@@ -48,10 +48,13 @@ const initialState: CounterpartiesState = {
 };
 
 function createCounterpartiesStore() {
-  const { subscribe, update } = writable<CounterpartiesState>(initialState);
+  const { subscribe, set, update } = writable<CounterpartiesState>(initialState);
 
   return {
     subscribe,
+    reset() {
+      set(initialState);
+    },
     async load(query = "") {
       update((state) => ({ ...state, loading: true, error: null, query }));
 

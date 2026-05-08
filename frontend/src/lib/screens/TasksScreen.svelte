@@ -4,6 +4,7 @@
   import SkeletonRow from "../components/SkeletonRow.svelte";
   import { EDITOR_DIRTY_COPY, TASK_PRIORITY_OPTIONS, TASK_STATUS_OPTIONS, TASK_TAB_OPTIONS } from "../config/ui";
   import { tasksStore } from "../stores/tasks";
+  import { formatDate } from "../date";
   import {
     formatTaskDayLabel,
     getFocusedTaskItems,
@@ -162,7 +163,7 @@
                   {#if item.dueDate}
                     <span class="task-meta-date">
                       <AppIcon name="calendar" size={10} />
-                      {item.dueDate}
+                      {formatDate(item.dueDate)}
                     </span>
                   {/if}
                   <span class="task-pill task-pill-{item.priority}">{item.priorityLabel}</span>
@@ -198,7 +199,7 @@
               on:click={() => tasks.openEditor(item.id)}
             >
               <span class="linked-row-title">{item.title}</span>
-              <span class="linked-row-time">{item.reminderAt || item.dueDate}</span>
+              <span class="linked-row-time">{formatDate(item.reminderAt || item.dueDate)}</span>
             </button>
           {:else}
             <div class="empty-state-card compact">

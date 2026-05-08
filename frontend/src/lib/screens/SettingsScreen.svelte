@@ -54,13 +54,6 @@
 </script>
 
 <section class="panel">
-  <div class="panel-header">
-    <div>
-      <h2>Налаштування</h2>
-      <p>Зовнішній вигляд, компанія, інтеграції, команда та резервні копії</p>
-    </div>
-  </div>
-
   <div class="settings-layout">
     <aside class="settings-nav">
       {#each settingsSections as [section, label]}

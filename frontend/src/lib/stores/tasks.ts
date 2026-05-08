@@ -32,10 +32,13 @@ const initialState: TasksState = {
 };
 
 function createTasksStore() {
-  const { subscribe, update } = writable<TasksState>(initialState);
+  const { subscribe, set, update } = writable<TasksState>(initialState);
 
   return {
     subscribe,
+    reset() {
+      set(initialState);
+    },
     async load() {
       update((state) => ({ ...state, loading: true, error: null }));
 

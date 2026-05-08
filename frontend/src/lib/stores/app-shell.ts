@@ -3,7 +3,10 @@ import type { SettingsScreenDto, ShellStateDto } from "../types";
 import { counterpartiesStore } from "./counterparties";
 import { dashboardStore } from "./dashboard";
 import { documentsStore } from "./documents";
+import { importStore } from "./import";
+import { navigationStore } from "./navigation";
 import { paymentsStore } from "./payments";
+import { paletteStore } from "./palette";
 import { reportsStore } from "./reports";
 import { settingsStore } from "./settings";
 import { shellStore } from "./shell";
@@ -54,12 +57,14 @@ async function reloadCanonicalScreens() {
 function createAppShellStore() {
   const { subscribe, set } = writable<AppShellState>(initialState);
   let activeRequest: Promise<unknown> | null = null;
+  let generation = 0;
 
   async function run<T>(phase: AppShellPhase, progressLabel: string, task: () => Promise<T>) {
     if (activeRequest) {
       await activeRequest;
     }
 
+    const currentGeneration = generation;
     set({
       loading: true,
       phase,
@@ -72,7 +77,9 @@ function createAppShellStore() {
       return await activeRequest;
     } finally {
       activeRequest = null;
-      set(initialState);
+      if (currentGeneration === generation) {
+        set(initialState);
+      }
     }
   }
 
@@ -105,6 +112,22 @@ function createAppShellStore() {
         applyThemeFromShell(shellState);
         return shellState;
       });
+    },
+    signOut() {
+      generation += 1;
+      activeRequest = null;
+      paletteStore.reset();
+      navigationStore.reset();
+      shellStore.reset();
+      dashboardStore.reset();
+      documentsStore.reset();
+      counterpartiesStore.reset();
+      tasksStore.reset();
+      reportsStore.reset();
+      paymentsStore.reset();
+      settingsStore.reset();
+      importStore.reset();
+      set(initialState);
     },
     syncThemeFromSettings: applyThemeFromSettings,
     syncThemeFromShell: applyThemeFromShell

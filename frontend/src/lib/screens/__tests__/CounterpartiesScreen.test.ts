@@ -227,7 +227,6 @@ describe("CounterpartiesScreen component", () => {
   it("renders the counterparty as an operational risk card with scenario sections and CTA hierarchy", () => {
     const { component, target } = renderCounterparties();
 
-    expect(target.textContent).toContain("Контрагенти");
     expect(target.textContent).toContain("ФОП Петренко");
     expect(target.textContent).toContain("Потребує уваги: прострочено 1 документ");
     expect(target.textContent).toContain("Хто це");
@@ -235,7 +234,7 @@ describe("CounterpartiesScreen component", () => {
     expect(target.textContent).toContain("Документи");
     expect(target.textContent).toContain("Платежі");
     expect(target.textContent).toContain("Наступна дія");
-    expect(target.textContent).toContain("Останній контакт 2026-04-25");
+    expect(target.textContent).toContain("Останній контакт 25.04.2026");
     expect(target.textContent).toContain("Директор");
     expect(target.textContent).toContain("Банк");
     expect(target.textContent).toContain("VAT");
@@ -332,8 +331,7 @@ describe("CounterpartiesScreen component", () => {
 
     const { component, target } = renderCounterparties();
 
-    expect(target.textContent).toContain("Контрагенти");
-    expect(target.textContent).toContain("Новий контрагент");
+    expect(target.textContent).toContain("Новий");
     expect(target.querySelectorAll('[data-testid="skeleton-row-item"]')).toHaveLength(6);
     expect(target.querySelector('[data-testid="counterparties-list"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="counterparties-empty-state"]')).toBeNull();

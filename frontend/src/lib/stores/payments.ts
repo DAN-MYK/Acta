@@ -125,7 +125,7 @@ const initialState: PaymentsStoreState = {
 };
 
 function createPaymentsStore() {
-  const { subscribe, update } = writable<PaymentsStoreState>(initialState);
+  const { subscribe, set, update } = writable<PaymentsStoreState>(initialState);
 
   function selectedEventIdForCalendar(
     calendar: PaymentCalendarMonthDto,
@@ -397,6 +397,10 @@ function createPaymentsStore() {
 
   return {
     subscribe,
+
+    reset() {
+      set(initialState);
+    },
 
     async load() {
       await loadPayments();

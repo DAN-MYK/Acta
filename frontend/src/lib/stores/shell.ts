@@ -42,6 +42,7 @@ function createShellStore() {
   let snapshot = createInitialState();
   let activeRequest: Promise<ShellStateDto | null> | null = null;
   let activeRequestMeta: ActiveRequestMeta | null = null;
+  let requestGeneration = 0;
 
   function commit(nextState: ShellStoreState) {
     snapshot = nextState;
@@ -57,6 +58,12 @@ function createShellStore() {
 
   return {
     subscribe,
+    reset() {
+      requestGeneration += 1;
+      activeRequest = null;
+      activeRequestMeta = null;
+      commit(createInitialState());
+    },
     async load(): Promise<ShellStateDto | null> {
       if (snapshot.loading && activeRequest) {
         if (activeRequestMeta?.kind === "load") {
@@ -76,10 +83,14 @@ function createShellStore() {
         pendingCompanyId: null,
         progressLabel: phase === "initial" ? "Завантажуємо робочий простір..." : "Оновлюємо shell..."
       }));
+      const generation = requestGeneration;
 
       activeRequest = (async () => {
         try {
           const state = await shellLoad();
+          if (generation !== requestGeneration) {
+            return null;
+          }
           commit({
             state,
             loading: false,
@@ -90,6 +101,9 @@ function createShellStore() {
           });
           return state;
         } catch (error) {
+          if (generation !== requestGeneration) {
+            return null;
+          }
           commit({
             ...snapshot,
             loading: false,
@@ -135,10 +149,14 @@ function createShellStore() {
         pendingCompanyId: companyId,
         progressLabel: "Оновлюємо дані активної компанії..."
       }));
+      const generation = requestGeneration;
 
       activeRequest = (async () => {
         try {
           const state = await shellSetActiveCompany(companyId);
+          if (generation !== requestGeneration) {
+            return null;
+          }
           commit({
             state,
             loading: false,
@@ -149,6 +167,9 @@ function createShellStore() {
           });
           return state;
         } catch (error) {
+          if (generation !== requestGeneration) {
+            return null;
+          }
           patch((state) => ({
             ...state,
             loading: false,

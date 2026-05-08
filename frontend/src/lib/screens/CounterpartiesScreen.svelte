@@ -13,6 +13,7 @@
     getCounterpartyScenarioTitle
   } from "../counterpartyPresentation";
   import { isFormattedMoneyNegative } from "../money";
+  import { formatDate } from "../date";
   import { counterpartiesStore } from "../stores/counterparties";
   import { documentsStore } from "../stores/documents";
   import { navigationStore } from "../stores/navigation";
@@ -106,16 +107,6 @@
   inert={$counterparties.editor ? true : undefined}
   aria-hidden={$counterparties.editor ? "true" : undefined}
 >
-  <div class="panel-header">
-    <div>
-      <h2>Контрагенти</h2>
-      <p>{$counterparties.screen?.items.length ?? 0} записів</p>
-    </div>
-    <div class="panel-actions">
-      <button class="btn-primary" on:click={() => counterparties.openEditor()}>Новий контрагент</button>
-    </div>
-  </div>
-
   {#if $counterparties.message}
     <p class="message">{$counterparties.message}</p>
   {/if}
@@ -132,6 +123,7 @@
     <div class="counterparties-list-wrap">
       <div class="counterparties-search-bar">
         <input placeholder={COUNTERPARTIES_COPY.searchPlaceholder} on:input={onCounterpartySearch} />
+        <button class="btn-primary btn-sm" on:click={() => counterparties.openEditor()}>Новий</button>
       </div>
       <div class="counterparties-scroll">
         <div class="counterparties-list" data-testid="counterparties-list">
@@ -248,7 +240,7 @@
             <div class="counterparty-metric-divider"></div>
             <div class="counterparty-metric">
               <div class="counterparty-metric-label">Останній контакт</div>
-              <div class="counterparty-metric-value counterparty-metric-value-sm">{$counterparties.detail.info.lastContactDate || "—"}</div>
+              <div class="counterparty-metric-value counterparty-metric-value-sm">{formatDate($counterparties.detail.info.lastContactDate)}</div>
               <div class="counterparty-metric-sub">{getCounterpartyLastContactLabel($counterparties.detail.info.lastContactDays)}</div>
             </div>
           </div>
@@ -299,7 +291,7 @@
                   <strong>{$counterparties.detail.info.overdueAmountStr}</strong>
                 </div>
                 <div>
-                  <span>Останній контакт {$counterparties.detail.info.lastContactDate}</span>
+                  <span>Останній контакт {formatDate($counterparties.detail.info.lastContactDate)}</span>
                   <strong>{getCounterpartyLastContactLabel($counterparties.detail.info.lastContactDays)}</strong>
                 </div>
               </div>
@@ -335,7 +327,7 @@
                 {#if $counterparties.detail.payments.length > 0}
                   {#each $counterparties.detail.payments as payment}
                     <div class="linked-row static">
-                      <span>{payment.date} • {payment.account}</span>
+                      <span>{formatDate(payment.date)} • {payment.account}</span>
                       <span>{payment.amountStr}</span>
                     </div>
                   {/each}
@@ -361,7 +353,7 @@
               <div class="scenario-facts">
                 <div>
                   <span>Контакт</span>
-                  <strong>{$counterparties.detail.info.lastContactDate} • {getCounterpartyLastContactLabel($counterparties.detail.info.lastContactDays)}</strong>
+                  <strong>{formatDate($counterparties.detail.info.lastContactDate)} • {getCounterpartyLastContactLabel($counterparties.detail.info.lastContactDays)}</strong>
                 </div>
                 <div>
                   <span>Документів</span>

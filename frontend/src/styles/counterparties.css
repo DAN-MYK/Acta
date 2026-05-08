@@ -256,8 +256,7 @@
   padding: 10px 12px;
   border-radius: var(--acta-radius-xl);
   background: color-mix(in srgb, var(--acta-color-bg-subtle) 82%, transparent);
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .scenario-facts span {

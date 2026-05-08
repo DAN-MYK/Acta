@@ -54,11 +54,15 @@ function shouldResetCounterparty(partial?: Partial<ReportsFilterDto>): boolean {
 }
 
 export function createReportsStore() {
-  const { subscribe, update } = writable<ReportsState>(initialState);
+  const { subscribe, set, update } = writable<ReportsState>(initialState);
   let latestLoadRequestId = 0;
 
   return {
     subscribe,
+    reset() {
+      latestLoadRequestId += 1;
+      set(initialState);
+    },
     async load(partial?: Partial<ReportsFilterDto>) {
       const requestId = ++latestLoadRequestId;
       const normalizedPartial =

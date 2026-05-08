@@ -8,6 +8,9 @@ function createNavigationStore() {
     subscribe,
     go(screen: ScreenId) {
       set(screen);
+    },
+    reset() {
+      set("dashboard");
     }
   };
 }

@@ -171,15 +171,15 @@ function documentsList(): DocumentsListDto {
 }
 
 function documentEditor(kind = "invoice", counterpartyId = "cp-1"): DocumentEditorDto {
-  const counterparty = counterparties.find((item) => item.id === counterpartyId) ?? counterparties[0];
+  const counterparty = counterparties.find((item) => item.id === counterpartyId);
 
   return {
     form: {
       id: "doc-1",
       kind,
       direction: "outgoing",
-      counterpartyId: counterparty.id,
-      counterpartyName: counterparty.name,
+      counterpartyId: counterparty?.id ?? "",
+      counterpartyName: counterparty?.name ?? "",
       title: kind === "invoice" ? "Рахунок INV-2026-0042" : "Документ у роботі",
       number: kind === "invoice" ? "INV-2026-0042" : "ACT-2026-0018",
       date: "2026-05-01",
@@ -531,7 +531,7 @@ export async function browserFixtureInvoke<T>(command: string, payload?: Record<
       return clone(
         documentEditor(
           String((payload?.request as { kind?: string } | undefined)?.kind ?? "invoice"),
-          String((payload?.request as { counterpartyId?: string } | undefined)?.counterpartyId ?? "cp-1")
+          String((payload?.request as { counterpartyId?: string | null } | undefined)?.counterpartyId ?? "")
         )
       ) as T;
     case "document_save":

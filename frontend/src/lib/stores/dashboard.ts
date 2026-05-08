@@ -17,11 +17,15 @@ const initialState: DashboardState = {
 };
 
 function createDashboardStore() {
-  const { subscribe, update } = writable<DashboardState>(initialState);
+  const { subscribe, set, update } = writable<DashboardState>(initialState);
   let latestRequestId = 0;
 
   return {
     subscribe,
+    reset() {
+      latestRequestId += 1;
+      set(initialState);
+    },
     async load() {
       const requestId = ++latestRequestId;
       update((state) => ({ ...state, loading: true, error: null }));

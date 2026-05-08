@@ -60,13 +60,6 @@
   inert={$payments.editor ? true : undefined}
   aria-hidden={$payments.editor ? "true" : undefined}
 >
-  <div class="panel-header">
-    <div>
-      <h2>Платежі</h2>
-      <p>{$payments.list?.items.length ?? 0} записів</p>
-    </div>
-  </div>
-
   <div class="payments-tabs" role="tablist">
     <button
       class="payments-tab"

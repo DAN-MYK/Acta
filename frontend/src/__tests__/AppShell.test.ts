@@ -107,6 +107,7 @@ const mocks = vi.hoisted(() => {
   const appShellSwitchActiveCompany = vi.fn();
   const appShellReloadShellChrome = vi.fn().mockResolvedValue(makeShellState());
   const appShellSyncThemeFromSettings = vi.fn();
+  const appShellSignOut = vi.fn();
   const paletteSearch = vi.fn(async (query: string) => {
     paletteState.set({
       ...paletteState.get(),
@@ -173,6 +174,7 @@ const mocks = vi.hoisted(() => {
     appShellSwitchActiveCompany,
     appShellReloadShellChrome,
     appShellSyncThemeFromSettings,
+    appShellSignOut,
     paletteSearch,
     paletteOpen,
     paletteClose,
@@ -242,7 +244,8 @@ vi.mock("../lib/stores/app-shell", () => ({
     switchActiveCompany: mocks.appShellSwitchActiveCompany,
     reloadShellChrome: mocks.appShellReloadShellChrome,
     syncThemeFromSettings: mocks.appShellSyncThemeFromSettings,
-    syncThemeFromShell: vi.fn()
+    syncThemeFromShell: vi.fn(),
+    signOut: mocks.appShellSignOut
   }
 }));
 
@@ -562,6 +565,7 @@ describe("User menu", () => {
     mocks.navigationGo.mockReset();
     mocks.themeSetMode.mockReset();
     mocks.settingsUpdatePreference.mockReset();
+    mocks.appShellSignOut.mockReset();
   });
 
   it("opens user menu on ··· click", async () => {
@@ -577,6 +581,25 @@ describe("User menu", () => {
 
     expect(target.querySelector('[role="menu"]')).toBeTruthy();
     expect(moreBtn.getAttribute("aria-expanded")).toBe("true");
+
+    component.$destroy();
+  });
+
+  it("runs the shell sign-out flow from the danger item", async () => {
+    const { component, target } = renderApp();
+    await tick();
+
+    const moreBtn = target.querySelector(".user-more") as HTMLButtonElement;
+    moreBtn.click();
+    await tick();
+
+    const signOutItem = target.querySelector(".user-menu-item-danger") as HTMLButtonElement;
+    expect(signOutItem).toBeTruthy();
+    signOutItem.click();
+    await tick();
+
+    expect(mocks.appShellSignOut).toHaveBeenCalledTimes(1);
+    expect(target.querySelector('[role="menu"]')).toBeNull();
 
     component.$destroy();
   });

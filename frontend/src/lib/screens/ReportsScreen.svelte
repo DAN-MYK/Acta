@@ -4,7 +4,6 @@
     formatOverdueDaysLabel,
     getReportActiveRowsCount,
     getReportContextText,
-    getReportHeadline,
     getReportKpiCards,
     getReportTopCounterpartiesSubtitle,
     hasReportActiveRows,
@@ -12,6 +11,7 @@
     REPORT_TABS
   } from "../config/ui";
   import { isFormattedMoneyNegative } from "../money";
+  import { formatDate } from "../date";
   import { counterpartiesStore } from "../stores/counterparties";
   import { navigationStore } from "../stores/navigation";
   import { reportsStore } from "../stores/reports";
@@ -130,22 +130,16 @@
   data-testid="reports-screen"
   aria-busy={$reports.loading && !$reports.initialLoading ? "true" : undefined}
 >
-  <div class="panel-header">
-    <div>
-      <h2>Звіти</h2>
-      <p>{getReportHeadline($reports.screen?.filter.tab)}</p>
-    </div>
-    <div class="panel-actions reports-export-actions">
-      <button class="btn-secondary" on:click={() => reports.exportExcelAndOpen()} disabled={$reports.loading}>
-        Відкрити Excel
-      </button>
-      <button class="btn-ghost" on:click={() => reports.exportExcel()} disabled={$reports.loading}>
-        Експортувати Excel
-      </button>
-      <button class="btn-ghost" on:click={() => reports.exportCsv()} disabled={$reports.loading}>
-        Експортувати CSV
-      </button>
-    </div>
+  <div class="reports-toolbar">
+    <button class="btn-secondary" on:click={() => reports.exportExcelAndOpen()} disabled={$reports.loading}>
+      Відкрити Excel
+    </button>
+    <button class="btn-ghost" on:click={() => reports.exportExcel()} disabled={$reports.loading}>
+      Експортувати Excel
+    </button>
+    <button class="btn-ghost" on:click={() => reports.exportCsv()} disabled={$reports.loading}>
+      Експортувати CSV
+    </button>
   </div>
 
   <div class="reports-filters">
@@ -435,11 +429,11 @@
               class:reports-table-row-overdue={row.overdueDays > 0}
             >
               <span class="reports-cell-title">{row.docNumber}</span>
-              <span class="reports-cell-date">{row.docDate}</span>
+              <span class="reports-cell-date">{formatDate(row.docDate)}</span>
               <span class="reports-cell-company">{row.companyName}</span>
               <span class="reports-cell-company">{row.counterparty}</span>
               <span class="reports-cell-money money-value" data-negative={isFormattedMoneyNegative(row.amountStr)}>{row.amountStr}</span>
-              <span class="reports-cell-date">{row.expectedDate || "—"}</span>
+              <span class="reports-cell-date">{formatDate(row.expectedDate)}</span>
               <span class="reports-cell-status">
                 {formatOverdueDaysLabel(row.overdueDays)}
               </span>
@@ -476,7 +470,7 @@
               <span class="reports-cell-company">{row.companyName}</span>
               <span class="reports-cell-company">{row.counterparty || "—"}</span>
               <span class="reports-cell-money money-value" data-negative={isFormattedMoneyNegative(row.amountStr)}>{row.amountStr}</span>
-              <span class="reports-cell-date">{row.dueDate}</span>
+              <span class="reports-cell-date">{formatDate(row.dueDate)}</span>
               <span class="reports-cell-status">
                 {formatOverdueDaysLabel(row.overdueDays)}
               </span>

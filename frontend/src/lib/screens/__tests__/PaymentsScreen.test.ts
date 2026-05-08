@@ -328,7 +328,6 @@ describe("PaymentsScreen component", () => {
   it("renders payment workflow header and grouped reconciliation sections", () => {
     const { component, target } = renderPayments();
 
-    expect(target.textContent).toContain("Платежі");
     expect(target.textContent).toContain("Імпортувати виписку");
     expect(target.textContent).toContain("Запустити звірку");
     expect(target.textContent).toContain("Створити платіж");

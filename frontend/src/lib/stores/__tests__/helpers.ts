@@ -20,6 +20,7 @@ export async function loadStores() {
     counterpartiesModule,
     paymentsModule,
     settingsModule,
+    importModule,
     paletteModule,
     navigationModule,
     tasksModule,
@@ -33,6 +34,7 @@ export async function loadStores() {
       import("../counterparties"),
       import("../payments"),
       import("../settings"),
+      import("../import"),
       import("../palette"),
       import("../navigation"),
       import("../tasks"),
@@ -49,6 +51,7 @@ export async function loadStores() {
     tasksStore: tasksModule.tasksStore,
     reportsStore: reportsModule.reportsStore,
     settingsStore: settingsModule.settingsStore,
+    importStore: importModule.importStore,
     paletteStore: paletteModule.paletteStore,
     navigationStore: navigationModule.navigationStore
   };
