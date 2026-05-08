@@ -21,6 +21,7 @@ import {
   type CloseEditorResult
 } from "../editorDirty";
 import type { DocumentChainDto, DocumentEditorDto, DocumentKind, DocumentsListDto } from "../types";
+import { DOCUMENT_FILTER_PRESETS } from "../config/documents";
 
 type EditorPayload = Pick<DocumentEditorDto, "form" | "items">;
 
@@ -39,10 +40,16 @@ interface DocumentsState {
   loading: boolean;
   error: string | null;
   message: string | null;
-  query: string;
   activeTab: "all" | "outgoing" | "incoming";
   kindFilter: DocumentKind | null;
   counterpartyFilterId: string | null;
+  dateFrom: string | null;
+  dateTo: string | null;
+  statusFilter: string[];
+  amountMin: string | null;
+  amountMax: string | null;
+  overdueOnly: boolean;
+  activePresetId: string | null;
 }
 
 const initialState: DocumentsState = {
@@ -56,10 +63,16 @@ const initialState: DocumentsState = {
   loading: false,
   error: null,
   message: null,
-  query: "",
   activeTab: "all",
   kindFilter: null,
-  counterpartyFilterId: null
+  counterpartyFilterId: null,
+  dateFrom: null,
+  dateTo: null,
+  statusFilter: [],
+  amountMin: null,
+  amountMax: null,
+  overdueOnly: false,
+  activePresetId: null,
 };
 
 async function loadEditorAndChain(docId: string): Promise<{
@@ -85,7 +98,13 @@ function createDocumentsStore() {
     return documentsList({
       direction: tabToDirection(state.activeTab),
       kind: state.kindFilter ?? undefined,
-      counterpartyId: state.counterpartyFilterId ?? undefined
+      counterpartyId: state.counterpartyFilterId ?? undefined,
+      dateFrom: state.dateFrom ?? undefined,
+      dateTo: state.dateTo ?? undefined,
+      statuses: state.statusFilter.length > 0 ? (state.statusFilter as any) : undefined,
+      amountMin: state.amountMin ?? undefined,
+      amountMax: state.amountMax ?? undefined,
+      overdueOnly: state.overdueOnly || undefined,
     });
   }
 
@@ -95,18 +114,16 @@ function createDocumentsStore() {
       filterSeq += 1;
       set(initialState);
     },
-    async load(query = "") {
+    async load() {
       update((state) => ({
         ...state,
         loading: true,
         error: null,
-        message: state.message,
-        query
       }));
 
       try {
         const snap = get({ subscribe });
-        const list = await reloadList({ ...snap, query });
+        const list = await reloadList(snap);
         update((state) => ({
           ...state,
           list,
@@ -623,6 +640,7 @@ function createDocumentsStore() {
       update((state) => ({
         ...state,
         counterpartyFilterId: counterpartyId,
+        activePresetId: null,
         loading: true,
         error: null
       }));
@@ -635,7 +653,145 @@ function createDocumentsStore() {
         if (seq !== filterSeq) return;
         update((state) => ({ ...state, loading: false, error: String(error) }));
       });
-    }
+    },
+    setDateRange(from: string | null, to: string | null) {
+      update((state) => ({
+        ...state,
+        dateFrom: from,
+        dateTo: to,
+        activePresetId: null,
+        loading: true,
+        error: null,
+      }));
+      const seq = ++filterSeq;
+      const snap = get({ subscribe });
+      reloadList(snap).then((list) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, list, loading: false }));
+      }).catch((error) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      });
+    },
+    setStatusFilter(statuses: string[]) {
+      update((state) => ({
+        ...state,
+        statusFilter: statuses,
+        activePresetId: null,
+        loading: true,
+        error: null,
+      }));
+      const seq = ++filterSeq;
+      const snap = get({ subscribe });
+      reloadList(snap).then((list) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, list, loading: false }));
+      }).catch((error) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      });
+    },
+    setAmountRange(min: string | null, max: string | null) {
+      update((state) => ({
+        ...state,
+        amountMin: min,
+        amountMax: max,
+        activePresetId: null,
+        loading: true,
+        error: null,
+      }));
+      const seq = ++filterSeq;
+      const snap = get({ subscribe });
+      reloadList(snap).then((list) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, list, loading: false }));
+      }).catch((error) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      });
+    },
+    async applyPreset(presetId: string) {
+      const today = new Date();
+      const preset = DOCUMENT_FILTER_PRESETS.find((p) => p.id === presetId);
+      if (!preset) return;
+      const draft = preset.build(today);
+
+      update((state) => ({
+        ...state,
+        dateFrom: draft.dateFrom,
+        dateTo: draft.dateTo,
+        statusFilter: draft.statusFilter,
+        amountMin: draft.amountMin,
+        amountMax: draft.amountMax,
+        overdueOnly: draft.overdueOnly,
+        activePresetId: presetId,
+        loading: true,
+        error: null,
+      }));
+      const seq = ++filterSeq;
+      const snap = get({ subscribe });
+      return reloadList(snap).then((list) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, list, loading: false }));
+      }).catch((error) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      });
+    },
+    async applyFilters(draft: {
+      dateFrom: string | null;
+      dateTo: string | null;
+      statusFilter: string[];
+      amountMin: string | null;
+      amountMax: string | null;
+      counterpartyFilterId: string | null;
+    }) {
+      update((state) => ({
+        ...state,
+        dateFrom: draft.dateFrom,
+        dateTo: draft.dateTo,
+        statusFilter: draft.statusFilter,
+        amountMin: draft.amountMin,
+        amountMax: draft.amountMax,
+        counterpartyFilterId: draft.counterpartyFilterId,
+        activePresetId: null,
+        loading: true,
+        error: null,
+      }));
+      const seq = ++filterSeq;
+      const snap = get({ subscribe });
+      return reloadList(snap).then((list) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, list, loading: false }));
+      }).catch((error) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      });
+    },
+    clearAllFilters() {
+      update((state) => ({
+        ...state,
+        dateFrom: null,
+        dateTo: null,
+        statusFilter: [],
+        amountMin: null,
+        amountMax: null,
+        counterpartyFilterId: null,
+        overdueOnly: false,
+        activePresetId: null,
+        loading: true,
+        error: null,
+      }));
+      const seq = ++filterSeq;
+      const snap = get({ subscribe });
+      reloadList(snap).then((list) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, list, loading: false }));
+      }).catch((error) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      });
+    },
   };
 }
 
