@@ -303,6 +303,28 @@ async fn load_counterparty_name(
     Ok(counterparty.name)
 }
 
+fn parse_required_draft_counterparty_id(counterparty_id: Option<String>) -> Result<Uuid> {
+    let counterparty_id = counterparty_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| anyhow!("Оберіть контрагента перед створенням документа"))?;
+
+    Uuid::parse_str(counterparty_id).with_context(|| {
+        format!("Некоректний ідентифікатор контрагента: {counterparty_id}")
+    })
+}
+
+async fn resolve_draft_counterparty(
+    ctx: &AppCtx,
+    counterparty_id: Option<String>,
+) -> Result<(Uuid, String)> {
+    let counterparty_uuid = parse_required_draft_counterparty_id(counterparty_id)?;
+    let counterparty_name =
+        load_counterparty_name(ctx.pool(), ctx.company_id(), counterparty_uuid).await?;
+    Ok((counterparty_uuid, counterparty_name))
+}
+
 async fn load_document_snapshot(
     pool: &PgPool,
     company_id: Uuid,
@@ -752,30 +774,41 @@ pub async fn documents_list(
     let company_id = ctx.company_id();
     let search = request.query.as_deref();
     let direction_filter = request.direction;
+    let counterparty_filter = request
+        .counterparty_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| {
+            Uuid::parse_str(value)
+                .with_context(|| format!("Некоректний фільтр контрагента: {value}"))
+        })
+        .transpose()?;
 
     // None = include all kinds; Some(k) skips the other two DB calls (cheaper than SQL filter)
     let include_acts     = request.kind.as_deref().map_or(true, |k| k == "act");
     let include_invoices = request.kind.as_deref().map_or(true, |k| k == "invoice");
     let include_waybills = request.kind.as_deref().map_or(true, |k| k == "waybill");
 
+    let today = chrono::Utc::now().date_naive();
     let (acts, invoices, waybills) = tokio::join!(
         async {
             if include_acts {
-                db::acts::list_filtered(ctx.pool(), company_id, None, direction_filter, search, None, None, None).await
+                db::acts::list_filtered(ctx.pool(), company_id, None, direction_filter, search, counterparty_filter, None, None, None, None, false, today).await
             } else {
                 Ok(vec![])
             }
         },
         async {
             if include_invoices {
-                db::invoices::list_filtered(ctx.pool(), company_id, None, direction_filter, search, None, None, None).await
+                db::invoices::list_filtered(ctx.pool(), company_id, None, direction_filter, search, counterparty_filter, None, None, None, None, false, today).await
             } else {
                 Ok(vec![])
             }
         },
         async {
             if include_waybills {
-                db::waybills::list_filtered(ctx.pool(), company_id, None, direction_filter, search, None, None, None).await
+                db::waybills::list_filtered(ctx.pool(), company_id, None, direction_filter, search, counterparty_filter, None, None, None, None).await
             } else {
                 Ok(vec![])
             }
@@ -1008,16 +1041,10 @@ pub async fn document_create_draft(
     ctx: &AppCtx,
     request: CreateDocumentDraftRequest,
 ) -> Result<DocumentEditorDto> {
-    let counterparty_id = Uuid::parse_str(&request.counterparty_id).with_context(|| {
-        format!(
-            "Некоректний ідентифікатор контрагента: {}",
-            request.counterparty_id
-        )
-    })?;
     let direction = DocumentDirection::try_from(request.direction)
         .map_err(|_| anyhow!("Невідома направленість документа"))?;
-    let counterparty_name =
-        load_counterparty_name(ctx.pool(), ctx.company_id(), counterparty_id).await?;
+    let (counterparty_id, counterparty_name) =
+        resolve_draft_counterparty(ctx, request.counterparty_id).await?;
     let form = create_draft_form(
         ctx.pool(),
         ctx.company_id(),
@@ -1480,4 +1507,16 @@ pub async fn documents_bulk_advance_status_live(
     };
 
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_required_draft_counterparty_id_rejects_empty_selection() {
+        assert!(parse_required_draft_counterparty_id(None).is_err());
+        assert!(parse_required_draft_counterparty_id(Some(String::new())).is_err());
+        assert!(parse_required_draft_counterparty_id(Some("  ".to_string())).is_err());
+    }
 }

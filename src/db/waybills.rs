@@ -61,16 +61,17 @@ pub async fn counterparties_for_select(
         .collect())
 }
 
-/// Отримати список накладних компанії. `status_filter = None` → всі.
+/// Отримати список накладних компанії. Зручна обгортка без додаткових фільтрів.
 pub async fn list(
     pool: &PgPool,
     company_id: Uuid,
-    status_filter: Option<WaybillStatus>,
 ) -> Result<Vec<WaybillListRow>> {
     list_filtered(
         pool,
         company_id,
-        status_filter,
+        None,
+        None,
+        None,
         None,
         None,
         None,
@@ -80,17 +81,25 @@ pub async fn list(
     .await
 }
 
-/// Список накладних з фільтром за статусом, текстовим пошуком,
-/// контрагентом і діапазоном дат.
+/// Список накладних з фільтром за статусами, напрямом, текстовим пошуком,
+/// контрагентом, діапазоном дат та сумами.
+///
+/// Примітка: waybills не мають `expected_payment_date`, тому `overdue_only` не підтримується.
+///
+/// - `statuses` — масив рядкових значень статусу; `None` = всі.
+/// - `amount_min` / `amount_max` — фільтр за сумою `total_amount`.
+#[allow(clippy::too_many_arguments)]
 pub async fn list_filtered(
     pool: &PgPool,
     company_id: Uuid,
-    status_filter: Option<WaybillStatus>,
+    statuses: Option<&[String]>,
     direction: Option<DocumentDirection>,
     search_query: Option<&str>,
     counterparty_id: Option<Uuid>,
     date_from: Option<chrono::NaiveDate>,
     date_to: Option<chrono::NaiveDate>,
+    amount_min: Option<Decimal>,
+    amount_max: Option<Decimal>,
 ) -> Result<Vec<WaybillListRow>> {
     let search_query = search_query.map(str::trim).filter(|q| !q.is_empty());
     let has_search = search_query.is_some();
@@ -105,9 +114,9 @@ pub async fn list_filtered(
     );
     qb.push_bind(company_id);
 
-    if let Some(status) = status_filter {
-        qb.push(" AND w.status = ");
-        qb.push_bind(status);
+    if let Some(statuses) = statuses.filter(|s| !s.is_empty()) {
+        let owned: Vec<String> = statuses.to_vec();
+        qb.push(" AND w.status::text = ANY(").push_bind(owned).push("::text[])");
     }
     if let Some(direction) = direction {
         qb.push(" AND w.direction = ");
@@ -132,6 +141,12 @@ pub async fn list_filtered(
     if let Some(dt) = date_to {
         qb.push(" AND w.date <= ");
         qb.push_bind(dt);
+    }
+    if let Some(min) = amount_min {
+        qb.push(" AND w.total_amount >= ").push_bind(min);
+    }
+    if let Some(max) = amount_max {
+        qb.push(" AND w.total_amount <= ").push_bind(max);
     }
     qb.push(" ORDER BY w.date DESC, w.number");
     if has_search {

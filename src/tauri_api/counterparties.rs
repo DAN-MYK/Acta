@@ -341,7 +341,11 @@ async fn load_detail(ctx: &AppCtx, counterparty_id: Uuid) -> Result<Counterparty
             None,
             Some(counterparty_id),
             None,
-            None
+            None,
+            None,
+            None,
+            false,
+            chrono::Utc::now().date_naive()
         ),
         db::invoices::list_filtered(
             ctx.pool(),
@@ -351,7 +355,11 @@ async fn load_detail(ctx: &AppCtx, counterparty_id: Uuid) -> Result<Counterparty
             None,
             Some(counterparty_id),
             None,
-            None
+            None,
+            None,
+            None,
+            false,
+            chrono::Utc::now().date_naive()
         ),
         db::payments::list_by_counterparty(ctx.pool(), company_id, counterparty_id)
     );

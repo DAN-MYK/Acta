@@ -111,40 +111,52 @@ pub async fn counterparties_for_select(
 
 /// Отримати список актів компанії з JOIN на назву контрагента.
 ///
-/// `status_filter = None`  → усі акти.
-/// `status_filter = Some(s)` → лише акти з вказаним статусом.
+/// Зручна обгортка над `list_filtered` без додаткових фільтрів.
 pub async fn list(
     pool: &PgPool,
     company_id: Uuid,
-    status_filter: Option<ActStatus>,
 ) -> Result<Vec<ActListRow>> {
     list_filtered(
         pool,
         company_id,
-        status_filter,
         None,
         None,
         None,
         None,
         None,
+        None,
+        None,
+        None,
+        false,
+        chrono::Utc::now().date_naive(),
     )
     .await
 }
 
-/// Отримати список актів компанії з фільтром за статусом, текстовим пошуком,
-/// контрагентом і діапазоном дат.
+/// Отримати список актів компанії з фільтром за статусами, напрямом, текстовим пошуком,
+/// контрагентом, діапазоном дат, сумами та ознакою прострочення.
 ///
 /// Використовує `QueryBuilder` для динамічної побудови WHERE-умов
 /// замість 4-гілкового match — дозволяє довільну комбінацію фільтрів.
+///
+/// - `statuses` — масив рядкових значень статусу (наприклад `&["issued", "signed"]`); `None` = всі.
+/// - `amount_min` / `amount_max` — фільтр за сумою `total_amount`.
+/// - `overdue_only` — лише прострочені: `expected_payment_date < today` та статус issued/signed.
+/// - `today` — поточна дата для розрахунку прострочення (передається явно для тестування).
+#[allow(clippy::too_many_arguments)]
 pub async fn list_filtered(
     pool: &PgPool,
     company_id: Uuid,
-    status_filter: Option<ActStatus>,
+    statuses: Option<&[String]>,
     direction: Option<DocumentDirection>,
     search_query: Option<&str>,
     counterparty_id: Option<Uuid>,
     date_from: Option<chrono::NaiveDate>,
     date_to: Option<chrono::NaiveDate>,
+    amount_min: Option<Decimal>,
+    amount_max: Option<Decimal>,
+    overdue_only: bool,
+    today: chrono::NaiveDate,
 ) -> Result<Vec<ActListRow>> {
     let search_query = search_query.map(str::trim).filter(|q| !q.is_empty());
     let has_search = search_query.is_some();
@@ -159,9 +171,9 @@ pub async fn list_filtered(
     );
     qb.push_bind(company_id);
 
-    if let Some(status) = status_filter {
-        qb.push(" AND a.status = ");
-        qb.push_bind(status);
+    if let Some(statuses) = statuses.filter(|s| !s.is_empty()) {
+        let owned: Vec<String> = statuses.to_vec();
+        qb.push(" AND a.status::text = ANY(").push_bind(owned).push("::text[])");
     }
     if let Some(direction) = direction {
         qb.push(" AND a.direction = ");
@@ -186,6 +198,17 @@ pub async fn list_filtered(
     if let Some(dt) = date_to {
         qb.push(" AND a.date <= ");
         qb.push_bind(dt);
+    }
+    if let Some(min) = amount_min {
+        qb.push(" AND a.total_amount >= ").push_bind(min);
+    }
+    if let Some(max) = amount_max {
+        qb.push(" AND a.total_amount <= ").push_bind(max);
+    }
+    if overdue_only {
+        qb.push(" AND a.expected_payment_date IS NOT NULL")
+          .push(" AND a.expected_payment_date < ").push_bind(today)
+          .push(" AND a.status::text IN ('issued','signed')");
     }
     qb.push(" ORDER BY a.date DESC, a.number");
     if has_search {

@@ -80,6 +80,10 @@ async fn invoices_create_update_and_status_flow_in_db() -> Result<()> {
         None,
         None,
         None,
+        None,
+        None,
+        false,
+        chrono::Utc::now().date_naive(),
     )
     .await?;
     assert!(listed.iter().any(|row| row.id == invoice.id));
@@ -656,12 +660,16 @@ async fn invoices_list_filtered_respects_status_and_search() -> Result<()> {
     let issued_only = db::invoices::list_filtered(
         &pool,
         DEFAULT_COMPANY_ID,
-        Some(models::InvoiceStatus::Issued),
+        Some(&["issued".to_string()]),
         None,
         None,
         None,
         None,
         None,
+        None,
+        None,
+        false,
+        chrono::Utc::now().date_naive(),
     )
     .await?;
     assert!(issued_only.iter().any(|row| row.id == issued.id));
@@ -670,12 +678,16 @@ async fn invoices_list_filtered_respects_status_and_search() -> Result<()> {
     let by_search = db::invoices::list_filtered(
         &pool,
         DEFAULT_COMPANY_ID,
-        Some(models::InvoiceStatus::Issued),
+        Some(&["issued".to_string()]),
         None,
         Some("FILTER-ISSUED"),
         None,
         None,
         None,
+        None,
+        None,
+        false,
+        chrono::Utc::now().date_naive(),
     )
     .await?;
     assert_eq!(by_search.len(), 1);
