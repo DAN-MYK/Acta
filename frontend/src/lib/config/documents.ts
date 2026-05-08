@@ -1,5 +1,5 @@
 import type { AppIconName } from "../icons";
-import type { DocumentDirection, DocumentKind } from "../types";
+import type { DocumentDirection, DocumentKind, DocumentStatus } from "../types";
 import { EDITOR_DIRTY_COPY } from "./shared";
 
 export const DOCUMENT_KIND_META: Record<
@@ -129,3 +129,84 @@ export function supportsExistingPdfFlow(kind: string): boolean {
 export function supportsDocumentPdfGeneration(kind: string): boolean {
   return kind === "act" || kind === "invoice";
 }
+
+export const DOCUMENT_STATUS_OPTIONS: Array<{ value: DocumentStatus; label: string }> = [
+  { value: "draft", label: "Чернетка" },
+  { value: "issued", label: "Виставлено" },
+  { value: "signed", label: "Підписано" },
+  { value: "paid", label: "Оплачено" },
+  { value: "delivered", label: "Доставлено" }
+];
+
+export interface DocumentFilterPresetSnapshot {
+  dateFrom: string | null;
+  dateTo: string | null;
+  statusFilter: string[];
+  amountMin: string | null;
+  amountMax: string | null;
+  overdueOnly: boolean;
+}
+
+export interface DocumentFilterPreset {
+  id: string;
+  label: string;
+  build(today: Date): DocumentFilterPresetSnapshot;
+}
+
+function isoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+const emptyPreset = (): DocumentFilterPresetSnapshot => ({
+  dateFrom: null,
+  dateTo: null,
+  statusFilter: [],
+  amountMin: null,
+  amountMax: null,
+  overdueOnly: false
+});
+
+export const DOCUMENT_FILTER_PRESETS: DocumentFilterPreset[] = [
+  { id: "all", label: "Усі", build: () => emptyPreset() },
+  { id: "drafts", label: "Чернетки", build: () => ({ ...emptyPreset(), statusFilter: ["draft"] }) },
+  {
+    id: "unpaid",
+    label: "Неоплачені",
+    build: () => ({ ...emptyPreset(), statusFilter: ["issued", "signed"] })
+  },
+  { id: "overdue", label: "Прострочені", build: () => ({ ...emptyPreset(), overdueOnly: true }) },
+  {
+    id: "this-month",
+    label: "Цього місяця",
+    build: (today) => ({
+      ...emptyPreset(),
+      dateFrom: isoDate(new Date(today.getFullYear(), today.getMonth(), 1)),
+      dateTo: isoDate(today)
+    })
+  }
+];
+
+export const DOCUMENTS_FILTER_COPY = {
+  filterButton: "Фільтр",
+  filterButtonWithCount: (n: number) => `Фільтр · ${n}`,
+  clearAll: "Очистити",
+  apply: "Застосувати",
+  reset: "Скинути",
+  activeFiltersLabel: "Активні:",
+  presetsLabel: "Швидкі:",
+  periodLabel: "Період",
+  periodFrom: "Від",
+  periodTo: "До",
+  periodSubpresets: { today: "Сьогодні", week: "Тиждень", month: "Місяць", quarter: "Квартал", year: "Рік" },
+  statusLabel: "Статус",
+  counterpartyLabel: "Контрагент",
+  counterpartyAll: "Усі контрагенти",
+  amountLabel: "Сума, грн",
+  amountFrom: "Від",
+  amountTo: "До",
+  errors: {
+    dateRangeInvalid: "Кінцева дата раніше за початкову",
+    amountRangeInvalid: "Максимальна сума менша за мінімальну",
+    amountInvalidFormat: "Некоректна сума"
+  }
+} as const;
