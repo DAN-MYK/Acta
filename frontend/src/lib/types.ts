@@ -11,6 +11,18 @@ export type DocumentKind = "invoice" | "act" | "waybill";
 export type DocumentStatus = "draft" | "issued" | "signed" | "paid" | "delivered";
 export type DocumentDirection = "outgoing" | "incoming";
 
+export interface DocumentsListRequest {
+  direction?: "outgoing" | "incoming";
+  kind?: string;
+  counterpartyId?: string;
+  dateFrom?: string;        // "YYYY-MM-DD"
+  dateTo?: string;          // "YYYY-MM-DD"
+  statuses?: DocumentStatus[];
+  amountMin?: string;       // major-units decimal string e.g. "1000.00"
+  amountMax?: string;
+  overdueOnly?: boolean;
+}
+
 export interface ShellChromeDto {
   companyName: string;
   userName: string;
