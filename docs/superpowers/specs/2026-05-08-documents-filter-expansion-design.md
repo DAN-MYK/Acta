@@ -95,7 +95,7 @@
 - Date sub-presets `[Сьогодні / Тиждень / Місяць / Квартал / Рік]` всередині панелі — заповнюють `panelDateFrom`/`panelDateTo`. **Не активують topline preset.**
 - Status — масив toggle-чіпів (multi).
 - Counterparty — наявний select.
-- Amount inputs — `inputmode="decimal"`, валідація через `parseMoneyToMinor`.
+- Amount inputs — `inputmode="decimal"`. UI приймає введення з комою або крапкою; перед передачею у DTO рядок нормалізується (trim, замінити кому на крапку, прибрати пробіли) і валідується як `Decimal` у **major units** (грн), щоб збігтися з `total_amount` у БД. Якщо рядок не парситься — inline-помилка `Некоректна сума`. **Не використовуємо** `parseMoneyToMinor` — він би повернув мінор-юніти і ламав би SQL-порівняння.
 - Кнопка `Застосувати` — викликає `applyFilters({...draft})` за один прохід; запит в backend — один.
 - Кнопка `Скинути` — обнуляє лише локальний draft (не торкається store, поки користувач не натисне `Застосувати`).
 - `Esc` всередині панелі — закриває без apply.
@@ -128,7 +128,7 @@ interface DocumentsState {
   dateFrom: string | null;
   dateTo: string | null;
   statusFilter: string[];
-  amountMin: string | null;       // мінор-юніти string, як решта money у frontend
+  amountMin: string | null;       // decimal string у major units ("1000.00"), кома/крапка нормалізується перед DTO
   amountMax: string | null;
   overdueOnly: boolean;            // true лише при пресеті "Прострочені"
   activePresetId: string | null;   // "all" | "drafts" | "unpaid" | "overdue" | "this-month" | null
@@ -219,12 +219,14 @@ if let Some(min) = amount_min {
 if let Some(max) = amount_max {
     qb.push(" AND ").push(alias).push(".total_amount <= ").push_bind(max);
 }
-// overdue_only — лише для acts/invoices (waybill не має expected_payment_date)
+// overdue_only — лише для acts/invoices (waybill не має expected_payment_date).
+// Свідомо виключаємо draft: чернетка не може бути просроченою — вона ще не виставлена клієнту.
+// Тому фільтр — позитивний whitelist (issued/signed), а не NOT IN(...).
 if overdue_only {
     qb.push(" AND ").push(alias)
       .push(".expected_payment_date IS NOT NULL AND ")
       .push(alias).push(".expected_payment_date < ").push_bind(today)
-      .push(" AND ").push(alias).push(".status::text NOT IN ('paid','delivered')");
+      .push(" AND ").push(alias).push(".status::text IN ('issued','signed')");
 }
 ```
 
@@ -241,7 +243,7 @@ let include_waybills = request.kind.as_deref().map_or(true, |k| k == "waybill")
 `tokio::join!` для трьох таблиць — як зараз (lessons.md правило). Нічого не послідовне.
 
 ### `cargo sqlx prepare`
-Після всіх змін у `query_builder` — обов'язково `cargo sqlx prepare` і коміт `.sqlx/*.json` (lessons.md правило).
+Поточні `list_filtered` побудовані на runtime `QueryBuilder` / `query_as::<_, T>()` — це навмисний вибір (коментар у файлах: "не потребує `cargo sqlx prepare`"). Нові фрагменти продовжують той самий шлях, тому метаданих у `.sqlx` не з'явиться. Прогон `cargo sqlx prepare` залишається **verification step** на випадок якщо в плані з'явиться додатковий `query!`/`query_as!` макрос: якщо diff у `.sqlx/*.json` виник — закомітити; якщо ні — пропустити (`lessons.md` правило стосується саме compile-time макросів).
 
 ## Пресети — `frontend/src/lib/config/ui.ts`
 
@@ -345,7 +347,7 @@ Gated на `TEST_DATABASE_URL`:
 - `src/db/acts.rs`, `invoices.rs`, `waybills.rs` — `list_filtered` нова сигнатура, нові SQL-блоки.
 - `tests/db_integration.rs` — нові тести.
 - `tests/tauri_vertical_slice.rs` — vertical slice тест.
-- `.sqlx/*.json` — оновити через `cargo sqlx prepare`, закомітити.
+- `.sqlx/*.json` — лише якщо план додасть `query!`/`query_as!` макрос (`QueryBuilder`-шлях метаданих не пише).
 
 **Tauri command:**
 - `src-tauri/src/commands/documents.rs` — лише прокидування DTO; нічого додавати не треба.
@@ -360,7 +362,7 @@ Gated на `TEST_DATABASE_URL`:
 ## Послідовність робіт (high-level)
 
 1. Backend: розширити `list_filtered` (3 файли) + DTO; написати backend-тести.
-2. `cargo sqlx prepare` + комітнути `.sqlx`.
+2. Прогнати `cargo sqlx prepare` як verification — закомітити `.sqlx/*.json` лише якщо з'явився diff.
 3. Frontend types + api.ts (single-object arg).
 4. Frontend store: видалити `query`/`load`-UI, додати нові поля/setters/`applyFilters`.
 5. Frontend screen: видалити input пошуку, додати presets row, розширити панель, додати active-chips і лічильник.
