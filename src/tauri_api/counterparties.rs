@@ -332,6 +332,7 @@ async fn load_detail(ctx: &AppCtx, counterparty_id: Uuid) -> Result<Counterparty
         .await?
         .ok_or_else(|| anyhow!("Контрагента не знайдено"))?;
 
+    let today = chrono::Utc::now().date_naive();
     let (acts, invoices, payments) = tokio::join!(
         db::acts::list_filtered(
             ctx.pool(),
@@ -345,7 +346,7 @@ async fn load_detail(ctx: &AppCtx, counterparty_id: Uuid) -> Result<Counterparty
             None,
             None,
             false,
-            chrono::Utc::now().date_naive()
+            today
         ),
         db::invoices::list_filtered(
             ctx.pool(),
@@ -359,7 +360,7 @@ async fn load_detail(ctx: &AppCtx, counterparty_id: Uuid) -> Result<Counterparty
             None,
             None,
             false,
-            chrono::Utc::now().date_naive()
+            today
         ),
         db::payments::list_by_counterparty(ctx.pool(), company_id, counterparty_id)
     );
