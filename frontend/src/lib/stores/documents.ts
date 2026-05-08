@@ -42,6 +42,7 @@ interface DocumentsState {
   query: string;
   activeTab: "all" | "outgoing" | "incoming";
   kindFilter: DocumentKind | null;
+  counterpartyFilterId: string | null;
 }
 
 const initialState: DocumentsState = {
@@ -57,7 +58,8 @@ const initialState: DocumentsState = {
   message: null,
   query: "",
   activeTab: "all",
-  kindFilter: null
+  kindFilter: null,
+  counterpartyFilterId: null
 };
 
 async function loadEditorAndChain(docId: string): Promise<{
@@ -69,7 +71,7 @@ async function loadEditorAndChain(docId: string): Promise<{
 }
 
 function createDocumentsStore() {
-  const { subscribe, update } = writable<DocumentsState>(initialState);
+  const { subscribe, set, update } = writable<DocumentsState>(initialState);
 
   let filterSeq = 0;
 
@@ -80,15 +82,19 @@ function createDocumentsStore() {
   }
 
   async function reloadList(state: DocumentsState): Promise<DocumentsListDto> {
-    return documentsList(
-      state.query,
-      tabToDirection(state.activeTab),
-      state.kindFilter ?? undefined
-    );
+    return documentsList({
+      direction: tabToDirection(state.activeTab),
+      kind: state.kindFilter ?? undefined,
+      counterpartyId: state.counterpartyFilterId ?? undefined
+    });
   }
 
   return {
     subscribe,
+    reset() {
+      filterSeq += 1;
+      set(initialState);
+    },
     async load(query = "") {
       update((state) => ({
         ...state,
@@ -250,7 +256,7 @@ function createDocumentsStore() {
         editorSnapshot: snapshotEditor(editor)
       }));
     },
-    async create(counterpartyId: string, kind: string) {
+    async create(counterpartyId: string | undefined, kind: string) {
       update((state) => ({ ...state, loading: true, error: null, message: null }));
       const snap = get({ subscribe });
       const direction: "outgoing" | "incoming" =
@@ -603,6 +609,23 @@ function createDocumentsStore() {
     },
     setKindFilter(kind: DocumentKind | null) {
       update((state) => ({ ...state, kindFilter: kind, loading: true, error: null }));
+      const seq = ++filterSeq;
+      const snap = get({ subscribe });
+      reloadList(snap).then((list) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, list, loading: false }));
+      }).catch((error) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      });
+    },
+    setCounterpartyFilter(counterpartyId: string | null) {
+      update((state) => ({
+        ...state,
+        counterpartyFilterId: counterpartyId,
+        loading: true,
+        error: null
+      }));
       const seq = ++filterSeq;
       const snap = get({ subscribe });
       reloadList(snap).then((list) => {

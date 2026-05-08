@@ -12,6 +12,7 @@ import type {
   DocumentEditorDto,
   DocumentPdfActionResultDto,
   DocumentsListDto,
+  DocumentsListRequest,
   ImportPlanDto,
   ImportResultDto,
   MutationResultDto,
@@ -90,15 +91,20 @@ export function dashboardLoad(): Promise<DashboardScreenDto> {
 }
 
 export function documentsList(
-  query = "",
-  direction?: "outgoing" | "incoming",
-  kind?: string
+  request: DocumentsListRequest = {}
 ): Promise<DocumentsListDto> {
   return appInvoke("documents_list", {
     request: {
-      query: query || null,
-      direction: direction ?? null,
-      kind: kind ?? null
+      query: null,
+      direction: request.direction ?? null,
+      kind: request.kind ?? null,
+      counterpartyId: request.counterpartyId ?? null,
+      dateFrom: request.dateFrom ?? null,
+      dateTo: request.dateTo ?? null,
+      statuses: request.statuses && request.statuses.length > 0 ? request.statuses : null,
+      amountMin: request.amountMin ?? null,
+      amountMax: request.amountMax ?? null,
+      overdueOnly: request.overdueOnly ?? false
     }
   });
 }
@@ -108,13 +114,13 @@ export function documentOpen(docId: string): Promise<DocumentEditorDto> {
 }
 
 export function documentCreateDraft(
-  counterpartyId: string,
+  counterpartyId: string | undefined,
   kind: string,
   direction: "outgoing" | "incoming" = "outgoing"
 ): Promise<DocumentEditorDto> {
   return appInvoke("document_create_draft", {
     request: {
-      counterpartyId,
+      counterpartyId: counterpartyId || null,
       kind,
       direction
     }
