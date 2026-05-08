@@ -241,3 +241,5 @@ mod payments;
 mod pdf_paths;
 #[path = "db_integration/reports.rs"]
 mod reports;
+#[path = "db_integration/waybills.rs"]
+mod waybills;
