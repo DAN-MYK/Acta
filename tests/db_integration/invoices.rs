@@ -817,3 +817,255 @@ async fn invoices_update_with_items_fails_for_missing_invoice() -> Result<()> {
     assert!(err.to_string().contains("не знайдена"));
     Ok(())
 }
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+async fn seed_inv_counterparty(
+    pool: &sqlx::PgPool,
+    prefix: &str,
+) -> Result<models::Counterparty> {
+    let suffix = unique_suffix();
+    db::counterparties::create(
+        pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewCounterparty {
+            name: format!("{prefix}-{suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("seed-cp-{prefix}-{suffix}")),
+        },
+    )
+    .await
+}
+
+async fn seed_invoice(
+    pool: &sqlx::PgPool,
+    cp: &models::Counterparty,
+    number: &str,
+    amount: rust_decimal::Decimal,
+) -> Result<models::Invoice> {
+    db::invoices::create(
+        pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewInvoice {
+            number: number.to_string(),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: models::DocumentDirection::Outgoing,
+            date: chrono::Utc::now().date_naive(),
+            expected_payment_date: None,
+            notes: None,
+            bas_id: None,
+            items: vec![models::NewInvoiceItem {
+                position: 1,
+                description: "x".to_string(),
+                unit: Some("шт".to_string()),
+                quantity: dec!(1.0000),
+                price: amount,
+            }],
+        },
+    )
+    .await
+}
+
+async fn seed_invoice_with_due(
+    pool: &sqlx::PgPool,
+    cp: &models::Counterparty,
+    number: &str,
+    amount: rust_decimal::Decimal,
+    due: Option<chrono::NaiveDate>,
+) -> Result<models::Invoice> {
+    db::invoices::create(
+        pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewInvoice {
+            number: number.to_string(),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: models::DocumentDirection::Outgoing,
+            date: chrono::Utc::now().date_naive(),
+            expected_payment_date: due,
+            notes: None,
+            bas_id: None,
+            items: vec![models::NewInvoiceItem {
+                position: 1,
+                description: "x".to_string(),
+                unit: Some("шт".to_string()),
+                quantity: dec!(1.0000),
+                price: amount,
+            }],
+        },
+    )
+    .await
+}
+
+// ─── Invoices: list_filtered — amount range ───────────────────────────────────
+
+#[tokio::test]
+async fn list_filtered_amount_range() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let cp = seed_inv_counterparty(&pool, "INV-AMT-CP").await?;
+    seed_invoice(&pool, &cp, "INV-AMT-500", dec!(500.00)).await?;
+    seed_invoice(&pool, &cp, "INV-AMT-5000", dec!(5000.00)).await?;
+    seed_invoice(&pool, &cp, "INV-AMT-50000", dec!(50000.00)).await?;
+
+    let mid = db::invoices::list_filtered(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        None,
+        None,
+        Some("INV-AMT-"),
+        Some(cp.id),
+        None,
+        None,
+        Some(dec!(1000)),
+        Some(dec!(10000)),
+        false,
+        chrono::Utc::now().date_naive(),
+    )
+    .await?;
+
+    assert_eq!(mid.len(), 1);
+    assert_eq!(mid[0].number, "INV-AMT-5000");
+
+    sqlx::query("DELETE FROM invoices WHERE counterparty_id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
+    Ok(())
+}
+
+// ─── Invoices: list_filtered — multi-status ───────────────────────────────────
+
+#[tokio::test]
+async fn list_filtered_multi_status() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let cp = seed_inv_counterparty(&pool, "INV-MS-CP").await?;
+    seed_invoice(&pool, &cp, "INV-MS-DRAFT", dec!(100)).await?;
+    let issued = seed_invoice(&pool, &cp, "INV-MS-ISSUED", dec!(100)).await?;
+    db::invoices::change_status(&pool, issued.id, models::InvoiceStatus::Issued)
+        .await?
+        .expect("issued");
+    let paid_inv = seed_invoice(&pool, &cp, "INV-MS-PAID", dec!(100)).await?;
+    db::invoices::change_status(&pool, paid_inv.id, models::InvoiceStatus::Issued).await?;
+    db::invoices::change_status(&pool, paid_inv.id, models::InvoiceStatus::Signed).await?;
+    db::invoices::change_status(&pool, paid_inv.id, models::InvoiceStatus::Paid).await?;
+
+    let filtered = db::invoices::list_filtered(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        Some(&["draft".to_string(), "paid".to_string()]),
+        None,
+        Some("INV-MS-"),
+        Some(cp.id),
+        None,
+        None,
+        None,
+        None,
+        false,
+        chrono::Utc::now().date_naive(),
+    )
+    .await?;
+
+    let numbers: Vec<&str> = filtered.iter().map(|r| r.number.as_str()).collect();
+    assert_eq!(numbers.len(), 2);
+    assert!(numbers.contains(&"INV-MS-DRAFT"));
+    assert!(numbers.contains(&"INV-MS-PAID"));
+    assert!(!numbers.contains(&"INV-MS-ISSUED"));
+
+    sqlx::query("DELETE FROM invoices WHERE counterparty_id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
+    Ok(())
+}
+
+// ─── Invoices: list_filtered — overdue_only ───────────────────────────────────
+
+#[tokio::test]
+async fn list_filtered_overdue_only() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let today = chrono::NaiveDate::from_ymd_opt(2026, 5, 8).unwrap();
+    let past = chrono::NaiveDate::from_ymd_opt(2026, 4, 1).unwrap();
+    let future = chrono::NaiveDate::from_ymd_opt(2026, 6, 1).unwrap();
+
+    let cp = seed_inv_counterparty(&pool, "INV-OVD-CP").await?;
+
+    // paid + past due → excluded (paid is not in overdue set)
+    let paid = seed_invoice_with_due(&pool, &cp, "INV-OVD-PAID", dec!(100), Some(past)).await?;
+    db::invoices::change_status(&pool, paid.id, models::InvoiceStatus::Issued).await?;
+    db::invoices::change_status(&pool, paid.id, models::InvoiceStatus::Signed).await?;
+    db::invoices::change_status(&pool, paid.id, models::InvoiceStatus::Paid).await?;
+
+    // issued + past due → MATCH
+    let overdue =
+        seed_invoice_with_due(&pool, &cp, "INV-OVD-ISSUED", dec!(100), Some(past)).await?;
+    db::invoices::change_status(&pool, overdue.id, models::InvoiceStatus::Issued).await?;
+
+    // issued + future due → excluded
+    let future_due =
+        seed_invoice_with_due(&pool, &cp, "INV-OVD-FUTURE", dec!(100), Some(future)).await?;
+    db::invoices::change_status(&pool, future_due.id, models::InvoiceStatus::Issued).await?;
+
+    // draft + past due → excluded (draft not in overdue set)
+    seed_invoice_with_due(&pool, &cp, "INV-OVD-DRAFT", dec!(100), Some(past)).await?;
+
+    let result = db::invoices::list_filtered(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        None,
+        None,
+        Some("INV-OVD-"),
+        Some(cp.id),
+        None,
+        None,
+        None,
+        None,
+        true,
+        today,
+    )
+    .await?;
+
+    let numbers: Vec<&str> = result.iter().map(|r| r.number.as_str()).collect();
+    assert_eq!(
+        numbers.len(),
+        1,
+        "Expected only INV-OVD-ISSUED, got: {:?}",
+        numbers
+    );
+    assert_eq!(numbers[0], "INV-OVD-ISSUED");
+
+    sqlx::query("DELETE FROM invoices WHERE counterparty_id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
+    Ok(())
+}
