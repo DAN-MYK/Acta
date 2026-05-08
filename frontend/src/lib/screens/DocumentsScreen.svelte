@@ -11,6 +11,9 @@
     DOCUMENT_KIND_META,
     DOCUMENT_KIND_OPTIONS,
     DOCUMENT_TAB_OPTIONS,
+    DOCUMENT_FILTER_PRESETS,
+    DOCUMENT_STATUS_OPTIONS,
+    DOCUMENTS_FILTER_COPY,
     formatDocumentItemsLabel,
     getDocumentChainTargets,
     getDocumentCreateLabel,
@@ -29,10 +32,11 @@
 
   let createCounterpartyId = "";
   let createKind: DocumentKind = "act";
-  let selectedCounterpartyName = "";
+  let filterCounterpartyId = "";
+  let lastCounterpartyFilterId = "";
   let lastDraftContextCounterpartyId = "";
   let createButton: HTMLButtonElement | null = null;
-  let createCounterpartySelect: HTMLSelectElement | null = null;
+  let filtersOpen = false;
   let pdfFindText = "";
   let pdfReplaceText = "";
   let lastPdfDocumentId = "";
@@ -54,14 +58,18 @@
     }
 
     if (!nextDraftContextCounterpartyId && lastDraftContextCounterpartyId) {
+      createCounterpartyId = "";
       lastDraftContextCounterpartyId = "";
     }
   }
 
-  $: selectedCounterpartyName =
-    ($counterparties.screen?.items ?? []).find((cp) => cp.id === createCounterpartyId)?.name ??
-    $documents.draftContext?.counterpartyName ??
-    "";
+  $: {
+    const nextCounterpartyFilterId = $documents.counterpartyFilterId ?? "";
+    if (nextCounterpartyFilterId !== lastCounterpartyFilterId) {
+      filterCounterpartyId = nextCounterpartyFilterId;
+      lastCounterpartyFilterId = nextCounterpartyFilterId;
+    }
+  }
 
   $: {
     const currentDocumentId = $documents.editor?.form.id ?? "";
@@ -197,13 +205,132 @@
     }
   }
 
-  function onDocumentSearch(event: Event) {
-    const input = event.currentTarget as HTMLInputElement;
-    void documents.load(input.value);
+  // Panel draft state
+  let panelDateFrom: string = "";
+  let panelDateTo: string = "";
+  let panelStatuses: string[] = [];
+  let panelAmountMin: string = "";
+  let panelAmountMax: string = "";
+
+  $: if (filtersOpen) {
+    // sync draft from current store state when panel opens
+    panelDateFrom = $documents.dateFrom ?? "";
+    panelDateTo = $documents.dateTo ?? "";
+    panelStatuses = [...$documents.statusFilter];
+    panelAmountMin = $documents.amountMin ?? "";
+    panelAmountMax = $documents.amountMax ?? "";
+  }
+
+  $: activeFilterCount = (() => {
+    const s = $documents;
+    let n = 0;
+    if (s.dateFrom || s.dateTo) n++;
+    if (s.statusFilter.length > 0) n++;
+    if (s.counterpartyFilterId) n++;
+    if (s.amountMin || s.amountMax) n++;
+    if (s.overdueOnly) n++;
+    return n;
+  })();
+
+  $: filterButtonLabel = activeFilterCount > 0
+    ? DOCUMENTS_FILTER_COPY.filterButtonWithCount(activeFilterCount)
+    : DOCUMENTS_FILTER_COPY.filterButton;
+
+  $: dateRangeError = (panelDateFrom && panelDateTo && panelDateFrom > panelDateTo)
+    ? DOCUMENTS_FILTER_COPY.errors.dateRangeInvalid
+    : null;
+
+  $: amountRangeError = computeAmountError(panelAmountMin, panelAmountMax);
+
+  function computeAmountError(minStr: string, maxStr: string): string | null {
+    const norm = (s: string) => s.trim().replace(/\s+/g, "").replace(",", ".");
+    const minNum = minStr ? Number(norm(minStr)) : null;
+    const maxNum = maxStr ? Number(norm(maxStr)) : null;
+    if (minStr && (minNum === null || Number.isNaN(minNum))) return DOCUMENTS_FILTER_COPY.errors.amountInvalidFormat;
+    if (maxStr && (maxNum === null || Number.isNaN(maxNum))) return DOCUMENTS_FILTER_COPY.errors.amountInvalidFormat;
+    if (minNum !== null && maxNum !== null && minNum > maxNum) return DOCUMENTS_FILTER_COPY.errors.amountRangeInvalid;
+    return null;
+  }
+
+  function statusLabelOf(code: string): string {
+    return DOCUMENT_STATUS_OPTIONS.find((o) => o.value === code)?.label ?? code;
+  }
+
+  function formatPeriodChip(from: string | null, to: string | null): string {
+    if (from && to) return `${DOCUMENTS_FILTER_COPY.periodLabel}: ${from} – ${to}`;
+    if (from)      return `${DOCUMENTS_FILTER_COPY.periodLabel}: від ${from}`;
+    if (to)        return `${DOCUMENTS_FILTER_COPY.periodLabel}: до ${to}`;
+    return DOCUMENTS_FILTER_COPY.periodLabel;
+  }
+
+  function onClearAllFilters() {
+    documents.clearAllFilters();
+  }
+
+  function onRemovePeriodChip()       { documents.setDateRange(null, null); }
+  function onRemoveStatusChip()       { documents.setStatusFilter([]); }
+  function onRemoveCounterpartyChip() { documents.setCounterpartyFilter(null); }
+  function onRemoveAmountChip()       { documents.setAmountRange(null, null); }
+  function onRemoveOverdueChip()      { void documents.applyPreset("all"); }
+
+  function toggleStatus(code: string, on: boolean) {
+    panelStatuses = on
+      ? Array.from(new Set([...panelStatuses, code]))
+      : panelStatuses.filter((s) => s !== code);
+  }
+
+  function onDateSubpreset(kind: 'today' | 'week' | 'month' | 'quarter' | 'year') {
+    const today = new Date();
+    const iso = (d: Date) => d.toISOString().slice(0, 10);
+    if (kind === 'today') { panelDateFrom = iso(today); panelDateTo = iso(today); return; }
+    if (kind === 'week') {
+      const start = new Date(today); start.setDate(today.getDate() - 6);
+      panelDateFrom = iso(start); panelDateTo = iso(today); return;
+    }
+    if (kind === 'month') {
+      panelDateFrom = iso(new Date(today.getFullYear(), today.getMonth(), 1));
+      panelDateTo = iso(today); return;
+    }
+    if (kind === 'quarter') {
+      const q = Math.floor(today.getMonth() / 3);
+      panelDateFrom = iso(new Date(today.getFullYear(), q * 3, 1));
+      panelDateTo = iso(today); return;
+    }
+    if (kind === 'year') {
+      panelDateFrom = iso(new Date(today.getFullYear(), 0, 1));
+      panelDateTo = iso(today); return;
+    }
+  }
+
+  function resetPanelDraft() {
+    panelDateFrom = "";
+    panelDateTo = "";
+    panelStatuses = [];
+    panelAmountMin = "";
+    panelAmountMax = "";
+    filterCounterpartyId = "";
+  }
+
+  function normalizeAmount(s: string): string | null {
+    const n = s.trim().replace(/\s+/g, "").replace(",", ".");
+    return n.length === 0 ? null : n;
+  }
+
+  function applyPanel() {
+    if (dateRangeError || amountRangeError) return;
+    void documents.applyFilters({
+      dateFrom: panelDateFrom || null,
+      dateTo: panelDateTo || null,
+      statusFilter: [...panelStatuses],
+      amountMin: normalizeAmount(panelAmountMin),
+      amountMax: normalizeAmount(panelAmountMax),
+      counterpartyFilterId: filterCounterpartyId || null,
+    });
+    filtersOpen = false;
   }
 
   function onCreateDraft() {
-    void documents.create(createCounterpartyId, createKind);
+    void documents.create(createCounterpartyId || undefined, createKind);
   }
 
   function onSelectCreateKind(kind: string) {
@@ -211,12 +338,11 @@
   }
 
   function focusCreateButton() {
-    if (!createCounterpartyId) {
-      createCounterpartySelect?.focus();
-      return;
-    }
-
     createButton?.focus();
+  }
+
+  function toggleFilters() {
+    filtersOpen = !filtersOpen;
   }
 
   function onEditorNumberChange(event: Event) {
@@ -322,19 +448,6 @@
   class="panel"
   data-testid="documents-screen"
 >
-  <div class="panel-header">
-    <div>
-      <h2>Документи</h2>
-      <p>{$documents.list?.totalCount ?? 0} документів</p>
-    </div>
-    <input
-      placeholder="Пошук документів"
-      on:input={onDocumentSearch}
-      disabled={$documents.loading}
-      aria-busy={$documents.loading ? "true" : "false"}
-    />
-  </div>
-
   <div class="documents-nav-tabs" role="tablist" aria-label="Напрямок документів">
     {#each navTabs as tab}
       <button
@@ -364,19 +477,161 @@
     {/each}
   </div>
 
-  <div class="documents-create-bar" data-testid="documents-create-strip">
-    <select
-      bind:this={createCounterpartySelect}
-      bind:value={createCounterpartyId}
-      disabled={$documents.loading}
-      aria-label="Контрагент"
-    >
-      <option value="">— Оберіть контрагента —</option>
-      {#each $counterparties.screen?.items ?? [] as cp}
-        <option value={cp.id}>{cp.name}</option>
-      {/each}
-    </select>
+  <div class="documents-presets-row" role="group" aria-label="Швидкі фільтри">
+    <span class="documents-presets-label">{DOCUMENTS_FILTER_COPY.presetsLabel}</span>
+    {#each DOCUMENT_FILTER_PRESETS as preset}
+      <button
+        type="button"
+        class="kind-chip"
+        class:kind-chip-active={$documents.activePresetId === preset.id}
+        data-testid={`documents-preset-${preset.id}`}
+        on:click={() => void documents.applyPreset(preset.id)}
+        disabled={$documents.loading}
+      >
+        {preset.label}
+      </button>
+    {/each}
+  </div>
 
+  <div class="documents-filter-toolbar">
+    <button
+      class="btn-secondary"
+      data-testid="documents-filter-button"
+      type="button"
+      aria-expanded={filtersOpen}
+      on:click={toggleFilters}
+      disabled={$documents.loading}
+    >
+      <span>{filterButtonLabel}</span>
+    </button>
+    {#if activeFilterCount > 0}
+      <button
+        class="btn-ghost"
+        type="button"
+        data-testid="documents-clear-filters"
+        on:click={onClearAllFilters}
+        disabled={$documents.loading}
+      >
+        {DOCUMENTS_FILTER_COPY.clearAll}
+      </button>
+    {/if}
+  </div>
+
+  {#if activeFilterCount > 0}
+    <div class="documents-active-filters" data-testid="documents-active-filters">
+      <span class="documents-active-label">{DOCUMENTS_FILTER_COPY.activeFiltersLabel}</span>
+
+      {#if $documents.dateFrom || $documents.dateTo}
+        <button class="active-chip" type="button" on:click={onRemovePeriodChip} aria-label="Прибрати фільтр період">
+          <span>{formatPeriodChip($documents.dateFrom, $documents.dateTo)}</span>
+          <span aria-hidden="true">×</span>
+        </button>
+      {/if}
+
+      {#if $documents.statusFilter.length > 0}
+        <button class="active-chip" type="button" on:click={onRemoveStatusChip} aria-label="Прибрати фільтр статус">
+          <span>{DOCUMENTS_FILTER_COPY.statusLabel}: {$documents.statusFilter.map(statusLabelOf).join(", ")}</span>
+          <span aria-hidden="true">×</span>
+        </button>
+      {/if}
+
+      {#if $documents.counterpartyFilterId}
+        <button class="active-chip" type="button" on:click={onRemoveCounterpartyChip} aria-label="Прибрати фільтр контрагент">
+          <span>{DOCUMENTS_FILTER_COPY.counterpartyLabel}: {
+            ($counterparties.screen?.items ?? []).find((c) => c.id === $documents.counterpartyFilterId)?.name ?? ""
+          }</span>
+          <span aria-hidden="true">×</span>
+        </button>
+      {/if}
+
+      {#if $documents.amountMin || $documents.amountMax}
+        <button class="active-chip" type="button" on:click={onRemoveAmountChip} aria-label="Прибрати фільтр сума">
+          <span>{DOCUMENTS_FILTER_COPY.amountLabel}: {$documents.amountMin ?? "0"} – {$documents.amountMax ?? "∞"}</span>
+          <span aria-hidden="true">×</span>
+        </button>
+      {/if}
+
+      {#if $documents.overdueOnly}
+        <button class="active-chip" type="button" on:click={onRemoveOverdueChip} aria-label="Прибрати фільтр прострочені">
+          <span>Прострочені</span>
+          <span aria-hidden="true">×</span>
+        </button>
+      {/if}
+    </div>
+  {/if}
+
+  {#if filtersOpen}
+    <div class="documents-filter-panel" data-testid="documents-filter-panel">
+      <fieldset class="filter-panel-section">
+        <legend>{DOCUMENTS_FILTER_COPY.periodLabel}</legend>
+        <div class="filter-panel-subpresets">
+          <button type="button" class="kind-chip" on:click={() => onDateSubpreset('today')}>{DOCUMENTS_FILTER_COPY.periodSubpresets.today}</button>
+          <button type="button" class="kind-chip" on:click={() => onDateSubpreset('week')}>{DOCUMENTS_FILTER_COPY.periodSubpresets.week}</button>
+          <button type="button" class="kind-chip" on:click={() => onDateSubpreset('month')}>{DOCUMENTS_FILTER_COPY.periodSubpresets.month}</button>
+          <button type="button" class="kind-chip" on:click={() => onDateSubpreset('quarter')}>{DOCUMENTS_FILTER_COPY.periodSubpresets.quarter}</button>
+          <button type="button" class="kind-chip" on:click={() => onDateSubpreset('year')}>{DOCUMENTS_FILTER_COPY.periodSubpresets.year}</button>
+        </div>
+        <div class="filter-panel-grid-2">
+          <label>{DOCUMENTS_FILTER_COPY.periodFrom}<input type="date" bind:value={panelDateFrom} /></label>
+          <label>{DOCUMENTS_FILTER_COPY.periodTo}<input type="date" bind:value={panelDateTo} /></label>
+        </div>
+        {#if dateRangeError}
+          <p class="filter-error" role="alert">{dateRangeError}</p>
+        {/if}
+      </fieldset>
+
+      <fieldset class="filter-panel-section">
+        <legend>{DOCUMENTS_FILTER_COPY.statusLabel}</legend>
+        <div class="filter-panel-statuses">
+          {#each DOCUMENT_STATUS_OPTIONS as opt}
+            <label class="status-checkbox">
+              <input type="checkbox" value={opt.value}
+                checked={panelStatuses.includes(opt.value)}
+                on:change={() => toggleStatus(opt.value, !panelStatuses.includes(opt.value))} />
+              {opt.label}
+            </label>
+          {/each}
+        </div>
+      </fieldset>
+
+      <fieldset class="filter-panel-section">
+        <legend>{DOCUMENTS_FILTER_COPY.counterpartyLabel}</legend>
+        <select
+          bind:value={filterCounterpartyId}
+          disabled={$documents.loading}
+          data-testid="documents-counterparty-filter"
+          aria-label="Фільтр за контрагентом"
+        >
+          <option value="">{DOCUMENTS_FILTER_COPY.counterpartyAll}</option>
+          {#each $counterparties.screen?.items ?? [] as cp}
+            <option value={cp.id}>{cp.name}</option>
+          {/each}
+        </select>
+      </fieldset>
+
+      <fieldset class="filter-panel-section">
+        <legend>{DOCUMENTS_FILTER_COPY.amountLabel}</legend>
+        <div class="filter-panel-grid-2">
+          <label>{DOCUMENTS_FILTER_COPY.amountFrom}<input type="text" inputmode="decimal" bind:value={panelAmountMin} placeholder="0,00" /></label>
+          <label>{DOCUMENTS_FILTER_COPY.amountTo}<input type="text" inputmode="decimal" bind:value={panelAmountMax} placeholder="0,00" /></label>
+        </div>
+        {#if amountRangeError}
+          <p class="filter-error" role="alert">{amountRangeError}</p>
+        {/if}
+      </fieldset>
+
+      <div class="documents-filter-actions">
+        <button class="btn-ghost" type="button" on:click={resetPanelDraft} disabled={$documents.loading}>
+          {DOCUMENTS_FILTER_COPY.reset}
+        </button>
+        <button class="btn-primary" type="button" on:click={applyPanel} disabled={$documents.loading || !!dateRangeError || !!amountRangeError}>
+          {DOCUMENTS_FILTER_COPY.apply}
+        </button>
+      </div>
+    </div>
+  {/if}
+
+  <div class="documents-create-bar" data-testid="documents-create-strip">
     <div class="documents-create-kind-chips" role="group" aria-label="Тип документа">
       {#each DOCUMENT_KIND_OPTIONS as option}
         <button
@@ -396,7 +651,7 @@
       class="btn-primary"
       data-testid="documents-create-button"
       type="button"
-      disabled={!createCounterpartyId || $documents.loading}
+      disabled={$documents.loading}
       on:click={onCreateDraft}
       aria-busy={$documents.loading ? "true" : "false"}
     >

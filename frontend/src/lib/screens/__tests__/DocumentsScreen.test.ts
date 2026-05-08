@@ -38,7 +38,16 @@ const mocks = vi.hoisted(() => {
     loading: false,
     error: null as string | null,
     message: null as string | null,
-    query: ""
+    activeTab: "all" as const,
+    kindFilter: null,
+    counterpartyFilterId: null as string | null,
+    dateFrom: null as string | null,
+    dateTo: null as string | null,
+    statusFilter: [] as string[],
+    amountMin: null as string | null,
+    amountMax: null as string | null,
+    overdueOnly: false,
+    activePresetId: null as string | null
   });
 
   const counterpartiesState = createMockStore({
@@ -64,16 +73,24 @@ const mocks = vi.hoisted(() => {
     createChainDraft: vi.fn(),
     deleteCurrent: vi.fn(),
     generatePdf: vi.fn(),
-    load: vi.fn(),
     open: vi.fn(),
     openCurrentPdf: vi.fn(),
     reloadCurrent: vi.fn(),
     removeItem: vi.fn(),
     save: vi.fn(),
     selectAllVisible: vi.fn(),
+    setCounterpartyFilter: vi.fn(),
+    setKindFilter: vi.fn(),
+    setTab: vi.fn(),
     toggleSelected: vi.fn(),
     updateFormField: vi.fn(),
-    updateItemField: vi.fn()
+    updateItemField: vi.fn(),
+    applyPreset: vi.fn(),
+    applyFilters: vi.fn(),
+    clearAllFilters: vi.fn(),
+    setDateRange: vi.fn(),
+    setStatusFilter: vi.fn(),
+    setAmountRange: vi.fn()
   };
 });
 
@@ -91,16 +108,24 @@ vi.mock("../../stores/documents", () => ({
     createChainDraft: mocks.createChainDraft,
     deleteCurrent: mocks.deleteCurrent,
     generatePdf: mocks.generatePdf,
-    load: mocks.load,
     open: mocks.open,
     openCurrentPdf: mocks.openCurrentPdf,
     reloadCurrent: mocks.reloadCurrent,
     removeItem: mocks.removeItem,
     save: mocks.save,
     selectAllVisible: mocks.selectAllVisible,
+    setCounterpartyFilter: mocks.setCounterpartyFilter,
+    setKindFilter: mocks.setKindFilter,
+    setTab: mocks.setTab,
     toggleSelected: mocks.toggleSelected,
     updateFormField: mocks.updateFormField,
-    updateItemField: mocks.updateItemField
+    updateItemField: mocks.updateItemField,
+    applyPreset: mocks.applyPreset,
+    applyFilters: mocks.applyFilters,
+    clearAllFilters: mocks.clearAllFilters,
+    setDateRange: mocks.setDateRange,
+    setStatusFilter: mocks.setStatusFilter,
+    setAmountRange: mocks.setAmountRange
   }
 }));
 
@@ -213,7 +238,16 @@ function setDocumentsState(selectedIds: string[] = [], items: boolean | Document
     loading: false,
     error: null,
     message: "Готово",
-    query: ""
+    activeTab: "all",
+    kindFilter: null,
+    counterpartyFilterId: null,
+    dateFrom: null,
+    dateTo: null,
+    statusFilter: [],
+    amountMin: null,
+    amountMax: null,
+    overdueOnly: false,
+    activePresetId: null
   });
 }
 
@@ -228,7 +262,16 @@ function setDocumentsStateWithoutDraftContext() {
     loading: false,
     error: null,
     message: "Готово",
-    query: ""
+    activeTab: "all",
+    kindFilter: null,
+    counterpartyFilterId: null,
+    dateFrom: null,
+    dateTo: null,
+    statusFilter: [],
+    amountMin: null,
+    amountMax: null,
+    overdueOnly: false,
+    activePresetId: null
   });
 }
 
@@ -268,16 +311,24 @@ describe("DocumentsScreen component", () => {
       mocks.createChainDraft,
       mocks.deleteCurrent,
       mocks.generatePdf,
-      mocks.load,
       mocks.open,
       mocks.openCurrentPdf,
       mocks.reloadCurrent,
       mocks.removeItem,
       mocks.save,
       mocks.selectAllVisible,
+      mocks.setCounterpartyFilter,
+      mocks.setKindFilter,
+      mocks.setTab,
       mocks.toggleSelected,
       mocks.updateFormField,
-      mocks.updateItemField
+      mocks.updateItemField,
+      mocks.applyPreset,
+      mocks.applyFilters,
+      mocks.clearAllFilters,
+      mocks.setDateRange,
+      mocks.setStatusFilter,
+      mocks.setAmountRange
     ]) {
       fn.mockReset();
     }
@@ -298,7 +349,6 @@ describe("DocumentsScreen component", () => {
   it("renders the main shell, item summary and existing PDF flow", () => {
     const { component, target } = renderDocuments();
 
-    expect(target.textContent).toContain("Документи");
     expect(target.textContent).toContain("Позиції документа");
     expect(target.textContent).toContain("5 000,00 грн");
     expect(target.textContent).toContain("Існуючий PDF");
@@ -380,11 +430,51 @@ describe("DocumentsScreen component", () => {
     component.$destroy();
   });
 
-  it("disables scenario creation without counterparty", () => {
+  it("creates a draft without a preliminary counterparty selection", () => {
     setDocumentsStateWithoutDraftContext();
     const { component, target } = renderDocuments();
 
-    expect((target.querySelector('[data-testid="documents-create-button"]') as HTMLButtonElement).disabled).toBe(true);
+    const createButton = target.querySelector('[data-testid="documents-create-button"]') as HTMLButtonElement;
+    expect(target.querySelector('[data-testid="documents-create-strip"] select')).toBeNull();
+
+    createButton.click();
+
+    expect(createButton.disabled).toBe(false);
+    expect(mocks.create).toHaveBeenCalledWith(undefined, "act");
+
+    component.$destroy();
+  });
+
+  it("does not reuse a stale draft counterparty after context is cleared", async () => {
+    const { component, target } = renderDocuments();
+
+    setDocumentsStateWithoutDraftContext();
+    await tick();
+
+    (target.querySelector('[data-testid="documents-create-button"]') as HTMLButtonElement).click();
+
+    expect(mocks.create).toHaveBeenCalledWith(undefined, "act");
+
+    component.$destroy();
+  });
+
+  it("keeps counterparty selection inside the document filters", async () => {
+    const { component, target } = renderDocuments();
+
+    (target.querySelector('[data-testid="documents-filter-button"]') as HTMLButtonElement).click();
+    await tick();
+
+    const select = target.querySelector('[data-testid="documents-counterparty-filter"]') as HTMLSelectElement;
+    select.value = "counterparty-2";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await tick();
+
+    (target.querySelector('[data-testid="documents-filter-panel"] .btn-primary') as HTMLButtonElement).click();
+    await tick();
+
+    expect(mocks.applyFilters).toHaveBeenCalledWith(
+      expect.objectContaining({ counterpartyFilterId: "counterparty-2" })
+    );
 
     component.$destroy();
   });
@@ -413,22 +503,16 @@ describe("DocumentsScreen component", () => {
     component.$destroy();
   });
 
-  it("uses a compact mode that hides duplicated search and de-emphasizes idle bulk actions", () => {
+  it("uses a compact mode that de-emphasizes idle bulk actions", () => {
     expect(source).toContain('data-testid="documents-bulk-actions"');
-    expect(styles).toMatch(/@media\s*\(max-width:\s*980px\)[\s\S]*\.panel-header input\s*\{[\s\S]*display:\s*none/);
     expect(styles).toMatch(/@media\s*\(max-width:\s*980px\)[\s\S]*\.bulk-actions-idle\s+button\s*\{[\s\S]*display:\s*none/);
     expect(styles).toMatch(/@media\s*\(max-width:\s*980px\)[\s\S]*\.documents-create-bar\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto/);
     expect(styles).toMatch(/@media\s*\(max-width:\s*980px\)[\s\S]*\.documents-create-bar\s+\.btn-primary:disabled\s*\{[\s\S]*display:\s*none/);
     expect(source).toContain('class="documents-create-kind-chips"');
   });
 
-  it("routes create, search and editor actions into the documents store", async () => {
+  it("routes create and editor actions into the documents store", async () => {
     const { component, target } = renderDocuments();
-
-    const search = target.querySelector('input[placeholder="Пошук документів"]') as HTMLInputElement;
-    search.value = "ромашка";
-    search.dispatchEvent(new Event("input", { bubbles: true }));
-    await tick();
 
     (target.querySelector('[data-testid="documents-create-button"]') as HTMLButtonElement).click();
     buttonByText(target, "Додати позицію").click();
@@ -437,7 +521,6 @@ describe("DocumentsScreen component", () => {
     (target.querySelector('[data-testid="documents-chain-create-act"]') as HTMLButtonElement).click();
     await tick();
 
-    expect(mocks.load).toHaveBeenCalledWith("ромашка");
     expect(mocks.create).toHaveBeenCalledWith("counterparty-1", "act");
     expect(mocks.addItem).toHaveBeenCalled();
     expect(mocks.save).toHaveBeenCalled();
@@ -450,7 +533,10 @@ describe("DocumentsScreen component", () => {
   it("does not overwrite manual counterparty selection on unrelated store updates", async () => {
     const { component, target } = renderDocuments();
 
-    const select = target.querySelector('[data-testid="documents-create-strip"] select') as HTMLSelectElement;
+    (target.querySelector('[data-testid="documents-filter-button"]') as HTMLButtonElement).click();
+    await tick();
+
+    const select = target.querySelector('[data-testid="documents-counterparty-filter"]') as HTMLSelectElement;
     select.value = "counterparty-2";
     select.dispatchEvent(new Event("change", { bubbles: true }));
     await tick();
@@ -507,7 +593,16 @@ describe("DocumentsScreen component", () => {
       loading: false,
       error: null,
       message: null,
-      query: ""
+      activeTab: "all",
+      kindFilter: null,
+      counterpartyFilterId: null,
+      dateFrom: null,
+      dateTo: null,
+      statusFilter: [],
+      amountMin: null,
+      amountMax: null,
+      overdueOnly: false,
+      activePresetId: null,
     });
 
     const { component, target } = renderDocuments();
@@ -562,7 +657,16 @@ describe("DocumentsScreen component", () => {
       loading: false,
       error: null,
       message: null,
-      query: ""
+      activeTab: "all",
+      kindFilter: null,
+      counterpartyFilterId: null,
+      dateFrom: null,
+      dateTo: null,
+      statusFilter: [],
+      amountMin: null,
+      amountMax: null,
+      overdueOnly: false,
+      activePresetId: null,
     });
 
     const { component, target } = renderDocuments();
@@ -592,7 +696,16 @@ describe("DocumentsScreen component", () => {
       loading: false,
       error: null,
       message: null,
-      query: ""
+      activeTab: "all",
+      kindFilter: null,
+      counterpartyFilterId: null,
+      dateFrom: null,
+      dateTo: null,
+      statusFilter: [],
+      amountMin: null,
+      amountMax: null,
+      overdueOnly: false,
+      activePresetId: null,
     });
 
     const { component, target } = renderDocuments();
