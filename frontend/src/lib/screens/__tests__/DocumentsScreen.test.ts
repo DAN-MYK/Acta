@@ -715,4 +715,106 @@ describe("DocumentsScreen component", () => {
 
     component.$destroy();
   });
+
+  it("preset chip calls applyPreset with correct id", () => {
+    const { component, target } = renderDocuments();
+
+    (target.querySelector('[data-testid="documents-preset-drafts"]') as HTMLButtonElement).click();
+
+    expect(mocks.applyPreset).toHaveBeenCalledWith("drafts");
+
+    component.$destroy();
+  });
+
+  it("filter button shows active filter count badge", () => {
+    mocks.documentsState.set({
+      ...{
+        list: makeList(), editor: makeEditor(), chain: makeChain(),
+        draftContext: null, selectedIds: [], initialLoading: false,
+        loading: false, error: null, message: null,
+        activeTab: "all" as const, kindFilter: null,
+        dateFrom: null, dateTo: null,
+        amountMin: null, amountMax: null, activePresetId: null,
+        counterpartyFilterId: null
+      },
+      statusFilter: ["draft"],
+      overdueOnly: true
+    });
+    const { component, target } = renderDocuments();
+
+    const filterBtn = target.querySelector('[data-testid="documents-filter-button"]') as HTMLButtonElement;
+    expect(filterBtn.textContent?.trim()).toBe("Фільтр · 2");
+
+    component.$destroy();
+  });
+
+  it("active-chip × click removes the corresponding filter", async () => {
+    mocks.documentsState.set({
+      ...{
+        list: makeList(), editor: makeEditor(), chain: makeChain(),
+        draftContext: null, selectedIds: [], initialLoading: false,
+        loading: false, error: null, message: null,
+        activeTab: "all" as const, kindFilter: null,
+        dateFrom: null, dateTo: null,
+        amountMin: null, amountMax: null, overdueOnly: false, activePresetId: null,
+        counterpartyFilterId: null
+      },
+      statusFilter: ["draft"]
+    });
+    const { component, target } = renderDocuments();
+
+    const activeFilters = target.querySelector('[data-testid="documents-active-filters"]');
+    expect(activeFilters).toBeTruthy();
+
+    (target.querySelector('[aria-label="Прибрати фільтр статус"]') as HTMLButtonElement).click();
+    await tick();
+
+    expect(mocks.setStatusFilter).toHaveBeenCalledWith([]);
+
+    component.$destroy();
+  });
+
+  it("panel Apply button calls applyFilters with panel draft values", async () => {
+    const { component, target } = renderDocuments();
+
+    (target.querySelector('[data-testid="documents-filter-button"]') as HTMLButtonElement).click();
+    await tick();
+
+    (target.querySelector('[data-testid="documents-filter-panel"] .btn-primary') as HTMLButtonElement).click();
+    await tick();
+
+    expect(mocks.applyFilters).toHaveBeenCalledWith({
+      dateFrom: null,
+      dateTo: null,
+      statusFilter: [],
+      amountMin: null,
+      amountMax: null,
+      counterpartyFilterId: null
+    });
+
+    component.$destroy();
+  });
+
+  it("clear-all button calls clearAllFilters", async () => {
+    mocks.documentsState.set({
+      ...{
+        list: makeList(), editor: makeEditor(), chain: makeChain(),
+        draftContext: null, selectedIds: [], initialLoading: false,
+        loading: false, error: null, message: null,
+        activeTab: "all" as const, kindFilter: null,
+        dateFrom: null, dateTo: null,
+        amountMin: null, amountMax: null, activePresetId: null,
+        counterpartyFilterId: null, statusFilter: []
+      },
+      overdueOnly: true
+    });
+    const { component, target } = renderDocuments();
+
+    (target.querySelector('[data-testid="documents-clear-filters"]') as HTMLButtonElement).click();
+    await tick();
+
+    expect(mocks.clearAllFilters).toHaveBeenCalled();
+
+    component.$destroy();
+  });
 });
