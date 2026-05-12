@@ -284,6 +284,7 @@ fn act_to_document_item(row: &crate::models::act::ActListRow) -> DocumentItemDto
         status: DocumentStatusDto::from_act_status(&row.status),
         status_label: row.status.label().to_string(),
         linked_id: String::new(),
+        direction: row.direction.as_str().to_string(),
     }
 }
 
@@ -298,6 +299,7 @@ fn invoice_to_document_item(row: &crate::models::invoice::InvoiceListRow) -> Doc
         status: DocumentStatusDto::from_invoice_status(&row.status),
         status_label: row.status.label().to_string(),
         linked_id: String::new(),
+        direction: row.direction.as_str().to_string(),
     }
 }
 
@@ -330,6 +332,7 @@ async fn load_detail(ctx: &AppCtx, counterparty_id: Uuid) -> Result<Counterparty
         .await?
         .ok_or_else(|| anyhow!("Контрагента не знайдено"))?;
 
+    let today = chrono::Utc::now().date_naive();
     let (acts, invoices, payments) = tokio::join!(
         db::acts::list_filtered(
             ctx.pool(),
@@ -339,7 +342,11 @@ async fn load_detail(ctx: &AppCtx, counterparty_id: Uuid) -> Result<Counterparty
             None,
             Some(counterparty_id),
             None,
-            None
+            None,
+            None,
+            None,
+            false,
+            today
         ),
         db::invoices::list_filtered(
             ctx.pool(),
@@ -349,7 +356,11 @@ async fn load_detail(ctx: &AppCtx, counterparty_id: Uuid) -> Result<Counterparty
             None,
             Some(counterparty_id),
             None,
-            None
+            None,
+            None,
+            None,
+            false,
+            today
         ),
         db::payments::list_by_counterparty(ctx.pool(), company_id, counterparty_id)
     );
@@ -429,8 +440,9 @@ pub async fn counterparty_save(
     let saved_id = if let Some(counterparty_id) = optional_string(&request.form.id) {
         let counterparty_id = Uuid::parse_str(&counterparty_id)
             .with_context(|| format!("Некоректний ідентифікатор контрагента: {counterparty_id}"))?;
-        db::counterparties::update(
+        db::counterparties::update_scoped(
             ctx.pool(),
+            ctx.company_id(),
             counterparty_id,
             &build_update_payload(&request.form)?,
         )
@@ -463,7 +475,7 @@ pub async fn counterparty_archive(
 ) -> Result<MutationResultDto> {
     let counterparty_id = Uuid::parse_str(&counterparty_id)
         .with_context(|| format!("Некоректний ідентифікатор контрагента: {counterparty_id}"))?;
-    if !db::counterparties::archive(ctx.pool(), counterparty_id).await? {
+    if !db::counterparties::archive_scoped(ctx.pool(), ctx.company_id(), counterparty_id).await? {
         return Err(anyhow!("Контрагента не знайдено"));
     }
 

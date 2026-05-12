@@ -329,7 +329,7 @@ pub async fn apply_imported_invoices(
 
         let (existing, duplicate_source): (_, Option<&'static str>) = match row.bas_id.as_deref() {
             Some(bas_id) => (
-                db::invoices::find_by_bas_id(pool, bas_id).await?,
+                db::invoices::find_by_bas_id_scoped(pool, company_id, bas_id).await?,
                 Some("bas_id"),
             ),
             None => {
@@ -371,7 +371,7 @@ pub async fn apply_imported_invoices(
 
         match existing {
             Some(invoice) => {
-                let loaded = db::invoices::get_by_id(pool, invoice.id)
+                let loaded = db::invoices::get_by_id_scoped(pool, company_id, invoice.id)
                     .await?
                     .ok_or_else(|| {
                         anyhow!(
@@ -462,7 +462,7 @@ async fn resolve_counterparty_id(
 ) -> Result<Option<Resolution<Uuid>>> {
     if let Some(counterparty_bas_id) = row.counterparty_bas_id.as_deref() {
         if let Some(counterparty) =
-            db::counterparties::find_by_bas_id(pool, counterparty_bas_id).await?
+            db::counterparties::find_by_bas_id_scoped(pool, company_id, counterparty_bas_id).await?
         {
             return Ok(Some(Resolution {
                 value: counterparty.id,
@@ -502,11 +502,10 @@ async fn resolve_contract_id(
     row: &ImportedInvoice,
 ) -> Result<Option<Resolution<Uuid>>> {
     if let Some(contract_bas_id) = row.contract_bas_id.as_deref() {
-        if let Some(contract) = db::contracts::find_by_bas_id(pool, contract_bas_id)
-            .await?
-            .filter(|contract| {
-                contract.company_id == company_id && contract.counterparty_id == counterparty_id
-            })
+        if let Some(contract) =
+            db::contracts::find_by_bas_id_scoped(pool, company_id, contract_bas_id)
+                .await?
+                .filter(|contract| contract.counterparty_id == counterparty_id)
         {
             return Ok(Some(Resolution {
                 value: contract.id,

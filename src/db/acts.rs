@@ -1,4 +1,4 @@
-// CRUD операції для актів виконаних робіт
+﻿// CRUD операції для актів виконаних робіт
 //
 // Транзакційна вставка: create() відкриває транзакцію, вставляє акт + всі позиції,
 // перераховує total_amount, і лише тоді робить commit.
@@ -23,8 +23,8 @@ pub struct ActKpi {
 }
 
 use crate::models::act::{Act, ActItem, ActListRow, ActStatus, NewAct, NewActItem, UpdateAct};
-use crate::models::DocumentDirection;
 use crate::models::payment::PaymentDirection;
+use crate::models::DocumentDirection;
 use crate::services::payment_matching::MatchCandidate;
 
 fn count_index_for_status(status: &ActStatus) -> usize {
@@ -111,40 +111,49 @@ pub async fn counterparties_for_select(
 
 /// Отримати список актів компанії з JOIN на назву контрагента.
 ///
-/// `status_filter = None`  → усі акти.
-/// `status_filter = Some(s)` → лише акти з вказаним статусом.
-pub async fn list(
-    pool: &PgPool,
-    company_id: Uuid,
-    status_filter: Option<ActStatus>,
-) -> Result<Vec<ActListRow>> {
+/// Зручна обгортка над `list_filtered` без додаткових фільтрів.
+pub async fn list(pool: &PgPool, company_id: Uuid) -> Result<Vec<ActListRow>> {
     list_filtered(
         pool,
         company_id,
-        status_filter,
         None,
         None,
         None,
         None,
         None,
+        None,
+        None,
+        None,
+        false,
+        chrono::Utc::now().date_naive(),
     )
     .await
 }
 
-/// Отримати список актів компанії з фільтром за статусом, текстовим пошуком,
-/// контрагентом і діапазоном дат.
+/// Отримати список актів компанії з фільтром за статусами, напрямом, текстовим пошуком,
+/// контрагентом, діапазоном дат, сумами та ознакою прострочення.
 ///
 /// Використовує `QueryBuilder` для динамічної побудови WHERE-умов
 /// замість 4-гілкового match — дозволяє довільну комбінацію фільтрів.
+///
+/// - `statuses` — масив рядкових значень статусу (наприклад `&["issued", "signed"]`); `None` = всі.
+/// - `amount_min` / `amount_max` — фільтр за сумою `total_amount`.
+/// - `overdue_only` — лише прострочені: `expected_payment_date < today` та статус issued/signed.
+/// - `today` — поточна дата для розрахунку прострочення (передається явно для тестування).
+#[allow(clippy::too_many_arguments)]
 pub async fn list_filtered(
     pool: &PgPool,
     company_id: Uuid,
-    status_filter: Option<ActStatus>,
+    statuses: Option<&[String]>,
     direction: Option<DocumentDirection>,
     search_query: Option<&str>,
     counterparty_id: Option<Uuid>,
     date_from: Option<chrono::NaiveDate>,
     date_to: Option<chrono::NaiveDate>,
+    amount_min: Option<Decimal>,
+    amount_max: Option<Decimal>,
+    overdue_only: bool,
+    today: chrono::NaiveDate,
 ) -> Result<Vec<ActListRow>> {
     let search_query = search_query.map(str::trim).filter(|q| !q.is_empty());
     let has_search = search_query.is_some();
@@ -159,9 +168,11 @@ pub async fn list_filtered(
     );
     qb.push_bind(company_id);
 
-    if let Some(status) = status_filter {
-        qb.push(" AND a.status = ");
-        qb.push_bind(status);
+    if let Some(statuses) = statuses.filter(|s| !s.is_empty()) {
+        let owned: Vec<String> = statuses.to_vec();
+        qb.push(" AND a.status::text = ANY(")
+            .push_bind(owned)
+            .push("::text[])");
     }
     if let Some(direction) = direction {
         qb.push(" AND a.direction = ");
@@ -186,6 +197,18 @@ pub async fn list_filtered(
     if let Some(dt) = date_to {
         qb.push(" AND a.date <= ");
         qb.push_bind(dt);
+    }
+    if let Some(min) = amount_min {
+        qb.push(" AND a.total_amount >= ").push_bind(min);
+    }
+    if let Some(max) = amount_max {
+        qb.push(" AND a.total_amount <= ").push_bind(max);
+    }
+    if overdue_only {
+        qb.push(" AND a.expected_payment_date IS NOT NULL")
+            .push(" AND a.expected_payment_date < ")
+            .push_bind(today)
+            .push(" AND a.status::text IN ('issued','signed')");
     }
     qb.push(" ORDER BY a.date DESC, a.number");
     if has_search {
@@ -272,6 +295,8 @@ pub async fn list_open_act_candidates(
     struct Row {
         id: Uuid,
         title: String,
+        reference_text: String,
+        match_text: String,
         open_amount: Decimal,
         counterparty_iban: Option<String>,
         match_date: Option<chrono::NaiveDate>,
@@ -287,6 +312,8 @@ pub async fn list_open_act_candidates(
         SELECT
             a.id,
             trim(concat_ws(' ', a.number, cp.name))               AS title,
+            a.number                                              AS reference_text,
+            trim(concat_ws(' ', a.number, cp.name))               AS match_text,
             a.total_amount - COALESCE(SUM(pa.amount), 0::numeric) AS open_amount,
             cp.iban                                               AS counterparty_iban,
             COALESCE(a.expected_payment_date, a.date)             AS match_date
@@ -314,6 +341,8 @@ pub async fn list_open_act_candidates(
                 row.open_amount,
                 row.counterparty_iban,
                 row.title,
+                row.reference_text,
+                row.match_text,
                 row.match_date,
             )
         })
@@ -322,7 +351,7 @@ pub async fn list_open_act_candidates(
 
 /// Отримати один акт разом з усіма його позиціями.
 /// Повертає `None` якщо акт не знайдено.
-pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<(Act, Vec<ActItem>)>> {
+async fn get_by_id_unscoped(pool: &PgPool, id: Uuid) -> Result<Option<(Act, Vec<ActItem>)>> {
     let act = sqlx::query_as::<_, Act>(
         r#"
         SELECT id, number, counterparty_id, contract_id, category_id, direction,
@@ -357,24 +386,58 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<(Act, Vec<ActIt
     Ok(Some((act, items)))
 }
 
-/// Знайти акт за bas_id для повторного імпорту без дублювання.
-pub async fn find_by_bas_id(pool: &PgPool, bas_id: &str) -> Result<Option<Act>> {
-    let act = sqlx::query_as::<_, Act>(
+async fn exists_in_company(pool: &PgPool, company_id: Uuid, id: Uuid) -> Result<bool> {
+    let exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM acts WHERE id = $1 AND company_id = $2)",
+    )
+    .bind(id)
+    .bind(company_id)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(exists)
+}
+
+pub async fn get_by_id_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+) -> Result<Option<(Act, Vec<ActItem>)>> {
+    if !exists_in_company(pool, company_id, id).await? {
+        return Ok(None);
+    }
+
+    get_by_id_unscoped(pool, id).await
+}
+
+pub async fn find_by_notes_marker(
+    pool: &PgPool,
+    company_id: Uuid,
+    marker: &str,
+) -> Result<Option<(Act, Vec<ActItem>)>> {
+    let pattern = format!("%{marker}%");
+    let id = sqlx::query_scalar::<_, Uuid>(
         r#"
-        SELECT id, number, counterparty_id, contract_id, category_id, direction,
-               date, expected_payment_date, total_amount,
-               status, notes, bas_id, created_at, updated_at
+        SELECT id
         FROM acts
-        WHERE bas_id = $1
+        WHERE company_id = $1
+          AND notes LIKE $2
+        ORDER BY updated_at DESC
+        LIMIT 1
         "#,
     )
-    .bind(bas_id)
+    .bind(company_id)
+    .bind(pattern)
     .fetch_optional(pool)
     .await?;
 
-    Ok(act)
+    match id {
+        Some(id) => get_by_id_unscoped(pool, id).await,
+        None => Ok(None),
+    }
 }
 
+/// Знайти акт за bas_id для повторного імпорту без дублювання.
 /// Знайти кандидата на дубль імпортованого акту за header fingerprint.
 #[allow(clippy::too_many_arguments)]
 pub async fn find_import_candidate(
@@ -541,32 +604,22 @@ pub async fn create(pool: &PgPool, company_id: Uuid, data: &NewAct) -> Result<Ac
 
 /// Оновити заголовок акту (без позицій — MVP).
 /// Повертає `None` якщо акт не знайдено.
-pub async fn update(pool: &PgPool, id: Uuid, data: &UpdateAct) -> Result<Option<Act>> {
+pub async fn find_by_bas_id_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    bas_id: &str,
+) -> Result<Option<Act>> {
     let row = sqlx::query_as::<_, Act>(
         r#"
-        UPDATE acts
-        SET number                = $2,
-            counterparty_id       = $3,
-            contract_id           = $4,
-            category_id           = $5,
-            date                  = $6,
-            expected_payment_date = $7,
-            notes                 = $8,
-            updated_at            = NOW()
-        WHERE id = $1
-        RETURNING id, number, counterparty_id, contract_id, category_id, direction,
-                  date, expected_payment_date, total_amount,
-                  status, notes, bas_id, created_at, updated_at
+        SELECT id, number, counterparty_id, contract_id, category_id, direction,
+               date, expected_payment_date, total_amount,
+               status, notes, bas_id, created_at, updated_at
+        FROM acts
+        WHERE company_id = $1 AND bas_id = $2
         "#,
     )
-    .bind(id)
-    .bind(&data.number)
-    .bind(data.counterparty_id)
-    .bind(data.contract_id)
-    .bind(data.category_id)
-    .bind(data.date)
-    .bind(data.expected_payment_date)
-    .bind(&data.notes)
+    .bind(company_id)
+    .bind(bas_id)
     .fetch_optional(pool)
     .await?;
 
@@ -577,7 +630,11 @@ pub async fn update(pool: &PgPool, id: Uuid, data: &UpdateAct) -> Result<Option<
 ///
 /// Дозволені переходи: Draft → Issued → Signed → Paid (лише вперед).
 /// Повертає помилку при спробі перескочити статус або піти назад.
-pub async fn change_status(pool: &PgPool, id: Uuid, new_status: ActStatus) -> Result<Option<Act>> {
+async fn change_status_unscoped(
+    pool: &PgPool,
+    id: Uuid,
+    new_status: ActStatus,
+) -> Result<Option<Act>> {
     use sqlx::Row;
 
     // Читаємо поточний статус — потрібен для валідації переходу
@@ -624,8 +681,25 @@ pub async fn change_status(pool: &PgPool, id: Uuid, new_status: ActStatus) -> Re
 
 /// Завантажити акт з позиціями для форми редагування.
 /// Делегує до `get_by_id` — логіка ідентична.
-pub async fn get_for_edit(pool: &PgPool, id: Uuid) -> Result<Option<(Act, Vec<ActItem>)>> {
-    get_by_id(pool, id).await
+pub async fn change_status_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+    new_status: ActStatus,
+) -> Result<Option<Act>> {
+    if !exists_in_company(pool, company_id, id).await? {
+        return Ok(None);
+    }
+
+    change_status_unscoped(pool, id, new_status).await
+}
+
+pub async fn get_for_edit_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+) -> Result<Option<(Act, Vec<ActItem>)>> {
+    get_by_id_scoped(pool, company_id, id).await
 }
 
 /// Оновити акт разом з позиціями в одній транзакції.
@@ -636,7 +710,7 @@ pub async fn get_for_edit(pool: &PgPool, id: Uuid) -> Result<Option<(Act, Vec<Ac
 ///   2. DELETE усіх старих позицій
 ///   3. INSERT нових позицій
 ///   4. UPDATE total_amount = сума нових позицій
-pub async fn update_with_items(
+async fn update_with_items_unscoped(
     pool: &PgPool,
     id: Uuid,
     data: UpdateAct,
@@ -655,6 +729,7 @@ pub async fn update_with_items(
             date                   = $6,
             expected_payment_date  = $7,
             notes                  = $8,
+            direction              = $9,
             updated_at             = NOW()
         WHERE id = $1
         RETURNING id, number, counterparty_id, contract_id, category_id, direction,
@@ -670,6 +745,7 @@ pub async fn update_with_items(
     .bind(data.date)
     .bind(data.expected_payment_date)
     .bind(&data.notes)
+    .bind(data.direction)
     .fetch_optional(&mut *tx)
     .await?;
 
@@ -729,7 +805,7 @@ pub async fn update_with_items(
 
 /// Перевести акт до наступного статусу (зручна обгортка над `change_status`).
 /// Повертає помилку якщо акт вже у фінальному статусі "Оплачено".
-pub async fn advance_status(pool: &PgPool, id: Uuid) -> Result<Option<Act>> {
+async fn advance_status_unscoped(pool: &PgPool, id: Uuid) -> Result<Option<Act>> {
     use sqlx::Row;
 
     let current = sqlx::query(r#"SELECT status FROM acts WHERE id = $1"#)
@@ -746,16 +822,45 @@ pub async fn advance_status(pool: &PgPool, id: Uuid) -> Result<Option<Act>> {
         bail!("Акт вже в фінальному статусі '{}'", current_status);
     };
 
-    change_status(pool, id, next).await
+    change_status_unscoped(pool, id, next).await
+}
+
+pub async fn update_with_items_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+    data: UpdateAct,
+    items: Vec<NewActItem>,
+) -> Result<Option<Act>> {
+    if !exists_in_company(pool, company_id, id).await? {
+        bail!("Акт не знайдено в межах компанії");
+    }
+
+    update_with_items_unscoped(pool, id, data, items).await.map(Some)
+}
+
+pub async fn advance_status_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+) -> Result<Option<Act>> {
+    if !exists_in_company(pool, company_id, id).await? {
+        return Ok(None);
+    }
+
+    advance_status_unscoped(pool, id).await
 }
 
 /// Видалити акт та всі його позиції (ON DELETE CASCADE у БД).
-pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
-    sqlx::query("DELETE FROM acts WHERE id = $1")
+pub async fn delete_scoped(pool: &PgPool, company_id: Uuid, id: Uuid) -> Result<bool> {
+    let affected = sqlx::query("DELETE FROM acts WHERE id = $1 AND company_id = $2")
         .bind(id)
+        .bind(company_id)
         .execute(pool)
-        .await?;
-    Ok(())
+        .await?
+        .rows_affected();
+
+    Ok(affected > 0)
 }
 
 #[cfg(test)]
@@ -780,16 +885,16 @@ mod tests {
         let _ = count_by_status;
         let _ = get_kpi;
         let _ = list_open_act_candidates;
-        let _ = get_by_id;
-        let _ = find_by_bas_id;
+        let _ = get_by_id_scoped;
+        let _ = find_by_bas_id_scoped;
+        let _ = find_by_notes_marker;
         let _ = find_import_candidate;
         let _ = list_import_candidates;
         let _ = create;
-        let _ = update;
-        let _ = change_status;
-        let _ = get_for_edit;
-        let _ = update_with_items;
-        let _ = advance_status;
-        let _ = delete;
+        let _ = change_status_scoped;
+        let _ = get_for_edit_scoped;
+        let _ = update_with_items_scoped;
+        let _ = advance_status_scoped;
+        let _ = delete_scoped;
     }
 }

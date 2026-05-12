@@ -287,11 +287,13 @@ pub async fn shell_palette_activate(
                     kind,
                     counterparty_id,
                 } => {
+                    // Command palette has no tab context — always creates outgoing (most common case)
                     let document_editor = documents::document_create_draft(
                         ctx,
                         CreateDocumentDraftRequest {
-                            counterparty_id: counterparty_id.to_string(),
+                            counterparty_id: Some(counterparty_id.to_string()),
                             kind: kind.as_str().to_string(),
+                            direction: "outgoing".to_string(),
                         },
                     )
                     .await?;

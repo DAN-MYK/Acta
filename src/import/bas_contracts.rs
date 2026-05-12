@@ -156,7 +156,7 @@ pub async fn apply_imported_contracts(
 
     for row in rows {
         let Some(counterparty) =
-            resolve_counterparty_id(pool, row.counterparty_bas_id.as_deref()).await?
+            resolve_counterparty_id(pool, company_id, row.counterparty_bas_id.as_deref()).await?
         else {
             report.skipped += 1;
             report.rows.push(ContractImportPlanRow {
@@ -194,7 +194,7 @@ pub async fn apply_imported_contracts(
 
         let (existing, match_source): (_, Option<&'static str>) = match row.bas_id.as_deref() {
             Some(bas_id) => (
-                db::contracts::find_by_bas_id(pool, bas_id).await?,
+                db::contracts::find_by_bas_id_scoped(pool, company_id, bas_id).await?,
                 Some("bas_id"),
             ),
             None => (
@@ -276,6 +276,7 @@ pub async fn apply_imported_contracts(
 
 async fn resolve_counterparty_id(
     pool: &PgPool,
+    company_id: Uuid,
     counterparty_bas_id: Option<&str>,
 ) -> Result<Option<Resolution<Uuid>>> {
     let Some(counterparty_bas_id) = counterparty_bas_id else {
@@ -283,7 +284,7 @@ async fn resolve_counterparty_id(
     };
 
     Ok(
-        db::counterparties::find_by_bas_id(pool, counterparty_bas_id)
+        db::counterparties::find_by_bas_id_scoped(pool, company_id, counterparty_bas_id)
             .await?
             .map(|cp| Resolution {
                 value: cp.id,
