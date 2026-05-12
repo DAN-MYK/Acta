@@ -1,4 +1,4 @@
-﻿// PDF генерація через Typst CLI
+// PDF генерація через Typst CLI
 pub mod generator;
 pub mod reader;
 

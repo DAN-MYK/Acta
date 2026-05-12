@@ -1,4 +1,4 @@
-// CRUD для категорій доходів/витрат.
+﻿// CRUD для категорій доходів/витрат.
 //
 // Використовує runtime-style sqlx::query_as::<_, T>() без compile-time макросів,
 // щоб не залежати від cargo sqlx prepare при нових таблицях.
@@ -148,31 +148,41 @@ pub async fn create(pool: &PgPool, data: NewCategory) -> Result<Category> {
 }
 
 /// Оновити назву/батька категорії.
-pub async fn update(pool: &PgPool, id: Uuid, data: UpdateCategory) -> Result<Category> {
+/// Архівувати категорію (soft delete).
+pub async fn update_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+    data: UpdateCategory,
+) -> Result<Option<Category>> {
     let row = sqlx::query_as::<_, Category>(
         r#"
         UPDATE categories
-        SET name = $2, parent_id = $3, updated_at = NOW()
-        WHERE id = $1
+        SET name = $3, parent_id = $4, updated_at = NOW()
+        WHERE id = $1 AND company_id = $2
         RETURNING id, name, kind, parent_id, company_id, is_archived,
                   created_at, updated_at
         "#,
     )
     .bind(id)
+    .bind(company_id)
     .bind(&data.name)
     .bind(data.parent_id)
-    .fetch_one(pool)
+    .fetch_optional(pool)
     .await?;
     Ok(row)
 }
 
-/// Архівувати категорію (soft delete).
-pub async fn archive(pool: &PgPool, id: Uuid) -> Result<()> {
-    sqlx::query("UPDATE categories SET is_archived = TRUE, updated_at = NOW() WHERE id = $1")
-        .bind(id)
-        .execute(pool)
-        .await?;
-    Ok(())
+pub async fn archive_scoped(pool: &PgPool, company_id: Uuid, id: Uuid) -> Result<bool> {
+    let affected = sqlx::query(
+        "UPDATE categories SET is_archived = TRUE, updated_at = NOW() WHERE id = $1 AND company_id = $2",
+    )
+    .bind(id)
+    .bind(company_id)
+    .execute(pool)
+    .await?
+    .rows_affected();
+    Ok(affected > 0)
 }
 
 /// Заповнити стандартні категорії при створенні нової компанії.

@@ -1,4 +1,4 @@
-// CRUD операції для контрагентів
+﻿// CRUD операції для контрагентів
 //
 // `sqlx::query_as!` — макрос, що перевіряє SQL під час компіляції.
 // Потребує DATABASE_URL у змінних середовища та запущеної БД при `cargo build`.
@@ -34,9 +34,43 @@ pub async fn get_by_id(pool: &PgPool, company_id: Uuid, id: Uuid) -> Result<Opti
     Ok(row)
 }
 
+pub async fn get_by_id_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+) -> Result<Option<Counterparty>> {
+    get_by_id(pool, company_id, id).await
+}
+
 /// Пошук контрагентів за назвою або ЄДРПОУ (часткове співпадіння, без урахування регістру).
 pub async fn search(pool: &PgPool, company_id: Uuid, query: &str) -> Result<Vec<Counterparty>> {
     list_filtered(pool, company_id, Some(query), false).await
+}
+
+/// Отримати тільки назву контрагента у межах компанії — легший варіант ніж `get_by_id`,
+/// коли решта полів не потрібна (наприклад, для resolve `selected_counterparty` у reports drill-down).
+pub async fn get_name_by_id(pool: &PgPool, company_id: Uuid, id: Uuid) -> Result<Option<String>> {
+    let name = sqlx::query_scalar::<_, String>(
+        "SELECT name FROM counterparties WHERE company_id = $1 AND id = $2",
+    )
+    .bind(company_id)
+    .bind(id)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(name)
+}
+
+/// Отримати тільки назву контрагента за UUID без обмеження по компанії.
+/// Використовується в глобальних зрізах, де focus може посилатися на контрагента
+/// поза межами активної компанії.
+pub async fn get_name_by_id_any_company(pool: &PgPool, id: Uuid) -> Result<Option<String>> {
+    let name = sqlx::query_scalar::<_, String>("SELECT name FROM counterparties WHERE id = $1")
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
+
+    Ok(name)
 }
 
 /// Список контрагентів компанії з опціональним текстовим пошуком та показом архіву.
@@ -157,29 +191,31 @@ pub async fn create(
 }
 
 /// Оновити дані контрагента. Повертає оновлений запис або `None` якщо не знайдено.
-pub async fn update(
+pub async fn update_scoped(
     pool: &PgPool,
+    company_id: Uuid,
     id: Uuid,
     data: &UpdateCounterparty,
 ) -> Result<Option<Counterparty>> {
     let row = sqlx::query_as::<_, Counterparty>(
         r#"
         UPDATE counterparties
-        SET name       = $2,
-            edrpou     = $3,
-            ipn        = $4,
-            iban       = $5,
-            address    = $6,
-            phone      = $7,
-            email      = $8,
-            notes      = $9,
+        SET name       = $3,
+            edrpou     = $4,
+            ipn        = $5,
+            iban       = $6,
+            address    = $7,
+            phone      = $8,
+            email      = $9,
+            notes      = $10,
             updated_at = NOW()
-        WHERE id = $1
+        WHERE id = $1 AND company_id = $2
         RETURNING id, name, edrpou, ipn, iban, address, phone, email, notes,
                   is_archived, bas_id, created_at, updated_at
         "#,
     )
     .bind(id)
+    .bind(company_id)
     .bind(&data.name)
     .bind(&data.edrpou)
     .bind(&data.ipn)
@@ -196,21 +232,20 @@ pub async fn update(
 
 /// Архівувати контрагента (м'яке видалення — `is_archived = TRUE`).
 /// Повертає `true` якщо запис знайдено та оновлено.
-pub async fn archive(pool: &PgPool, id: Uuid) -> Result<bool> {
-    // execute() повертає PgQueryResult — rows_affected() показує скільки рядків змінено
+pub async fn archive_scoped(pool: &PgPool, company_id: Uuid, id: Uuid) -> Result<bool> {
     let affected = sqlx::query(
         r#"
         UPDATE counterparties
         SET is_archived = TRUE, updated_at = NOW()
-        WHERE id = $1
+        WHERE id = $1 AND company_id = $2
         "#,
     )
     .bind(id)
+    .bind(company_id)
     .execute(pool)
     .await?
     .rows_affected();
 
-    // 0 означає "запис не знайдено"
     Ok(affected > 0)
 }
 
@@ -227,15 +262,20 @@ pub async fn count_archived(pool: &PgPool) -> Result<i64> {
 }
 
 /// Знайти контрагента за bas_id (для імпорту з BAS без дублів).
-pub async fn find_by_bas_id(pool: &PgPool, bas_id: &str) -> Result<Option<Counterparty>> {
+pub async fn find_by_bas_id_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    bas_id: &str,
+) -> Result<Option<Counterparty>> {
     let row = sqlx::query_as::<_, Counterparty>(
         r#"
         SELECT id, name, edrpou, ipn, iban, address, phone, email, notes,
                is_archived, bas_id, created_at, updated_at
         FROM counterparties
-        WHERE bas_id = $1
+        WHERE company_id = $1 AND bas_id = $2
         "#,
     )
+    .bind(company_id)
     .bind(bas_id)
     .fetch_optional(pool)
     .await?;
@@ -321,13 +361,16 @@ mod tests {
         // Перевіряємо що всі публічні функції доступні та компілюються
         let _ = list;
         let _ = get_by_id;
+        let _ = get_by_id_scoped;
         let _ = search;
+        let _ = get_name_by_id;
+        let _ = get_name_by_id_any_company;
         let _ = list_filtered;
         let _ = create;
-        let _ = update;
-        let _ = archive;
+        let _ = update_scoped;
+        let _ = archive_scoped;
         let _ = count_archived;
-        let _ = find_by_bas_id;
+        let _ = find_by_bas_id_scoped;
         let _ = find_by_edrpou;
         let _ = find_by_name;
         let _ = list_by_name_exact;

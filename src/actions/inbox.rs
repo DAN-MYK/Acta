@@ -44,8 +44,8 @@ pub async fn execute_inbox_action(
             create_overdue_act_reminder(ctx, act_id).await?;
             InboxEffect::RefreshScreens(vec![AppScreen::Dashboard, AppScreen::Tasks])
         }
-        InboxAction::ReconcilePayment(payment_id) => {
-            crate::db::payments::mark_reconciled(ctx.pool(), payment_id).await?;
+        InboxAction::ReconcilePayment(_payment_id) => {
+            ctx.set_active_screen(AppScreen::Payments);
             InboxEffect::RefreshScreens(vec![AppScreen::Dashboard, AppScreen::Payments])
         }
         InboxAction::OpenDocument(document_id) => InboxEffect::OpenDocument {
@@ -63,13 +63,15 @@ fn prefixed_uuid(id: &str, prefix: &str) -> Option<Uuid> {
 }
 
 async fn create_overdue_act_reminder(ctx: &AppCtx, act_id: Uuid) -> Result<()> {
-    let Some((act, _items)) = crate::db::acts::get_by_id(ctx.pool(), act_id).await? else {
+    let Some((act, _items)) =
+        crate::db::acts::get_by_id_scoped(ctx.pool(), ctx.company_id(), act_id).await?
+    else {
         tracing::warn!("inbox_action: act {act_id} не знайдено для нагадування");
         return Ok(());
     };
 
     let title = format!("Нагадати про оплату акту {}", act.number);
-    let already_open = crate::db::tasks::list_by_act(ctx.pool(), act_id)
+    let already_open = crate::db::tasks::list_by_act_scoped(ctx.pool(), ctx.company_id(), act_id)
         .await?
         .into_iter()
         .any(|task| {
@@ -98,9 +100,15 @@ async fn create_overdue_act_reminder(ctx: &AppCtx, act_id: Uuid) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use sqlx::PgPool;
     use uuid::Uuid;
 
-    use super::{parse_inbox_action, InboxAction};
+    use super::{execute_inbox_action, parse_inbox_action, InboxAction, InboxEffect};
+    use crate::app_ctx::{AppCtx, AppScreen};
+
+    fn make_ctx_pool() -> PgPool {
+        sqlx::PgPool::connect_lazy("postgres://test:test@localhost/test").unwrap()
+    }
 
     #[test]
     fn parses_supported_inbox_actions() {
@@ -125,5 +133,24 @@ mod tests {
     fn rejects_invalid_inbox_payloads() {
         assert_eq!(parse_inbox_action("act:missing-uuid", "overdue"), None);
         assert_eq!(parse_inbox_action("whatever", "unknown"), None);
+    }
+
+    #[tokio::test]
+    async fn unmatched_payment_action_opens_payments_flow_without_db_mutation() {
+        let ctx = AppCtx::new(make_ctx_pool(), Uuid::new_v4());
+        let payment_id = Uuid::new_v4();
+
+        let effect = execute_inbox_action(&ctx, &format!("pay:{payment_id}"), "unmatched")
+            .await
+            .unwrap();
+
+        assert_eq!(
+            effect,
+            Some(InboxEffect::RefreshScreens(vec![
+                AppScreen::Dashboard,
+                AppScreen::Payments
+            ]))
+        );
+        assert_eq!(ctx.active_screen(), AppScreen::Payments);
     }
 }

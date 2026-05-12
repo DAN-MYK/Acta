@@ -1,4 +1,4 @@
-// CRUD для договорів.
+﻿// CRUD для договорів.
 //
 // Використовує runtime-style sqlx::query_as::<_, T>() без compile-time макросів.
 
@@ -220,33 +220,45 @@ pub async fn list_for_select(
 }
 
 /// Отримати договір за ID.
-pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Contract> {
+/// Отримати договір за ID у межах конкретної компанії.
+pub async fn get_by_id_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+) -> Result<Option<Contract>> {
     let row = sqlx::query_as::<_, Contract>(
         r#"
         SELECT id, company_id, counterparty_id, number, subject,
                date, expires_at, amount, notes, bas_id, status,
                created_at, updated_at
         FROM contracts
-        WHERE id = $1
+        WHERE id = $1 AND company_id = $2
         "#,
     )
     .bind(id)
-    .fetch_one(pool)
+    .bind(company_id)
+    .fetch_optional(pool)
     .await?;
     Ok(row)
 }
 
 /// Знайти договір за bas_id для ідемпотентного імпорту з BAS.
-pub async fn find_by_bas_id(pool: &PgPool, bas_id: &str) -> Result<Option<Contract>> {
+/// Знайти договір за номером у межах компанії та контрагента.
+pub async fn find_by_bas_id_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    bas_id: &str,
+) -> Result<Option<Contract>> {
     let row = sqlx::query_as::<_, Contract>(
         r#"
         SELECT id, company_id, counterparty_id, number, subject,
                date, expires_at, amount, notes, bas_id, status,
                created_at, updated_at
         FROM contracts
-        WHERE bas_id = $1
+        WHERE company_id = $1 AND bas_id = $2
         "#,
     )
+    .bind(company_id)
     .bind(bas_id)
     .fetch_optional(pool)
     .await?;
@@ -254,7 +266,6 @@ pub async fn find_by_bas_id(pool: &PgPool, bas_id: &str) -> Result<Option<Contra
     Ok(row)
 }
 
-/// Знайти договір за номером у межах компанії та контрагента.
 pub async fn find_by_number(
     pool: &PgPool,
     company_id: Uuid,
@@ -375,25 +386,33 @@ pub async fn create_imported(
 }
 
 /// Оновити договір.
-pub async fn update(pool: &PgPool, id: Uuid, data: UpdateContract) -> Result<Contract> {
+/// Оновити договір лише в межах конкретної компанії.
+pub async fn update_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+    data: UpdateContract,
+) -> Result<Option<Contract>> {
     let row = sqlx::query_as::<_, Contract>(
         r#"
         UPDATE contracts
-        SET number     = $2,
-            subject    = $3,
-            date       = $4,
-            expires_at = $5,
-            amount     = $6,
-            status     = $7,
-            notes      = $8,
+        SET number     = $3,
+            subject    = $4,
+            date       = $5,
+            expires_at = $6,
+            amount     = $7,
+            status     = $8,
+            notes      = $9,
             updated_at = NOW()
         WHERE id = $1
+          AND company_id = $2
         RETURNING id, company_id, counterparty_id, number, subject,
                   date, expires_at, amount, notes, bas_id, status,
                   created_at, updated_at
         "#,
     )
     .bind(id)
+    .bind(company_id)
     .bind(&data.number)
     .bind(&data.subject)
     .bind(data.date)
@@ -401,7 +420,7 @@ pub async fn update(pool: &PgPool, id: Uuid, data: UpdateContract) -> Result<Con
     .bind(data.amount)
     .bind(data.status)
     .bind(&data.notes)
-    .fetch_one(pool)
+    .fetch_optional(pool)
     .await?;
     Ok(row)
 }
@@ -449,12 +468,15 @@ pub async fn update_imported(
 }
 
 /// Видалити договір.
-pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
-    sqlx::query("DELETE FROM contracts WHERE id = $1")
+/// Видалити договір лише в межах конкретної компанії.
+pub async fn delete_scoped(pool: &PgPool, company_id: Uuid, id: Uuid) -> Result<bool> {
+    let affected = sqlx::query("DELETE FROM contracts WHERE id = $1 AND company_id = $2")
         .bind(id)
+        .bind(company_id)
         .execute(pool)
-        .await?;
-    Ok(())
+        .await?
+        .rows_affected();
+    Ok(affected > 0)
 }
 
 #[cfg(test)]
@@ -466,14 +488,14 @@ mod tests {
         let _ = list;
         let _ = list_by_counterparty;
         let _ = list_for_select;
-        let _ = get_by_id;
-        let _ = find_by_bas_id;
+        let _ = get_by_id_scoped;
+        let _ = find_by_bas_id_scoped;
         let _ = find_by_number;
         let _ = list_by_number_exact;
         let _ = create;
         let _ = create_imported;
-        let _ = update;
+        let _ = update_scoped;
         let _ = update_imported;
-        let _ = delete;
+        let _ = delete_scoped;
     }
 }
