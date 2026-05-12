@@ -64,11 +64,7 @@ pub struct PdfActData {
 /// 1. Серіалізує `data` у JSON рядок.
 /// 2. Викликає `typst compile templates/act.typ <output_path> --input data=<json>`.
 /// 3. Перевіряє успішність команди через `ensure!`.
-pub fn generate_act_pdf(
-    data: &PdfActData,
-    template_path: &Path,
-    output_path: &Path,
-) -> Result<()> {
+pub fn generate_act_pdf(data: &PdfActData, template_path: &Path, output_path: &Path) -> Result<()> {
     let json = serde_json::to_string(data).context("Серіалізація PdfActData у JSON")?;
 
     let input_arg = format!("data={json}");

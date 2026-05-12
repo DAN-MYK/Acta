@@ -6,8 +6,11 @@ node_modules/
 e2e-tests/node_modules/
 .gh-cache/
 .superpowers/
+.cache/
+.playwright-mcp/
 .env
 .claude/
+.claude/settings.local.json
 .claude/worktrees/
 .worktrees/
 
@@ -25,3 +28,4 @@ storage/backups/
 storage/logs/
 storage/reports/
 storage/test-config/
+src-tauri/storage/

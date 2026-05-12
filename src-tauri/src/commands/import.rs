@@ -20,10 +20,12 @@ pub async fn import_bas_plan(
 ) -> CommandResult<ImportPlanDto> {
     acta::tauri_api::import::import_bas_plan(
         &state.ctx,
-        request.as_ref().and_then(|payload| payload.input_dir.as_deref()),
+        request
+            .as_ref()
+            .and_then(|payload| payload.input_dir.as_deref()),
     )
-        .await
-        .map_err(|e| e.to_string())
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -33,10 +35,12 @@ pub async fn import_bas_execute(
 ) -> CommandResult<ImportResultDto> {
     acta::tauri_api::import::import_bas_execute(
         &state.ctx,
-        request.as_ref().and_then(|payload| payload.input_dir.as_deref()),
+        request
+            .as_ref()
+            .and_then(|payload| payload.input_dir.as_deref()),
     )
-        .await
-        .map_err(|e| e.to_string())
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

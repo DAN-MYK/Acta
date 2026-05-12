@@ -6,9 +6,17 @@
 
 ## Актуальне
 
-- [ui-ux-roadmap-2026-05-01.md](/C:/Users/MykhailoDan/apps/Acta/docs/planning/ui-ux-roadmap-2026-05-01.md) - живий backlog для post-cutover UI/UX polish.
+Поточний активний backlog відсутній — всі хвилі реалізовані.
 
-## Архівне
+Незакрите:
+- **Task 7** у [`docs/superpowers/plans/2026-05-01-ui-ux-roadmap-execution.md`](/C:/Users/MykhailoDan/apps/Acta/docs/superpowers/plans/2026-05-01-ui-ux-roadmap-execution.md): cross-screen polish, empty states, accessibility pass.
+- **Release 4** у [`docs/superpowers/plans/2026-05-01-reports-finance-roadmap.md`](/C:/Users/MykhailoDan/apps/Acta/docs/superpowers/plans/2026-05-01-reports-finance-roadmap.md): Top counterparties, aging buckets, Excel money as numbers.
+
+## Завершене (архів Wave 1 — 2026-05-01)
+
+- [ui-ux-roadmap-2026-05-01.md](/C:/Users/MykhailoDan/apps/Acta/docs/planning/ui-ux-roadmap-2026-05-01.md) — повний UI/UX roadmap; Wave 1 (Tasks 1–6) виконано.
+
+## Архівне (pre-cutover)
 
 - `bas-import-cli-*`
 - `next-sprint-*`

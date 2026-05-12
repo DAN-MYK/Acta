@@ -107,6 +107,8 @@ describe("palette store behavior", () => {
       error: null
     });
   });
+
+
   it("reopens from a clean query and replaces previous results with fresh defaults", async () => {
     const { paletteStore } = await loadStores();
 

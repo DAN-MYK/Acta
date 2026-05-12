@@ -478,6 +478,7 @@ fn split_new_act_for_update(data: NewAct) -> (UpdateAct, Vec<NewActItem>) {
         counterparty_id: data.counterparty_id,
         contract_id: data.contract_id,
         category_id: data.category_id,
+        direction: data.direction,
         date: data.date,
         expected_payment_date: data.expected_payment_date,
         notes: data.notes,

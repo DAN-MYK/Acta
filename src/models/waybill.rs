@@ -144,6 +144,7 @@ pub struct UpdateWaybill {
     pub counterparty_id: Uuid,
     pub contract_id: Option<Uuid>,
     pub category_id: Option<Uuid>,
+    pub direction: DocumentDirection,
     pub date: NaiveDate,
     pub notes: Option<String>,
 }

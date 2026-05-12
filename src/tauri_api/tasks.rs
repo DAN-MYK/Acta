@@ -175,7 +175,22 @@ fn parse_reminder_at(value: &str) -> Result<Option<DateTime<Utc>>> {
     parse_local_datetime(parsed, "Нагадування").map(Some)
 }
 
-async fn resolve_link_label(ctx: &AppCtx, task: &Task) -> Result<(String, String)> {
+fn matches_query(task: &Task, query: Option<&str>) -> bool {
+    let Some(query) = query.map(str::trim).filter(|value| !value.is_empty()) else {
+        return true;
+    };
+
+    let query = query.to_lowercase();
+    task.title.to_lowercase().contains(&query)
+        || task
+            .description
+            .as_deref()
+            .unwrap_or_default()
+            .to_lowercase()
+            .contains(&query)
+}
+
+pub(crate) async fn resolve_link_label(ctx: &AppCtx, task: &Task) -> Result<(String, String)> {
     if let Some(act_id) = task.act_id {
         if let Some((act, _)) = db::acts::get_by_id(ctx.pool(), act_id).await? {
             return Ok(("act".to_string(), format!("Акт {}", act.number)));

@@ -39,6 +39,32 @@ pub async fn search(pool: &PgPool, company_id: Uuid, query: &str) -> Result<Vec<
     list_filtered(pool, company_id, Some(query), false).await
 }
 
+/// Отримати тільки назву контрагента у межах компанії — легший варіант ніж `get_by_id`,
+/// коли решта полів не потрібна (наприклад, для resolve `selected_counterparty` у reports drill-down).
+pub async fn get_name_by_id(pool: &PgPool, company_id: Uuid, id: Uuid) -> Result<Option<String>> {
+    let name = sqlx::query_scalar::<_, String>(
+        "SELECT name FROM counterparties WHERE company_id = $1 AND id = $2",
+    )
+    .bind(company_id)
+    .bind(id)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(name)
+}
+
+/// Отримати тільки назву контрагента за UUID без обмеження по компанії.
+/// Використовується в глобальних зрізах, де focus може посилатися на контрагента
+/// поза межами активної компанії.
+pub async fn get_name_by_id_any_company(pool: &PgPool, id: Uuid) -> Result<Option<String>> {
+    let name = sqlx::query_scalar::<_, String>("SELECT name FROM counterparties WHERE id = $1")
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
+
+    Ok(name)
+}
+
 /// Список контрагентів компанії з опціональним текстовим пошуком та показом архіву.
 ///
 /// Всі 4 гілки фільтрують за `company_id` — ізоляція даних між компаніями.

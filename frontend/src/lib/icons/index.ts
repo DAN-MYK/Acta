@@ -1,5 +1,26 @@
 import act from "./act.svg?raw";
 import add from "./add.svg?raw";
+import arrowLeft from "./arrow-left.svg?raw";
+import arrowRight from "./arrow-right.svg?raw";
+import chartBar from "./chart-bar.svg?raw";
+import chartLine from "./chart-line.svg?raw";
+import chevronDown from "./chevron-down.svg?raw";
+import download from "./download.svg?raw";
+import draft from "./draft.svg?raw";
+import home from "./home.svg?raw";
+import incoming from "./incoming.svg?raw";
+import issued from "./issued.svg?raw";
+import more from "./more.svg?raw";
+import newItem from "./new-item.svg?raw";
+import outgoing from "./outgoing.svg?raw";
+import overdue from "./overdue.svg?raw";
+import paid from "./paid.svg?raw";
+import pdfPrint from "./pdf-print.svg?raw";
+import send from "./send.svg?raw";
+import signed from "./signed.svg?raw";
+import sort from "./sort.svg?raw";
+import uah from "./uah.svg?raw";
+import uncheck from "./uncheck.svg?raw";
 import address from "./address.svg?raw";
 import allStatus from "./all-status.svg?raw";
 import appearance from "./appearance.svg?raw";
@@ -49,7 +70,6 @@ import sync from "./sync.svg?raw";
 import tasks from "./tasks.svg?raw";
 import team from "./team.svg?raw";
 import template from "./template.svg?raw";
-import theme from "./theme.svg?raw";
 import today from "./today.svg?raw";
 import unmatched from "./unmatched.svg?raw";
 import unreconcile from "./unreconcile.svg?raw";
@@ -59,6 +79,27 @@ export const appIcons = {
   act,
   add,
   address,
+  arrowLeft,
+  arrowRight,
+  chartBar,
+  chartLine,
+  chevronDown,
+  download,
+  draft,
+  home,
+  incoming,
+  issued,
+  more,
+  newItem,
+  outgoing,
+  overdue,
+  paid,
+  pdfPrint,
+  send,
+  signed,
+  sort,
+  uah,
+  uncheck,
   allStatus,
   appearance,
   archive,
@@ -107,7 +148,6 @@ export const appIcons = {
   tasks,
   team,
   template,
-  theme,
   today,
   unmatched,
   unreconcile,

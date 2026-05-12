@@ -1,4 +1,6 @@
-# Acta — Claude Code Instructions
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Проект
 Десктопна програма управлінського обліку для українського бізнесу.
@@ -54,6 +56,34 @@ cd src-tauri && cargo tauri dev   # Tauri dev режим
 - UI логіка в frontend/src/ (.svelte, .ts) | Бізнес логіка в Rust (src/tauri_api/)
 - Дані через Tauri commands (invoke) | події через Svelte stores
 - Типи між Rust і TS: serde → JSON → TypeScript interfaces
+- Всі рядки UI — в `frontend/src/lib/config/ui.ts`, не hardcode в компонентах
+- CSS — screen-scoped файли в `frontend/src/styles/`, дизайн-токени з `--acta-*` префіксом
+- Гроші у frontend: bigint minor-units через `money.ts` (parseMoneyToMinor / formatMinorMoney)
+
+## Frontend Архітектура
+
+### Шар виклику Tauri команд (api.ts)
+`frontend/src/lib/api.ts` — єдина точка входу для всіх 61 Tauri команд.
+`appInvoke<T>(command, payload?)` автоматично роутить:
+- в Tauri runtime → `invoke()` з `@tauri-apps/api/core`
+- в браузері / тестах → `browserFixtureInvoke()` з `browser-fixtures.ts`
+
+Це дає змогу запускати всі тести без Tauri runtime.
+
+### Svelte Stores (стан екранів)
+Кожен екран має свій store в `frontend/src/lib/stores/`.
+Типовий публічний API store:
+- `load()` / `refresh()` — завантаження даних через api.ts
+- `openEditor(id?)` / `closeEditor(force?)` — lifecycle редактора
+- Dirty-check: `cloneSnapshot` + `isEditorFormDirty` з `editorDirty.ts`
+
+### Presentation Layer
+`*Presentation.ts` файли (payments, tasks, counterparty) — чиста бізнес-логіка форматування та фільтрації без store/UI залежностей. Тестуються без моків.
+
+### Тестування
+- Screen/component тести: `@vitest-environment jsdom` + `vi.hoisted()` для mock stores
+- Store тести: мокування subscribe, перевірка load/error стейтів
+- Presentation тести: чисті функції, без моків
 
 ## Домен
 | Українська | Rust struct | Таблиця |
@@ -71,17 +101,24 @@ cd src-tauri && cargo tauri dev   # Tauri dev режим
 ## Структура проекту
 ```
 acta/
-├── src/               ← lib-крейт (Slint-free)
-│   ├── lib.rs
-│   ├── db/            ← CRUD функції
+├── src/               ← lib-крейт
+│   ├── db/            ← CRUD функції (14 модулів, по одному на таблицю)
 │   ├── models/        ← Rust структури
-│   ├── tauri_api/     ← команди для Tauri (invoke handlers)
-│   ├── actions/       ← бізнес-операції
+│   ├── tauri_api/     ← бізнес-логіка між командами і БД
+│   ├── actions/       ← складні бізнес-операції
 │   ├── pdf/           ← Typst генерація
-│   └── import/        ← Парсери BAS, банків
-├── src-tauri/         ← Tauri binary (src-tauri/src/)
-│   └── src/commands/  ← #[tauri::command] handlers
-├── frontend/          ← Svelte UI (src/lib/, src/routes/)
+│   └── import/        ← Парсери BAS, банків (CSV/XLSX)
+├── src-tauri/src/commands/  ← тонкі #[tauri::command] обгортки (61 команда)
+├── frontend/src/lib/
+│   ├── screens/       ← 7 екранів (.svelte) + __tests__/
+│   ├── stores/        ← Svelte stores (14 файлів) + __tests__/
+│   ├── components/    ← Button, Modal, Table, KPI, StatusBadge...
+│   ├── config/        ← UI рядки, мітки, конфіги (ui.ts — головний)
+│   ├── api.ts         ← виклик Tauri команд
+│   ├── browser-fixtures.ts  ← mock-дані для тестів без Tauri
+│   └── *Presentation.ts     ← presentation layer (бізнес-логіка UI)
+├── frontend/src/styles/     ← screen-scoped CSS файли
+├── tests/             ← Rust integration tests (db_integration, tauri_vertical_slice)
 ├── templates/         ← .typ шаблони Typst
 ├── migrations/        ← sqlx міграції
 └── storage/           ← файли на диску
@@ -93,13 +130,24 @@ acta/
 cd src-tauri && cargo tauri dev                   # dev режим (hot reload)
 cd src-tauri && cargo tauri build                 # production build
 
-# Бібліотека та утиліти
+# Frontend
+cd frontend && npm run test:frontend              # всі frontend тести (vitest)
+cd frontend && npx vitest run --config vitest.config.mjs -t "назва тесту"  # один тест
+cd frontend && npm run check                      # svelte-check типізація
+cd frontend && npm run dev                        # Vite dev server (port 1420)
+
+# Rust
 cargo build --lib                                 # компіляція lib-крейту
-cargo run --bin migrate -- --input ./bas-export/  # міграція з BAS
-sqlx migrate run                                  # міграції БД
-cargo sqlx prepare                                # offline SQL (після зміни запитів)
 cargo build --tests                               # повна компіляція: lib + тести
 cargo test                                        # всі тести
+cargo test --test unit_business_logic             # unit тести (без БД)
+TEST_DATABASE_URL=... cargo test --test db_integration      # DB інтеграційні
+TEST_DATABASE_URL=... cargo test --test tauri_vertical_slice # vertical slice
+cargo run --bin reseed                            # seed тестової БД
+
+# БД
+sqlx migrate run                                  # міграції БД
+cargo sqlx prepare                                # offline SQL (після зміни запитів)
 ```
 > `cargo run` більше не працює — немає default binary. Запуск тільки через `cargo tauri dev`.
 

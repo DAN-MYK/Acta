@@ -4,6 +4,8 @@ import { spawnSync } from "node:child_process";
 
 const BUILD_LOCK_TIMEOUT_MS = 300000;
 const BUILD_LOCK_POLL_MS = 250;
+const TRANSIENT_BUILD_RETRY_COUNT = 3;
+const TRANSIENT_BUILD_RETRY_DELAY_MS = 1500;
 
 export function latestDependencyMtimeMs(
   dependencyPaths,
@@ -71,7 +73,12 @@ export async function ensureTauriBuild({
   stampPath,
   repoRoot,
   buildCommand = "npm",
-  buildArgs = ["run", "tauri", "build", "--", "--debug", "--no-bundle"]
+  buildArgs = ["run", "tauri", "build", "--", "--debug", "--no-bundle"],
+  runBuild = defaultRunBuild,
+  delayFn = delay,
+  retryCount = TRANSIENT_BUILD_RETRY_COUNT,
+  retryDelayMs = TRANSIENT_BUILD_RETRY_DELAY_MS,
+  platform = process.platform
 }) {
   if (!needsTauriBuild({ applicationPath, dependencyPaths, stampPath })) {
     return { built: false, reason: "fresh" };
@@ -96,15 +103,17 @@ export async function ensureTauriBuild({
     }
 
     const dependencyMtime = latestDependencyMtimeMs(dependencyPaths);
-    const result = spawnSync(buildCommand, buildArgs, {
-      cwd: repoRoot,
-      stdio: "inherit",
-      shell: true
+    await runBuildWithRetry({
+      applicationPath,
+      repoRoot,
+      buildCommand,
+      buildArgs,
+      runBuild,
+      delayFn,
+      retryCount,
+      retryDelayMs,
+      platform
     });
-
-    if (result.status !== 0) {
-      throw new Error(`Tauri debug build failed with exit code ${result.status}`);
-    }
 
     writeBuildStamp(stampPath, dependencyMtime);
     return { built: true, reason: "rebuilt" };
@@ -155,6 +164,82 @@ function releaseLock(lockHandle, lockPath) {
 
 function delay(timeoutMs) {
   return new Promise((resolve) => setTimeout(resolve, timeoutMs));
+}
+
+async function runBuildWithRetry({
+  applicationPath,
+  repoRoot,
+  buildCommand,
+  buildArgs,
+  runBuild,
+  delayFn,
+  retryCount,
+  retryDelayMs,
+  platform
+}) {
+  for (let attempt = 1; attempt <= retryCount; attempt += 1) {
+    const result = runBuild(buildCommand, buildArgs, repoRoot);
+
+    if (result.status === 0) {
+      return;
+    }
+
+    const buildError = createBuildError(result);
+    const canRetry =
+      platform === "win32" &&
+      attempt < retryCount &&
+      isTransientWindowsLockError(buildError.message) &&
+      fs.existsSync(applicationPath);
+
+    if (!canRetry) {
+      if (platform === "win32" && isTransientWindowsLockError(buildError.message)) {
+        throw new Error(
+          `Tauri build did not converge after ${retryCount} attempts because the Windows binary remained locked.`
+        );
+      }
+
+      throw buildError;
+    }
+
+    console.warn(
+      `Tauri build завершився transient lock-помилкою. Повторюю спробу ${attempt + 1}/${retryCount} через ${retryDelayMs}мс.`
+    );
+    await delayFn(retryDelayMs);
+  }
+
+  throw new Error(`Tauri build did not converge after ${retryCount} attempts.`);
+}
+
+function defaultRunBuild(buildCommand, buildArgs, repoRoot) {
+  return spawnSync(buildCommand, buildArgs, {
+    cwd: repoRoot,
+    stdio: "inherit",
+    encoding: "utf8",
+    shell: true
+  });
+}
+
+function createBuildError(result) {
+  if (result.error) {
+    return result.error;
+  }
+
+  const details = [result.stdout, result.stderr]
+    .filter((value) => typeof value === "string" && value.trim().length > 0)
+    .join("\n")
+    .trim();
+
+  const suffix = details ? `\n${details}` : "";
+  return new Error(`Tauri debug build failed with exit code ${result.status}.${suffix}`);
+}
+
+function isTransientWindowsLockError(message) {
+  const normalizedMessage = message.toLowerCase();
+  return (
+    normalizedMessage.includes("os error 32") ||
+    normalizedMessage.includes("being used by another process") ||
+    normalizedMessage.includes("cannot access the file because it is being used by another process")
+  );
 }
 
 function isAlreadyExistsError(error) {

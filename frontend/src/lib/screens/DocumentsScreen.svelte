@@ -1,50 +1,348 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import AppIcon from "../components/AppIcon.svelte";
-  import type { AppIconName } from "../icons";
+  import SkeletonRow from "../components/SkeletonRow.svelte";
+  import {
+    EDITOR_DIRTY_COPY,
+    DOCUMENTS_COPY,
+    DOCUMENT_DIRECTION_LABELS,
+    DOCUMENT_DIRECTION_OPTIONS,
+    DOCUMENT_KIND_FILTER_OPTIONS,
+    DOCUMENT_KIND_META,
+    DOCUMENT_KIND_OPTIONS,
+    DOCUMENT_TAB_OPTIONS,
+    DOCUMENT_FILTER_PRESETS,
+    DOCUMENT_STATUS_OPTIONS,
+    DOCUMENTS_FILTER_COPY,
+    formatDocumentItemsLabel,
+    getDocumentChainTargets,
+    getDocumentCreateLabel,
+    resolveDocumentKindMeta,
+    supportsDocumentPdfGeneration,
+    supportsExistingPdfFlow
+  } from "../config/ui";
   import { documentsStore } from "../stores/documents";
   import { counterpartiesStore } from "../stores/counterparties";
-  import type { DocumentKind, DocumentItemDto } from "../types";
+  import { formatDocumentDraftTotal, formatDocumentItemTotal } from "../documentMoney";
+  import { isFormattedMoneyNegative } from "../money";
+  import type { DocumentDraftItemDto, DocumentKind } from "../types";
 
   const documents = documentsStore;
   const counterparties = counterpartiesStore;
 
   let createCounterpartyId = "";
   let createKind: DocumentKind = "act";
+  let filterCounterpartyId = "";
+  let lastCounterpartyFilterId = "";
+  let lastDraftContextCounterpartyId = "";
+  let createButton: HTMLButtonElement | null = null;
+  let filtersOpen = false;
+  let pdfFindText = "";
+  let pdfReplaceText = "";
+  let lastPdfDocumentId = "";
+  let drawerSection: HTMLElement | null = null;
+  let drawerReturnFocus: HTMLElement | null = null;
+  let lastEditorDocumentId = "";
+  let chainMenuOpen = false;
+  let chainMenuButton: HTMLButtonElement | null = null;
+  let chainMenuPopover: HTMLElement | null = null;
+  let pendingDirtyClose = false;
+  let panelElement: HTMLElement | null = null;
 
-  const documentKindLabels: Record<DocumentKind, string> = {
-    invoice: "Рахунок",
-    act: "Акт",
-    waybill: "Накладна"
-  };
+  $: {
+    const nextDraftContextCounterpartyId = $documents.draftContext?.counterpartyId ?? "";
 
-  const documentKindIcons: Record<DocumentKind, AppIconName> = {
-    invoice: "invoice",
-    act: "act",
-    waybill: "waybill"
-  };
+    if (nextDraftContextCounterpartyId && nextDraftContextCounterpartyId !== lastDraftContextCounterpartyId) {
+      createCounterpartyId = nextDraftContextCounterpartyId;
+      lastDraftContextCounterpartyId = nextDraftContextCounterpartyId;
+    }
 
-  const documentKindActionLabels: Record<DocumentKind, string> = {
-    invoice: "Рахунок",
-    act: "Акт",
-    waybill: "Накладну"
-  };
-
-  const itemTotalFormatter = new Intl.NumberFormat("uk-UA", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  });
-
-  $: if ($documents.draftContext?.counterpartyId) {
-    createCounterpartyId = $documents.draftContext.counterpartyId;
+    if (!nextDraftContextCounterpartyId && lastDraftContextCounterpartyId) {
+      createCounterpartyId = "";
+      lastDraftContextCounterpartyId = "";
+    }
   }
 
-  function onDocumentSearch(event: Event) {
-    const input = event.currentTarget as HTMLInputElement;
-    void documents.load(input.value);
+  $: {
+    const nextCounterpartyFilterId = $documents.counterpartyFilterId ?? "";
+    if (nextCounterpartyFilterId !== lastCounterpartyFilterId) {
+      filterCounterpartyId = nextCounterpartyFilterId;
+      lastCounterpartyFilterId = nextCounterpartyFilterId;
+    }
+  }
+
+  $: {
+    const currentDocumentId = $documents.editor?.form.id ?? "";
+    if (currentDocumentId !== lastPdfDocumentId) {
+      lastPdfDocumentId = currentDocumentId;
+      pdfFindText = "";
+      pdfReplaceText = "";
+    }
+  }
+
+  $: {
+    const editorDocumentId = $documents.editor?.form.id ?? "";
+
+    if (editorDocumentId && !lastEditorDocumentId) {
+      const previouslyFocused = document.activeElement;
+      drawerReturnFocus = previouslyFocused instanceof HTMLElement ? previouslyFocused : null;
+      void tick().then(() => {
+        const heading = drawerSection?.querySelector<HTMLElement>("h3");
+        heading?.focus();
+      });
+    }
+
+    if (!editorDocumentId && lastEditorDocumentId) {
+      const target = drawerReturnFocus && document.contains(drawerReturnFocus) ? drawerReturnFocus : null;
+      void tick().then(() => target?.focus());
+      drawerReturnFocus = null;
+    }
+
+    lastEditorDocumentId = editorDocumentId;
+  }
+
+  function onDrawerKeydown(event: KeyboardEvent) {
+    if (event.key !== "Escape") {
+      return;
+    }
+
+    if (chainMenuOpen) {
+      event.preventDefault();
+      chainMenuOpen = false;
+      chainMenuButton?.focus();
+      return;
+    }
+
+    if ($documents.editor) {
+      event.preventDefault();
+      requestCloseDrawer();
+    }
+  }
+
+  function closeEditor(force = false) {
+    const result = documents.closeEditor(force);
+    if (result && result.ok === false && result.reason === "dirty") {
+      pendingDirtyClose = true;
+      return result;
+    }
+
+    pendingDirtyClose = false;
+    return result;
+  }
+
+  function confirmCloseIfDirty() {
+    closeEditor();
+  }
+
+  function onDrawerBackdropClick() {
+    confirmCloseIfDirty();
+  }
+
+  function requestCloseDrawer() {
+    confirmCloseIfDirty();
+  }
+
+  function confirmDiscardChanges() {
+    closeEditor(true);
+  }
+
+  function cancelDiscardChanges() {
+    pendingDirtyClose = false;
+  }
+
+  function toggleChainMenu() {
+    chainMenuOpen = !chainMenuOpen;
+  }
+
+  function closeChainMenu() {
+    chainMenuOpen = false;
+  }
+
+  function onWindowClickForChainMenu(event: MouseEvent) {
+    if (!chainMenuOpen) {
+      return;
+    }
+    const target = event.target as Node | null;
+    if (target && chainMenuButton?.contains(target)) {
+      return;
+    }
+    if (target && chainMenuPopover?.contains(target)) {
+      return;
+    }
+    closeChainMenu();
+  }
+
+  function onChainMenuAdvanceStatus() {
+    void documents.advanceStatus();
+    closeChainMenu();
+  }
+
+  function onChainMenuCreateChain(kind: DocumentKind) {
+    onCreateChainDraft(kind);
+    closeChainMenu();
+  }
+
+  const documentKindMeta = DOCUMENT_KIND_META;
+
+  $: {
+    const editorDocId = $documents.editor?.form.id ?? "";
+    if (!editorDocId && chainMenuOpen) {
+      chainMenuOpen = false;
+    }
+  }
+
+  $: if (!$documents.editor && pendingDirtyClose) {
+    pendingDirtyClose = false;
+  }
+
+  $: if (panelElement) {
+    if ($documents.editor) {
+      panelElement.setAttribute("inert", "");
+      panelElement.setAttribute("aria-hidden", "true");
+    } else {
+      panelElement.removeAttribute("inert");
+      panelElement.removeAttribute("aria-hidden");
+    }
+  }
+
+  // Panel draft state
+  let panelDateFrom: string = "";
+  let panelDateTo: string = "";
+  let panelStatuses: string[] = [];
+  let panelAmountMin: string = "";
+  let panelAmountMax: string = "";
+
+  $: if (filtersOpen) {
+    // sync draft from current store state when panel opens
+    panelDateFrom = $documents.dateFrom ?? "";
+    panelDateTo = $documents.dateTo ?? "";
+    panelStatuses = [...$documents.statusFilter];
+    panelAmountMin = $documents.amountMin ?? "";
+    panelAmountMax = $documents.amountMax ?? "";
+  }
+
+  $: activeFilterCount = (() => {
+    const s = $documents;
+    let n = 0;
+    if (s.dateFrom || s.dateTo) n++;
+    if (s.statusFilter.length > 0) n++;
+    if (s.counterpartyFilterId) n++;
+    if (s.amountMin || s.amountMax) n++;
+    if (s.overdueOnly) n++;
+    return n;
+  })();
+
+  $: filterButtonLabel = activeFilterCount > 0
+    ? DOCUMENTS_FILTER_COPY.filterButtonWithCount(activeFilterCount)
+    : DOCUMENTS_FILTER_COPY.filterButton;
+
+  $: dateRangeError = (panelDateFrom && panelDateTo && panelDateFrom > panelDateTo)
+    ? DOCUMENTS_FILTER_COPY.errors.dateRangeInvalid
+    : null;
+
+  $: amountRangeError = computeAmountError(panelAmountMin, panelAmountMax);
+
+  function computeAmountError(minStr: string, maxStr: string): string | null {
+    const norm = (s: string) => s.trim().replace(/\s+/g, "").replace(",", ".");
+    const minNum = minStr ? Number(norm(minStr)) : null;
+    const maxNum = maxStr ? Number(norm(maxStr)) : null;
+    if (minStr && (minNum === null || Number.isNaN(minNum))) return DOCUMENTS_FILTER_COPY.errors.amountInvalidFormat;
+    if (maxStr && (maxNum === null || Number.isNaN(maxNum))) return DOCUMENTS_FILTER_COPY.errors.amountInvalidFormat;
+    if (minNum !== null && maxNum !== null && minNum > maxNum) return DOCUMENTS_FILTER_COPY.errors.amountRangeInvalid;
+    return null;
+  }
+
+  function statusLabelOf(code: string): string {
+    return DOCUMENT_STATUS_OPTIONS.find((o) => o.value === code)?.label ?? code;
+  }
+
+  function formatPeriodChip(from: string | null, to: string | null): string {
+    if (from && to) return `${DOCUMENTS_FILTER_COPY.periodLabel}: ${from} – ${to}`;
+    if (from)      return `${DOCUMENTS_FILTER_COPY.periodLabel}: від ${from}`;
+    if (to)        return `${DOCUMENTS_FILTER_COPY.periodLabel}: до ${to}`;
+    return DOCUMENTS_FILTER_COPY.periodLabel;
+  }
+
+  function onClearAllFilters() {
+    documents.clearAllFilters();
+  }
+
+  function onRemovePeriodChip()       { documents.setDateRange(null, null); }
+  function onRemoveStatusChip()       { documents.setStatusFilter([]); }
+  function onRemoveCounterpartyChip() { documents.setCounterpartyFilter(null); }
+  function onRemoveAmountChip()       { documents.setAmountRange(null, null); }
+  function onRemoveOverdueChip()      { void documents.applyPreset("all"); }
+
+  function toggleStatus(code: string, on: boolean) {
+    panelStatuses = on
+      ? Array.from(new Set([...panelStatuses, code]))
+      : panelStatuses.filter((s) => s !== code);
+  }
+
+  function onDateSubpreset(kind: 'today' | 'week' | 'month' | 'quarter' | 'year') {
+    const today = new Date();
+    const iso = (d: Date) => d.toISOString().slice(0, 10);
+    if (kind === 'today') { panelDateFrom = iso(today); panelDateTo = iso(today); return; }
+    if (kind === 'week') {
+      const start = new Date(today); start.setDate(today.getDate() - 6);
+      panelDateFrom = iso(start); panelDateTo = iso(today); return;
+    }
+    if (kind === 'month') {
+      panelDateFrom = iso(new Date(today.getFullYear(), today.getMonth(), 1));
+      panelDateTo = iso(today); return;
+    }
+    if (kind === 'quarter') {
+      const q = Math.floor(today.getMonth() / 3);
+      panelDateFrom = iso(new Date(today.getFullYear(), q * 3, 1));
+      panelDateTo = iso(today); return;
+    }
+    if (kind === 'year') {
+      panelDateFrom = iso(new Date(today.getFullYear(), 0, 1));
+      panelDateTo = iso(today); return;
+    }
+  }
+
+  function resetPanelDraft() {
+    panelDateFrom = "";
+    panelDateTo = "";
+    panelStatuses = [];
+    panelAmountMin = "";
+    panelAmountMax = "";
+    filterCounterpartyId = "";
+  }
+
+  function normalizeAmount(s: string): string | null {
+    const n = s.trim().replace(/\s+/g, "").replace(",", ".");
+    return n.length === 0 ? null : n;
+  }
+
+  function applyPanel() {
+    if (dateRangeError || amountRangeError) return;
+    void documents.applyFilters({
+      dateFrom: panelDateFrom || null,
+      dateTo: panelDateTo || null,
+      statusFilter: [...panelStatuses],
+      amountMin: normalizeAmount(panelAmountMin),
+      amountMax: normalizeAmount(panelAmountMax),
+      counterpartyFilterId: filterCounterpartyId || null,
+    });
+    filtersOpen = false;
   }
 
   function onCreateDraft() {
-    void documents.create(createCounterpartyId, createKind);
+    void documents.create(createCounterpartyId || undefined, createKind);
+  }
+
+  function onSelectCreateKind(kind: string) {
+    createKind = kind as DocumentKind;
+  }
+
+  function focusCreateButton() {
+    createButton?.focus();
+  }
+
+  function toggleFilters() {
+    filtersOpen = !filtersOpen;
   }
 
   function onEditorNumberChange(event: Event) {
@@ -71,16 +369,39 @@
     documents.updateItemField(index, field, input.value);
   }
 
+  let pendingDeleteKind: 'single' | 'bulk' | null = null;
+
   function onDeleteCurrent() {
-    void documents.deleteCurrent();
+    pendingDeleteKind = 'single';
+  }
+
+  function confirmDelete() {
+    if (pendingDeleteKind === 'single') {
+      void documents.deleteCurrent();
+    } else if (pendingDeleteKind === 'bulk') {
+      void documents.bulkDelete();
+    }
+    pendingDeleteKind = null;
+  }
+
+  function cancelDelete() {
+    pendingDeleteKind = null;
   }
 
   function onCreateChainDraft(kind: DocumentKind) {
     void documents.createChainDraft(kind);
   }
 
-  function onReloadChain() {
-    void documents.reloadCurrent();
+  function onAttachExistingPdf() {
+    void documents.attachExistingPdf();
+  }
+
+  function onOpenCurrentPdf() {
+    void documents.openCurrentPdf();
+  }
+
+  function onApplyPdfTextReplace() {
+    void documents.applyPdfTextReplace(pdfFindText, pdfReplaceText);
   }
 
   function onToggleSelection(docId: string) {
@@ -92,196 +413,259 @@
   }
 
   function onBulkDelete() {
-    void documents.bulkDelete();
+    pendingDeleteKind = 'bulk';
   }
 
   function onBulkAdvanceStatus() {
     void documents.bulkAdvanceStatus();
   }
 
-  function getChainTargets(kind: string): DocumentKind[] {
-    if (kind === "invoice") {
-      return ["act", "waybill"];
-    }
-    if (kind === "act") {
-      return ["waybill"];
-    }
-    return [];
-  }
-
-  function getDocumentKindIcon(kind: string): AppIconName {
-    const normalized = kind.toLowerCase();
-
-    if (normalized === "invoice" || normalized.includes("рах")) {
-      return "invoice";
-    }
-    if (normalized === "act" || normalized.includes("акт")) {
-      return "act";
-    }
-    if (normalized === "waybill" || normalized.includes("наклад")) {
-      return "waybill";
-    }
-    if (normalized.includes("догов")) {
-      return "contract";
-    }
-    if (normalized.includes("pdf")) {
-      return "pdf";
-    }
-    if (normalized.includes("excel") || normalized.includes("xls")) {
-      return "excel";
-    }
-    return "documents";
-  }
-
   function getDocumentKindLabel(kind: string): string {
-    const normalized = kind.toLowerCase();
-
-    if (normalized === "invoice" || normalized.includes("рах")) {
-      return "Рахунок";
-    }
-    if (normalized === "act" || normalized.includes("акт")) {
-      return "Акт";
-    }
-    if (normalized === "waybill" || normalized.includes("наклад")) {
-      return "Накладна";
-    }
-    if (normalized.includes("догов")) {
-      return "Договір";
-    }
-    if (normalized.includes("pdf")) {
-      return "PDF";
-    }
-    if (normalized.includes("excel") || normalized.includes("xls")) {
-      return "Excel";
-    }
-    return kind;
+    return resolveDocumentKindMeta(kind).label;
   }
 
-  function getCreateHint(counterpartyId: string, kind: DocumentKind): string {
-    if (!counterpartyId) {
-      return "Спочатку оберіть контрагента, щоб ми відкрили чернетку в правильному контексті.";
-    }
+  const navTabs = DOCUMENT_TAB_OPTIONS;
 
-    return `Чернетка типу "${documentKindLabels[kind]}" відкриється одразу з прив'язкою до вибраного контрагента.`;
-  }
-
-  function getNextStepMessage(kind: string): string {
-    if (kind === "invoice") {
-      return "На основі рахунку можна одразу підготувати акт або накладну.";
-    }
-    if (kind === "act") {
-      return "Після акту зазвичай лишається підготувати накладну або оновити статус документа.";
-    }
-    if (kind === "waybill") {
-      return "Накладна вже закриває сценарій відвантаження, тож далі варто лише перевірити статус і зв'язки.";
-    }
-
-    return "Перевірте, який похідний документ потрібен далі, і створіть його звідси.";
-  }
+  const kindChips = DOCUMENT_KIND_FILTER_OPTIONS;
 
   function getItemsCountLabel(count: number): string {
-    if (count === 1) {
-      return "1 позиція";
-    }
-    if (count >= 2 && count <= 4) {
-      return `${count} позиції`;
-    }
-    return `${count} позицій`;
+    return formatDocumentItemsLabel(count);
   }
 
-  function formatItemTotal(quantity: string, price: string): string {
-    const normalizedQuantity = Number.parseFloat(quantity.replace(",", "."));
-    const normalizedPrice = Number.parseFloat(price.replace(",", "."));
-
-    if (!Number.isFinite(normalizedQuantity) || !Number.isFinite(normalizedPrice)) {
-      return "—";
-    }
-
-    return `${itemTotalFormatter
-      .format(normalizedQuantity * normalizedPrice)
-      .replace(/\u00A0/g, " ")} грн`;
+  function getCurrentChainStatus() {
+    const steps = $documents.chain?.steps ?? [];
+    return steps.length > 0 ? steps[steps.length - 1].status : "Чернетка";
   }
 
-  function draftCount(items: DocumentItemDto[]): number {
-    return items.filter((item) => item.status === "draft").length;
+  function getEditorKindIcon(kind: string) {
+    return resolveDocumentKindMeta(kind).icon;
   }
 
-  function issuedCount(items: DocumentItemDto[]): number {
-    return items.filter((item) => item.status !== "draft").length;
-  }
-
-  function nextAttentionLabel(items: DocumentItemDto[]): string {
-    const draft = items.find((item) => item.status === "draft");
-    return draft ? `${draft.number} · ${draft.counterparty}` : "Усі документи вже просунуті по сценарію";
-  }
 </script>
 
-<section class="panel" data-testid="documents-screen">
-  <div class="panel-header">
-    <div>
-      <h2>Документи</h2>
-      <p>{$documents.list?.totalCount ?? 0} документів</p>
-    </div>
-    <input placeholder="Пошук документів" on:input={onDocumentSearch} />
+<section
+  bind:this={panelElement}
+  class="panel"
+  data-testid="documents-screen"
+>
+  <div class="documents-nav-tabs" role="tablist" aria-label="Напрямок документів">
+    {#each navTabs as tab}
+      <button
+        role="tab"
+        type="button"
+        class="nav-tab"
+        class:nav-tab-active={$documents.activeTab === tab.value}
+        on:click={() => documents.setTab(tab.value)}
+        disabled={$documents.loading}
+      >
+        {tab.label}
+      </button>
+    {/each}
   </div>
 
-  <div class="create-strip-card" data-testid="documents-create-strip">
-    <div class="create-strip-header">
-      <div>
-        <strong>Новий документ</strong>
-        <p>1. Оберіть контрагента  2. Вкажіть тип документа  3. Створіть чернетку</p>
-      </div>
-      <span class="doc-kind-badge">
-        <AppIcon name={documentKindIcons[createKind]} size={14} />
-        <span>{documentKindLabels[createKind]}</span>
-      </span>
-    </div>
+  <div class="documents-kind-chips" role="group" aria-label="Тип документа">
+    {#each kindChips as chip}
+      <button
+        type="button"
+        class="kind-chip"
+        class:kind-chip-active={$documents.kindFilter === chip.value}
+        on:click={() => documents.setKindFilter(chip.value)}
+        disabled={$documents.loading}
+      >
+        {chip.label}
+      </button>
+    {/each}
+  </div>
 
-    <div class="create-strip">
-      <label class="create-strip-field">
-        <span>Контрагент</span>
-        <select bind:value={createCounterpartyId}>
-          <option value="">— Оберіть контрагента —</option>
+  <div class="documents-presets-row" role="group" aria-label="Швидкі фільтри">
+    <span class="documents-presets-label">{DOCUMENTS_FILTER_COPY.presetsLabel}</span>
+    {#each DOCUMENT_FILTER_PRESETS as preset}
+      <button
+        type="button"
+        class="kind-chip"
+        class:kind-chip-active={$documents.activePresetId === preset.id}
+        data-testid={`documents-preset-${preset.id}`}
+        on:click={() => void documents.applyPreset(preset.id)}
+        disabled={$documents.loading}
+      >
+        {preset.label}
+      </button>
+    {/each}
+  </div>
+
+  <div class="documents-filter-toolbar">
+    <button
+      class="btn-secondary"
+      data-testid="documents-filter-button"
+      type="button"
+      aria-expanded={filtersOpen}
+      on:click={toggleFilters}
+      disabled={$documents.loading}
+    >
+      <span>{filterButtonLabel}</span>
+    </button>
+    {#if activeFilterCount > 0}
+      <button
+        class="btn-ghost"
+        type="button"
+        data-testid="documents-clear-filters"
+        on:click={onClearAllFilters}
+        disabled={$documents.loading}
+      >
+        {DOCUMENTS_FILTER_COPY.clearAll}
+      </button>
+    {/if}
+  </div>
+
+  {#if activeFilterCount > 0}
+    <div class="documents-active-filters" data-testid="documents-active-filters">
+      <span class="documents-active-label">{DOCUMENTS_FILTER_COPY.activeFiltersLabel}</span>
+
+      {#if $documents.dateFrom || $documents.dateTo}
+        <button class="active-chip" type="button" on:click={onRemovePeriodChip} aria-label="Прибрати фільтр період">
+          <span>{formatPeriodChip($documents.dateFrom, $documents.dateTo)}</span>
+          <span aria-hidden="true">×</span>
+        </button>
+      {/if}
+
+      {#if $documents.statusFilter.length > 0}
+        <button class="active-chip" type="button" on:click={onRemoveStatusChip} aria-label="Прибрати фільтр статус">
+          <span>{DOCUMENTS_FILTER_COPY.statusLabel}: {$documents.statusFilter.map(statusLabelOf).join(", ")}</span>
+          <span aria-hidden="true">×</span>
+        </button>
+      {/if}
+
+      {#if $documents.counterpartyFilterId}
+        <button class="active-chip" type="button" on:click={onRemoveCounterpartyChip} aria-label="Прибрати фільтр контрагент">
+          <span>{DOCUMENTS_FILTER_COPY.counterpartyLabel}: {
+            ($counterparties.screen?.items ?? []).find((c) => c.id === $documents.counterpartyFilterId)?.name ?? ""
+          }</span>
+          <span aria-hidden="true">×</span>
+        </button>
+      {/if}
+
+      {#if $documents.amountMin || $documents.amountMax}
+        <button class="active-chip" type="button" on:click={onRemoveAmountChip} aria-label="Прибрати фільтр сума">
+          <span>{DOCUMENTS_FILTER_COPY.amountLabel}: {$documents.amountMin ?? "0"} – {$documents.amountMax ?? "∞"}</span>
+          <span aria-hidden="true">×</span>
+        </button>
+      {/if}
+
+      {#if $documents.overdueOnly}
+        <button class="active-chip" type="button" on:click={onRemoveOverdueChip} aria-label="Прибрати фільтр прострочені">
+          <span>Прострочені</span>
+          <span aria-hidden="true">×</span>
+        </button>
+      {/if}
+    </div>
+  {/if}
+
+  {#if filtersOpen}
+    <div class="documents-filter-panel" data-testid="documents-filter-panel">
+      <fieldset class="filter-panel-section">
+        <legend>{DOCUMENTS_FILTER_COPY.periodLabel}</legend>
+        <div class="filter-panel-subpresets">
+          <button type="button" class="kind-chip" on:click={() => onDateSubpreset('today')}>{DOCUMENTS_FILTER_COPY.periodSubpresets.today}</button>
+          <button type="button" class="kind-chip" on:click={() => onDateSubpreset('week')}>{DOCUMENTS_FILTER_COPY.periodSubpresets.week}</button>
+          <button type="button" class="kind-chip" on:click={() => onDateSubpreset('month')}>{DOCUMENTS_FILTER_COPY.periodSubpresets.month}</button>
+          <button type="button" class="kind-chip" on:click={() => onDateSubpreset('quarter')}>{DOCUMENTS_FILTER_COPY.periodSubpresets.quarter}</button>
+          <button type="button" class="kind-chip" on:click={() => onDateSubpreset('year')}>{DOCUMENTS_FILTER_COPY.periodSubpresets.year}</button>
+        </div>
+        <div class="filter-panel-grid-2">
+          <label>{DOCUMENTS_FILTER_COPY.periodFrom}<input type="date" bind:value={panelDateFrom} /></label>
+          <label>{DOCUMENTS_FILTER_COPY.periodTo}<input type="date" bind:value={panelDateTo} /></label>
+        </div>
+        {#if dateRangeError}
+          <p class="filter-error" role="alert">{dateRangeError}</p>
+        {/if}
+      </fieldset>
+
+      <fieldset class="filter-panel-section">
+        <legend>{DOCUMENTS_FILTER_COPY.statusLabel}</legend>
+        <div class="filter-panel-statuses">
+          {#each DOCUMENT_STATUS_OPTIONS as opt}
+            <label class="status-checkbox">
+              <input type="checkbox" value={opt.value}
+                checked={panelStatuses.includes(opt.value)}
+                on:change={() => toggleStatus(opt.value, !panelStatuses.includes(opt.value))} />
+              {opt.label}
+            </label>
+          {/each}
+        </div>
+      </fieldset>
+
+      <fieldset class="filter-panel-section">
+        <legend>{DOCUMENTS_FILTER_COPY.counterpartyLabel}</legend>
+        <select
+          bind:value={filterCounterpartyId}
+          disabled={$documents.loading}
+          data-testid="documents-counterparty-filter"
+          aria-label="Фільтр за контрагентом"
+        >
+          <option value="">{DOCUMENTS_FILTER_COPY.counterpartyAll}</option>
           {#each $counterparties.screen?.items ?? [] as cp}
             <option value={cp.id}>{cp.name}</option>
           {/each}
         </select>
-      </label>
+      </fieldset>
 
-      <label class="create-strip-field">
-        <span>Тип документа</span>
-        <select bind:value={createKind}>
-          <option value="act">Акт</option>
-          <option value="invoice">Рахунок</option>
-          <option value="waybill">Накладна</option>
-        </select>
-      </label>
+      <fieldset class="filter-panel-section">
+        <legend>{DOCUMENTS_FILTER_COPY.amountLabel}</legend>
+        <div class="filter-panel-grid-2">
+          <label>{DOCUMENTS_FILTER_COPY.amountFrom}<input type="text" inputmode="decimal" bind:value={panelAmountMin} placeholder="0,00" /></label>
+          <label>{DOCUMENTS_FILTER_COPY.amountTo}<input type="text" inputmode="decimal" bind:value={panelAmountMax} placeholder="0,00" /></label>
+        </div>
+        {#if amountRangeError}
+          <p class="filter-error" role="alert">{amountRangeError}</p>
+        {/if}
+      </fieldset>
 
-      <button class="btn-primary create-doc-button" disabled={!createCounterpartyId} on:click={onCreateDraft}>
-        <AppIcon name={documentKindIcons[createKind]} surface={true} />
-        <span>Створити чернетку</span>
-      </button>
+      <div class="documents-filter-actions">
+        <button class="btn-ghost" type="button" on:click={resetPanelDraft} disabled={$documents.loading}>
+          {DOCUMENTS_FILTER_COPY.reset}
+        </button>
+        <button class="btn-primary" type="button" on:click={applyPanel} disabled={$documents.loading || !!dateRangeError || !!amountRangeError}>
+          {DOCUMENTS_FILTER_COPY.apply}
+        </button>
+      </div>
+    </div>
+  {/if}
+
+  <div class="documents-create-bar" data-testid="documents-create-strip">
+    <div class="documents-create-kind-chips" role="group" aria-label="Тип документа">
+      {#each DOCUMENT_KIND_OPTIONS as option}
+        <button
+          type="button"
+          class="kind-chip"
+          class:kind-chip-active={createKind === option.value}
+          on:click={() => onSelectCreateKind(option.value)}
+          disabled={$documents.loading}
+        >
+          {option.label}
+        </button>
+      {/each}
     </div>
 
-    <p class="create-strip-hint">{getCreateHint(createCounterpartyId, createKind)}</p>
+    <button
+      bind:this={createButton}
+      class="btn-primary"
+      data-testid="documents-create-button"
+      type="button"
+      disabled={$documents.loading}
+      on:click={onCreateDraft}
+      aria-busy={$documents.loading ? "true" : "false"}
+    >
+      <AppIcon name={documentKindMeta[createKind].icon} surface={true} />
+      <span>{getDocumentCreateLabel(createKind, $documents.activeTab)}</span>
+    </button>
   </div>
 
-  <div class="documents-focus-grid">
-    <div class="documents-focus-card" data-testid="documents-focus-primary">
-      <span class="reports-focus-label">Що потребує уваги</span>
-      <strong>{draftCount($documents.list?.items ?? [])}</strong>
-      <p>Чернетки, які ще не пройшли далі по сценарію й можуть затримати оплату або відвантаження.</p>
-      <small>{nextAttentionLabel($documents.list?.items ?? [])}</small>
-    </div>
-    <div class="documents-focus-card documents-focus-card-muted">
-      <span class="reports-focus-label">В роботі</span>
-      <strong>{issuedCount($documents.list?.items ?? [])}</strong>
-      <p>Документи, які вже виставлені або рухаються далі по ланцюжку.</p>
-      <small>Виберіть рядок, щоб одразу перейти до редактора та наступної дії.</small>
-    </div>
-  </div>
-
-  <div class="bulk-actions">
+  {#if ($documents.list?.items.length ?? 0) > 0}
+  <div
+    class="bulk-actions"
+    class:bulk-actions-idle={$documents.selectedIds.length === 0}
+    data-testid="documents-bulk-actions"
+  >
     <label class="bulk-select-all">
       <input
         type="checkbox"
@@ -294,32 +678,78 @@
       <span>Вибрати все</span>
     </label>
 
-    <button class="btn-secondary" disabled={$documents.selectedIds.length === 0} on:click={onBulkAdvanceStatus}>
+    <button
+      class="btn-secondary"
+      disabled={$documents.selectedIds.length === 0 || $documents.loading}
+      on:click={onBulkAdvanceStatus}
+    >
       Оновити статус вибраних
     </button>
 
-    <button class="btn-danger" disabled={$documents.selectedIds.length === 0} on:click={onBulkDelete}>
+    <button
+      class="btn-danger"
+      disabled={$documents.selectedIds.length === 0 || $documents.loading}
+      on:click={onBulkDelete}
+    >
       Видалити вибрані
     </button>
   </div>
+  {/if}
+
+  {#if pendingDeleteKind === 'bulk'}
+    <div
+      class="confirm-delete-banner"
+      role="alertdialog"
+      aria-live="assertive"
+      aria-labelledby="documents-confirm-bulk-title"
+      data-testid="documents-confirm-bulk-banner"
+    >
+      <div>
+        <strong id="documents-confirm-bulk-title">Видалити вибрані?</strong>
+        <p>{DOCUMENTS_COPY.confirmDeleteBulk}</p>
+      </div>
+      <div class="editor-dirty-actions">
+        <button type="button" class="btn-ghost btn-sm" on:click={cancelDelete}>Скасувати</button>
+        <button type="button" class="btn-danger btn-sm" on:click={confirmDelete} data-testid="documents-confirm-bulk-confirm">Видалити</button>
+      </div>
+    </div>
+  {/if}
 
   {#if $documents.message}
-    <p class="message">{$documents.message}</p>
+    <p class="message" role="status" aria-live="polite">{$documents.message}</p>
   {/if}
 
   {#if $documents.error}
-    <p class="error">{$documents.error}</p>
+    <div class="status-banner is-error" role="alert" aria-live="assertive">
+      <div>
+        <strong>Потрібна увага</strong>
+        <p>{$documents.error}</p>
+      </div>
+    </div>
   {/if}
 
-  {#if ($documents.list?.items.length ?? 0) === 0}
+  {#if $documents.initialLoading}
+    <SkeletonRow count={5} />
+  {:else if ($documents.list?.items.length ?? 0) === 0}
     <div class="empty-state-card" data-testid="documents-empty-state">
-      <strong>Поки що документів немає</strong>
-      <p>Створіть першу чернетку, щоб запустити сценарій рахунку, акту або накладної.</p>
+      <span class="empty-state-eyebrow">Почніть зі сценарію</span>
+      <strong>{DOCUMENTS_COPY.emptyTitle}</strong>
+      <p>{DOCUMENTS_COPY.emptyDescription}</p>
+      <div class="empty-state-actions">
+        <button
+          class="btn-primary"
+          type="button"
+          data-testid="documents-empty-primary-action"
+          on:click={focusCreateButton}
+        >
+          {DOCUMENTS_COPY.emptyAction}
+        </button>
+      </div>
     </div>
   {:else}
     <div class="documents-list" data-testid="documents-list">
       {#each $documents.list?.items ?? [] as item}
-        <button class="doc-row doc-row-rich" on:click={() => documents.open(item.id)}>
+        <div class="doc-row doc-row-rich" data-testid={`documents-row-${item.id}`}>
           <label class="doc-row-checkbox" aria-label={`Вибрати ${item.number}`}>
             <input
               type="checkbox"
@@ -328,181 +758,480 @@
             />
           </label>
 
-          <div class="doc-row-body">
-            <div>
-              <strong class="doc-row-title">
-                <AppIcon name={getDocumentKindIcon(item.kind)} surface={true} size={16} />
-                <span>{item.number}</span>
-              </strong>
-              <p>{item.counterparty}</p>
+          <button
+            class="doc-row-open"
+            type="button"
+            on:click={() => documents.open(item.id)}
+            disabled={$documents.loading}
+            aria-label={`Відкрити документ ${item.number}`}
+          >
+            <div class="doc-row-body">
+              <div>
+                <strong class="doc-row-title">
+                  <AppIcon name={resolveDocumentKindMeta(item.kind).icon} surface={true} size={16} />
+                  <span>{item.number}</span>
+                </strong>
+                <p>{item.counterparty}</p>
+              </div>
+              <div class="doc-row-meta">
+                <span>{item.date}</span>
+                <span class="money-value" data-negative={isFormattedMoneyNegative(item.amountStr)}>{item.amountStr}</span>
+                <span class="doc-kind-badge">
+                  <AppIcon name={resolveDocumentKindMeta(item.kind).icon} size={14} />
+                  <span>{getDocumentKindLabel(item.kind)}</span>
+                </span>
+                <span class="doc-status-chip">{item.statusLabel}</span>
+                <span class="doc-direction-badge" data-direction={item.direction}>
+                  {DOCUMENT_DIRECTION_LABELS[item.direction] ?? item.direction}
+                </span>
+              </div>
             </div>
-            <div class="doc-row-meta">
-              <span>{item.date}</span>
-              <span>{item.amountStr}</span>
-              <span class="doc-kind-badge">
-                <AppIcon name={getDocumentKindIcon(item.kind)} size={14} />
-                <span>{getDocumentKindLabel(item.kind)}</span>
-              </span>
-              <span class="doc-status-chip">{item.statusLabel}</span>
-            </div>
-          </div>
-        </button>
+          </button>
+        </div>
       {/each}
     </div>
   {/if}
 </section>
 
+<svelte:window on:keydown={onDrawerKeydown} on:click={onWindowClickForChainMenu} />
+
 {#if $documents.editor}
-  <section class="editor-sheet">
+  <button
+    type="button"
+    class="documents-drawer-backdrop"
+    aria-label="Закрити редактор"
+    data-testid="documents-drawer-backdrop"
+    on:click={onDrawerBackdropClick}
+  ></button>
+  <section
+    class="editor-sheet documents-drawer"
+    bind:this={drawerSection}
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="documents-drawer-title"
+    data-testid="documents-drawer"
+  >
+    {#if pendingDirtyClose}
+      <div
+        class="editor-dirty-banner"
+        role="alertdialog"
+        aria-live="assertive"
+        aria-labelledby="documents-dirty-banner-title"
+        data-testid="documents-dirty-banner"
+      >
+        <div>
+          <strong id="documents-dirty-banner-title">{EDITOR_DIRTY_COPY.dirtyTitle}</strong>
+          <p>{EDITOR_DIRTY_COPY.dirtyDescription}</p>
+        </div>
+        <div class="editor-dirty-actions">
+          <button
+            type="button"
+            class="btn-ghost btn-sm"
+            on:click={cancelDiscardChanges}
+            data-testid="documents-dirty-banner-cancel"
+          >
+            {EDITOR_DIRTY_COPY.dirtyStay}
+          </button>
+          <button
+            type="button"
+            class="btn-danger btn-sm"
+            on:click={confirmDiscardChanges}
+            data-testid="documents-dirty-banner-discard"
+          >
+            {EDITOR_DIRTY_COPY.dirtyDiscard}
+          </button>
+        </div>
+      </div>
+    {/if}
+
+    {#if pendingDeleteKind === 'single'}
+      <div
+        class="confirm-delete-banner"
+        role="alertdialog"
+        aria-live="assertive"
+        aria-labelledby="documents-confirm-delete-title"
+        data-testid="documents-confirm-delete-banner"
+      >
+        <div>
+          <strong id="documents-confirm-delete-title">Видалити документ?</strong>
+          <p>{DOCUMENTS_COPY.confirmDeleteCurrent}</p>
+        </div>
+        <div class="editor-dirty-actions">
+          <button type="button" class="btn-ghost btn-sm" on:click={cancelDelete}>Скасувати</button>
+          <button type="button" class="btn-danger btn-sm" on:click={confirmDelete} data-testid="documents-confirm-delete-confirm">Видалити</button>
+        </div>
+      </div>
+    {/if}
     <div class="editor-header">
       <div>
-        <h3>{$documents.editor.form.title}</h3>
+        <div class="editor-header-meta">
+          <span class="doc-kind-badge">
+            <AppIcon name={getEditorKindIcon($documents.editor.form.kind)} size={14} />
+            <span>{getDocumentKindLabel($documents.editor.form.kind)}</span>
+          </span>
+          <span class="doc-status-chip">{getCurrentChainStatus()}</span>
+        </div>
+        <h3 id="documents-drawer-title" tabindex="-1">{$documents.editor.form.title}</h3>
         <p>{$documents.editor.form.counterpartyName}</p>
       </div>
       <div class="editor-actions">
-        <button class="btn-ghost" on:click={() => documents.addItem()}>Додати позицію</button>
-        <button class="btn-primary" on:click={() => documents.save()}>Зберегти</button>
-        <button class="btn-secondary" on:click={() => documents.advanceStatus()}>Наступний статус</button>
-        {#if ["act", "invoice"].includes($documents.editor.form.kind)}
-          <button class="btn-secondary" on:click={() => documents.generatePdf()}>PDF</button>
+        <button
+          class="btn-primary"
+          on:click={() => documents.save()}
+          disabled={$documents.loading}
+          aria-busy={$documents.loading ? "true" : "false"}
+        >
+          Зберегти
+        </button>
+
+        <div class="chain-menu" class:chain-menu-open={chainMenuOpen}>
+          <button
+            bind:this={chainMenuButton}
+            class="btn-secondary chain-menu-trigger"
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={chainMenuOpen}
+            on:click|stopPropagation={toggleChainMenu}
+            disabled={$documents.loading}
+          >
+            <span>Дії далі</span>
+            <span aria-hidden="true" class="chain-menu-caret">▾</span>
+          </button>
+          <div
+            bind:this={chainMenuPopover}
+            class="chain-menu-popover"
+            role="menu"
+            hidden={!chainMenuOpen}
+          >
+            <button
+              role="menuitem"
+              type="button"
+              class="chain-menu-item"
+              on:click={onChainMenuAdvanceStatus}
+              disabled={$documents.loading}
+            >
+              Наступний статус
+            </button>
+            {#each getDocumentChainTargets($documents.editor.form.kind) as targetKind}
+              <button
+                role="menuitem"
+                type="button"
+                class="chain-menu-item"
+                data-testid={`documents-chain-create-${targetKind}`}
+                on:click={() => onChainMenuCreateChain(targetKind)}
+                disabled={$documents.loading}
+              >
+                <AppIcon name={documentKindMeta[targetKind].icon} size={16} />
+                <span>Створити {documentKindMeta[targetKind].actionLabel}</span>
+              </button>
+            {/each}
+          </div>
+        </div>
+
+        {#if supportsDocumentPdfGeneration($documents.editor.form.kind)}
+          <button class="btn-ghost" on:click={() => documents.generatePdf()} disabled={$documents.loading}>
+            PDF
+          </button>
         {/if}
-        <button class="btn-danger" on:click={onDeleteCurrent}>Видалити</button>
-        <button class="btn-ghost" on:click={() => documents.closeEditor()}>Закрити</button>
+        <div class="editor-actions-close">
+          <button class="btn-danger" on:click={onDeleteCurrent} disabled={$documents.loading} data-testid="documents-delete-current-btn">
+            Видалити
+          </button>
+          <button class="btn-ghost" on:click={requestCloseDrawer} disabled={$documents.loading}>
+            Закрити
+          </button>
+        </div>
       </div>
     </div>
 
     <div class="editor-grid">
       <label>
         Номер
-        <input value={$documents.editor.form.number} on:input={onEditorNumberChange} />
+        <input value={$documents.editor.form.number} on:input={onEditorNumberChange} disabled={$documents.loading} />
       </label>
-      <label>
+      <label class="editor-date-field">
         Дата
-        <input type="date" value={$documents.editor.form.date} on:input={onEditorDateChange} />
+        <input
+          type="date"
+          value={$documents.editor.form.date}
+          on:input={onEditorDateChange}
+          disabled={$documents.loading}
+        />
       </label>
       <label class="editor-grid-span">
         Примітки
-        <textarea rows="3" value={$documents.editor.form.notes} on:input={onEditorNotesChange}></textarea>
+        <textarea
+          rows="3"
+          value={$documents.editor.form.notes}
+          on:input={onEditorNotesChange}
+          disabled={$documents.loading}
+        ></textarea>
       </label>
-    </div>
-
-    <div class="chain-panel">
-      <div class="chain-panel-header">
-        <div>
-          <strong>Що далі</strong>
-          <p>Переходьте до наступного документа без пошуку по інших екранах.</p>
-        </div>
-        <div class="chain-summary">
-          <div class="chain-summary-block">
-            <span>Поточний документ</span>
-            <strong>{getDocumentKindLabel($documents.editor.form.kind)}</strong>
-          </div>
-          <div class="chain-summary-block">
-            <span>Наступний крок</span>
-            <strong>{getNextStepMessage($documents.editor.form.kind)}</strong>
-          </div>
-        </div>
-      </div>
-
-      <div class="chain-actions">
-        <button class="btn-ghost" on:click={onReloadChain}>Оновити</button>
-        {#each getChainTargets($documents.editor.form.kind) as targetKind}
-          <button class="btn-secondary chain-action-button" on:click={() => onCreateChainDraft(targetKind)}>
-            <AppIcon name={documentKindIcons[targetKind]} size={16} />
-            <span>Створити {documentKindActionLabels[targetKind]}</span>
-          </button>
-        {/each}
-      </div>
-
-      {#if $documents.chain}
-        <div class="chain-steps">
-          {#each $documents.chain.steps as step}
-            <div class:missing={!step.exists} class="chain-step">
-              <div>
-                <strong class="chain-doc-title">
-                  <AppIcon name={getDocumentKindIcon(step.docType)} surface={true} size={16} />
-                  <span>{getDocumentKindLabel(step.docType)}</span>
-                </strong>
-                <p>{step.docNumber}</p>
-              </div>
-              <div>
-                <span>{step.amountStr}</span>
-                <span>{step.status}</span>
-              </div>
-            </div>
-          {/each}
-        </div>
-      {/if}
+      <fieldset class="editor-direction-fieldset editor-grid-span">
+        <legend>Напрямок</legend>
+        <label class="editor-direction-option">
+          <input
+            type="radio"
+            name="direction"
+            value="outgoing"
+            checked={$documents.editor?.form.direction === "outgoing"}
+            on:change={() => documents.updateFormField("direction", "outgoing")}
+            disabled={$documents.loading}
+          />
+          {DOCUMENT_DIRECTION_OPTIONS[0].label}
+        </label>
+        <label class="editor-direction-option">
+          <input
+            type="radio"
+            name="direction"
+            value="incoming"
+            checked={$documents.editor?.form.direction === "incoming"}
+            on:change={() => documents.updateFormField("direction", "incoming")}
+            disabled={$documents.loading}
+          />
+          {DOCUMENT_DIRECTION_OPTIONS[1].label}
+        </label>
+      </fieldset>
     </div>
 
     <div class="editor-items-card">
       <div class="editor-items-header">
-        <div>
-          <strong>Позиції документа</strong>
-          <p>Додайте товари або послуги, щоб документ одразу мав зрозумілу суму й склад.</p>
+        <strong>Позиції документа</strong>
+        <div class="editor-items-summary">
+          <span class="editor-items-count">{getItemsCountLabel($documents.editor.items.length)}</span>
+          <strong>{formatDocumentDraftTotal($documents.editor.items)}</strong>
+          <button class="btn-secondary" on:click={() => documents.addItem()} disabled={$documents.loading}>
+            Додати позицію
+          </button>
         </div>
-        <span class="editor-items-count">{getItemsCountLabel($documents.editor.items.length)}</span>
       </div>
 
       <div class="editor-items">
         {#if $documents.editor.items.length === 0}
-          <div class="editor-items-empty">
-            <strong>Поки що без позицій</strong>
-            <p>Додайте перший рядок, щоб заповнити номенклатуру, кількість та ціну в одному місці.</p>
-            <button class="btn-secondary" on:click={() => documents.addItem()}>Додати першу позицію</button>
+          <div class="editor-items-empty" data-testid="documents-items-empty">
+            <strong>{DOCUMENTS_COPY.itemsEmptyTitle}</strong>
+            <p>{DOCUMENTS_COPY.itemsEmptyDescription}</p>
+            <button class="btn-primary" on:click={() => documents.addItem()} disabled={$documents.loading}>
+              Додати першу позицію
+            </button>
           </div>
         {:else}
           <div class="editor-item editor-item-head">
             <span>Опис</span>
             <span>Од.</span>
-            <span>Кількість</span>
-            <span>Ціна, грн</span>
+            <span class="editor-item-cell-numeric">Кількість</span>
+            <span class="editor-item-cell-numeric">Ціна, грн</span>
+            <span class="editor-item-cell-numeric">Сума</span>
             <span></span>
           </div>
           {#each $documents.editor.items as item, index}
-            <div class="editor-item-card">
-              <div class="editor-item-meta">
-                <strong>Рядок {index + 1}</strong>
-                <span>Сума позиції {formatItemTotal(item.quantity, item.price)}</span>
-              </div>
-
-              <div class="editor-item">
-                <label class="editor-item-field">
-                  <span>Опис</span>
-                  <input
-                    value={item.description}
-                    placeholder="Опис"
-                    on:input={(event) => onItemFieldChange(index, "description", event)}
-                  />
-                </label>
-                <label class="editor-item-field">
-                  <span>Од.</span>
-                  <input value={item.unit} placeholder="Од." on:input={(event) => onItemFieldChange(index, "unit", event)} />
-                </label>
-                <label class="editor-item-field">
-                  <span>Кількість</span>
-                  <input
-                    value={item.quantity}
-                    placeholder="Кількість"
-                    on:input={(event) => onItemFieldChange(index, "quantity", event)}
-                  />
-                </label>
-                <label class="editor-item-field">
-                  <span>Ціна, грн</span>
-                  <input
-                    value={item.price}
-                    placeholder="Ціна"
-                    on:input={(event) => onItemFieldChange(index, "price", event)}
-                  />
-                </label>
-                <button class="btn-danger editor-item-remove" on:click={() => documents.removeItem(index)}>
-                  Видалити позицію
-                </button>
-              </div>
+            <div class="editor-item">
+              <input
+                aria-label={`Опис рядка ${index + 1}`}
+                value={item.description}
+                placeholder="Опишіть товар або послугу"
+                on:input={(event) => onItemFieldChange(index, "description", event)}
+                disabled={$documents.loading}
+              />
+              <input
+                aria-label={`Одиниця рядка ${index + 1}`}
+                value={item.unit}
+                placeholder="шт / год"
+                on:input={(event) => onItemFieldChange(index, "unit", event)}
+                disabled={$documents.loading}
+              />
+              <input
+                aria-label={`Кількість рядка ${index + 1}`}
+                class="editor-item-cell-numeric"
+                value={item.quantity}
+                placeholder="0"
+                inputmode="decimal"
+                on:input={(event) => onItemFieldChange(index, "quantity", event)}
+                disabled={$documents.loading}
+              />
+              <input
+                aria-label={`Ціна рядка ${index + 1}`}
+                class="editor-item-cell-numeric"
+                value={item.price}
+                placeholder="0,00"
+                inputmode="decimal"
+                on:input={(event) => onItemFieldChange(index, "price", event)}
+                disabled={$documents.loading}
+              />
+              <span
+                class="editor-item-cell-numeric editor-item-sum"
+                aria-label={`Сума рядка ${index + 1}`}
+              >{formatDocumentItemTotal(item.quantity, item.price)}</span>
+              <button
+                class="btn-icon-danger editor-item-remove"
+                aria-label={`Прибрати рядок ${index + 1}`}
+                on:click={() => documents.removeItem(index)}
+                disabled={$documents.loading}
+              >
+                ✕
+              </button>
             </div>
           {/each}
         {/if}
       </div>
     </div>
+
+    {#if supportsExistingPdfFlow($documents.editor.form.kind)}
+      <div class="editor-items-card existing-pdf-card" data-testid="documents-existing-pdf">
+        <div class="editor-items-header">
+          <div>
+            <strong>Існуючий PDF</strong>
+            {#if $documents.editor.pdf}
+              <p class="existing-pdf-status">
+                {$documents.editor.pdf.filePath} · {$documents.editor.pdf.pageCount} стор. ·
+                {$documents.editor.pdf.editable ? "Exact replace доступний" : "Тільки перегляд"}
+              </p>
+            {:else}
+              <p class="existing-pdf-status">Не прив'язано</p>
+            {/if}
+          </div>
+          <div class="editor-actions existing-pdf-actions">
+            <button class="btn-secondary" on:click={onAttachExistingPdf} disabled={$documents.loading}>
+              {$documents.editor.pdf ? "Прив'язати інший PDF" : "Прив'язати PDF"}
+            </button>
+            {#if $documents.editor.pdf}
+              <button
+                class="btn-ghost"
+                on:click={onOpenCurrentPdf}
+                disabled={$documents.loading}
+              >
+                Відкрити PDF
+              </button>
+            {/if}
+          </div>
+        </div>
+
+        {#if $documents.editor.pdf}
+          <details class="existing-pdf-details" open={$documents.editor.pdf.warnings.length > 0}>
+            <summary>Текстовий шар і exact replace</summary>
+
+            <p class="existing-pdf-meta">
+              Текстовий шар: {$documents.editor.pdf.hasTextOps ? "Знайдено" : "Не знайдено"}
+            </p>
+
+            {#if $documents.editor.pdf.warnings.length > 0}
+              <div class="existing-pdf-warnings">
+                {#each $documents.editor.pdf.warnings as warning}
+                  <p>{warning}</p>
+                {/each}
+              </div>
+            {/if}
+
+            <label class="existing-pdf-preview">
+              Витягнутий текст
+              <textarea rows="10" readonly value={$documents.editor.pdf.extractedText}></textarea>
+            </label>
+
+            <div class="existing-pdf-replace">
+              <label>
+                <span>Знайти текст</span>
+                <input bind:value={pdfFindText} placeholder="Точний фрагмент з витягнутого тексту" />
+              </label>
+              <label>
+                <span>Замінити на</span>
+                <input bind:value={pdfReplaceText} placeholder="Новий текст" />
+              </label>
+              <button
+                class="btn-primary"
+                on:click={onApplyPdfTextReplace}
+                disabled={
+                  $documents.loading ||
+                  !$documents.editor.pdf.editable ||
+                  !pdfFindText.trim() ||
+                  !pdfReplaceText.trim()
+                }
+              >
+                Застосувати exact replace
+              </button>
+            </div>
+          </details>
+        {/if}
+      </div>
+    {/if}
   </section>
 {/if}
+
+<style>
+  .documents-nav-tabs {
+    display: flex;
+    gap: 2px;
+    border-bottom: 1px solid var(--acta-color-border);
+    padding: 0 16px;
+  }
+
+  .nav-tab {
+    padding: 8px 16px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: var(--acta-color-text-muted);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+
+  .nav-tab-active {
+    color: var(--acta-color-accent);
+    border-bottom-color: var(--acta-color-accent);
+    font-weight: 500;
+  }
+
+  .documents-kind-chips {
+    display: flex;
+    gap: 6px;
+    padding: 8px 16px;
+  }
+
+  .kind-chip {
+    padding: 4px 12px;
+    border-radius: var(--acta-radius-pill);
+    border: 1px solid var(--acta-color-border);
+    background: var(--acta-color-bg-subtle);
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--acta-color-text-muted);
+  }
+
+  .kind-chip-active {
+    background: var(--acta-color-accent);
+    border-color: var(--acta-color-accent);
+    color: #fff;
+  }
+
+  .doc-direction-badge {
+    font-size: 11px;
+    color: var(--acta-color-text-faint);
+  }
+
+  .doc-direction-badge[data-direction="outgoing"] {
+    color: var(--acta-color-success);
+  }
+
+  .doc-direction-badge[data-direction="incoming"] {
+    color: var(--acta-color-warning);
+  }
+
+  .editor-direction-fieldset {
+    border: 1px solid var(--acta-color-border);
+    border-radius: 6px;
+    padding: 8px 12px;
+  }
+
+  .editor-direction-fieldset legend {
+    font-size: 12px;
+    color: var(--acta-color-text-muted);
+    padding: 0 4px;
+  }
+
+  .editor-direction-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: 16px;
+    cursor: pointer;
+  }
+</style>

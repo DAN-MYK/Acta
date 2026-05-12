@@ -23,8 +23,8 @@ pub struct ActKpi {
 }
 
 use crate::models::act::{Act, ActItem, ActListRow, ActStatus, NewAct, NewActItem, UpdateAct};
-use crate::models::DocumentDirection;
 use crate::models::payment::PaymentDirection;
+use crate::models::DocumentDirection;
 use crate::services::payment_matching::MatchCandidate;
 
 fn count_index_for_status(status: &ActStatus) -> usize {
@@ -111,40 +111,52 @@ pub async fn counterparties_for_select(
 
 /// Отримати список актів компанії з JOIN на назву контрагента.
 ///
-/// `status_filter = None`  → усі акти.
-/// `status_filter = Some(s)` → лише акти з вказаним статусом.
+/// Зручна обгортка над `list_filtered` без додаткових фільтрів.
 pub async fn list(
     pool: &PgPool,
     company_id: Uuid,
-    status_filter: Option<ActStatus>,
 ) -> Result<Vec<ActListRow>> {
     list_filtered(
         pool,
         company_id,
-        status_filter,
         None,
         None,
         None,
         None,
         None,
+        None,
+        None,
+        None,
+        false,
+        chrono::Utc::now().date_naive(),
     )
     .await
 }
 
-/// Отримати список актів компанії з фільтром за статусом, текстовим пошуком,
-/// контрагентом і діапазоном дат.
+/// Отримати список актів компанії з фільтром за статусами, напрямом, текстовим пошуком,
+/// контрагентом, діапазоном дат, сумами та ознакою прострочення.
 ///
 /// Використовує `QueryBuilder` для динамічної побудови WHERE-умов
 /// замість 4-гілкового match — дозволяє довільну комбінацію фільтрів.
+///
+/// - `statuses` — масив рядкових значень статусу (наприклад `&["issued", "signed"]`); `None` = всі.
+/// - `amount_min` / `amount_max` — фільтр за сумою `total_amount`.
+/// - `overdue_only` — лише прострочені: `expected_payment_date < today` та статус issued/signed.
+/// - `today` — поточна дата для розрахунку прострочення (передається явно для тестування).
+#[allow(clippy::too_many_arguments)]
 pub async fn list_filtered(
     pool: &PgPool,
     company_id: Uuid,
-    status_filter: Option<ActStatus>,
+    statuses: Option<&[String]>,
     direction: Option<DocumentDirection>,
     search_query: Option<&str>,
     counterparty_id: Option<Uuid>,
     date_from: Option<chrono::NaiveDate>,
     date_to: Option<chrono::NaiveDate>,
+    amount_min: Option<Decimal>,
+    amount_max: Option<Decimal>,
+    overdue_only: bool,
+    today: chrono::NaiveDate,
 ) -> Result<Vec<ActListRow>> {
     let search_query = search_query.map(str::trim).filter(|q| !q.is_empty());
     let has_search = search_query.is_some();
@@ -159,9 +171,9 @@ pub async fn list_filtered(
     );
     qb.push_bind(company_id);
 
-    if let Some(status) = status_filter {
-        qb.push(" AND a.status = ");
-        qb.push_bind(status);
+    if let Some(statuses) = statuses.filter(|s| !s.is_empty()) {
+        let owned: Vec<String> = statuses.to_vec();
+        qb.push(" AND a.status::text = ANY(").push_bind(owned).push("::text[])");
     }
     if let Some(direction) = direction {
         qb.push(" AND a.direction = ");
@@ -186,6 +198,17 @@ pub async fn list_filtered(
     if let Some(dt) = date_to {
         qb.push(" AND a.date <= ");
         qb.push_bind(dt);
+    }
+    if let Some(min) = amount_min {
+        qb.push(" AND a.total_amount >= ").push_bind(min);
+    }
+    if let Some(max) = amount_max {
+        qb.push(" AND a.total_amount <= ").push_bind(max);
+    }
+    if overdue_only {
+        qb.push(" AND a.expected_payment_date IS NOT NULL")
+          .push(" AND a.expected_payment_date < ").push_bind(today)
+          .push(" AND a.status::text IN ('issued','signed')");
     }
     qb.push(" ORDER BY a.date DESC, a.number");
     if has_search {
@@ -272,6 +295,8 @@ pub async fn list_open_act_candidates(
     struct Row {
         id: Uuid,
         title: String,
+        reference_text: String,
+        match_text: String,
         open_amount: Decimal,
         counterparty_iban: Option<String>,
         match_date: Option<chrono::NaiveDate>,
@@ -287,6 +312,8 @@ pub async fn list_open_act_candidates(
         SELECT
             a.id,
             trim(concat_ws(' ', a.number, cp.name))               AS title,
+            a.number                                              AS reference_text,
+            trim(concat_ws(' ', a.number, cp.name))               AS match_text,
             a.total_amount - COALESCE(SUM(pa.amount), 0::numeric) AS open_amount,
             cp.iban                                               AS counterparty_iban,
             COALESCE(a.expected_payment_date, a.date)             AS match_date
@@ -314,6 +341,8 @@ pub async fn list_open_act_candidates(
                 row.open_amount,
                 row.counterparty_iban,
                 row.title,
+                row.reference_text,
+                row.match_text,
                 row.match_date,
             )
         })
@@ -355,6 +384,33 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<(Act, Vec<ActIt
     .await?;
 
     Ok(Some((act, items)))
+}
+
+pub async fn find_by_notes_marker(
+    pool: &PgPool,
+    company_id: Uuid,
+    marker: &str,
+) -> Result<Option<(Act, Vec<ActItem>)>> {
+    let pattern = format!("%{marker}%");
+    let id = sqlx::query_scalar::<_, Uuid>(
+        r#"
+        SELECT id
+        FROM acts
+        WHERE company_id = $1
+          AND notes LIKE $2
+        ORDER BY updated_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(company_id)
+    .bind(pattern)
+    .fetch_optional(pool)
+    .await?;
+
+    match id {
+        Some(id) => get_by_id(pool, id).await,
+        None => Ok(None),
+    }
 }
 
 /// Знайти акт за bas_id для повторного імпорту без дублювання.
@@ -655,6 +711,7 @@ pub async fn update_with_items(
             date                   = $6,
             expected_payment_date  = $7,
             notes                  = $8,
+            direction              = $9,
             updated_at             = NOW()
         WHERE id = $1
         RETURNING id, number, counterparty_id, contract_id, category_id, direction,
@@ -670,6 +727,7 @@ pub async fn update_with_items(
     .bind(data.date)
     .bind(data.expected_payment_date)
     .bind(&data.notes)
+    .bind(data.direction)
     .fetch_optional(&mut *tx)
     .await?;
 
