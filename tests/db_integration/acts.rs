@@ -651,21 +651,21 @@ async fn acts_get_kpi_aggregates_this_month_and_overdue() -> Result<()> {
     .await?;
     db::acts::change_status_scoped(
         &pool,
-        DEFAULT_COMPANY_ID,
+        company_id,
         act_paid.id,
         models::ActStatus::Issued,
     )
     .await?;
     db::acts::change_status_scoped(
         &pool,
-        DEFAULT_COMPANY_ID,
+        company_id,
         act_paid.id,
         models::ActStatus::Signed,
     )
     .await?;
     db::acts::change_status_scoped(
         &pool,
-        DEFAULT_COMPANY_ID,
+        company_id,
         act_paid.id,
         models::ActStatus::Paid,
     )
@@ -692,7 +692,7 @@ async fn acts_get_kpi_aggregates_this_month_and_overdue() -> Result<()> {
     .await?;
     db::acts::change_status_scoped(
         &pool,
-        DEFAULT_COMPANY_ID,
+        company_id,
         act_issued_new.id,
         models::ActStatus::Issued,
     )
@@ -721,7 +721,7 @@ async fn acts_get_kpi_aggregates_this_month_and_overdue() -> Result<()> {
     .await?;
     db::acts::change_status_scoped(
         &pool,
-        DEFAULT_COMPANY_ID,
+        company_id,
         act_overdue.id,
         models::ActStatus::Issued,
     )

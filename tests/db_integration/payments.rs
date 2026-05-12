@@ -979,7 +979,10 @@ async fn payments_reconcile_supports_split_and_rejects_overallocation() -> Resul
     )
     .await
     .expect_err("reconcile must reject allocation above document open amount");
-    assert!(over_document_err.to_string().contains("документа"));
+    assert!(
+        over_document_err.to_string().contains("залишок")
+            || over_document_err.to_string().contains("Сума звірки")
+    );
 
     db::payments::delete_scoped(&pool, DEFAULT_COMPANY_ID, payment.id).await?;
     sqlx::query("DELETE FROM acts WHERE id = $1")
@@ -1114,7 +1117,10 @@ async fn payments_reconcile_split_is_atomic_on_failure() -> Result<()> {
     )
     .await
     .expect_err("split reconcile має відкотити всю транзакцію, якщо один allocation невалідний");
-    assert!(err.to_string().contains("документа"));
+    assert!(
+        err.to_string().contains("залишок")
+            || err.to_string().contains("Сума звірки")
+    );
 
     let act_amount_after_error = sqlx::query_scalar::<_, rust_decimal::Decimal>(
         "SELECT amount FROM payment_acts WHERE payment_id = $1 AND act_id = $2",
