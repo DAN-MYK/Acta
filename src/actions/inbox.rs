@@ -63,13 +63,15 @@ fn prefixed_uuid(id: &str, prefix: &str) -> Option<Uuid> {
 }
 
 async fn create_overdue_act_reminder(ctx: &AppCtx, act_id: Uuid) -> Result<()> {
-    let Some((act, _items)) = crate::db::acts::get_by_id(ctx.pool(), act_id).await? else {
+    let Some((act, _items)) =
+        crate::db::acts::get_by_id_scoped(ctx.pool(), ctx.company_id(), act_id).await?
+    else {
         tracing::warn!("inbox_action: act {act_id} не знайдено для нагадування");
         return Ok(());
     };
 
     let title = format!("Нагадати про оплату акту {}", act.number);
-    let already_open = crate::db::tasks::list_by_act(ctx.pool(), act_id)
+    let already_open = crate::db::tasks::list_by_act_scoped(ctx.pool(), ctx.company_id(), act_id)
         .await?
         .into_iter()
         .any(|task| {

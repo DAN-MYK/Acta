@@ -1,4 +1,3 @@
-
 use super::*;
 use crate::services::payment_matching::{MatchCandidate, MatchScore};
 use rust_decimal_macros::dec;
@@ -150,67 +149,57 @@ fn format_decimal_ua_zero() {
 #[test]
 fn payment_match_preview_helpers_map_exact_decision() {
     let decision = MatchDecision::Exact(ScoredMatchCandidate {
-            candidate: MatchCandidate::act(
-                Uuid::new_v4(),
-                dec!(1250.00),
-                Some("UA123".to_string()),
-                "ТОВ Клієнт №42",
-                "ACT-42",
-                "Оплата акту №42",
-                Some(
-                    NaiveDate::from_ymd_opt(2026, 5, 1)
-                        .expect("валідна дата"),
-                ),
-            ),
-            score: MatchScore {
-                total: 170,
-                amount_fits: true,
-                exact_amount: true,
-                same_iban: true,
-                reference_hit: true,
-                text_hits: 2,
-                days_distance: 0,
-            },
-        });
+        candidate: MatchCandidate::act(
+            Uuid::new_v4(),
+            dec!(1250.00),
+            Some("UA123".to_string()),
+            "ТОВ Клієнт №42",
+            "ACT-42",
+            "Оплата акту №42",
+            Some(NaiveDate::from_ymd_opt(2026, 5, 1).expect("валідна дата")),
+        ),
+        score: MatchScore {
+            total: 170,
+            amount_fits: true,
+            exact_amount: true,
+            same_iban: true,
+            reference_hit: true,
+            text_hits: 2,
+            days_distance: 0,
+        },
+    });
 
-    let recommendation = exact_recommendation(&decision).expect(
-            "exact decision має повертати recommendation",
-        );
+    let recommendation =
+        exact_recommendation(&decision).expect("exact decision має повертати recommendation");
 
     assert_eq!(match_kind_to_str(decision.kind()), "exact");
     assert_eq!(recommendation.document_kind, "act");
-    assert_eq!(
-        recommendation.title,
-        "ТОВ Клієнт №42"
-    );
+    assert_eq!(recommendation.title, "ТОВ Клієнт №42");
     assert_eq!(recommendation.amount_str, "1\u{00a0}250,00");
 }
 
 #[test]
 fn payment_match_preview_helpers_map_candidate_scores() {
     let dto = scored_candidate_to_dto(ScoredMatchCandidate {
-            candidate: MatchCandidate::invoice(
-                Uuid::new_v4(),
-                dec!(980.00),
-                None,
-                "Рахунок №7",
-                "INV-7",
-                "Оплата послуг",
-                Some(
-                    NaiveDate::from_ymd_opt(2026, 5, 3)
-                        .expect("валідна дата"),
-                ),
-            ),
-            score: MatchScore {
-                total: 130,
-                amount_fits: true,
-                exact_amount: true,
-                same_iban: false,
-                reference_hit: false,
-                text_hits: 1,
-                days_distance: 2,
-            },
-        });
+        candidate: MatchCandidate::invoice(
+            Uuid::new_v4(),
+            dec!(980.00),
+            None,
+            "Рахунок №7",
+            "INV-7",
+            "Оплата послуг",
+            Some(NaiveDate::from_ymd_opt(2026, 5, 3).expect("валідна дата")),
+        ),
+        score: MatchScore {
+            total: 130,
+            amount_fits: true,
+            exact_amount: true,
+            same_iban: false,
+            reference_hit: false,
+            text_hits: 1,
+            days_distance: 2,
+        },
+    });
 
     assert_eq!(dto.document_kind, "invoice");
     assert_eq!(dto.open_amount_str, "980,00");
@@ -222,28 +211,25 @@ fn payment_match_preview_helpers_map_candidate_scores() {
 #[test]
 fn payment_match_preview_helpers_map_split_decision_kind() {
     let decision = MatchDecision::Split(vec![ScoredMatchCandidate {
-            candidate: MatchCandidate::invoice(
-                Uuid::new_v4(),
-                dec!(1500.00),
-                None,
-                "Накладна INV-007",
-                "INV-7",
-                "Оплата накладної",
-                Some(
-                    NaiveDate::from_ymd_opt(2026, 5, 3)
-                        .expect("валідна дата"),
-                ),
-            ),
-            score: MatchScore {
-                total: 88,
-                amount_fits: true,
-                exact_amount: false,
-                same_iban: true,
-                reference_hit: false,
-                text_hits: 1,
-                days_distance: 2,
-            },
-        }]);
+        candidate: MatchCandidate::invoice(
+            Uuid::new_v4(),
+            dec!(1500.00),
+            None,
+            "Накладна INV-007",
+            "INV-7",
+            "Оплата накладної",
+            Some(NaiveDate::from_ymd_opt(2026, 5, 3).expect("валідна дата")),
+        ),
+        score: MatchScore {
+            total: 88,
+            amount_fits: true,
+            exact_amount: false,
+            same_iban: true,
+            reference_hit: false,
+            text_hits: 1,
+            days_distance: 2,
+        },
+    }]);
 
     assert_eq!(match_kind_to_str(decision.kind()), "split");
     assert!(exact_recommendation(&decision).is_none());

@@ -65,13 +65,11 @@ fn parse_payment_amount(value: &str) -> Result<Decimal> {
         .replace('\u{00A0}', "")
         .replace(' ', "")
         .replace(',', ".");
-    let amount = normalized.parse::<Decimal>().map_err(|_| {
-        anyhow!("Невірна сума платежу")
-    })?;
+    let amount = normalized
+        .parse::<Decimal>()
+        .map_err(|_| anyhow!("Невірна сума платежу"))?;
     if amount <= Decimal::ZERO {
-        return Err(anyhow!(
-            "Сума платежу має бути більшою за нуль"
-        ));
+        return Err(anyhow!("Сума платежу має бути більшою за нуль"));
     }
     Ok(amount)
 }
@@ -80,9 +78,7 @@ fn parse_payment_direction(value: &str) -> Result<PaymentDirection> {
     match value.trim() {
         "income" => Ok(PaymentDirection::Income),
         "expense" => Ok(PaymentDirection::Expense),
-        other => Err(anyhow!(
-            "Невідомий напрям платежу: {other}"
-        )),
+        other => Err(anyhow!("Невідомий напрям платежу: {other}")),
     }
 }
 
@@ -91,9 +87,9 @@ fn parse_optional_counterparty_id(value: &str) -> Result<Option<Uuid>> {
     if trimmed.is_empty() {
         return Ok(None);
     }
-    Uuid::parse_str(trimmed).map(Some).map_err(|_| {
-        anyhow!("Невалідний ідентифікатор контрагента")
-    })
+    Uuid::parse_str(trimmed)
+        .map(Some)
+        .map_err(|_| anyhow!("Невалідний ідентифікатор контрагента"))
 }
 
 fn parse_optional_payment_id(value: &str) -> Result<Option<Uuid>> {
@@ -116,8 +112,7 @@ fn trimmed_option(value: &str) -> Option<String> {
 }
 
 fn parse_payment_uuid(value: &str) -> Result<Uuid> {
-    Uuid::parse_str(value.trim())
-        .map_err(|_| anyhow!("Невалідний ідентифікатор платежу"))
+    Uuid::parse_str(value.trim()).map_err(|_| anyhow!("Невалідний ідентифікатор платежу"))
 }
 
 fn match_document_kind_to_str(kind: MatchDocumentKind) -> &'static str {
@@ -143,24 +138,19 @@ async fn load_split_allocation_title(
 ) -> Result<String> {
     match document_kind {
         "act" => {
-            let (act, _) = db::acts::get_by_id(ctx.pool(), document_id)
+            let (act, _) = db::acts::get_by_id_scoped(ctx.pool(), ctx.company_id(), document_id)
                 .await?
-                .ok_or_else(|| {
-                    anyhow!("Документ не знайдено в межах компанії")
-                })?;
+                .ok_or_else(|| anyhow!("Документ не знайдено в межах компанії"))?;
             Ok(format!("Акт {}", act.number))
         }
         "invoice" => {
-            let (invoice, _) = db::invoices::get_by_id(ctx.pool(), document_id)
-                .await?
-                .ok_or_else(|| {
-                    anyhow!("Документ не знайдено в межах компанії")
-                })?;
+            let (invoice, _) =
+                db::invoices::get_by_id_scoped(ctx.pool(), ctx.company_id(), document_id)
+                    .await?
+                    .ok_or_else(|| anyhow!("Документ не знайдено в межах компанії"))?;
             Ok(format!("Накладна {}", invoice.number))
         }
-        other => Err(anyhow!(
-            "Невідомий тип документу: {other}"
-        )),
+        other => Err(anyhow!("Невідомий тип документу: {other}")),
     }
 }
 
@@ -170,9 +160,7 @@ async fn build_match_input(
 ) -> Result<(crate::models::payment::Payment, PaymentMatchInput)> {
     let payment = db::payments::get_by_id_scoped(ctx.pool(), ctx.company_id(), payment_id)
         .await?
-        .ok_or_else(|| {
-            anyhow!("Платіж не знайдено в межах компанії")
-        })?;
+        .ok_or_else(|| anyhow!("Платіж не знайдено в межах компанії"))?;
 
     let counterparty_iban = match payment.counterparty_id {
         Some(counterparty_id) => {
@@ -423,10 +411,8 @@ pub async fn payments_list(ctx: &AppCtx) -> Result<PaymentsScreenDto> {
             outgoing_str: format_decimal_ua(kpi.outgoing_month),
             net_str: format_decimal_ua(net),
             unmatched_str: kpi.unmatched_count.to_string(),
-            incoming_sub: "поточний місяць"
-                .to_string(),
-            outgoing_sub: "поточний місяць"
-                .to_string(),
+            incoming_sub: "поточний місяць".to_string(),
+            outgoing_sub: "поточний місяць".to_string(),
             unmatched_count: kpi.unmatched_count as i32,
         },
     })
@@ -436,10 +422,7 @@ pub async fn payments_import_latest_csv(ctx: &AppCtx) -> Result<MutationResultDt
     let (imported, path) = run_bank_import(ctx).await?;
     Ok(MutationResultDto {
         ok: true,
-        message: format!(
-            "Імпортовано {imported} рядків з {}",
-            path.display()
-        ),
+        message: format!("Імпортовано {imported} рядків з {}", path.display()),
     })
 }
 
@@ -639,9 +622,8 @@ pub async fn payment_reconcile(
 ) -> Result<MutationResultDto> {
     let payment_id = Uuid::parse_str(&req.payment_id)
         .map_err(|_| anyhow!("Невалідний ідентифікатор платежу"))?;
-    let doc_id = Uuid::parse_str(&req.document_id).map_err(|_| {
-        anyhow!("Невалідний ідентифікатор документу")
-    })?;
+    let doc_id = Uuid::parse_str(&req.document_id)
+        .map_err(|_| anyhow!("Невалідний ідентифікатор документу"))?;
     let amount = parse_payment_amount(&req.amount)?;
 
     db::payments::reconcile_document_scoped(
@@ -708,9 +690,8 @@ pub async fn payment_reconcile_split(
         allocation.title = load_split_allocation_title(
             ctx,
             &allocation.document_kind,
-            Uuid::parse_str(&allocation.document_id).map_err(|_| {
-                anyhow!("Невалідний ідентифікатор документу")
-            })?,
+            Uuid::parse_str(&allocation.document_id)
+                .map_err(|_| anyhow!("Невалідний ідентифікатор документу"))?,
         )
         .await?;
     }
@@ -731,9 +712,8 @@ pub async fn payment_unreconcile(
 ) -> Result<MutationResultDto> {
     let payment_id = Uuid::parse_str(&req.payment_id)
         .map_err(|_| anyhow!("Невалідний ідентифікатор платежу"))?;
-    let doc_id = Uuid::parse_str(&req.document_id).map_err(|_| {
-        anyhow!("Невалідний ідентифікатор документу")
-    })?;
+    let doc_id = Uuid::parse_str(&req.document_id)
+        .map_err(|_| anyhow!("Невалідний ідентифікатор документу"))?;
 
     db::payments::unreconcile_document_scoped(
         ctx.pool(),

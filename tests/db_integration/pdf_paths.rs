@@ -65,10 +65,14 @@ async fn relative_pdf_paths_migration_converts_absolute_invoice_and_waybill_path
     )
     .await?;
 
-    let invoice_relative =
-        format!("existing_pdf/invoice/{}_REL-PDF-INV-{suffix}/working.pdf", invoice.id);
-    let waybill_relative =
-        format!("existing_pdf/waybill/{}_REL-PDF-WBL-{suffix}/working.pdf", waybill.id);
+    let invoice_relative = format!(
+        "existing_pdf/invoice/{}_REL-PDF-INV-{suffix}/working.pdf",
+        invoice.id
+    );
+    let waybill_relative = format!(
+        "existing_pdf/waybill/{}_REL-PDF-WBL-{suffix}/working.pdf",
+        waybill.id
+    );
     let storage_root = std::env::temp_dir().join(format!("acta_migration_storage_{suffix}"));
     let invoice_absolute = storage_root.join(&invoice_relative).display().to_string();
     let waybill_absolute = storage_root
@@ -97,21 +101,25 @@ async fn relative_pdf_paths_migration_converts_absolute_invoice_and_waybill_path
         sqlx::query(statement).execute(&pool).await?;
     }
 
-    let stored_invoice_path = sqlx::query_scalar::<_, Option<String>>(
-        "SELECT pdf_path FROM invoices WHERE id = $1",
-    )
-    .bind(invoice.id)
-    .fetch_one(&pool)
-    .await?;
-    let stored_waybill_path = sqlx::query_scalar::<_, Option<String>>(
-        "SELECT pdf_path FROM waybills WHERE id = $1",
-    )
-    .bind(waybill.id)
-    .fetch_one(&pool)
-    .await?;
+    let stored_invoice_path =
+        sqlx::query_scalar::<_, Option<String>>("SELECT pdf_path FROM invoices WHERE id = $1")
+            .bind(invoice.id)
+            .fetch_one(&pool)
+            .await?;
+    let stored_waybill_path =
+        sqlx::query_scalar::<_, Option<String>>("SELECT pdf_path FROM waybills WHERE id = $1")
+            .bind(waybill.id)
+            .fetch_one(&pool)
+            .await?;
 
-    assert_eq!(stored_invoice_path.as_deref(), Some(invoice_relative.as_str()));
-    assert_eq!(stored_waybill_path.as_deref(), Some(waybill_relative.as_str()));
+    assert_eq!(
+        stored_invoice_path.as_deref(),
+        Some(invoice_relative.as_str())
+    );
+    assert_eq!(
+        stored_waybill_path.as_deref(),
+        Some(waybill_relative.as_str())
+    );
 
     sqlx::query("DELETE FROM invoices WHERE id = $1")
         .bind(invoice.id)

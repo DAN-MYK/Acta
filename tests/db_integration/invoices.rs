@@ -60,13 +60,13 @@ async fn invoices_create_update_and_status_flow_in_db() -> Result<()> {
     assert_eq!(invoice.total_amount, dec!(900.00));
     assert_eq!(invoice.status, models::InvoiceStatus::Draft);
 
-    let loaded = db::invoices::get_by_id(&pool, invoice.id)
+    let loaded = db::invoices::get_by_id_scoped(&pool, DEFAULT_COMPANY_ID, invoice.id)
         .await?
         .expect("invoice exists");
     assert_eq!(loaded.0.number, invoice.number);
     assert_eq!(loaded.1.len(), 2);
 
-    let editable = db::invoices::get_for_edit(&pool, invoice.id)
+    let editable = db::invoices::get_for_edit_scoped(&pool, DEFAULT_COMPANY_ID, invoice.id)
         .await?
         .expect("invoice editable");
     assert_eq!(editable.0.id, invoice.id);
@@ -88,8 +88,9 @@ async fn invoices_create_update_and_status_flow_in_db() -> Result<()> {
     .await?;
     assert!(listed.iter().any(|row| row.id == invoice.id));
 
-    let updated = db::invoices::update_with_items(
+    let updated = db::invoices::update_with_items_scoped(
         &pool,
+        DEFAULT_COMPANY_ID,
         invoice.id,
         models::UpdateInvoice {
             number: format!("IT-INV-UPD-{suffix}"),
@@ -109,27 +110,38 @@ async fn invoices_create_update_and_status_flow_in_db() -> Result<()> {
             price: dec!(250.00),
         }],
     )
-    .await?;
+    .await?
+    .expect("накладна має оновитися");
 
     assert_eq!(updated.number, format!("IT-INV-UPD-{suffix}"));
     assert_eq!(updated.total_amount, dec!(1250.00));
 
-    let reloaded = db::invoices::get_by_id(&pool, invoice.id)
+    let reloaded = db::invoices::get_by_id_scoped(&pool, DEFAULT_COMPANY_ID, invoice.id)
         .await?
         .expect("invoice still exists");
     assert_eq!(reloaded.1.len(), 1);
     assert_eq!(reloaded.1[0].amount, dec!(1250.00));
 
-    let issued = db::invoices::change_status(&pool, invoice.id, models::InvoiceStatus::Issued)
-        .await?
-        .expect("invoice issued");
+    let issued = db::invoices::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        invoice.id,
+        models::InvoiceStatus::Issued,
+    )
+    .await?
+    .expect("invoice issued");
     assert_eq!(issued.status, models::InvoiceStatus::Issued);
 
-    let invalid =
-        db::invoices::change_status(&pool, invoice.id, models::InvoiceStatus::Draft).await;
+    let invalid = db::invoices::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        invoice.id,
+        models::InvoiceStatus::Draft,
+    )
+    .await;
     assert!(invalid.is_err());
 
-    let signed = db::invoices::advance_status(&pool, invoice.id)
+    let signed = db::invoices::advance_status_scoped(&pool, DEFAULT_COMPANY_ID, invoice.id)
         .await?
         .expect("invoice signed");
     assert_eq!(signed.status, models::InvoiceStatus::Signed);
@@ -194,7 +206,13 @@ async fn invoices_change_status_rejects_skipping_forward_transition() -> Result<
     )
     .await?;
 
-    let result = db::invoices::change_status(&pool, invoice.id, models::InvoiceStatus::Paid).await;
+    let result = db::invoices::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        invoice.id,
+        models::InvoiceStatus::Paid,
+    )
+    .await;
     assert!(result.is_err());
 
     sqlx::query("DELETE FROM invoices WHERE id = $1")
@@ -257,7 +275,13 @@ async fn invoices_change_status_rejects_same_status_transition() -> Result<()> {
     )
     .await?;
 
-    let result = db::invoices::change_status(&pool, invoice.id, models::InvoiceStatus::Draft).await;
+    let result = db::invoices::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        invoice.id,
+        models::InvoiceStatus::Draft,
+    )
+    .await;
     assert!(result.is_err());
 
     sqlx::query("DELETE FROM invoices WHERE id = $1")
@@ -320,12 +344,35 @@ async fn invoices_change_status_rejects_transition_from_paid() -> Result<()> {
     )
     .await?;
 
-    db::invoices::change_status(&pool, invoice.id, models::InvoiceStatus::Issued).await?;
-    db::invoices::change_status(&pool, invoice.id, models::InvoiceStatus::Signed).await?;
-    db::invoices::change_status(&pool, invoice.id, models::InvoiceStatus::Paid).await?;
+    db::invoices::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        invoice.id,
+        models::InvoiceStatus::Issued,
+    )
+    .await?;
+    db::invoices::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        invoice.id,
+        models::InvoiceStatus::Signed,
+    )
+    .await?;
+    db::invoices::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        invoice.id,
+        models::InvoiceStatus::Paid,
+    )
+    .await?;
 
-    let result =
-        db::invoices::change_status(&pool, invoice.id, models::InvoiceStatus::Issued).await;
+    let result = db::invoices::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        invoice.id,
+        models::InvoiceStatus::Issued,
+    )
+    .await;
     assert!(result.is_err());
 
     sqlx::query("DELETE FROM invoices WHERE id = $1")
@@ -388,11 +435,29 @@ async fn invoices_advance_status_on_paid_returns_error() -> Result<()> {
     )
     .await?;
 
-    db::invoices::change_status(&pool, invoice.id, models::InvoiceStatus::Issued).await?;
-    db::invoices::change_status(&pool, invoice.id, models::InvoiceStatus::Signed).await?;
-    db::invoices::change_status(&pool, invoice.id, models::InvoiceStatus::Paid).await?;
+    db::invoices::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        invoice.id,
+        models::InvoiceStatus::Issued,
+    )
+    .await?;
+    db::invoices::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        invoice.id,
+        models::InvoiceStatus::Signed,
+    )
+    .await?;
+    db::invoices::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        invoice.id,
+        models::InvoiceStatus::Paid,
+    )
+    .await?;
 
-    let result = db::invoices::advance_status(&pool, invoice.id).await;
+    let result = db::invoices::advance_status_scoped(&pool, DEFAULT_COMPANY_ID, invoice.id).await;
     assert!(result.is_err());
 
     sqlx::query("DELETE FROM invoices WHERE id = $1")
@@ -415,11 +480,17 @@ async fn invoices_status_functions_return_none_for_missing_id() -> Result<()> {
 
     let missing_id = Uuid::new_v4();
 
-    let change_result =
-        db::invoices::change_status(&pool, missing_id, models::InvoiceStatus::Issued).await?;
+    let change_result = db::invoices::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        missing_id,
+        models::InvoiceStatus::Issued,
+    )
+    .await?;
     assert!(matches!(change_result, None));
 
-    let advance_result = db::invoices::advance_status(&pool, missing_id).await?;
+    let advance_result =
+        db::invoices::advance_status_scoped(&pool, DEFAULT_COMPANY_ID, missing_id).await?;
     assert!(matches!(advance_result, None));
 
     Ok(())
@@ -652,9 +723,14 @@ async fn invoices_list_filtered_respects_status_and_search() -> Result<()> {
     )
     .await?;
 
-    let issued = db::invoices::change_status(&pool, issued_seed.id, models::InvoiceStatus::Issued)
-        .await?
-        .expect("invoice issued");
+    let issued = db::invoices::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        issued_seed.id,
+        models::InvoiceStatus::Issued,
+    )
+    .await?
+    .expect("invoice issued");
     assert_eq!(issued.status, models::InvoiceStatus::Issued);
 
     let issued_only = db::invoices::list_filtered(
@@ -757,17 +833,22 @@ async fn invoices_advance_status_fails_for_final_status() -> Result<()> {
     )
     .await?;
 
-    db::invoices::change_status(&pool, invoice.id, models::InvoiceStatus::Issued)
-        .await?
-        .expect("issued");
-    db::invoices::advance_status(&pool, invoice.id)
+    db::invoices::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        invoice.id,
+        models::InvoiceStatus::Issued,
+    )
+    .await?
+    .expect("issued");
+    db::invoices::advance_status_scoped(&pool, DEFAULT_COMPANY_ID, invoice.id)
         .await?
         .expect("signed");
-    db::invoices::advance_status(&pool, invoice.id)
+    db::invoices::advance_status_scoped(&pool, DEFAULT_COMPANY_ID, invoice.id)
         .await?
         .expect("paid");
 
-    let err = db::invoices::advance_status(&pool, invoice.id)
+    let err = db::invoices::advance_status_scoped(&pool, DEFAULT_COMPANY_ID, invoice.id)
         .await
         .expect_err("paid invoice should be final");
     assert!(err.to_string().contains("фінальному статусі"));
@@ -790,8 +871,9 @@ async fn invoices_update_with_items_fails_for_missing_invoice() -> Result<()> {
         return Ok(());
     };
 
-    let err = db::invoices::update_with_items(
+    let err = db::invoices::update_with_items_scoped(
         &pool,
+        DEFAULT_COMPANY_ID,
         Uuid::new_v4(),
         models::UpdateInvoice {
             number: "MISSING".to_string(),
@@ -820,10 +902,7 @@ async fn invoices_update_with_items_fails_for_missing_invoice() -> Result<()> {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-async fn seed_inv_counterparty(
-    pool: &sqlx::PgPool,
-    prefix: &str,
-) -> Result<models::Counterparty> {
+async fn seed_inv_counterparty(pool: &sqlx::PgPool, prefix: &str) -> Result<models::Counterparty> {
     let suffix = unique_suffix();
     db::counterparties::create(
         pool,
@@ -960,13 +1039,36 @@ async fn list_filtered_multi_status() -> Result<()> {
     let cp = seed_inv_counterparty(&pool, "INV-MS-CP").await?;
     seed_invoice(&pool, &cp, "INV-MS-DRAFT", dec!(100)).await?;
     let issued = seed_invoice(&pool, &cp, "INV-MS-ISSUED", dec!(100)).await?;
-    db::invoices::change_status(&pool, issued.id, models::InvoiceStatus::Issued)
-        .await?
-        .expect("issued");
+    db::invoices::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        issued.id,
+        models::InvoiceStatus::Issued,
+    )
+    .await?
+    .expect("issued");
     let paid_inv = seed_invoice(&pool, &cp, "INV-MS-PAID", dec!(100)).await?;
-    db::invoices::change_status(&pool, paid_inv.id, models::InvoiceStatus::Issued).await?;
-    db::invoices::change_status(&pool, paid_inv.id, models::InvoiceStatus::Signed).await?;
-    db::invoices::change_status(&pool, paid_inv.id, models::InvoiceStatus::Paid).await?;
+    db::invoices::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        paid_inv.id,
+        models::InvoiceStatus::Issued,
+    )
+    .await?;
+    db::invoices::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        paid_inv.id,
+        models::InvoiceStatus::Signed,
+    )
+    .await?;
+    db::invoices::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        paid_inv.id,
+        models::InvoiceStatus::Paid,
+    )
+    .await?;
 
     let filtered = db::invoices::list_filtered(
         &pool,
@@ -1017,19 +1119,49 @@ async fn list_filtered_overdue_only() -> Result<()> {
 
     // paid + past due → excluded (paid is not in overdue set)
     let paid = seed_invoice_with_due(&pool, &cp, "INV-OVD-PAID", dec!(100), Some(past)).await?;
-    db::invoices::change_status(&pool, paid.id, models::InvoiceStatus::Issued).await?;
-    db::invoices::change_status(&pool, paid.id, models::InvoiceStatus::Signed).await?;
-    db::invoices::change_status(&pool, paid.id, models::InvoiceStatus::Paid).await?;
+    db::invoices::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        paid.id,
+        models::InvoiceStatus::Issued,
+    )
+    .await?;
+    db::invoices::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        paid.id,
+        models::InvoiceStatus::Signed,
+    )
+    .await?;
+    db::invoices::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        paid.id,
+        models::InvoiceStatus::Paid,
+    )
+    .await?;
 
     // issued + past due → MATCH
     let overdue =
         seed_invoice_with_due(&pool, &cp, "INV-OVD-ISSUED", dec!(100), Some(past)).await?;
-    db::invoices::change_status(&pool, overdue.id, models::InvoiceStatus::Issued).await?;
+    db::invoices::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        overdue.id,
+        models::InvoiceStatus::Issued,
+    )
+    .await?;
 
     // issued + future due → excluded
     let future_due =
         seed_invoice_with_due(&pool, &cp, "INV-OVD-FUTURE", dec!(100), Some(future)).await?;
-    db::invoices::change_status(&pool, future_due.id, models::InvoiceStatus::Issued).await?;
+    db::invoices::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        future_due.id,
+        models::InvoiceStatus::Issued,
+    )
+    .await?;
 
     // draft + past due → excluded (draft not in overdue set)
     seed_invoice_with_due(&pool, &cp, "INV-OVD-DRAFT", dec!(100), Some(past)).await?;

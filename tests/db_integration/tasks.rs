@@ -43,12 +43,17 @@ async fn tasks_create_update_and_delete_in_db() -> Result<()> {
     let due = db::tasks::due_reminders(&pool).await?;
     assert!(due.iter().any(|t| t.id == created.id));
 
-    let done = db::tasks::set_status(&pool, created.id, models::TaskStatus::Done)
-        .await?
-        .expect("status updated");
+    let done = db::tasks::set_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        created.id,
+        models::TaskStatus::Done,
+    )
+    .await?
+    .expect("status updated");
     assert_eq!(done.status, models::TaskStatus::Done);
 
-    let deleted = db::tasks::delete(&pool, created.id).await?;
+    let deleted = db::tasks::delete_scoped(&pool, DEFAULT_COMPANY_ID, created.id).await?;
     assert!(deleted);
 
     sqlx::query("DELETE FROM counterparties WHERE id = $1")
@@ -98,8 +103,9 @@ async fn tasks_update_and_get_by_id_in_db() -> Result<()> {
     )
     .await?;
 
-    let updated = db::tasks::update(
+    let updated = db::tasks::update_scoped(
         &pool,
+        DEFAULT_COMPANY_ID,
         created.id,
         &models::NewTask {
             title: format!("Оновлена задача {suffix}"),
@@ -118,14 +124,15 @@ async fn tasks_update_and_get_by_id_in_db() -> Result<()> {
     assert_eq!(updated.description.as_deref(), Some("Оновлений опис"));
     assert_eq!(updated.priority, models::TaskPriority::Critical);
 
-    let fetched = db::tasks::get_by_id(&pool, created.id)
+    let fetched = db::tasks::get_by_id_scoped(&pool, DEFAULT_COMPANY_ID, created.id)
         .await?
         .expect("task exists");
     assert_eq!(fetched.title, updated.title);
     assert_eq!(fetched.priority, updated.priority);
 
-    let missing = db::tasks::update(
+    let missing = db::tasks::update_scoped(
         &pool,
+        DEFAULT_COMPANY_ID,
         Uuid::new_v4(),
         &models::NewTask {
             title: "Missing".to_string(),
@@ -146,6 +153,80 @@ async fn tasks_update_and_get_by_id_in_db() -> Result<()> {
         .await?;
     sqlx::query("DELETE FROM counterparties WHERE id = $1")
         .bind(cp.id)
+        .execute(&pool)
+        .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn tasks_scoped_mutations_reject_foreign_company() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let suffix = unique_suffix();
+    let foreign_company_id: Uuid =
+        sqlx::query_scalar("INSERT INTO companies (name) VALUES ($1) RETURNING id")
+            .bind(format!("IT Foreign Task Company {suffix}"))
+            .fetch_one(&pool)
+            .await?;
+
+    let created = db::tasks::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewTask {
+            title: format!("IT Scoped Task {suffix}"),
+            description: None,
+            priority: models::TaskPriority::Normal,
+            due_date: None,
+            reminder_at: None,
+            counterparty_id: None,
+            act_id: None,
+        },
+    )
+    .await?;
+
+    assert!(
+        db::tasks::get_by_id_scoped(&pool, foreign_company_id, created.id)
+            .await?
+            .is_none()
+    );
+    assert!(db::tasks::update_scoped(
+        &pool,
+        foreign_company_id,
+        created.id,
+        &models::NewTask {
+            title: "Foreign update".to_string(),
+            description: None,
+            priority: models::TaskPriority::Critical,
+            due_date: None,
+            reminder_at: None,
+            counterparty_id: None,
+            act_id: None,
+        },
+    )
+    .await?
+    .is_none());
+    assert!(db::tasks::set_status_scoped(
+        &pool,
+        foreign_company_id,
+        created.id,
+        models::TaskStatus::Done,
+    )
+    .await?
+    .is_none());
+    assert!(!db::tasks::delete_scoped(&pool, foreign_company_id, created.id).await?);
+
+    let own = db::tasks::get_by_id_scoped(&pool, DEFAULT_COMPANY_ID, created.id)
+        .await?
+        .expect("own company still sees task");
+    assert_eq!(own.title, created.title);
+    assert_eq!(own.status, models::TaskStatus::Open);
+
+    assert!(db::tasks::delete_scoped(&pool, DEFAULT_COMPANY_ID, created.id).await?);
+    sqlx::query("DELETE FROM companies WHERE id = $1")
+        .bind(foreign_company_id)
         .execute(&pool)
         .await?;
 
@@ -230,7 +311,7 @@ async fn tasks_list_by_act_returns_only_related_tasks() -> Result<()> {
     )
     .await?;
 
-    let tasks = db::tasks::list_by_act(&pool, act.id).await?;
+    let tasks = db::tasks::list_by_act_scoped(&pool, DEFAULT_COMPANY_ID, act.id).await?;
     assert!(tasks.iter().any(|t| t.id == related.id));
     assert!(!tasks.iter().any(|t| t.id == unrelated.id));
 
@@ -322,7 +403,7 @@ async fn tasks_due_reminders_and_list_open_filter_correctly() -> Result<()> {
         },
     )
     .await?;
-    db::tasks::set_status(&pool, done.id, models::TaskStatus::Done)
+    db::tasks::set_status_scoped(&pool, DEFAULT_COMPANY_ID, done.id, models::TaskStatus::Done)
         .await?
         .expect("done task updated");
 
@@ -351,7 +432,8 @@ async fn tasks_due_reminders_and_list_open_filter_correctly() -> Result<()> {
     assert_eq!(all_filtered.len(), 1);
     assert_eq!(all_filtered[0].id, later.id);
 
-    let description_filtered = db::tasks::list_open(&pool, DEFAULT_COMPANY_ID, "ключове-слово").await?;
+    let description_filtered =
+        db::tasks::list_open(&pool, DEFAULT_COMPANY_ID, "ключове-слово").await?;
     assert_eq!(description_filtered.len(), 1);
     assert_eq!(description_filtered[0].id, urgent.id);
 

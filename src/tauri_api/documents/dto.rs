@@ -64,7 +64,7 @@ pub struct DocumentItemDto {
     pub status: DocumentStatusDto,
     pub status_label: String,
     pub linked_id: String,
-    pub direction: String,  // "outgoing" | "incoming"
+    pub direction: String, // "outgoing" | "incoming"
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -78,7 +78,7 @@ pub struct DocumentDraftFormDto {
     pub number: String,
     pub date: String,
     pub notes: String,
-    pub direction: String,  // "outgoing" | "incoming"
+    pub direction: String, // "outgoing" | "incoming"
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -173,7 +173,7 @@ pub struct DocumentsListRequest {
 pub struct CreateDocumentDraftRequest {
     pub counterparty_id: Option<String>,
     pub kind: String,
-    pub direction: String,  // "outgoing" | "incoming"
+    pub direction: String, // "outgoing" | "incoming"
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

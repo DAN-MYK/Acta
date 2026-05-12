@@ -147,10 +147,14 @@ async fn bas_invoice_import_resolves_dependencies_and_creates_items() -> Result<
         .unwrap_or_default()
         .contains("contract: contract number"));
 
-    let stored = db::invoices::find_by_bas_id(&pool, &format!("import-invoice-{suffix}"))
-        .await?
-        .expect("invoice imported");
-    let loaded = db::invoices::get_by_id(&pool, stored.id)
+    let stored = db::invoices::find_by_bas_id_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &format!("import-invoice-{suffix}"),
+    )
+    .await?
+    .expect("invoice imported");
+    let loaded = db::invoices::get_by_id_scoped(&pool, DEFAULT_COMPANY_ID, stored.id)
         .await?
         .expect("invoice with items exists");
     assert_eq!(loaded.0.counterparty_id, cp.id);
@@ -245,7 +249,7 @@ async fn bas_invoice_import_marks_conflict_for_tolerant_header_match() -> Result
         .unwrap_or_default()
         .contains("tolerant"));
 
-    let loaded = db::invoices::get_by_id(&pool, existing.id)
+    let loaded = db::invoices::get_by_id_scoped(&pool, DEFAULT_COMPANY_ID, existing.id)
         .await?
         .expect("invoice still exists");
     assert_eq!(loaded.0.status, models::invoice::InvoiceStatus::Draft);

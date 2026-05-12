@@ -179,7 +179,7 @@ pub async fn apply_imported_acts(
 
     for row in rows {
         let Some(counterparty) =
-            resolve_counterparty_id(pool, row.counterparty_bas_id.as_deref()).await?
+            resolve_counterparty_id(pool, company_id, row.counterparty_bas_id.as_deref()).await?
         else {
             report.skipped += 1;
             report.rows.push(ActImportPlanRow {
@@ -240,7 +240,7 @@ pub async fn apply_imported_acts(
 
         let (existing, match_source): (_, Option<&'static str>) = match row.bas_id.as_deref() {
             Some(bas_id) => (
-                db::acts::find_by_bas_id(pool, bas_id).await?,
+                db::acts::find_by_bas_id_scoped(pool, company_id, bas_id).await?,
                 Some("bas_id"),
             ),
             None => (
@@ -266,9 +266,11 @@ pub async fn apply_imported_acts(
 
         match existing {
             Some(act) => {
-                let loaded = db::acts::get_by_id(pool, act.id).await?.ok_or_else(|| {
-                    anyhow!("Акт знайдено для preview, але не вдалося перечитати його позиції")
-                })?;
+                let loaded = db::acts::get_by_id_scoped(pool, company_id, act.id)
+                    .await?
+                    .ok_or_else(|| {
+                        anyhow!("Акт знайдено для preview, але не вдалося перечитати його позиції")
+                    })?;
                 if let Some(conflict_note) = detect_act_conflict(
                     &loaded.0,
                     &loaded.1,
@@ -296,7 +298,12 @@ pub async fn apply_imported_acts(
                 });
                 if !dry_run {
                     let (header, items) = split_new_act_for_update(payload);
-                    let _ = db::acts::update_with_items(pool, act.id, header, items).await?;
+                    let _ =
+                        db::acts::update_with_items_scoped(pool, company_id, act.id, header, items)
+                            .await?
+                            .ok_or_else(|| {
+                                anyhow::anyhow!("Акт BAS не знайдено в межах компанії")
+                            })?;
                 }
             }
             None => {
@@ -319,6 +326,7 @@ pub async fn apply_imported_acts(
 
 async fn resolve_counterparty_id(
     pool: &PgPool,
+    company_id: Uuid,
     counterparty_bas_id: Option<&str>,
 ) -> Result<Option<Resolution<Uuid>>> {
     let Some(counterparty_bas_id) = counterparty_bas_id else {
@@ -326,7 +334,7 @@ async fn resolve_counterparty_id(
     };
 
     Ok(
-        db::counterparties::find_by_bas_id(pool, counterparty_bas_id)
+        db::counterparties::find_by_bas_id_scoped(pool, company_id, counterparty_bas_id)
             .await?
             .map(|cp| Resolution {
                 value: cp.id,
@@ -344,13 +352,14 @@ async fn resolve_contract_id(
         return Ok(None);
     };
 
-    Ok(db::contracts::find_by_bas_id(pool, contract_bas_id)
-        .await?
-        .filter(|contract| contract.company_id == company_id)
-        .map(|contract| Resolution {
-            value: contract.id,
-            source: "contract bas_id",
-        }))
+    Ok(
+        db::contracts::find_by_bas_id_scoped(pool, company_id, contract_bas_id)
+            .await?
+            .map(|contract| Resolution {
+                value: contract.id,
+                source: "contract bas_id",
+            }),
+    )
 }
 
 fn to_new_act(row: &ImportedAct, counterparty_id: Uuid, contract_id: Option<Uuid>) -> NewAct {

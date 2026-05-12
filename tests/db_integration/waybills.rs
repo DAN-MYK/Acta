@@ -82,7 +82,12 @@ async fn list_filtered_amount_range() -> Result<()> {
     )
     .await?;
 
-    assert_eq!(mid.len(), 1, "Expected only WBL-AMT-5000, got: {:?}", mid.iter().map(|r| &r.number).collect::<Vec<_>>());
+    assert_eq!(
+        mid.len(),
+        1,
+        "Expected only WBL-AMT-5000, got: {:?}",
+        mid.iter().map(|r| &r.number).collect::<Vec<_>>()
+    );
     assert_eq!(mid[0].number, "WBL-AMT-5000");
 
     sqlx::query("DELETE FROM waybills WHERE counterparty_id = $1")
@@ -111,14 +116,44 @@ async fn list_filtered_multi_status() -> Result<()> {
 
     // delivered — переходить Draft → Issued → Signed → Delivered
     let wbl_issued = seed_waybill(&pool, &cp, "WBL-MS-DELIVERED", dec!(100)).await?;
-    db::waybills::change_status(&pool, wbl_issued.id, models::WaybillStatus::Issued).await?;
-    db::waybills::change_status(&pool, wbl_issued.id, models::WaybillStatus::Signed).await?;
-    db::waybills::change_status(&pool, wbl_issued.id, models::WaybillStatus::Delivered).await?;
+    db::waybills::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        wbl_issued.id,
+        models::WaybillStatus::Issued,
+    )
+    .await?;
+    db::waybills::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        wbl_issued.id,
+        models::WaybillStatus::Signed,
+    )
+    .await?;
+    db::waybills::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        wbl_issued.id,
+        models::WaybillStatus::Delivered,
+    )
+    .await?;
 
     // signed — не має бути у результаті (не входить у фільтр)
     let wbl_signed = seed_waybill(&pool, &cp, "WBL-MS-SIGNED", dec!(100)).await?;
-    db::waybills::change_status(&pool, wbl_signed.id, models::WaybillStatus::Issued).await?;
-    db::waybills::change_status(&pool, wbl_signed.id, models::WaybillStatus::Signed).await?;
+    db::waybills::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        wbl_signed.id,
+        models::WaybillStatus::Issued,
+    )
+    .await?;
+    db::waybills::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        wbl_signed.id,
+        models::WaybillStatus::Signed,
+    )
+    .await?;
 
     let filtered = db::waybills::list_filtered(
         &pool,

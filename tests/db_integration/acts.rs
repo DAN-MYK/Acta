@@ -1,6 +1,89 @@
 use super::super::*;
 
 #[tokio::test]
+async fn acts_scoped_mutations_reject_foreign_company() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let suffix = unique_suffix();
+    let foreign_company_id: Uuid =
+        sqlx::query_scalar("INSERT INTO companies (name) VALUES ($1) RETURNING id")
+            .bind(format!("IT Foreign Act Company {suffix}"))
+            .fetch_one(&pool)
+            .await?;
+    let cp = db::counterparties::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewCounterparty {
+            name: format!("IT Scoped Act Counterparty {suffix}"),
+            edrpou: Some(suffix[..8].to_string()),
+            ipn: None,
+            iban: None,
+            address: None,
+            phone: None,
+            email: None,
+            notes: None,
+            bas_id: Some(format!("it-scoped-act-cp-{suffix}")),
+        },
+    )
+    .await?;
+
+    let act = db::acts::create(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        &models::NewAct {
+            number: format!("IT-SCOPED-ACT-{suffix}"),
+            counterparty_id: cp.id,
+            contract_id: None,
+            category_id: None,
+            direction: models::DocumentDirection::Outgoing,
+            date: Utc::now().date_naive(),
+            expected_payment_date: None,
+            status: models::ActStatus::Draft,
+            notes: None,
+            bas_id: Some(format!("it-scoped-act-{suffix}")),
+            items: vec![models::NewActItem {
+                description: "Service".to_string(),
+                quantity: dec!(1.0000),
+                unit: "pcs".to_string(),
+                unit_price: dec!(100.00),
+            }],
+        },
+    )
+    .await?;
+
+    assert!(
+        db::acts::get_by_id_scoped(&pool, foreign_company_id, act.id)
+            .await?
+            .is_none()
+    );
+    assert!(
+        db::acts::advance_status_scoped(&pool, foreign_company_id, act.id)
+            .await?
+            .is_none()
+    );
+    assert!(!db::acts::delete_scoped(&pool, foreign_company_id, act.id).await?);
+
+    let own = db::acts::get_by_id_scoped(&pool, DEFAULT_COMPANY_ID, act.id)
+        .await?
+        .expect("own company still sees act");
+    assert_eq!(own.0.status, models::ActStatus::Draft);
+
+    assert!(db::acts::delete_scoped(&pool, DEFAULT_COMPANY_ID, act.id).await?);
+    sqlx::query("DELETE FROM counterparties WHERE id = $1")
+        .bind(cp.id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM companies WHERE id = $1")
+        .bind(foreign_company_id)
+        .execute(&pool)
+        .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn acts_create_and_status_flow_in_db() -> Result<()> {
     let Some(pool) = test_pool().await? else {
         return Ok(());
@@ -58,21 +141,28 @@ async fn acts_create_and_status_flow_in_db() -> Result<()> {
 
     assert_eq!(act.total_amount, dec!(2500.00));
 
-    let loaded = db::acts::get_by_id(&pool, act.id)
+    let loaded = db::acts::get_by_id_scoped(&pool, DEFAULT_COMPANY_ID, act.id)
         .await?
         .expect("act exists");
     assert_eq!(loaded.0.number, act.number);
     assert_eq!(loaded.1.len(), 2);
 
-    let issued = db::acts::change_status(&pool, act.id, models::ActStatus::Issued)
-        .await?
-        .expect("status changed");
+    let issued = db::acts::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        act.id,
+        models::ActStatus::Issued,
+    )
+    .await?
+    .expect("status changed");
     assert_eq!(issued.status, models::ActStatus::Issued);
 
-    let invalid = db::acts::change_status(&pool, act.id, models::ActStatus::Draft).await;
+    let invalid =
+        db::acts::change_status_scoped(&pool, DEFAULT_COMPANY_ID, act.id, models::ActStatus::Draft)
+            .await;
     assert!(invalid.is_err());
 
-    let signed = db::acts::advance_status(&pool, act.id)
+    let signed = db::acts::advance_status_scoped(&pool, DEFAULT_COMPANY_ID, act.id)
         .await?
         .expect("advanced");
     assert_eq!(signed.status, models::ActStatus::Signed);
@@ -137,7 +227,9 @@ async fn acts_change_status_rejects_skipping_forward_transition() -> Result<()> 
     )
     .await?;
 
-    let result = db::acts::change_status(&pool, act.id, models::ActStatus::Paid).await;
+    let result =
+        db::acts::change_status_scoped(&pool, DEFAULT_COMPANY_ID, act.id, models::ActStatus::Paid)
+            .await;
     assert!(result.is_err());
 
     sqlx::query("DELETE FROM acts WHERE id = $1")
@@ -200,7 +292,9 @@ async fn acts_change_status_rejects_same_status_transition() -> Result<()> {
     )
     .await?;
 
-    let result = db::acts::change_status(&pool, act.id, models::ActStatus::Draft).await;
+    let result =
+        db::acts::change_status_scoped(&pool, DEFAULT_COMPANY_ID, act.id, models::ActStatus::Draft)
+            .await;
     assert!(result.is_err());
 
     sqlx::query("DELETE FROM acts WHERE id = $1")
@@ -263,11 +357,20 @@ async fn acts_change_status_rejects_transition_from_paid() -> Result<()> {
     )
     .await?;
 
-    db::acts::change_status(&pool, act.id, models::ActStatus::Issued).await?;
-    db::acts::change_status(&pool, act.id, models::ActStatus::Signed).await?;
-    db::acts::change_status(&pool, act.id, models::ActStatus::Paid).await?;
+    db::acts::change_status_scoped(&pool, DEFAULT_COMPANY_ID, act.id, models::ActStatus::Issued)
+        .await?;
+    db::acts::change_status_scoped(&pool, DEFAULT_COMPANY_ID, act.id, models::ActStatus::Signed)
+        .await?;
+    db::acts::change_status_scoped(&pool, DEFAULT_COMPANY_ID, act.id, models::ActStatus::Paid)
+        .await?;
 
-    let result = db::acts::change_status(&pool, act.id, models::ActStatus::Issued).await;
+    let result = db::acts::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        act.id,
+        models::ActStatus::Issued,
+    )
+    .await;
     assert!(result.is_err());
 
     sqlx::query("DELETE FROM acts WHERE id = $1")
@@ -330,11 +433,14 @@ async fn acts_advance_status_on_paid_returns_error() -> Result<()> {
     )
     .await?;
 
-    db::acts::change_status(&pool, act.id, models::ActStatus::Issued).await?;
-    db::acts::change_status(&pool, act.id, models::ActStatus::Signed).await?;
-    db::acts::change_status(&pool, act.id, models::ActStatus::Paid).await?;
+    db::acts::change_status_scoped(&pool, DEFAULT_COMPANY_ID, act.id, models::ActStatus::Issued)
+        .await?;
+    db::acts::change_status_scoped(&pool, DEFAULT_COMPANY_ID, act.id, models::ActStatus::Signed)
+        .await?;
+    db::acts::change_status_scoped(&pool, DEFAULT_COMPANY_ID, act.id, models::ActStatus::Paid)
+        .await?;
 
-    let result = db::acts::advance_status(&pool, act.id).await;
+    let result = db::acts::advance_status_scoped(&pool, DEFAULT_COMPANY_ID, act.id).await;
     assert!(result.is_err());
 
     sqlx::query("DELETE FROM acts WHERE id = $1")
@@ -357,11 +463,17 @@ async fn acts_status_functions_return_none_for_missing_id() -> Result<()> {
 
     let missing_id = Uuid::new_v4();
 
-    let change_result =
-        db::acts::change_status(&pool, missing_id, models::ActStatus::Issued).await?;
+    let change_result = db::acts::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        missing_id,
+        models::ActStatus::Issued,
+    )
+    .await?;
     assert!(matches!(change_result, None));
 
-    let advance_result = db::acts::advance_status(&pool, missing_id).await?;
+    let advance_result =
+        db::acts::advance_status_scoped(&pool, DEFAULT_COMPANY_ID, missing_id).await?;
     assert!(matches!(advance_result, None));
 
     Ok(())
@@ -537,9 +649,27 @@ async fn acts_get_kpi_aggregates_this_month_and_overdue() -> Result<()> {
         },
     )
     .await?;
-    db::acts::change_status(&pool, act_paid.id, models::ActStatus::Issued).await?;
-    db::acts::change_status(&pool, act_paid.id, models::ActStatus::Signed).await?;
-    db::acts::change_status(&pool, act_paid.id, models::ActStatus::Paid).await?;
+    db::acts::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        act_paid.id,
+        models::ActStatus::Issued,
+    )
+    .await?;
+    db::acts::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        act_paid.id,
+        models::ActStatus::Signed,
+    )
+    .await?;
+    db::acts::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        act_paid.id,
+        models::ActStatus::Paid,
+    )
+    .await?;
 
     // Акт 3: today, статус Issued → acts_this_month += 1, unpaid_total += 3000
     let act_issued_new = db::acts::create(
@@ -560,7 +690,13 @@ async fn acts_get_kpi_aggregates_this_month_and_overdue() -> Result<()> {
         },
     )
     .await?;
-    db::acts::change_status(&pool, act_issued_new.id, models::ActStatus::Issued).await?;
+    db::acts::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        act_issued_new.id,
+        models::ActStatus::Issued,
+    )
+    .await?;
 
     // Акт 4: дата 45 днів тому, статус Issued
     // → unpaid_total += 4000, overdue_count += 1 (issued + date < today-30d)
@@ -583,7 +719,13 @@ async fn acts_get_kpi_aggregates_this_month_and_overdue() -> Result<()> {
         },
     )
     .await?;
-    db::acts::change_status(&pool, act_overdue.id, models::ActStatus::Issued).await?;
+    db::acts::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        act_overdue.id,
+        models::ActStatus::Issued,
+    )
+    .await?;
 
     let kpi = db::acts::get_kpi(&pool, company_id).await?;
 
@@ -675,14 +817,15 @@ async fn acts_update_with_items_replaces_positions_and_recalculates_total() -> R
     .await?;
     assert_eq!(original.total_amount, dec!(800.00));
 
-    let (_, items_before) = db::acts::get_by_id(&pool, original.id)
+    let (_, items_before) = db::acts::get_by_id_scoped(&pool, DEFAULT_COMPANY_ID, original.id)
         .await?
         .expect("act exists");
     assert_eq!(items_before.len(), 2);
 
     // Оновлюємо: 1 нова позиція qty=3, price=400 → total = 1200
-    let updated = db::acts::update_with_items(
+    let updated = db::acts::update_with_items_scoped(
         &pool,
+        DEFAULT_COMPANY_ID,
         original.id,
         models::UpdateAct {
             number: format!("UWI-UPDATED-{suffix}"),
@@ -701,7 +844,8 @@ async fn acts_update_with_items_replaces_positions_and_recalculates_total() -> R
             unit_price: dec!(400.00),
         }],
     )
-    .await?;
+    .await?
+    .expect("акт має оновитися");
 
     // Перевіряємо заголовок
     assert_eq!(updated.number, format!("UWI-UPDATED-{suffix}"));
@@ -709,7 +853,7 @@ async fn acts_update_with_items_replaces_positions_and_recalculates_total() -> R
     assert_eq!(updated.notes.as_deref(), Some("оновлено"));
 
     // Перевіряємо позиції: старі замінились на нову
-    let (_, items_after) = db::acts::get_by_id(&pool, original.id)
+    let (_, items_after) = db::acts::get_by_id_scoped(&pool, DEFAULT_COMPANY_ID, original.id)
         .await?
         .expect("act exists after update");
     assert_eq!(items_after.len(), 1);
@@ -717,8 +861,9 @@ async fn acts_update_with_items_replaces_positions_and_recalculates_total() -> R
     assert_eq!(items_after[0].amount, dec!(1200.00));
 
     // Оновлення неіснуючого акту — anyhow помилка з текстом "не знайдено"
-    let missing_err = db::acts::update_with_items(
+    let missing_err = db::acts::update_with_items_scoped(
         &pool,
+        DEFAULT_COMPANY_ID,
         Uuid::new_v4(),
         models::UpdateAct {
             number: "MISSING".to_string(),
@@ -753,10 +898,7 @@ async fn acts_update_with_items_replaces_positions_and_recalculates_total() -> R
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-async fn seed_counterparty(
-    pool: &sqlx::PgPool,
-    prefix: &str,
-) -> Result<models::Counterparty> {
+async fn seed_counterparty(pool: &sqlx::PgPool, prefix: &str) -> Result<models::Counterparty> {
     let suffix = unique_suffix();
     db::counterparties::create(
         pool,
@@ -893,13 +1035,36 @@ async fn list_filtered_multi_status() -> Result<()> {
     let cp = seed_counterparty(&pool, "MS-CP").await?;
     seed_act(&pool, &cp, "MS-DRAFT", dec!(100)).await?;
     let issued = seed_act(&pool, &cp, "MS-ISSUED", dec!(100)).await?;
-    db::acts::change_status(&pool, issued.id, models::ActStatus::Issued)
-        .await?
-        .expect("issued");
+    db::acts::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        issued.id,
+        models::ActStatus::Issued,
+    )
+    .await?
+    .expect("issued");
     let paid_act = seed_act(&pool, &cp, "MS-PAID", dec!(100)).await?;
-    db::acts::change_status(&pool, paid_act.id, models::ActStatus::Issued).await?;
-    db::acts::change_status(&pool, paid_act.id, models::ActStatus::Signed).await?;
-    db::acts::change_status(&pool, paid_act.id, models::ActStatus::Paid).await?;
+    db::acts::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        paid_act.id,
+        models::ActStatus::Issued,
+    )
+    .await?;
+    db::acts::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        paid_act.id,
+        models::ActStatus::Signed,
+    )
+    .await?;
+    db::acts::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        paid_act.id,
+        models::ActStatus::Paid,
+    )
+    .await?;
 
     let filtered = db::acts::list_filtered(
         &pool,
@@ -949,15 +1114,40 @@ async fn list_filtered_overdue_only() -> Result<()> {
     let cp = seed_counterparty(&pool, "OVD-CP").await?;
 
     let paid = seed_act_with_due(&pool, &cp, "OVD-PAID", dec!(100), Some(past)).await?;
-    db::acts::change_status(&pool, paid.id, models::ActStatus::Issued).await?;
-    db::acts::change_status(&pool, paid.id, models::ActStatus::Signed).await?;
-    db::acts::change_status(&pool, paid.id, models::ActStatus::Paid).await?;
+    db::acts::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        paid.id,
+        models::ActStatus::Issued,
+    )
+    .await?;
+    db::acts::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        paid.id,
+        models::ActStatus::Signed,
+    )
+    .await?;
+    db::acts::change_status_scoped(&pool, DEFAULT_COMPANY_ID, paid.id, models::ActStatus::Paid)
+        .await?;
 
     let overdue = seed_act_with_due(&pool, &cp, "OVD-ISSUED", dec!(100), Some(past)).await?;
-    db::acts::change_status(&pool, overdue.id, models::ActStatus::Issued).await?;
+    db::acts::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        overdue.id,
+        models::ActStatus::Issued,
+    )
+    .await?;
 
     let future_due = seed_act_with_due(&pool, &cp, "OVD-FUTURE", dec!(100), Some(future)).await?;
-    db::acts::change_status(&pool, future_due.id, models::ActStatus::Issued).await?;
+    db::acts::change_status_scoped(
+        &pool,
+        DEFAULT_COMPANY_ID,
+        future_due.id,
+        models::ActStatus::Issued,
+    )
+    .await?;
 
     seed_act_with_due(&pool, &cp, "OVD-DRAFT", dec!(100), Some(past)).await?;
 

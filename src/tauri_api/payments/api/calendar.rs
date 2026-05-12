@@ -14,9 +14,8 @@ use crate::db;
 
 pub(super) fn parse_calendar_month(value: &str) -> Result<NaiveDate> {
     let month_value = format!("{}-01", value.trim());
-    NaiveDate::parse_from_str(&month_value, "%Y-%m-%d").map_err(|_| {
-        anyhow!("Невірний місяць. Використовуйте формат yyyy-mm")
-    })
+    NaiveDate::parse_from_str(&month_value, "%Y-%m-%d")
+        .map_err(|_| anyhow!("Невірний місяць. Використовуйте формат yyyy-mm"))
 }
 
 pub(super) fn parse_calendar_date(value: &str, field: &str) -> Result<NaiveDate> {
@@ -96,17 +95,15 @@ fn calendar_event_sort_key(event: &PaymentCalendarEventDto) -> (u8, String, Stri
 }
 
 fn calendar_grid_bounds(anchor: NaiveDate) -> Result<(NaiveDate, NaiveDate)> {
-    let month_start = anchor.with_day(1).ok_or_else(|| {
-        anyhow!("Не вдалося визначити початок місяця")
-    })?;
+    let month_start = anchor
+        .with_day(1)
+        .ok_or_else(|| anyhow!("Не вдалося визначити початок місяця"))?;
     let next_month = if month_start.month() == 12 {
         NaiveDate::from_ymd_opt(month_start.year() + 1, 1, 1)
     } else {
         NaiveDate::from_ymd_opt(month_start.year(), month_start.month() + 1, 1)
     }
-    .ok_or_else(|| {
-        anyhow!("Не вдалося визначити наступний місяць")
-    })?;
+    .ok_or_else(|| anyhow!("Не вдалося визначити наступний місяць"))?;
     let month_end = next_month - Duration::days(1);
     let grid_start =
         month_start - Duration::days(month_start.weekday().num_days_from_monday() as i64);
@@ -122,9 +119,9 @@ pub(super) fn build_calendar_month(
 ) -> Result<PaymentCalendarMonthDto> {
     let (grid_start, grid_end) = calendar_grid_bounds(anchor)?;
     let today = Local::now().date_naive();
-    let month_start = anchor.with_day(1).ok_or_else(|| {
-        anyhow!("Не вдалося визначити початок місяця")
-    })?;
+    let month_start = anchor
+        .with_day(1)
+        .ok_or_else(|| anyhow!("Не вдалося визначити початок місяця"))?;
 
     let mut events_by_date: BTreeMap<String, Vec<PaymentCalendarEventDto>> = BTreeMap::new();
     for event in events {
@@ -190,9 +187,9 @@ pub async fn payments_calendar_load(
     request: PaymentCalendarMonthRequest,
 ) -> Result<PaymentCalendarMonthDto> {
     let anchor = parse_calendar_month(&request.month)?;
-    let month_start = anchor.with_day(1).ok_or_else(|| {
-        anyhow!("Не вдалося визначити початок місяця")
-    })?;
+    let month_start = anchor
+        .with_day(1)
+        .ok_or_else(|| anyhow!("Не вдалося визначити початок місяця"))?;
     let (grid_start, grid_end) = calendar_grid_bounds(anchor)?;
     let today = Local::now().date_naive();
     let selected = match request.selected_date.as_deref() {
@@ -321,7 +318,6 @@ pub async fn payment_schedule_complete(
 
     Ok(MutationResultDto {
         ok: true,
-        message: "Запланований платіж позначено як виконаний"
-            .to_string(),
+        message: "Запланований платіж позначено як виконаний".to_string(),
     })
 }

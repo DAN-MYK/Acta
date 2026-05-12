@@ -21,14 +21,15 @@ use crate::pdf::reader::inspect_pdf;
 pub(super) async fn load_existing_pdf_path(
     storage_dir: &Path,
     pool: &PgPool,
+    company_id: Uuid,
     doc_ref: DocumentRef,
 ) -> Result<Option<String>> {
     let stored_path = match doc_ref {
         DocumentRef::Act(_) => None,
-        DocumentRef::Invoice(id) => db::invoices::get_by_id(pool, id)
+        DocumentRef::Invoice(id) => db::invoices::get_by_id_scoped(pool, company_id, id)
             .await?
             .and_then(|(invoice, _)| invoice.pdf_path),
-        DocumentRef::Waybill(id) => db::waybills::get_by_id(pool, id)
+        DocumentRef::Waybill(id) => db::waybills::get_by_id_scoped(pool, company_id, id)
             .await?
             .and_then(|(waybill, _)| waybill.pdf_path),
     };
@@ -68,23 +69,24 @@ pub(super) async fn persist_existing_pdf_path(
 
 pub(super) async fn load_document_kind_and_number(
     pool: &PgPool,
+    company_id: Uuid,
     doc_ref: DocumentRef,
 ) -> Result<(String, String)> {
     match doc_ref {
         DocumentRef::Act(id) => {
-            let (act, _) = db::acts::get_by_id(pool, id)
+            let (act, _) = db::acts::get_by_id_scoped(pool, company_id, id)
                 .await?
                 .ok_or_else(|| anyhow!("Акт не знайдено"))?;
             Ok(("act".to_string(), act.number))
         }
         DocumentRef::Invoice(id) => {
-            let (invoice, _) = db::invoices::get_by_id(pool, id)
+            let (invoice, _) = db::invoices::get_by_id_scoped(pool, company_id, id)
                 .await?
                 .ok_or_else(|| anyhow!("Рахунок не знайдено"))?;
             Ok(("invoice".to_string(), invoice.number))
         }
         DocumentRef::Waybill(id) => {
-            let (waybill, _) = db::waybills::get_by_id(pool, id)
+            let (waybill, _) = db::waybills::get_by_id_scoped(pool, company_id, id)
                 .await?
                 .ok_or_else(|| anyhow!("Накладну не знайдено"))?;
             Ok(("waybill".to_string(), waybill.number))
@@ -171,7 +173,12 @@ fn normalize_stored_pdf_path(path: &Path) -> String {
 pub(super) fn managed_pdf_storage_path(storage_dir: &Path, path: &Path) -> Result<String> {
     let relative = if path.is_absolute() {
         path.strip_prefix(storage_dir)
-            .with_context(|| format!("Керований PDF path лежить поза storage_dir: {}", path.display()))?
+            .with_context(|| {
+                format!(
+                    "Керований PDF path лежить поза storage_dir: {}",
+                    path.display()
+                )
+            })?
             .to_path_buf()
     } else {
         path.to_path_buf()
@@ -196,19 +203,13 @@ pub(super) fn managed_pdf_storage_path(storage_dir: &Path, path: &Path) -> Resul
 /// від випадку коли користувач (або зловмисник) вказує існуючий керований PDF як
 /// джерело — інакше copy(source -> working.pdf) переписав би оригінал самим собою
 /// або вкрав би чужий PDF в managed dir.
-pub(super) fn ensure_attach_source_safe(
-    storage_dir: &Path,
-    source_path: &Path,
-) -> Result<PathBuf> {
+pub(super) fn ensure_attach_source_safe(storage_dir: &Path, source_path: &Path) -> Result<PathBuf> {
     let extension_ok = source_path
         .extension()
         .and_then(|ext| ext.to_str())
         .map(|ext| ext.eq_ignore_ascii_case("pdf"))
         .unwrap_or(false);
-    anyhow::ensure!(
-        extension_ok,
-        "Файл має бути PDF (розширення .pdf)"
-    );
+    anyhow::ensure!(extension_ok, "Файл має бути PDF (розширення .pdf)");
 
     let canonical_source = std::fs::canonicalize(source_path).with_context(|| {
         format!(
@@ -217,8 +218,7 @@ pub(super) fn ensure_attach_source_safe(
         )
     })?;
 
-    let canonical_managed_root = std::fs::canonicalize(storage_dir.join("existing_pdf"))
-        .ok();
+    let canonical_managed_root = std::fs::canonicalize(storage_dir.join("existing_pdf")).ok();
     if let Some(root) = canonical_managed_root {
         anyhow::ensure!(
             !canonical_source.starts_with(&root),
@@ -348,9 +348,9 @@ pub(super) async fn attach_existing_pdf_copy(
             )
         })?;
 
-        Ok(normalize_stored_pdf_path(&managed_existing_pdf_relative_path(
-            &kind, doc_id, &number,
-        )))
+        Ok(normalize_stored_pdf_path(
+            &managed_existing_pdf_relative_path(&kind, doc_id, &number),
+        ))
     })
     .await
     .context("PDF copy thread error")?
@@ -458,7 +458,7 @@ pub async fn generate_document_pdf(ctx: &AppCtx, doc_id: String) -> Result<Mutat
 
     let path = match doc_ref {
         DocumentRef::Act(id) => {
-            let (act, items) = db::acts::get_by_id(pool, id)
+            let (act, items) = db::acts::get_by_id_scoped(pool, company_id, id)
                 .await?
                 .ok_or_else(|| anyhow!("Акт не знайдено"))?;
 
@@ -480,7 +480,7 @@ pub async fn generate_document_pdf(ctx: &AppCtx, doc_id: String) -> Result<Mutat
             path
         }
         DocumentRef::Invoice(id) => {
-            let (invoice, items) = db::invoices::get_by_id(pool, id)
+            let (invoice, items) = db::invoices::get_by_id_scoped(pool, company_id, id)
                 .await?
                 .ok_or_else(|| anyhow!("Рахунок не знайдено"))?;
 

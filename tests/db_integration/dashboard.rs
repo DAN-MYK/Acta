@@ -124,7 +124,7 @@ async fn dashboard_kpi_summary_aggregates_acts_correctly() -> Result<()> {
         None,
     )
     .await?;
-    db::acts::change_status(&pool, issued_id, models::ActStatus::Issued).await?;
+    db::acts::change_status_scoped(&pool, company_id, issued_id, models::ActStatus::Issued).await?;
 
     // Оплачений — в revenue_this_month
     let paid_id = make_act(
@@ -137,7 +137,7 @@ async fn dashboard_kpi_summary_aggregates_acts_correctly() -> Result<()> {
         None,
     )
     .await?;
-    db::acts::change_status(&pool, paid_id, models::ActStatus::Issued).await?;
+    db::acts::change_status_scoped(&pool, company_id, paid_id, models::ActStatus::Issued).await?;
     sqlx::query("UPDATE acts SET status = 'paid' WHERE id = $1")
         .bind(paid_id)
         .execute(&pool)
@@ -180,7 +180,7 @@ async fn dashboard_revenue_by_month_fills_all_slots() -> Result<()> {
         None,
     )
     .await?;
-    db::acts::change_status(&pool, act_id, models::ActStatus::Issued).await?;
+    db::acts::change_status_scoped(&pool, company_id, act_id, models::ActStatus::Issued).await?;
     sqlx::query("UPDATE acts SET status = 'paid' WHERE id = $1")
         .bind(act_id)
         .execute(&pool)
@@ -250,12 +250,12 @@ async fn dashboard_acts_status_distribution_counts_by_status() -> Result<()> {
 
     let i1 = make_act(&pool, company_id, cp_id, &suffix, "I1", dec!(200.00), None).await?;
     let i2 = make_act(&pool, company_id, cp_id, &suffix, "I2", dec!(300.00), None).await?;
-    db::acts::change_status(&pool, i1, models::ActStatus::Issued).await?;
-    db::acts::change_status(&pool, i2, models::ActStatus::Issued).await?;
+    db::acts::change_status_scoped(&pool, company_id, i1, models::ActStatus::Issued).await?;
+    db::acts::change_status_scoped(&pool, company_id, i2, models::ActStatus::Issued).await?;
 
     let s1 = make_act(&pool, company_id, cp_id, &suffix, "S1", dec!(400.00), None).await?;
-    db::acts::change_status(&pool, s1, models::ActStatus::Issued).await?;
-    db::acts::advance_status(&pool, s1).await?;
+    db::acts::change_status_scoped(&pool, company_id, s1, models::ActStatus::Issued).await?;
+    db::acts::advance_status_scoped(&pool, company_id, s1).await?;
 
     let slices = db::dashboard::acts_status_distribution(&pool, company_id).await?;
 
@@ -301,7 +301,8 @@ async fn dashboard_upcoming_payments_overdue_appears_first() -> Result<()> {
         Some(yesterday),
     )
     .await?;
-    db::acts::change_status(&pool, overdue_id, models::ActStatus::Issued).await?;
+    db::acts::change_status_scoped(&pool, company_id, overdue_id, models::ActStatus::Issued)
+        .await?;
 
     // Майбутній — +30 днів, статус signed
     let future_id = make_act(
@@ -314,8 +315,8 @@ async fn dashboard_upcoming_payments_overdue_appears_first() -> Result<()> {
         Some(next_month),
     )
     .await?;
-    db::acts::change_status(&pool, future_id, models::ActStatus::Issued).await?;
-    db::acts::advance_status(&pool, future_id).await?;
+    db::acts::change_status_scoped(&pool, company_id, future_id, models::ActStatus::Issued).await?;
+    db::acts::advance_status_scoped(&pool, company_id, future_id).await?;
 
     let upcoming = db::dashboard::upcoming_payments(&pool, company_id, 10).await?;
 
@@ -406,7 +407,7 @@ async fn dashboard_company_isolation_applies_to_kpi_and_revenue() -> Result<()> 
         None,
     )
     .await?;
-    db::acts::change_status(&pool, act_a, models::ActStatus::Issued).await?;
+    db::acts::change_status_scoped(&pool, company_a, act_a, models::ActStatus::Issued).await?;
     sqlx::query("UPDATE acts SET status = 'paid' WHERE id = $1")
         .bind(act_a)
         .execute(&pool)
@@ -422,7 +423,7 @@ async fn dashboard_company_isolation_applies_to_kpi_and_revenue() -> Result<()> 
         None,
     )
     .await?;
-    db::acts::change_status(&pool, act_b, models::ActStatus::Issued).await?;
+    db::acts::change_status_scoped(&pool, company_b, act_b, models::ActStatus::Issued).await?;
     sqlx::query("UPDATE acts SET status = 'paid' WHERE id = $1")
         .bind(act_b)
         .execute(&pool)
@@ -477,7 +478,7 @@ async fn dashboard_upcoming_payments_includes_only_issued_and_signed() -> Result
         Some(due_date),
     )
     .await?;
-    db::acts::change_status(&pool, issued_id, models::ActStatus::Issued).await?;
+    db::acts::change_status_scoped(&pool, company_id, issued_id, models::ActStatus::Issued).await?;
 
     let signed_id = make_act(
         &pool,
@@ -489,8 +490,8 @@ async fn dashboard_upcoming_payments_includes_only_issued_and_signed() -> Result
         Some(due_date),
     )
     .await?;
-    db::acts::change_status(&pool, signed_id, models::ActStatus::Issued).await?;
-    db::acts::advance_status(&pool, signed_id).await?;
+    db::acts::change_status_scoped(&pool, company_id, signed_id, models::ActStatus::Issued).await?;
+    db::acts::advance_status_scoped(&pool, company_id, signed_id).await?;
 
     let paid_id = make_act(
         &pool,
@@ -502,7 +503,7 @@ async fn dashboard_upcoming_payments_includes_only_issued_and_signed() -> Result
         Some(due_date),
     )
     .await?;
-    db::acts::change_status(&pool, paid_id, models::ActStatus::Issued).await?;
+    db::acts::change_status_scoped(&pool, company_id, paid_id, models::ActStatus::Issued).await?;
     sqlx::query("UPDATE acts SET status = 'paid' WHERE id = $1")
         .bind(paid_id)
         .execute(&pool)

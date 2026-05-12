@@ -1,4 +1,4 @@
-// CRUD для платежів.
+﻿// CRUD для платежів.
 //
 // Використовує runtime-style sqlx::query_as::<_, T>() без compile-time макросів.
 
@@ -236,22 +236,6 @@ pub async fn list_by_counterparty(
         .collect())
 }
 
-pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<Payment>> {
-    let row = sqlx::query_as::<_, Payment>(
-        r#"
-        SELECT id, company_id, date, amount, direction, counterparty_id,
-               bank_name, bank_ref, description, is_reconciled, bas_id,
-               created_at, updated_at
-        FROM payments
-        WHERE id = $1
-        "#,
-    )
-    .bind(id)
-    .fetch_optional(pool)
-    .await?;
-    Ok(row)
-}
-
 /// Отримати платіж за ID у межах конкретної компанії.
 pub async fn get_by_id_scoped(
     pool: &PgPool,
@@ -315,37 +299,6 @@ pub async fn create(pool: &PgPool, data: NewPayment) -> Result<Payment> {
 }
 
 /// Оновити платіж.
-pub async fn update(pool: &PgPool, id: Uuid, data: UpdatePayment) -> Result<Option<Payment>> {
-    let row = sqlx::query_as::<_, Payment>(
-        r#"
-        UPDATE payments
-        SET date            = $2,
-            amount          = $3,
-            direction       = $4,
-            counterparty_id = $5,
-            bank_name       = $6,
-            bank_ref        = $7,
-            description     = $8,
-            updated_at      = NOW()
-        WHERE id = $1
-        RETURNING id, company_id, date, amount, direction, counterparty_id,
-                  bank_name, bank_ref, description, is_reconciled, bas_id,
-                  created_at, updated_at
-        "#,
-    )
-    .bind(id)
-    .bind(data.date)
-    .bind(data.amount)
-    .bind(data.direction)
-    .bind(data.counterparty_id)
-    .bind(data.bank_name)
-    .bind(data.bank_ref)
-    .bind(data.description)
-    .fetch_optional(pool)
-    .await?;
-    Ok(row)
-}
-
 /// Оновити платіж лише в межах конкретної компанії.
 pub async fn update_scoped(
     pool: &PgPool,
@@ -386,14 +339,6 @@ pub async fn update_scoped(
 }
 
 /// Видалити платіж.
-pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
-    sqlx::query("DELETE FROM payments WHERE id = $1")
-        .bind(id)
-        .execute(pool)
-        .await?;
-    Ok(())
-}
-
 /// Видалити платіж лише в межах конкретної компанії.
 pub async fn delete_scoped(pool: &PgPool, company_id: Uuid, id: Uuid) -> Result<bool> {
     let affected = sqlx::query("DELETE FROM payments WHERE id = $1 AND company_id = $2")
@@ -474,10 +419,7 @@ async fn ensure_act_in_company_tx(
     .bind(company_id)
     .fetch_optional(&mut **tx)
     .await?;
-    anyhow::ensure!(
-        exists.is_some(),
-        "Документ не знайдено в межах компанії"
-    );
+    anyhow::ensure!(exists.is_some(), "Документ не знайдено в межах компанії");
     Ok(())
 }
 
@@ -509,10 +451,7 @@ async fn ensure_invoice_in_company_tx(
     .bind(company_id)
     .fetch_optional(&mut **tx)
     .await?;
-    anyhow::ensure!(
-        exists.is_some(),
-        "Документ не знайдено в межах компанії"
-    );
+    anyhow::ensure!(exists.is_some(), "Документ не знайдено в межах компанії");
     Ok(())
 }
 
@@ -926,5 +865,3 @@ pub async fn complete_schedule_scoped(pool: &PgPool, company_id: Uuid, id: Uuid)
     .rows_affected();
     Ok(affected > 0)
 }
-
-

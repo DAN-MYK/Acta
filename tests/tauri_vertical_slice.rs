@@ -196,18 +196,16 @@ async fn tauri_vertical_slice_existing_pdf_flow_stores_relative_paths_and_blocks
     )
     .await?;
 
-    let stored_invoice_path = sqlx::query_scalar::<_, Option<String>>(
-        "SELECT pdf_path FROM invoices WHERE id = $1",
-    )
-    .bind(invoice.id)
-    .fetch_one(ctx.pool())
-    .await?;
-    let stored_waybill_path = sqlx::query_scalar::<_, Option<String>>(
-        "SELECT pdf_path FROM waybills WHERE id = $1",
-    )
-    .bind(waybill.id)
-    .fetch_one(ctx.pool())
-    .await?;
+    let stored_invoice_path =
+        sqlx::query_scalar::<_, Option<String>>("SELECT pdf_path FROM invoices WHERE id = $1")
+            .bind(invoice.id)
+            .fetch_one(ctx.pool())
+            .await?;
+    let stored_waybill_path =
+        sqlx::query_scalar::<_, Option<String>>("SELECT pdf_path FROM waybills WHERE id = $1")
+            .bind(waybill.id)
+            .fetch_one(ctx.pool())
+            .await?;
 
     assert_eq!(
         stored_invoice_path.as_deref(),
@@ -229,20 +227,16 @@ async fn tauri_vertical_slice_existing_pdf_flow_stores_relative_paths_and_blocks
             .as_str()
         )
     );
-    assert!(
-        invoice_attach
-            .editor
-            .pdf
-            .as_ref()
-            .is_some_and(|pdf| pdf.extracted_text.contains("DRAFT"))
-    );
-    assert!(
-        waybill_attach
-            .editor
-            .pdf
-            .as_ref()
-            .is_some_and(|pdf| pdf.extracted_text.contains("DRAFT"))
-    );
+    assert!(invoice_attach
+        .editor
+        .pdf
+        .as_ref()
+        .is_some_and(|pdf| pdf.extracted_text.contains("DRAFT")));
+    assert!(waybill_attach
+        .editor
+        .pdf
+        .as_ref()
+        .is_some_and(|pdf| pdf.extracted_text.contains("DRAFT")));
 
     let invoice_replace = acta::tauri_api::documents::document_pdf_apply_text_replace(
         &ctx,
@@ -262,20 +256,16 @@ async fn tauri_vertical_slice_existing_pdf_flow_stores_relative_paths_and_blocks
         },
     )
     .await?;
-    assert!(
-        invoice_replace
-            .editor
-            .pdf
-            .as_ref()
-            .is_some_and(|pdf| pdf.extracted_text.contains("PAID"))
-    );
-    assert!(
-        waybill_replace
-            .editor
-            .pdf
-            .as_ref()
-            .is_some_and(|pdf| pdf.extracted_text.contains("SIGNED"))
-    );
+    assert!(invoice_replace
+        .editor
+        .pdf
+        .as_ref()
+        .is_some_and(|pdf| pdf.extracted_text.contains("PAID")));
+    assert!(waybill_replace
+        .editor
+        .pdf
+        .as_ref()
+        .is_some_and(|pdf| pdf.extracted_text.contains("SIGNED")));
 
     let managed_invoice_path = storage_dir.join(
         stored_invoice_path
@@ -326,8 +316,8 @@ async fn tauri_vertical_slice_existing_pdf_flow_stores_relative_paths_and_blocks
         .to_string()
         .contains("поза керованою директорією"));
 
-    let _ = acta::db::invoices::delete(ctx.pool(), invoice.id).await;
-    let _ = acta::db::waybills::delete(ctx.pool(), waybill.id).await;
+    let _ = acta::db::invoices::delete_scoped(ctx.pool(), ctx.company_id(), invoice.id).await;
+    let _ = acta::db::waybills::delete_scoped(ctx.pool(), ctx.company_id(), waybill.id).await;
     let _ = sqlx::query("DELETE FROM counterparties WHERE id = $1")
         .bind(counterparty.id)
         .execute(ctx.pool())
@@ -988,7 +978,7 @@ async fn dashboard_load_uses_expected_receivables_for_upcoming_payments() -> Res
     );
 
     acta::db::payments::delete_scoped(ctx.pool(), ctx.company_id(), payment_id).await?;
-    let _ = acta::db::acts::delete(ctx.pool(), act.id).await;
+    let _ = acta::db::acts::delete_scoped(ctx.pool(), ctx.company_id(), act.id).await;
     let _ = sqlx::query("DELETE FROM counterparties WHERE id = $1")
         .bind(counterparty.id)
         .execute(ctx.pool())
@@ -1263,7 +1253,7 @@ async fn tauri_vertical_slice_payments_smoke() -> Result<()> {
     let payment_uuid = uuid::Uuid::parse_str(&new_payment_id)
         .map_err(|e| anyhow!("не вдалося розпарсити UUID платежу: {}", e))?;
     acta::db::payments::delete_scoped(ctx.pool(), ctx.company_id(), payment_uuid).await?;
-    let _ = acta::db::acts::delete(ctx.pool(), act.id).await;
+    let _ = acta::db::acts::delete_scoped(ctx.pool(), ctx.company_id(), act.id).await;
     let _ = sqlx::query("DELETE FROM counterparties WHERE id = $1")
         .bind(counterparty.id)
         .execute(ctx.pool())
@@ -1354,8 +1344,9 @@ async fn tauri_vertical_slice_payment_match_preview_and_apply_auto_exact() -> Re
         },
     )
     .await?;
-    acta::db::invoices::change_status(
+    acta::db::invoices::change_status_scoped(
         ctx.pool(),
+        ctx.company_id(),
         invoice.id,
         acta::models::invoice::InvoiceStatus::Issued,
     )
@@ -1445,8 +1436,8 @@ async fn tauri_vertical_slice_payment_match_preview_and_apply_auto_exact() -> Re
     assert!(payment.is_reconciled);
 
     acta::db::payments::delete_scoped(ctx.pool(), ctx.company_id(), payment_id).await?;
-    let _ = acta::db::invoices::delete(ctx.pool(), invoice.id).await;
-    let _ = acta::db::acts::delete(ctx.pool(), act.id).await;
+    let _ = acta::db::invoices::delete_scoped(ctx.pool(), ctx.company_id(), invoice.id).await;
+    let _ = acta::db::acts::delete_scoped(ctx.pool(), ctx.company_id(), act.id).await;
     let _ = sqlx::query("DELETE FROM counterparties WHERE id = $1")
         .bind(counterparty.id)
         .execute(ctx.pool())
@@ -1530,8 +1521,9 @@ async fn tauri_vertical_slice_payment_match_preview_ambiguous_refuses_auto_apply
         },
     )
     .await?;
-    acta::db::invoices::change_status(
+    acta::db::invoices::change_status_scoped(
         ctx.pool(),
+        ctx.company_id(),
         invoice.id,
         acta::models::invoice::InvoiceStatus::Issued,
     )
@@ -1625,8 +1617,8 @@ async fn tauri_vertical_slice_payment_match_preview_ambiguous_refuses_auto_apply
     assert!(!has_act_link && !has_invoice_link);
 
     acta::db::payments::delete_scoped(ctx.pool(), ctx.company_id(), payment_id).await?;
-    let _ = acta::db::invoices::delete(ctx.pool(), invoice.id).await;
-    let _ = acta::db::acts::delete(ctx.pool(), act.id).await;
+    let _ = acta::db::invoices::delete_scoped(ctx.pool(), ctx.company_id(), invoice.id).await;
+    let _ = acta::db::acts::delete_scoped(ctx.pool(), ctx.company_id(), act.id).await;
     let _ = sqlx::query("DELETE FROM counterparties WHERE id = $1")
         .bind(counterparty.id)
         .execute(ctx.pool())
@@ -1816,8 +1808,8 @@ async fn tauri_vertical_slice_payment_reconcile_split_is_atomic() -> Result<()> 
     assert_eq!(invoice_amount_after_error, dec!(1500.00));
 
     acta::db::payments::delete_scoped(ctx.pool(), ctx.company_id(), payment.id).await?;
-    let _ = acta::db::invoices::delete(ctx.pool(), invoice.id).await;
-    let _ = acta::db::acts::delete(ctx.pool(), act.id).await;
+    let _ = acta::db::invoices::delete_scoped(ctx.pool(), ctx.company_id(), invoice.id).await;
+    let _ = acta::db::acts::delete_scoped(ctx.pool(), ctx.company_id(), act.id).await;
     let _ = sqlx::query("DELETE FROM counterparties WHERE id = $1")
         .bind(counterparty.id)
         .execute(ctx.pool())
@@ -1933,7 +1925,7 @@ async fn tauri_vertical_slice_payment_calendar_load_includes_schedule_and_task_d
             .await?;
     assert!(updated_schedule);
 
-    let _ = acta::db::tasks::delete(ctx.pool(), task.id).await;
+    let _ = acta::db::tasks::delete_scoped(ctx.pool(), ctx.company_id(), task.id).await;
     sqlx::query("DELETE FROM payment_schedule WHERE id = $1")
         .bind(schedule.id)
         .execute(ctx.pool())
@@ -1950,8 +1942,8 @@ async fn tauri_vertical_slice_payment_calendar_load_includes_schedule_and_task_d
 async fn documents_direction_filter() -> Result<()> {
     use acta::models::DocumentDirection;
     use acta::tauri_api::documents::{
-        CreateDocumentDraftRequest, DocumentsListRequest, documents_list, document_create_draft,
-        document_delete,
+        document_create_draft, document_delete, documents_list, CreateDocumentDraftRequest,
+        DocumentsListRequest,
     };
 
     let _guard = tauri_vertical_slice_lock().lock().await;
@@ -1999,7 +1991,10 @@ async fn documents_direction_filter() -> Result<()> {
         // filter by outgoing — only invoice returned (not the incoming act)
         let outgoing_list = documents_list(
             &ctx,
-            DocumentsListRequest { direction: Some(DocumentDirection::Outgoing), ..Default::default() },
+            DocumentsListRequest {
+                direction: Some(DocumentDirection::Outgoing),
+                ..Default::default()
+            },
         )
         .await?;
         assert!(
@@ -2011,14 +2006,20 @@ async fn documents_direction_filter() -> Result<()> {
             "outgoing filter must exclude incoming act"
         );
         assert!(
-            outgoing_list.items.iter().all(|i| i.direction == "outgoing"),
+            outgoing_list
+                .items
+                .iter()
+                .all(|i| i.direction == "outgoing"),
             "all items in outgoing filter must have direction=outgoing"
         );
 
         // filter by incoming — only act returned
         let incoming_list = documents_list(
             &ctx,
-            DocumentsListRequest { direction: Some(DocumentDirection::Incoming), ..Default::default() },
+            DocumentsListRequest {
+                direction: Some(DocumentDirection::Incoming),
+                ..Default::default()
+            },
         )
         .await?;
         assert!(
@@ -2033,15 +2034,24 @@ async fn documents_direction_filter() -> Result<()> {
         // filter by kind=act — only acts returned
         let act_list = documents_list(
             &ctx,
-            DocumentsListRequest { kind: Some("act".to_string()), ..Default::default() },
+            DocumentsListRequest {
+                kind: Some("act".to_string()),
+                ..Default::default()
+            },
         )
         .await?;
         assert!(
-            act_list.items.iter().all(|i| i.direction == "incoming" || i.direction == "outgoing"),
+            act_list
+                .items
+                .iter()
+                .all(|i| i.direction == "incoming" || i.direction == "outgoing"),
             "all items must have direction set"
         );
         assert!(
-            act_list.items.iter().all(|i| matches!(i.kind, acta::tauri_api::documents::DocumentKindDto::Act)),
+            act_list
+                .items
+                .iter()
+                .all(|i| matches!(i.kind, acta::tauri_api::documents::DocumentKindDto::Act)),
             "kind=act filter must only return acts"
         );
 
@@ -2060,7 +2070,7 @@ async fn documents_direction_filter() -> Result<()> {
 #[tokio::test]
 async fn documents_list_filters_date_status_amount() -> Result<()> {
     use acta::models::{DocumentDirection, InvoiceStatus, NewInvoice, NewInvoiceItem};
-    use acta::tauri_api::documents::{DocumentsListRequest, documents_list};
+    use acta::tauri_api::documents::{documents_list, DocumentsListRequest};
 
     let _guard = tauri_vertical_slice_lock().lock().await;
     let _ = dotenvy::dotenv();
@@ -2139,7 +2149,13 @@ async fn documents_list_filters_date_status_amount() -> Result<()> {
     )
     .await?;
     // Advance to issued
-    acta::db::invoices::change_status(ctx.pool(), inv_hit.id, InvoiceStatus::Issued).await?;
+    acta::db::invoices::change_status_scoped(
+        ctx.pool(),
+        ctx.company_id(),
+        inv_hit.id,
+        InvoiceStatus::Issued,
+    )
+    .await?;
 
     // hi: amount 50000, date 2026-05-01, draft — should be excluded (amount > max, status not issued)
     let inv_hi = acta::db::invoices::create(
@@ -2201,9 +2217,9 @@ async fn documents_list_filters_date_status_amount() -> Result<()> {
     .await;
 
     // cleanup
-    let _ = acta::db::invoices::delete(ctx.pool(), inv_lo.id).await;
-    let _ = acta::db::invoices::delete(ctx.pool(), inv_hit.id).await;
-    let _ = acta::db::invoices::delete(ctx.pool(), inv_hi.id).await;
+    let _ = acta::db::invoices::delete_scoped(ctx.pool(), ctx.company_id(), inv_lo.id).await;
+    let _ = acta::db::invoices::delete_scoped(ctx.pool(), ctx.company_id(), inv_hit.id).await;
+    let _ = acta::db::invoices::delete_scoped(ctx.pool(), ctx.company_id(), inv_hi.id).await;
     sqlx::query("DELETE FROM counterparties WHERE id = $1")
         .bind(counterparty.id)
         .execute(ctx.pool())

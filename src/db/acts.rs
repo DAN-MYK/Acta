@@ -1,4 +1,4 @@
-// CRUD операції для актів виконаних робіт
+﻿// CRUD операції для актів виконаних робіт
 //
 // Транзакційна вставка: create() відкриває транзакцію, вставляє акт + всі позиції,
 // перераховує total_amount, і лише тоді робить commit.
@@ -112,10 +112,7 @@ pub async fn counterparties_for_select(
 /// Отримати список актів компанії з JOIN на назву контрагента.
 ///
 /// Зручна обгортка над `list_filtered` без додаткових фільтрів.
-pub async fn list(
-    pool: &PgPool,
-    company_id: Uuid,
-) -> Result<Vec<ActListRow>> {
+pub async fn list(pool: &PgPool, company_id: Uuid) -> Result<Vec<ActListRow>> {
     list_filtered(
         pool,
         company_id,
@@ -173,7 +170,9 @@ pub async fn list_filtered(
 
     if let Some(statuses) = statuses.filter(|s| !s.is_empty()) {
         let owned: Vec<String> = statuses.to_vec();
-        qb.push(" AND a.status::text = ANY(").push_bind(owned).push("::text[])");
+        qb.push(" AND a.status::text = ANY(")
+            .push_bind(owned)
+            .push("::text[])");
     }
     if let Some(direction) = direction {
         qb.push(" AND a.direction = ");
@@ -207,8 +206,9 @@ pub async fn list_filtered(
     }
     if overdue_only {
         qb.push(" AND a.expected_payment_date IS NOT NULL")
-          .push(" AND a.expected_payment_date < ").push_bind(today)
-          .push(" AND a.status::text IN ('issued','signed')");
+            .push(" AND a.expected_payment_date < ")
+            .push_bind(today)
+            .push(" AND a.status::text IN ('issued','signed')");
     }
     qb.push(" ORDER BY a.date DESC, a.number");
     if has_search {
@@ -351,7 +351,7 @@ pub async fn list_open_act_candidates(
 
 /// Отримати один акт разом з усіма його позиціями.
 /// Повертає `None` якщо акт не знайдено.
-pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<(Act, Vec<ActItem>)>> {
+async fn get_by_id_unscoped(pool: &PgPool, id: Uuid) -> Result<Option<(Act, Vec<ActItem>)>> {
     let act = sqlx::query_as::<_, Act>(
         r#"
         SELECT id, number, counterparty_id, contract_id, category_id, direction,
@@ -386,6 +386,30 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<(Act, Vec<ActIt
     Ok(Some((act, items)))
 }
 
+async fn exists_in_company(pool: &PgPool, company_id: Uuid, id: Uuid) -> Result<bool> {
+    let exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM acts WHERE id = $1 AND company_id = $2)",
+    )
+    .bind(id)
+    .bind(company_id)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(exists)
+}
+
+pub async fn get_by_id_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+) -> Result<Option<(Act, Vec<ActItem>)>> {
+    if !exists_in_company(pool, company_id, id).await? {
+        return Ok(None);
+    }
+
+    get_by_id_unscoped(pool, id).await
+}
+
 pub async fn find_by_notes_marker(
     pool: &PgPool,
     company_id: Uuid,
@@ -408,29 +432,12 @@ pub async fn find_by_notes_marker(
     .await?;
 
     match id {
-        Some(id) => get_by_id(pool, id).await,
+        Some(id) => get_by_id_unscoped(pool, id).await,
         None => Ok(None),
     }
 }
 
 /// Знайти акт за bas_id для повторного імпорту без дублювання.
-pub async fn find_by_bas_id(pool: &PgPool, bas_id: &str) -> Result<Option<Act>> {
-    let act = sqlx::query_as::<_, Act>(
-        r#"
-        SELECT id, number, counterparty_id, contract_id, category_id, direction,
-               date, expected_payment_date, total_amount,
-               status, notes, bas_id, created_at, updated_at
-        FROM acts
-        WHERE bas_id = $1
-        "#,
-    )
-    .bind(bas_id)
-    .fetch_optional(pool)
-    .await?;
-
-    Ok(act)
-}
-
 /// Знайти кандидата на дубль імпортованого акту за header fingerprint.
 #[allow(clippy::too_many_arguments)]
 pub async fn find_import_candidate(
@@ -597,32 +604,22 @@ pub async fn create(pool: &PgPool, company_id: Uuid, data: &NewAct) -> Result<Ac
 
 /// Оновити заголовок акту (без позицій — MVP).
 /// Повертає `None` якщо акт не знайдено.
-pub async fn update(pool: &PgPool, id: Uuid, data: &UpdateAct) -> Result<Option<Act>> {
+pub async fn find_by_bas_id_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    bas_id: &str,
+) -> Result<Option<Act>> {
     let row = sqlx::query_as::<_, Act>(
         r#"
-        UPDATE acts
-        SET number                = $2,
-            counterparty_id       = $3,
-            contract_id           = $4,
-            category_id           = $5,
-            date                  = $6,
-            expected_payment_date = $7,
-            notes                 = $8,
-            updated_at            = NOW()
-        WHERE id = $1
-        RETURNING id, number, counterparty_id, contract_id, category_id, direction,
-                  date, expected_payment_date, total_amount,
-                  status, notes, bas_id, created_at, updated_at
+        SELECT id, number, counterparty_id, contract_id, category_id, direction,
+               date, expected_payment_date, total_amount,
+               status, notes, bas_id, created_at, updated_at
+        FROM acts
+        WHERE company_id = $1 AND bas_id = $2
         "#,
     )
-    .bind(id)
-    .bind(&data.number)
-    .bind(data.counterparty_id)
-    .bind(data.contract_id)
-    .bind(data.category_id)
-    .bind(data.date)
-    .bind(data.expected_payment_date)
-    .bind(&data.notes)
+    .bind(company_id)
+    .bind(bas_id)
     .fetch_optional(pool)
     .await?;
 
@@ -633,7 +630,11 @@ pub async fn update(pool: &PgPool, id: Uuid, data: &UpdateAct) -> Result<Option<
 ///
 /// Дозволені переходи: Draft → Issued → Signed → Paid (лише вперед).
 /// Повертає помилку при спробі перескочити статус або піти назад.
-pub async fn change_status(pool: &PgPool, id: Uuid, new_status: ActStatus) -> Result<Option<Act>> {
+async fn change_status_unscoped(
+    pool: &PgPool,
+    id: Uuid,
+    new_status: ActStatus,
+) -> Result<Option<Act>> {
     use sqlx::Row;
 
     // Читаємо поточний статус — потрібен для валідації переходу
@@ -680,8 +681,25 @@ pub async fn change_status(pool: &PgPool, id: Uuid, new_status: ActStatus) -> Re
 
 /// Завантажити акт з позиціями для форми редагування.
 /// Делегує до `get_by_id` — логіка ідентична.
-pub async fn get_for_edit(pool: &PgPool, id: Uuid) -> Result<Option<(Act, Vec<ActItem>)>> {
-    get_by_id(pool, id).await
+pub async fn change_status_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+    new_status: ActStatus,
+) -> Result<Option<Act>> {
+    if !exists_in_company(pool, company_id, id).await? {
+        return Ok(None);
+    }
+
+    change_status_unscoped(pool, id, new_status).await
+}
+
+pub async fn get_for_edit_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+) -> Result<Option<(Act, Vec<ActItem>)>> {
+    get_by_id_scoped(pool, company_id, id).await
 }
 
 /// Оновити акт разом з позиціями в одній транзакції.
@@ -692,7 +710,7 @@ pub async fn get_for_edit(pool: &PgPool, id: Uuid) -> Result<Option<(Act, Vec<Ac
 ///   2. DELETE усіх старих позицій
 ///   3. INSERT нових позицій
 ///   4. UPDATE total_amount = сума нових позицій
-pub async fn update_with_items(
+async fn update_with_items_unscoped(
     pool: &PgPool,
     id: Uuid,
     data: UpdateAct,
@@ -787,7 +805,7 @@ pub async fn update_with_items(
 
 /// Перевести акт до наступного статусу (зручна обгортка над `change_status`).
 /// Повертає помилку якщо акт вже у фінальному статусі "Оплачено".
-pub async fn advance_status(pool: &PgPool, id: Uuid) -> Result<Option<Act>> {
+async fn advance_status_unscoped(pool: &PgPool, id: Uuid) -> Result<Option<Act>> {
     use sqlx::Row;
 
     let current = sqlx::query(r#"SELECT status FROM acts WHERE id = $1"#)
@@ -804,16 +822,45 @@ pub async fn advance_status(pool: &PgPool, id: Uuid) -> Result<Option<Act>> {
         bail!("Акт вже в фінальному статусі '{}'", current_status);
     };
 
-    change_status(pool, id, next).await
+    change_status_unscoped(pool, id, next).await
+}
+
+pub async fn update_with_items_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+    data: UpdateAct,
+    items: Vec<NewActItem>,
+) -> Result<Option<Act>> {
+    if !exists_in_company(pool, company_id, id).await? {
+        return Ok(None);
+    }
+
+    update_with_items_unscoped(pool, id, data, items).await.map(Some)
+}
+
+pub async fn advance_status_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+) -> Result<Option<Act>> {
+    if !exists_in_company(pool, company_id, id).await? {
+        return Ok(None);
+    }
+
+    advance_status_unscoped(pool, id).await
 }
 
 /// Видалити акт та всі його позиції (ON DELETE CASCADE у БД).
-pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
-    sqlx::query("DELETE FROM acts WHERE id = $1")
+pub async fn delete_scoped(pool: &PgPool, company_id: Uuid, id: Uuid) -> Result<bool> {
+    let affected = sqlx::query("DELETE FROM acts WHERE id = $1 AND company_id = $2")
         .bind(id)
+        .bind(company_id)
         .execute(pool)
-        .await?;
-    Ok(())
+        .await?
+        .rows_affected();
+
+    Ok(affected > 0)
 }
 
 #[cfg(test)]

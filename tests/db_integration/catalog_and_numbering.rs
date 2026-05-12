@@ -25,7 +25,9 @@ async fn contracts_crud_in_db() -> Result<()> {
     .await?;
 
     // get_by_id: всі поля
-    let fetched = db::contracts::get_by_id(&pool, contract.id).await?;
+    let fetched = db::contracts::get_by_id_scoped(&pool, company_id, contract.id)
+        .await?
+        .expect("договір має існувати");
     assert_eq!(fetched.number, format!("ДГ-{suffix}"));
     assert_eq!(fetched.subject.as_deref(), Some("Розробка ПЗ"));
     assert_eq!(fetched.amount, Some(dec!(50000.00)));
@@ -51,8 +53,9 @@ async fn contracts_crud_in_db() -> Result<()> {
     );
 
     // update: змінюємо номер, статус, примітки
-    let updated = db::contracts::update(
+    let updated = db::contracts::update_scoped(
         &pool,
+        company_id,
         contract.id,
         models::UpdateContract {
             number: format!("ДГ-UPD-{suffix}"),
@@ -64,7 +67,8 @@ async fn contracts_crud_in_db() -> Result<()> {
             notes: Some("термін закінчився".to_string()),
         },
     )
-    .await?;
+    .await?
+    .expect("договір має оновитися");
 
     assert_eq!(updated.number, format!("ДГ-UPD-{suffix}"));
     assert_eq!(updated.status, models::ContractStatus::Expired);
@@ -72,11 +76,104 @@ async fn contracts_crud_in_db() -> Result<()> {
     assert_eq!(updated.amount, Some(dec!(55000.00)));
 
     // delete: після видалення відсутній у списку
-    db::contracts::delete(&pool, contract.id).await?;
+    db::contracts::delete_scoped(&pool, company_id, contract.id).await?;
     let after_delete = db::contracts::list(&pool, company_id).await?;
     assert!(!after_delete.iter().any(|r| r.id == contract.id));
 
     dashboard_test_cleanup(&pool, company_id).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn contracts_scoped_mutations_reject_foreign_company() -> Result<()> {
+    let Some(pool) = test_pool().await? else {
+        return Ok(());
+    };
+
+    let suffix = unique_suffix();
+    let (own_company_id, own_cp_id) =
+        dashboard_test_setup(&pool, &format!("own-contract-{suffix}")).await?;
+    let (foreign_company_id, foreign_cp_id) =
+        dashboard_test_setup(&pool, &format!("foreign-contract-{suffix}")).await?;
+
+    let contract = db::contracts::create(
+        &pool,
+        models::NewContract {
+            company_id: own_company_id,
+            counterparty_id: own_cp_id,
+            number: format!("IT-SCOPED-CONTRACT-{suffix}"),
+            subject: Some("Scoped contract".to_string()),
+            date: Utc::now().date_naive(),
+            expires_at: None,
+            amount: Some(dec!(1000.00)),
+        },
+    )
+    .await?;
+
+    assert!(
+        db::contracts::get_by_id_scoped(&pool, foreign_company_id, contract.id)
+            .await?
+            .is_none()
+    );
+
+    let foreign_update = db::contracts::update_scoped(
+        &pool,
+        foreign_company_id,
+        contract.id,
+        models::UpdateContract {
+            number: format!("IT-SCOPED-FOREIGN-{suffix}"),
+            subject: Some("Foreign update".to_string()),
+            date: contract.date,
+            expires_at: contract.expires_at,
+            amount: Some(dec!(2000.00)),
+            status: models::ContractStatus::Expired,
+            notes: Some("should not apply".to_string()),
+        },
+    )
+    .await?;
+    assert!(foreign_update.is_none());
+
+    let after_foreign = db::contracts::get_by_id_scoped(&pool, own_company_id, contract.id)
+        .await?
+        .expect("contract remains visible to its company");
+    assert_eq!(after_foreign.number, contract.number);
+    assert_eq!(after_foreign.status, models::ContractStatus::Active);
+
+    assert!(!db::contracts::delete_scoped(&pool, foreign_company_id, contract.id).await?);
+    assert!(
+        db::contracts::get_by_id_scoped(&pool, own_company_id, contract.id)
+            .await?
+            .is_some()
+    );
+
+    let own_update = db::contracts::update_scoped(
+        &pool,
+        own_company_id,
+        contract.id,
+        models::UpdateContract {
+            number: format!("IT-SCOPED-OWN-{suffix}"),
+            subject: Some("Own update".to_string()),
+            date: contract.date,
+            expires_at: contract.expires_at,
+            amount: Some(dec!(3000.00)),
+            status: models::ContractStatus::Expired,
+            notes: Some("applied".to_string()),
+        },
+    )
+    .await?
+    .expect("own company can update contract");
+    assert_eq!(own_update.number, format!("IT-SCOPED-OWN-{suffix}"));
+
+    assert!(db::contracts::delete_scoped(&pool, own_company_id, contract.id).await?);
+    assert!(
+        db::contracts::get_by_id_scoped(&pool, own_company_id, contract.id)
+            .await?
+            .is_none()
+    );
+
+    let _ = foreign_cp_id;
+    dashboard_test_cleanup(&pool, foreign_company_id).await?;
+    dashboard_test_cleanup(&pool, own_company_id).await?;
     Ok(())
 }
 
@@ -134,7 +231,7 @@ async fn contracts_list_by_counterparty_isolates_by_cp() -> Result<()> {
     assert!(all.iter().any(|r| r.id == c3.id));
 
     for id in [c1.id, c2.id, c3.id] {
-        db::contracts::delete(&pool, id).await?;
+        db::contracts::delete_scoped(&pool, company_id, id).await?;
     }
     dashboard_test_cleanup(&pool, company_id).await?;
     Ok(())
@@ -163,8 +260,9 @@ async fn contracts_list_for_select_returns_only_active() -> Result<()> {
     let to_expire = db::contracts::create(&pool, make("EXP")).await?;
     let to_term = db::contracts::create(&pool, make("TRM")).await?;
 
-    db::contracts::update(
+    db::contracts::update_scoped(
         &pool,
+        company_id,
         to_expire.id,
         models::UpdateContract {
             number: to_expire.number.clone(),
@@ -176,10 +274,12 @@ async fn contracts_list_for_select_returns_only_active() -> Result<()> {
             notes: None,
         },
     )
-    .await?;
+    .await?
+    .expect("договір має оновитися");
 
-    db::contracts::update(
+    db::contracts::update_scoped(
         &pool,
+        company_id,
         to_term.id,
         models::UpdateContract {
             number: to_term.number.clone(),
@@ -191,14 +291,15 @@ async fn contracts_list_for_select_returns_only_active() -> Result<()> {
             notes: None,
         },
     )
-    .await?;
+    .await?
+    .expect("договір має оновитися");
 
     let selectable = db::contracts::list_for_select(&pool, company_id, cp_id).await?;
     assert_eq!(selectable.len(), 1);
     assert_eq!(selectable[0].id, active.id);
 
     for id in [active.id, to_expire.id, to_term.id] {
-        db::contracts::delete(&pool, id).await?;
+        db::contracts::delete_scoped(&pool, company_id, id).await?;
     }
     dashboard_test_cleanup(&pool, company_id).await?;
     Ok(())
@@ -263,19 +364,21 @@ async fn categories_crud_and_archive_in_db() -> Result<()> {
     assert!(all.iter().any(|c| c.id == cat.id));
 
     // update: перейменування
-    let renamed = db::categories::update(
+    let renamed = db::categories::update_scoped(
         &pool,
+        company_id,
         cat.id,
         models::UpdateCategory {
             name: "ІТ Консалтинг".to_string(),
             parent_id: None,
         },
     )
-    .await?;
+    .await?
+    .expect("категорія має оновитися");
     assert_eq!(renamed.name, "ІТ Консалтинг");
 
     // archive
-    db::categories::archive(&pool, cat.id).await?;
+    db::categories::archive_scoped(&pool, company_id, cat.id).await?;
 
     // list включає, але is_archived = true
     let after = db::categories::list(&pool, company_id).await?;
@@ -583,9 +686,11 @@ async fn acts_get_kpi_aggregates_this_month_and_overdue() -> Result<()> {
         },
     )
     .await?;
-    db::acts::change_status(&pool, act_paid.id, models::ActStatus::Issued).await?;
-    db::acts::change_status(&pool, act_paid.id, models::ActStatus::Signed).await?;
-    db::acts::change_status(&pool, act_paid.id, models::ActStatus::Paid).await?;
+    db::acts::change_status_scoped(&pool, company_id, act_paid.id, models::ActStatus::Issued)
+        .await?;
+    db::acts::change_status_scoped(&pool, company_id, act_paid.id, models::ActStatus::Signed)
+        .await?;
+    db::acts::change_status_scoped(&pool, company_id, act_paid.id, models::ActStatus::Paid).await?;
 
     // Акт 3: today, статус Issued → acts_this_month += 1, unpaid_total += 3000
     let act_issued_new = db::acts::create(
@@ -606,7 +711,13 @@ async fn acts_get_kpi_aggregates_this_month_and_overdue() -> Result<()> {
         },
     )
     .await?;
-    db::acts::change_status(&pool, act_issued_new.id, models::ActStatus::Issued).await?;
+    db::acts::change_status_scoped(
+        &pool,
+        company_id,
+        act_issued_new.id,
+        models::ActStatus::Issued,
+    )
+    .await?;
 
     // Акт 4: дата 45 днів тому, статус Issued
     // → unpaid_total += 4000, overdue_count += 1 (issued + date < today-30d)
@@ -629,7 +740,8 @@ async fn acts_get_kpi_aggregates_this_month_and_overdue() -> Result<()> {
         },
     )
     .await?;
-    db::acts::change_status(&pool, act_overdue.id, models::ActStatus::Issued).await?;
+    db::acts::change_status_scoped(&pool, company_id, act_overdue.id, models::ActStatus::Issued)
+        .await?;
 
     let kpi = db::acts::get_kpi(&pool, company_id).await?;
 
@@ -721,14 +833,15 @@ async fn acts_update_with_items_replaces_positions_and_recalculates_total() -> R
     .await?;
     assert_eq!(original.total_amount, dec!(800.00));
 
-    let (_, items_before) = db::acts::get_by_id(&pool, original.id)
+    let (_, items_before) = db::acts::get_by_id_scoped(&pool, DEFAULT_COMPANY_ID, original.id)
         .await?
         .expect("act exists");
     assert_eq!(items_before.len(), 2);
 
     // Оновлюємо: 1 нова позиція qty=3, price=400 → total = 1200
-    let updated = db::acts::update_with_items(
+    let updated = db::acts::update_with_items_scoped(
         &pool,
+        DEFAULT_COMPANY_ID,
         original.id,
         models::UpdateAct {
             number: format!("UWI-UPDATED-{suffix}"),
@@ -747,7 +860,8 @@ async fn acts_update_with_items_replaces_positions_and_recalculates_total() -> R
             unit_price: dec!(400.00),
         }],
     )
-    .await?;
+    .await?
+    .expect("акт має оновитися");
 
     // Перевіряємо заголовок
     assert_eq!(updated.number, format!("UWI-UPDATED-{suffix}"));
@@ -755,7 +869,7 @@ async fn acts_update_with_items_replaces_positions_and_recalculates_total() -> R
     assert_eq!(updated.notes.as_deref(), Some("оновлено"));
 
     // Перевіряємо позиції: старі замінились на нову
-    let (_, items_after) = db::acts::get_by_id(&pool, original.id)
+    let (_, items_after) = db::acts::get_by_id_scoped(&pool, DEFAULT_COMPANY_ID, original.id)
         .await?
         .expect("act exists after update");
     assert_eq!(items_after.len(), 1);
@@ -763,8 +877,9 @@ async fn acts_update_with_items_replaces_positions_and_recalculates_total() -> R
     assert_eq!(items_after[0].amount, dec!(1200.00));
 
     // Оновлення неіснуючого акту — anyhow помилка з текстом "не знайдено"
-    let missing_err = db::acts::update_with_items(
+    let missing_err = db::acts::update_with_items_scoped(
         &pool,
+        DEFAULT_COMPANY_ID,
         Uuid::new_v4(),
         models::UpdateAct {
             number: "MISSING".to_string(),

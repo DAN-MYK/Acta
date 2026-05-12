@@ -440,8 +440,9 @@ pub async fn counterparty_save(
     let saved_id = if let Some(counterparty_id) = optional_string(&request.form.id) {
         let counterparty_id = Uuid::parse_str(&counterparty_id)
             .with_context(|| format!("Некоректний ідентифікатор контрагента: {counterparty_id}"))?;
-        db::counterparties::update(
+        db::counterparties::update_scoped(
             ctx.pool(),
+            ctx.company_id(),
             counterparty_id,
             &build_update_payload(&request.form)?,
         )
@@ -474,7 +475,7 @@ pub async fn counterparty_archive(
 ) -> Result<MutationResultDto> {
     let counterparty_id = Uuid::parse_str(&counterparty_id)
         .with_context(|| format!("Некоректний ідентифікатор контрагента: {counterparty_id}"))?;
-    if !db::counterparties::archive(ctx.pool(), counterparty_id).await? {
+    if !db::counterparties::archive_scoped(ctx.pool(), ctx.company_id(), counterparty_id).await? {
         return Err(anyhow!("Контрагента не знайдено"));
     }
 

@@ -69,7 +69,7 @@ async fn payments_crud_and_direction_filter_in_db() -> Result<()> {
     .await?;
 
     // get_by_id повертає правильні поля
-    let fetched = db::payments::get_by_id(&pool, income.id)
+    let fetched = db::payments::get_by_id_scoped(&pool, DEFAULT_COMPANY_ID, income.id)
         .await?
         .expect("платіж має існувати");
     assert_eq!(fetched.amount, dec!(1500.00));
@@ -119,8 +119,9 @@ async fn payments_crud_and_direction_filter_in_db() -> Result<()> {
     assert!(!expenses.iter().any(|p| p.id == income.id));
 
     // update змінює суму та банк
-    let updated = db::payments::update(
+    let updated = db::payments::update_scoped(
         &pool,
+        DEFAULT_COMPANY_ID,
         income.id,
         models::payment::UpdatePayment {
             date: Utc::now().date_naive(),
@@ -138,9 +139,13 @@ async fn payments_crud_and_direction_filter_in_db() -> Result<()> {
     assert_eq!(updated.bank_name.as_deref(), Some("Monobank"));
 
     // delete: після видалення get_by_id повертає None
-    db::payments::delete(&pool, income.id).await?;
-    db::payments::delete(&pool, expense.id).await?;
-    assert!(db::payments::get_by_id(&pool, income.id).await?.is_none());
+    db::payments::delete_scoped(&pool, DEFAULT_COMPANY_ID, income.id).await?;
+    db::payments::delete_scoped(&pool, DEFAULT_COMPANY_ID, expense.id).await?;
+    assert!(
+        db::payments::get_by_id_scoped(&pool, DEFAULT_COMPANY_ID, income.id)
+            .await?
+            .is_none()
+    );
 
     Ok(())
 }
@@ -215,8 +220,8 @@ async fn payments_list_by_counterparty_filters_correctly() -> Result<()> {
         Some(Some(cp.id))
     );
 
-    db::payments::delete(&pool, with_cp.id).await?;
-    db::payments::delete(&pool, without_cp.id).await?;
+    db::payments::delete_scoped(&pool, DEFAULT_COMPANY_ID, with_cp.id).await?;
+    db::payments::delete_scoped(&pool, DEFAULT_COMPANY_ID, without_cp.id).await?;
     sqlx::query("DELETE FROM counterparties WHERE id = $1")
         .bind(cp.id)
         .execute(&pool)
@@ -363,7 +368,7 @@ async fn payments_link_act_and_link_invoice_in_db() -> Result<()> {
     assert_eq!(inv_link_updated, dec!(1700.00));
 
     // Видалення платежу каскадно прибирає payment_acts і payment_invoices
-    db::payments::delete(&pool, payment.id).await?;
+    db::payments::delete_scoped(&pool, DEFAULT_COMPANY_ID, payment.id).await?;
 
     let act_link_gone = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM payment_acts WHERE payment_id = $1)",
@@ -609,7 +614,7 @@ async fn payments_reconcile_persists_links_and_derived_state_in_db() -> Result<(
         "без links derived state має скидатися в false"
     );
 
-    db::payments::delete(&pool, payment.id).await?;
+    db::payments::delete_scoped(&pool, DEFAULT_COMPANY_ID, payment.id).await?;
     sqlx::query("DELETE FROM acts WHERE id = $1")
         .bind(act.id)
         .execute(&pool)
@@ -818,7 +823,7 @@ async fn payments_reconcile_rejects_cross_company_documents() -> Result<()> {
         "foreign документи не мають створювати links навіть при прямому виклику DB helper"
     );
 
-    db::payments::delete(&pool, payment.id).await?;
+    db::payments::delete_scoped(&pool, DEFAULT_COMPANY_ID, payment.id).await?;
     sqlx::query("DELETE FROM acts WHERE id = $1")
         .bind(foreign_act.id)
         .execute(&pool)
@@ -976,7 +981,7 @@ async fn payments_reconcile_supports_split_and_rejects_overallocation() -> Resul
     .expect_err("reconcile must reject allocation above document open amount");
     assert!(over_document_err.to_string().contains("документа"));
 
-    db::payments::delete(&pool, payment.id).await?;
+    db::payments::delete_scoped(&pool, DEFAULT_COMPANY_ID, payment.id).await?;
     sqlx::query("DELETE FROM acts WHERE id = $1")
         .bind(act.id)
         .execute(&pool)
@@ -1141,7 +1146,7 @@ async fn payments_reconcile_split_is_atomic_on_failure() -> Result<()> {
         .expect("payment exists after failed atomic split");
     assert!(payment_after_error.is_reconciled);
 
-    db::payments::delete(&pool, payment.id).await?;
+    db::payments::delete_scoped(&pool, DEFAULT_COMPANY_ID, payment.id).await?;
     sqlx::query("DELETE FROM acts WHERE id = $1")
         .bind(act.id)
         .execute(&pool)
@@ -1259,7 +1264,7 @@ async fn payments_reconcile_split_waits_for_locked_document_row() -> Result<()> 
         .expect("payment exists after locked split reconcile");
     assert!(payment_after_lock.is_reconciled);
 
-    db::payments::delete(&pool, payment.id).await?;
+    db::payments::delete_scoped(&pool, DEFAULT_COMPANY_ID, payment.id).await?;
     sqlx::query("DELETE FROM acts WHERE id = $1")
         .bind(act.id)
         .execute(&pool)
@@ -1370,7 +1375,7 @@ async fn payments_reconcile_document_waits_for_locked_document_row() -> Result<(
         .expect("payment exists after locked single reconcile");
     assert!(payment_after_lock.is_reconciled);
 
-    db::payments::delete(&pool, payment.id).await?;
+    db::payments::delete_scoped(&pool, DEFAULT_COMPANY_ID, payment.id).await?;
     sqlx::query("DELETE FROM acts WHERE id = $1")
         .bind(act.id)
         .execute(&pool)

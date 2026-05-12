@@ -310,9 +310,8 @@ fn parse_required_draft_counterparty_id(counterparty_id: Option<String>) -> Resu
         .filter(|value| !value.is_empty())
         .ok_or_else(|| anyhow!("Оберіть контрагента перед створенням документа"))?;
 
-    Uuid::parse_str(counterparty_id).with_context(|| {
-        format!("Некоректний ідентифікатор контрагента: {counterparty_id}")
-    })
+    Uuid::parse_str(counterparty_id)
+        .with_context(|| format!("Некоректний ідентифікатор контрагента: {counterparty_id}"))
 }
 
 async fn resolve_draft_counterparty(
@@ -332,7 +331,7 @@ async fn load_document_snapshot(
 ) -> Result<DocumentSnapshot> {
     match doc_ref {
         DocumentRef::Act(id) => {
-            let (act, items) = db::acts::get_by_id(pool, id)
+            let (act, items) = db::acts::get_by_id_scoped(pool, company_id, id)
                 .await?
                 .ok_or_else(|| anyhow!("Акт не знайдено"))?;
             Ok(DocumentSnapshot {
@@ -351,7 +350,7 @@ async fn load_document_snapshot(
             })
         }
         DocumentRef::Invoice(id) => {
-            let (invoice, items) = db::invoices::get_by_id(pool, id)
+            let (invoice, items) = db::invoices::get_by_id_scoped(pool, company_id, id)
                 .await?
                 .ok_or_else(|| anyhow!("Рахунок не знайдено"))?;
             Ok(DocumentSnapshot {
@@ -374,7 +373,7 @@ async fn load_document_snapshot(
             })
         }
         DocumentRef::Waybill(id) => {
-            let (waybill, items) = db::waybills::get_by_id(pool, id)
+            let (waybill, items) = db::waybills::get_by_id_scoped(pool, company_id, id)
                 .await?
                 .ok_or_else(|| anyhow!("Накладну не знайдено"))?;
             Ok(DocumentSnapshot {
@@ -505,7 +504,7 @@ async fn build_existing_document_form(
 ) -> Result<DocumentEditorDto> {
     match doc_ref {
         DocumentRef::Act(id) => {
-            let (act, items) = db::acts::get_by_id(pool, id)
+            let (act, items) = db::acts::get_by_id_scoped(pool, company_id, id)
                 .await?
                 .ok_or_else(|| anyhow!("Акт не знайдено"))?;
             let counterparty_name =
@@ -529,12 +528,12 @@ async fn build_existing_document_form(
             })
         }
         DocumentRef::Invoice(id) => {
-            let (invoice, items) = db::invoices::get_by_id(pool, id)
+            let (invoice, items) = db::invoices::get_by_id_scoped(pool, company_id, id)
                 .await?
                 .ok_or_else(|| anyhow!("Рахунок не знайдено"))?;
             let counterparty_name =
                 load_counterparty_name(pool, company_id, invoice.counterparty_id).await?;
-            let pdf = match load_existing_pdf_path(storage_dir, pool, doc_ref).await? {
+            let pdf = match load_existing_pdf_path(storage_dir, pool, company_id, doc_ref).await? {
                 Some(path) => Some(inspect_document_pdf_state(path).await),
                 None => None,
             };
@@ -557,12 +556,12 @@ async fn build_existing_document_form(
             })
         }
         DocumentRef::Waybill(id) => {
-            let (waybill, items) = db::waybills::get_by_id(pool, id)
+            let (waybill, items) = db::waybills::get_by_id_scoped(pool, company_id, id)
                 .await?
                 .ok_or_else(|| anyhow!("Накладну не знайдено"))?;
             let counterparty_name =
                 load_counterparty_name(pool, company_id, waybill.counterparty_id).await?;
-            let pdf = match load_existing_pdf_path(storage_dir, pool, doc_ref).await? {
+            let pdf = match load_existing_pdf_path(storage_dir, pool, company_id, doc_ref).await? {
                 Some(path) => Some(inspect_document_pdf_state(path).await),
                 None => None,
             };
@@ -797,19 +796,29 @@ pub async fn documents_list(
     let date_to = request.date_to;
 
     // None = include all kinds; Some(k) skips the other two DB calls (cheaper than SQL filter)
-    let include_acts     = request.kind.as_deref().map_or(true, |k| k == "act");
+    let include_acts = request.kind.as_deref().map_or(true, |k| k == "act");
     let include_invoices = request.kind.as_deref().map_or(true, |k| k == "invoice");
-    let include_waybills = request.kind.as_deref().map_or(true, |k| k == "waybill") && !overdue_only;
+    let include_waybills =
+        request.kind.as_deref().map_or(true, |k| k == "waybill") && !overdue_only;
 
     let (acts, invoices, waybills) = tokio::join!(
         async {
             if include_acts {
                 db::acts::list_filtered(
-                    ctx.pool(), company_id,
-                    statuses_slice, direction_filter, search, counterparty_filter,
-                    date_from, date_to,
-                    amount_min, amount_max, overdue_only, today,
-                ).await
+                    ctx.pool(),
+                    company_id,
+                    statuses_slice,
+                    direction_filter,
+                    search,
+                    counterparty_filter,
+                    date_from,
+                    date_to,
+                    amount_min,
+                    amount_max,
+                    overdue_only,
+                    today,
+                )
+                .await
             } else {
                 Ok(vec![])
             }
@@ -817,11 +826,20 @@ pub async fn documents_list(
         async {
             if include_invoices {
                 db::invoices::list_filtered(
-                    ctx.pool(), company_id,
-                    statuses_slice, direction_filter, search, counterparty_filter,
-                    date_from, date_to,
-                    amount_min, amount_max, overdue_only, today,
-                ).await
+                    ctx.pool(),
+                    company_id,
+                    statuses_slice,
+                    direction_filter,
+                    search,
+                    counterparty_filter,
+                    date_from,
+                    date_to,
+                    amount_min,
+                    amount_max,
+                    overdue_only,
+                    today,
+                )
+                .await
             } else {
                 Ok(vec![])
             }
@@ -829,11 +847,18 @@ pub async fn documents_list(
         async {
             if include_waybills {
                 db::waybills::list_filtered(
-                    ctx.pool(), company_id,
-                    statuses_slice, direction_filter, search, counterparty_filter,
-                    date_from, date_to,
-                    amount_min, amount_max,
-                ).await
+                    ctx.pool(),
+                    company_id,
+                    statuses_slice,
+                    direction_filter,
+                    search,
+                    counterparty_filter,
+                    date_from,
+                    date_to,
+                    amount_min,
+                    amount_max,
+                )
+                .await
             } else {
                 Ok(vec![])
             }
@@ -942,7 +967,8 @@ pub async fn document_pdf_attach_existing(
         .ok_or_else(|| anyhow!("Некоректний ідентифікатор документа"))?;
 
     let doc_uuid = document_ref_uuid(doc_ref);
-    let (kind, number) = load_document_kind_and_number(ctx.pool(), doc_ref).await?;
+    let (kind, number) =
+        load_document_kind_and_number(ctx.pool(), ctx.company_id(), doc_ref).await?;
     if !supports_existing_pdf_flow(&kind) {
         return Err(anyhow!(
             "Для документа типу {kind} прив’язка існуючого PDF поки не підтримується"
@@ -980,12 +1006,14 @@ pub async fn document_pdf_apply_text_replace(
 ) -> Result<DocumentPdfActionResultDto> {
     let doc_ref = parse_document_ref(&request.doc_id)
         .ok_or_else(|| anyhow!("Некоректний ідентифікатор документа"))?;
-    let file_path = load_existing_pdf_path(ctx.storage_dir(), ctx.pool(), doc_ref)
-        .await?
-        .ok_or_else(|| anyhow!("Спочатку прив’яжіть існуючий PDF до документа"))?;
+    let file_path =
+        load_existing_pdf_path(ctx.storage_dir(), ctx.pool(), ctx.company_id(), doc_ref)
+            .await?
+            .ok_or_else(|| anyhow!("Спочатку прив’яжіть існуючий PDF до документа"))?;
 
     let doc_uuid = document_ref_uuid(doc_ref);
-    let (kind, number) = load_document_kind_and_number(ctx.pool(), doc_ref).await?;
+    let (kind, number) =
+        load_document_kind_and_number(ctx.pool(), ctx.company_id(), doc_ref).await?;
     let safe_path = ensure_managed_pdf_path(
         ctx.storage_dir(),
         &kind,
@@ -1026,10 +1054,12 @@ pub async fn document_pdf_open_current(ctx: &AppCtx, doc_id: String) -> Result<M
     let doc_ref = parse_document_ref(&doc_id)
         .ok_or_else(|| anyhow!("Некоректний ідентифікатор документа"))?;
     let doc_uuid = document_ref_uuid(doc_ref);
-    let (kind, number) = load_document_kind_and_number(ctx.pool(), doc_ref).await?;
-    let file_path = load_existing_pdf_path(ctx.storage_dir(), ctx.pool(), doc_ref)
-        .await?
-        .ok_or_else(|| anyhow!("Для цього документа ще не прив’язано PDF"))?;
+    let (kind, number) =
+        load_document_kind_and_number(ctx.pool(), ctx.company_id(), doc_ref).await?;
+    let file_path =
+        load_existing_pdf_path(ctx.storage_dir(), ctx.pool(), ctx.company_id(), doc_ref)
+            .await?
+            .ok_or_else(|| anyhow!("Для цього документа ще не прив’язано PDF"))?;
 
     let safe_path = ensure_managed_pdf_path(
         ctx.storage_dir(),
@@ -1102,14 +1132,15 @@ pub async fn document_save(
 
     match doc_ref {
         DocumentRef::Act(id) => {
-            let (act, _) = db::acts::get_by_id(ctx.pool(), id)
+            let (act, _) = db::acts::get_by_id_scoped(ctx.pool(), ctx.company_id(), id)
                 .await?
                 .ok_or_else(|| anyhow!("Акт не знайдено"))?;
             let parent_ref = split_visible_notes_and_chain_parent(act.notes.as_deref()).1;
             let direction = DocumentDirection::try_from(request.form.direction.clone())
                 .map_err(|_| anyhow!("Невідома направленість документа"))?;
-            db::acts::update_with_items(
+            db::acts::update_with_items_scoped(
                 ctx.pool(),
+                ctx.company_id(),
                 id,
                 UpdateAct {
                     number: request.form.number.clone(),
@@ -1126,7 +1157,8 @@ pub async fn document_save(
                 },
                 draft_items_to_new_act(request.items)?,
             )
-            .await?;
+            .await?
+            .ok_or_else(|| anyhow!("РђРєС‚ РЅРµ Р·РЅР°Р№РґРµРЅРѕ"))?;
 
             Ok(SaveDocumentResponse {
                 document_id: request.form.id,
@@ -1135,14 +1167,15 @@ pub async fn document_save(
             })
         }
         DocumentRef::Invoice(id) => {
-            let (invoice, _) = db::invoices::get_by_id(ctx.pool(), id)
+            let (invoice, _) = db::invoices::get_by_id_scoped(ctx.pool(), ctx.company_id(), id)
                 .await?
                 .ok_or_else(|| anyhow!("Рахунок не знайдено"))?;
             let parent_ref = split_visible_notes_and_chain_parent(invoice.notes.as_deref()).1;
             let direction = DocumentDirection::try_from(request.form.direction.clone())
                 .map_err(|_| anyhow!("Невідома направленість документа"))?;
-            db::invoices::update_with_items(
+            db::invoices::update_with_items_scoped(
                 ctx.pool(),
+                ctx.company_id(),
                 id,
                 UpdateInvoice {
                     number: request.form.number.clone(),
@@ -1159,7 +1192,8 @@ pub async fn document_save(
                 },
                 draft_items_to_new_invoice(request.items)?,
             )
-            .await?;
+            .await?
+            .ok_or_else(|| anyhow!("Р Р°С…СѓРЅРѕРє РЅРµ Р·РЅР°Р№РґРµРЅРѕ"))?;
 
             Ok(SaveDocumentResponse {
                 document_id: request.form.id,
@@ -1168,14 +1202,15 @@ pub async fn document_save(
             })
         }
         DocumentRef::Waybill(id) => {
-            let (waybill, _) = db::waybills::get_by_id(ctx.pool(), id)
+            let (waybill, _) = db::waybills::get_by_id_scoped(ctx.pool(), ctx.company_id(), id)
                 .await?
                 .ok_or_else(|| anyhow!("Накладну не знайдено"))?;
             let parent_ref = split_visible_notes_and_chain_parent(waybill.notes.as_deref()).1;
             let direction = DocumentDirection::try_from(request.form.direction.clone())
                 .map_err(|_| anyhow!("Невідома направленість документа"))?;
-            db::waybills::update_with_items(
+            db::waybills::update_with_items_scoped(
                 ctx.pool(),
+                ctx.company_id(),
                 id,
                 UpdateWaybill {
                     number: request.form.number.clone(),
@@ -1191,7 +1226,8 @@ pub async fn document_save(
                 },
                 draft_items_to_new_waybill(request.items)?,
             )
-            .await?;
+            .await?
+            .ok_or_else(|| anyhow!("РќР°РєР»Р°РґРЅСѓ РЅРµ Р·РЅР°Р№РґРµРЅРѕ"))?;
 
             Ok(SaveDocumentResponse {
                 document_id: request.form.id,
@@ -1208,19 +1244,19 @@ pub async fn document_advance_status(ctx: &AppCtx, doc_id: String) -> Result<Mut
 
     let message = match doc_ref {
         DocumentRef::Act(id) => {
-            db::acts::advance_status(ctx.pool(), id)
+            db::acts::advance_status_scoped(ctx.pool(), ctx.company_id(), id)
                 .await?
                 .ok_or_else(|| anyhow!("Акт не знайдено"))?;
             "Статус акта оновлено"
         }
         DocumentRef::Invoice(id) => {
-            db::invoices::advance_status(ctx.pool(), id)
+            db::invoices::advance_status_scoped(ctx.pool(), ctx.company_id(), id)
                 .await?
                 .ok_or_else(|| anyhow!("Рахунок не знайдено"))?;
             "Статус рахунку оновлено"
         }
         DocumentRef::Waybill(id) => {
-            db::waybills::advance_status(ctx.pool(), id)
+            db::waybills::advance_status_scoped(ctx.pool(), ctx.company_id(), id)
                 .await?
                 .ok_or_else(|| anyhow!("Накладну не знайдено"))?;
             "Статус накладної оновлено"
@@ -1239,9 +1275,21 @@ pub async fn document_delete(ctx: &AppCtx, doc_id: String) -> Result<MutationRes
         .ok_or_else(|| anyhow!("Некоректний ідентифікатор документа"))?;
 
     match doc_ref {
-        DocumentRef::Act(id) => db::acts::delete(ctx.pool(), id).await?,
-        DocumentRef::Invoice(id) => db::invoices::delete(ctx.pool(), id).await?,
-        DocumentRef::Waybill(id) => db::waybills::delete(ctx.pool(), id).await?,
+        DocumentRef::Act(id) => {
+            if !db::acts::delete_scoped(ctx.pool(), ctx.company_id(), id).await? {
+                return Err(anyhow!("РђРєС‚ РЅРµ Р·РЅР°Р№РґРµРЅРѕ"));
+            }
+        }
+        DocumentRef::Invoice(id) => {
+            if !db::invoices::delete_scoped(ctx.pool(), ctx.company_id(), id).await? {
+                return Err(anyhow!("Р Р°С…СѓРЅРѕРє РЅРµ Р·РЅР°Р№РґРµРЅРѕ"));
+            }
+        }
+        DocumentRef::Waybill(id) => {
+            if !db::waybills::delete_scoped(ctx.pool(), ctx.company_id(), id).await? {
+                return Err(anyhow!("РќР°РєР»Р°РґРЅСѓ РЅРµ Р·РЅР°Р№РґРµРЅРѕ"));
+            }
+        }
     }
 
     Ok(MutationResultDto {
@@ -1448,9 +1496,37 @@ pub async fn documents_bulk_delete_live(
 
     for doc_id in request.doc_ids {
         let delete_result = match parse_document_ref(&doc_id) {
-            Some(DocumentRef::Act(id)) => db::acts::delete(ctx.pool(), id).await,
-            Some(DocumentRef::Invoice(id)) => db::invoices::delete(ctx.pool(), id).await,
-            Some(DocumentRef::Waybill(id)) => db::waybills::delete(ctx.pool(), id).await,
+            Some(DocumentRef::Act(id)) => db::acts::delete_scoped(ctx.pool(), ctx.company_id(), id)
+                .await
+                .and_then(|deleted| {
+                    if deleted {
+                        Ok(())
+                    } else {
+                        Err(anyhow!("РђРєС‚ РЅРµ Р·РЅР°Р№РґРµРЅРѕ"))
+                    }
+                }),
+            Some(DocumentRef::Invoice(id)) => {
+                db::invoices::delete_scoped(ctx.pool(), ctx.company_id(), id)
+                    .await
+                    .and_then(|deleted| {
+                        if deleted {
+                            Ok(())
+                        } else {
+                            Err(anyhow!("Р Р°С…СѓРЅРѕРє РЅРµ Р·РЅР°Р№РґРµРЅРѕ"))
+                        }
+                    })
+            }
+            Some(DocumentRef::Waybill(id)) => {
+                db::waybills::delete_scoped(ctx.pool(), ctx.company_id(), id)
+                    .await
+                    .and_then(|deleted| {
+                        if deleted {
+                            Ok(())
+                        } else {
+                            Err(anyhow!("РќР°РєР»Р°РґРЅСѓ РЅРµ Р·РЅР°Р№РґРµРЅРѕ"))
+                        }
+                    })
+            }
             None => Err(anyhow!("Некоректний ідентифікатор документа: {doc_id}")),
         };
 
@@ -1488,15 +1564,21 @@ pub async fn documents_bulk_advance_status_live(
 
     for doc_id in request.doc_ids {
         let advance_result = match parse_document_ref(&doc_id) {
-            Some(DocumentRef::Act(id)) => db::acts::advance_status(ctx.pool(), id)
-                .await
-                .map(|value| value.map(|_| ())),
-            Some(DocumentRef::Invoice(id)) => db::invoices::advance_status(ctx.pool(), id)
-                .await
-                .map(|value| value.map(|_| ())),
-            Some(DocumentRef::Waybill(id)) => db::waybills::advance_status(ctx.pool(), id)
-                .await
-                .map(|value| value.map(|_| ())),
+            Some(DocumentRef::Act(id)) => {
+                db::acts::advance_status_scoped(ctx.pool(), ctx.company_id(), id)
+                    .await
+                    .map(|value| value.map(|_| ()))
+            }
+            Some(DocumentRef::Invoice(id)) => {
+                db::invoices::advance_status_scoped(ctx.pool(), ctx.company_id(), id)
+                    .await
+                    .map(|value| value.map(|_| ()))
+            }
+            Some(DocumentRef::Waybill(id)) => {
+                db::waybills::advance_status_scoped(ctx.pool(), ctx.company_id(), id)
+                    .await
+                    .map(|value| value.map(|_| ()))
+            }
             None => Err(anyhow!("Некоректний ідентифікатор документа: {doc_id}")),
         };
 

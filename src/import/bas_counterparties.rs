@@ -166,7 +166,7 @@ pub async fn apply_imported_counterparties(
 
         let (existing, match_source) = if let Some(bas_id) = row.bas_id.as_deref() {
             (
-                db::counterparties::find_by_bas_id(pool, bas_id).await?,
+                db::counterparties::find_by_bas_id_scoped(pool, company_id, bas_id).await?,
                 Some("bas_id"),
             )
         } else if let Some(edrpou) = row.edrpou.as_deref() {
@@ -193,7 +193,13 @@ pub async fn apply_imported_counterparties(
                 });
                 if !dry_run {
                     let payload = merge_update_payload(&counterparty, row);
-                    let _ = db::counterparties::update(pool, counterparty.id, &payload).await?;
+                    let _ = db::counterparties::update_scoped(
+                        pool,
+                        company_id,
+                        counterparty.id,
+                        &payload,
+                    )
+                    .await?;
                 }
             }
             None => {
