@@ -1109,7 +1109,7 @@ pub async fn update_with_items_scoped(
     items: Vec<NewInvoiceItem>,
 ) -> Result<Option<Invoice>> {
     if !exists_in_company(pool, company_id, id).await? {
-        return Ok(None);
+        bail!("Накладна не знайдена в межах компанії");
     }
 
     update_with_items_unscoped(pool, id, data, items).await.map(Some)

@@ -526,17 +526,16 @@ pub async fn reconcile_document_scoped(
     doc_id: Uuid,
     amount: rust_decimal::Decimal,
 ) -> Result<()> {
-    reconcile_split_scoped(
-        pool,
-        company_id,
-        payment_id,
-        &[PaymentReconcileAllocation {
-            document_kind: doc_kind.to_string(),
-            document_id: doc_id,
-            amount,
-        }],
-    )
-    .await
+    let mut tx = pool.begin().await?;
+    let mut allocations = existing_allocations_except_target_tx(&mut tx, payment_id, doc_kind, doc_id).await?;
+    allocations.push(PaymentReconcileAllocation {
+        document_kind: doc_kind.to_string(),
+        document_id: doc_id,
+        amount,
+    });
+    reconcile_split_scoped_tx(&mut tx, company_id, payment_id, &allocations).await?;
+    tx.commit().await?;
+    Ok(())
 }
 
 /// Від'єднати платіж від документа і перерахувати статус звірки.
@@ -623,14 +622,24 @@ pub async fn reconcile_split_scoped(
     payment_id: Uuid,
     allocations: &[PaymentReconcileAllocation],
 ) -> Result<()> {
+    let mut tx = pool.begin().await?;
+    reconcile_split_scoped_tx(&mut tx, company_id, payment_id, allocations).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+async fn reconcile_split_scoped_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    company_id: Uuid,
+    payment_id: Uuid,
+    allocations: &[PaymentReconcileAllocation],
+) -> Result<()> {
     anyhow::ensure!(
         !allocations.is_empty(),
         "Для split reconcile потрібен хоча б один allocation"
     );
 
-    let mut tx = pool.begin().await?;
-
-    let payment_amount = payment_amount_scoped_tx_locked(&mut tx, company_id, payment_id).await?;
+    let payment_amount = payment_amount_scoped_tx_locked(tx, company_id, payment_id).await?;
     let total_allocated = allocations
         .iter()
         .fold(rust_decimal::Decimal::ZERO, |sum, allocation| {
@@ -645,19 +654,19 @@ pub async fn reconcile_split_scoped(
     // обчислювався без урахування поточних allocation-ів цього самого платежу.
     sqlx::query("DELETE FROM payment_acts WHERE payment_id = $1")
         .bind(payment_id)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
     sqlx::query("DELETE FROM payment_invoices WHERE payment_id = $1")
         .bind(payment_id)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
 
     for allocation in allocations {
         match allocation.document_kind.as_str() {
             "act" => {
-                ensure_act_in_company_tx(&mut tx, company_id, allocation.document_id).await?;
+                ensure_act_in_company_tx(tx, company_id, allocation.document_id).await?;
                 let available = act_available_amount_for_payment_tx(
-                    &mut tx,
+                    tx,
                     company_id,
                     payment_id,
                     allocation.document_id,
@@ -677,13 +686,13 @@ pub async fn reconcile_split_scoped(
                 .bind(payment_id)
                 .bind(allocation.document_id)
                 .bind(allocation.amount)
-                .execute(&mut *tx)
+                .execute(&mut **tx)
                 .await?;
             }
             "invoice" => {
-                ensure_invoice_in_company_tx(&mut tx, company_id, allocation.document_id).await?;
+                ensure_invoice_in_company_tx(tx, company_id, allocation.document_id).await?;
                 let available = invoice_available_amount_for_payment_tx(
-                    &mut tx,
+                    tx,
                     company_id,
                     payment_id,
                     allocation.document_id,
@@ -703,17 +712,54 @@ pub async fn reconcile_split_scoped(
                 .bind(payment_id)
                 .bind(allocation.document_id)
                 .bind(allocation.amount)
-                .execute(&mut *tx)
+                .execute(&mut **tx)
                 .await?;
             }
             other => anyhow::bail!("Невідомий тип документу: {other}"),
         }
     }
 
-    refresh_reconciled_state_tx(&mut tx, payment_id).await?;
-    tx.commit().await?;
-
+    refresh_reconciled_state_tx(tx, payment_id).await?;
     Ok(())
+}
+
+async fn existing_allocations_except_target_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    payment_id: Uuid,
+    target_kind: &str,
+    target_id: Uuid,
+) -> Result<Vec<PaymentReconcileAllocation>> {
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        document_kind: String,
+        document_id: Uuid,
+        amount: rust_decimal::Decimal,
+    }
+
+    let rows = sqlx::query_as::<_, Row>(
+        r#"
+        SELECT 'act' AS document_kind, act_id AS document_id, amount
+        FROM payment_acts
+        WHERE payment_id = $1
+        UNION ALL
+        SELECT 'invoice' AS document_kind, invoice_id AS document_id, amount
+        FROM payment_invoices
+        WHERE payment_id = $1
+        "#,
+    )
+    .bind(payment_id)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .filter(|row| !(row.document_kind == target_kind && row.document_id == target_id))
+        .map(|row| PaymentReconcileAllocation {
+            document_kind: row.document_kind,
+            document_id: row.document_id,
+            amount: row.amount,
+        })
+        .collect())
 }
 
 async fn refresh_reconciled_state(pool: &PgPool, payment_id: Uuid) -> Result<()> {

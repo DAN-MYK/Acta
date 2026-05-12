@@ -833,7 +833,7 @@ pub async fn update_with_items_scoped(
     items: Vec<NewActItem>,
 ) -> Result<Option<Act>> {
     if !exists_in_company(pool, company_id, id).await? {
-        return Ok(None);
+        bail!("Акт не знайдено в межах компанії");
     }
 
     update_with_items_unscoped(pool, id, data, items).await.map(Some)

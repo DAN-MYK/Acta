@@ -1,5 +1,6 @@
 use acta::tauri_api::payments::{
-    MutationResultDto, OpenTemplateResultDto, PaymentCreateOrUpdateRequest, PaymentsScreenDto,
+    MutationResultDto, OpenTemplateResultDto, PaymentCreateOrUpdateRequest,
+    PaymentReconcileRequest, PaymentUnreconcileRequest, PaymentsScreenDto,
 };
 use tauri::State;
 
@@ -54,9 +55,9 @@ pub async fn payment_create_or_update(
 #[tauri::command]
 pub async fn payment_reconcile(
     state: State<'_, TauriState>,
-    payment_id: String,
+    request: PaymentReconcileRequest,
 ) -> CommandResult<MutationResultDto> {
-    acta::tauri_api::payments::payment_reconcile(&state.ctx, payment_id)
+    acta::tauri_api::payments::payment_reconcile(&state.ctx, request)
         .await
         .map_err(|error| error.to_string())
 }
@@ -64,9 +65,9 @@ pub async fn payment_reconcile(
 #[tauri::command]
 pub async fn payment_unreconcile(
     state: State<'_, TauriState>,
-    payment_id: String,
+    request: PaymentUnreconcileRequest,
 ) -> CommandResult<MutationResultDto> {
-    acta::tauri_api::payments::payment_unreconcile(&state.ctx, payment_id)
+    acta::tauri_api::payments::payment_unreconcile(&state.ctx, request)
         .await
         .map_err(|error| error.to_string())
 }

@@ -22,7 +22,6 @@ async fn counterparties_crud_in_db() -> Result<()> {
         bas_id: Some(bas_id.clone()),
     };
 
-    let before_archived = db::counterparties::count_archived(&pool).await?;
     let created = db::counterparties::create(&pool, DEFAULT_COMPANY_ID, &new_cp).await?;
 
     let fetched = db::counterparties::get_by_id(&pool, DEFAULT_COMPANY_ID, created.id)
@@ -53,8 +52,10 @@ async fn counterparties_crud_in_db() -> Result<()> {
         db::counterparties::archive_scoped(&pool, DEFAULT_COMPANY_ID, created.id).await?;
     assert!(archived);
 
-    let after_archived = db::counterparties::count_archived(&pool).await?;
-    assert!(after_archived >= before_archived + 1);
+    let archived_fetched = db::counterparties::get_by_id(&pool, DEFAULT_COMPANY_ID, created.id)
+        .await?
+        .expect("archived counterparty still exists");
+    assert!(archived_fetched.is_archived);
 
     sqlx::query("DELETE FROM counterparties WHERE id = $1")
         .bind(created.id)

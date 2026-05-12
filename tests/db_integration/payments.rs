@@ -510,7 +510,7 @@ async fn payments_reconcile_persists_links_and_derived_state_in_db() -> Result<(
         payment.id,
         "act",
         act.id,
-        dec!(3100.00),
+        dec!(2800.00),
     )
     .await?;
 
@@ -523,7 +523,7 @@ async fn payments_reconcile_persists_links_and_derived_state_in_db() -> Result<(
     .await?;
     assert_eq!(
         act_link_amount_after_repeat,
-        dec!(3100.00),
+        dec!(2800.00),
         "повторний reconcile має безпечно оновлювати amount через upsert"
     );
 
@@ -1026,7 +1026,7 @@ async fn payments_reconcile_split_is_atomic_on_failure() -> Result<()> {
         &pool,
         DEFAULT_COMPANY_ID,
         &models::NewAct {
-            number: format!("IT-ATOMIC-SPLIT-ACT-{suffix}"),
+            number: format!("IT-ATM-SPLT-ACT-{suffix}"),
             counterparty_id: cp.id,
             contract_id: None,
             category_id: None,
@@ -1050,7 +1050,7 @@ async fn payments_reconcile_split_is_atomic_on_failure() -> Result<()> {
         &pool,
         DEFAULT_COMPANY_ID,
         &models::NewInvoice {
-            number: format!("IT-ATOMIC-SPLIT-INV-{suffix}"),
+            number: format!("IT-ATM-SPLT-INV-{suffix}"),
             counterparty_id: cp.id,
             contract_id: None,
             category_id: None,
@@ -1191,7 +1191,7 @@ async fn payments_reconcile_split_waits_for_locked_document_row() -> Result<()> 
         &pool,
         DEFAULT_COMPANY_ID,
         &models::NewAct {
-            number: format!("IT-LOCKED-SPLIT-ACT-{suffix}"),
+            number: format!("IT-LKD-SPLT-ACT-{suffix}"),
             counterparty_id: cp.id,
             contract_id: None,
             category_id: None,
@@ -1305,7 +1305,7 @@ async fn payments_reconcile_document_waits_for_locked_document_row() -> Result<(
         &pool,
         DEFAULT_COMPANY_ID,
         &models::NewAct {
-            number: format!("IT-LOCKED-SINGLE-ACT-{suffix}"),
+            number: format!("IT-LKD-SNGL-ACT-{suffix}"),
             counterparty_id: cp.id,
             contract_id: None,
             category_id: None,
