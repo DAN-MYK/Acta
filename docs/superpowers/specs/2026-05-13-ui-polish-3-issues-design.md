@@ -47,15 +47,18 @@
 }
 ```
 
-**`PaymentsScreen.svelte`** — змінити HTML та стилі:
-- Замінити `class="payments-tabs"` → `class="nav-tabs"` + додати `margin-top: 18px` як модифікатор або inline
-- Замінити `class="payments-tab"` → `class="nav-tab"`
-- Замінити `class:active={}` → `class:nav-tab-active={}`
-- Видалити весь CSS для `.payments-tabs`, `.payments-tab`, `.payments-tab.active`, `.payments-tab.active::after` зі scoped `<style>`
+**`PaymentsScreen.svelte`** — HTML та scoped style:
+- HTML: `class="payments-tabs"` → `class="nav-tabs"` (додати `style="margin-top: 18px"` або окремий модифікатор)
+- HTML: `class="payments-tab"` → `class="nav-tab"`
+- HTML: `class:active={...}` → `class:nav-tab-active={...}`
+- CSS: видалити `.payments-tabs`, `.payments-tab`, `.payments-tab.active`, `.payments-tab.active::after`
 
-**`DocumentsScreen.svelte`** — HTML залишається (`nav-tab`, `nav-tab-active`), видалити scoped CSS для `.documents-nav-tabs`, `.nav-tab`, `.nav-tab-active` — вони тепер у global.
+**`DocumentsScreen.svelte`** — HTML та scoped style:
+- HTML: `class="documents-nav-tabs"` → **`class="nav-tabs"`** (контейнер таб-рядку)  
+  _(buttons вже мають `class="nav-tab"` та `class:nav-tab-active` — ці не змінюються)_
+- CSS: видалити scoped `.documents-nav-tabs`, `.nav-tab`, `.nav-tab-active` — вони тепер глобальні
 
-**`TasksScreen.svelte`** (`.task-tabs` всередині картки) — без змін. Pill-стиль залишається scoped.
+**`TasksScreen.svelte`** (`.task-tabs` всередині картки) — без змін. Pill-стиль залишається.
 
 ---
 
@@ -68,29 +71,37 @@
 
 ### Рішення: видалити scoped `<style>`, перенести в tasks.css
 
-**Кроки:**
+**Крок 1 — Tasks editor drawer (критично)**
 
-1. **Видалити** весь `<style>` блок з `TasksScreen.svelte` — повністю.
+Scoped `.editor-sheet` у TasksScreen — це fixed-drawer стиль (`position: fixed; display: flex; flex-direction: column; width: 480px; ...`), який відрізняється від глобального `.editor-sheet` у `styles.css` (той лише card background/border/radius). Не можна просто видалити scoped блок і покластися на global.
 
-2. **Перевірити** які класи з scoped блоку вже є у `styles.css` глобально:
-   - `.editor-sheet`, `.editor-header`, `.editor-actions`, `.editor-dirty-banner`, `.editor-dirty-actions`, `.editor-grid`, `.editor-grid-span` — вже в styles.css, не дублювати
-   - `.editor-backdrop` — вже в styles.css
+**Рішення:** перейменувати drawer на `tasks-editor-sheet`:
+- HTML: `<section class="editor-sheet" role="dialog" ...>` → `<section class="tasks-editor-sheet" role="dialog" ...>`
+- `tasks.css`: додати `.tasks-editor-sheet { position: fixed; top: 0; right: 0; bottom: 0; z-index: 201; width: 480px; max-width: 100vw; background: var(--acta-color-bg-elevated); border-left: 1px solid var(--acta-color-border); display: flex; flex-direction: column; box-shadow: ...; }`
 
-3. **Перенести** в `tasks.css` тільки screen-специфічні класи (з `--acta-*` токенами):
-   - `.tasks-panel` (layout/padding)
-   - `.task-kpis` — уніфікувати: замість flex-strip переробити на той самий дизайн (flex + border + radius) але з правильними токенами
-   - `.kpi-cell`, `.kpi-divider`, `.kpi-label`, `.kpi-value`, `.kpi-value.kpi-danger`, `.tasks-kpi-skeleton`
-   - `.tasks-card` (background + border + radius)
-   - `.tasks-card-header`
-   - `.task-row`, `.task-row:hover`, `.task-row-done`, `.task-row-main`, `.task-row-content`, `.task-row-title`, `.task-row-meta`, `.task-row-link`, `.task-row-status`
-   - `.task-priority-bar` варіанти
-   - `.task-meta-date`, `.task-pill` варіанти, `.task-status-label`
-   - `.tasks-empty`, `.tasks-message`, `.tasks-error`
-   - `.today-header`, `.today-day`, `.linked-row`, `.linked-row-title`, `.linked-row-time`
-   - `.tasks-new-btn`, `.tasks-skeleton-wrapper`
-   - `.task-tabs button` (pill style) і media queries
+**Крок 2 — Видалити** весь `<style>` блок з `TasksScreen.svelte`.
 
-4. **Видалити** з tasks.css конфліктне `.task-kpis` (grid version) і невикористаний `.task-kpi-card`.
+**Крок 3 — Перевірити** які класи з scoped блоку вже є у `styles.css` глобально:
+- `.editor-backdrop`, `.editor-header`, `.editor-actions`, `.editor-dirty-banner`, `.editor-dirty-actions`, `.editor-grid`, `.editor-grid-span` — вже в styles.css, не дублювати
+- `.editor-sheet` (глобальна) залишається для інших екранів
+
+**Крок 4 — Перенести** в `tasks.css` screen-специфічні класи (з `--acta-*` токенами):
+- `.tasks-panel` (layout/padding)
+- `.task-kpis` — flex-strip з border/radius і правильними токенами (замість поточної grid-версії)
+- `.kpi-cell`, `.kpi-divider`, `.kpi-label`, `.kpi-value`, `.kpi-value.kpi-danger`, `.tasks-kpi-skeleton`
+- `.tasks-card`, `.tasks-card-header`, `.tasks-new-btn`
+- `.task-row`, `.task-row:hover`, `.task-row-done`, `.task-row-main`, `.task-row-content`, `.task-row-title`, `.task-row-meta`, `.task-row-status`
+- `.task-priority-bar` варіанти
+- `.task-meta-date`, `.task-pill` варіанти, `.task-status-label`
+- `.tasks-empty`, `.tasks-message`, `.tasks-error`, `.tasks-skeleton-wrapper`
+- `.today-header`, `.today-day`
+- `.task-tabs button` styles, media queries
+
+**Крок 5 — Namespace** у tasks.css для класів з generic назвами (щоб styles.css після import не перекривав):
+- Класи типу `.task-row-main`, `.task-row-content`, `.task-row-title`, `.tasks-card-header`, `.tasks-empty`, `.today-header`, `.today-day` — додати `.tasks-panel` prefix: `.tasks-panel .task-row-main { ... }`
+- **Виняток — не namespaceити:** `.task-pill` і `.linked-row` — ці класи спільно використовуються в `CounterpartiesScreen.svelte`, тому залишаються глобальними без `.tasks-panel` prefix
+
+**Крок 6 — Видалити** з tasks.css конфліктні `.task-kpis` (grid version) і невикористаний `.task-kpi-card`.
 
 ### Таблиця замін токенів
 
@@ -100,7 +111,7 @@
 | `var(--bg-card)` | `var(--acta-color-bg-elevated)` |
 | `var(--bg-subtle)` | `var(--acta-color-bg-subtle)` |
 | `var(--bg-hover)` | `var(--acta-color-bg-hover)` |
-| `var(--bg)` | Залежить від контексту: `.task-tabs` → `--acta-color-bg-subtle`; inputs → `--acta-color-bg-page` |
+| `var(--bg)` | Контекст-залежно: `.task-tabs` → `--acta-color-bg-subtle`; inputs → `--acta-color-bg-page` |
 | `var(--border)` | `var(--acta-color-border)` |
 | `var(--text)` | `var(--acta-color-text)` |
 | `var(--text-muted)` | `var(--acta-color-text-muted)` |
@@ -124,44 +135,57 @@
 height: calc(100vh - 160px);  /* магічне число */
 ```
 
-### Рішення: flex-chain
-
-Замість viewport-relative height — зробити layout природньо розтягуватись через flex.
-
-**Крок 1** — `CounterpartiesScreen.svelte`: додати клас `.panel-fill` до кореневого `<section>`:
-```html
-<section class="panel panel-fill" data-testid="counterparties-screen" ...>
+### Батьківський ланцюг (поточний стан)
+```
+.main           { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+  .topbar       { flex-shrink: 0; height: 56px; }
+  .screen-outlet { flex: 1; overflow-y: auto; overflow-x: hidden; }  ← НЕ flex-контейнер
+    .panel      { margin: 20px; padding: 20px; }
+      .counterparties-layout { height: calc(100vh - 160px); }
 ```
 
-**Крок 2** — `frontend/src/styles.css`: додати `.panel-fill` модифікатор:
+### Рішення: flex-chain через screen-outlet
+
+**Крок 1 — `styles.css`**: зробити `.screen-outlet` flex-колонкою:
+```css
+.screen-outlet {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;           /* ← додати */
+  flex-direction: column;  /* ← додати */
+}
+```
+Інші екрани (Documents, Tasks) не зламаються: їхній `.panel` без `.panel-fill` буде `height: auto` → природна висота → screen-outlet scrolls як і раніше.
+
+**Крок 2 — `styles.css`**: додати модифікатор `.panel-fill`:
 ```css
 .panel-fill {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  /* 
-   Щоб flex-chain працював, батьківський контейнер (main column)
-   повинен мати визначену висоту. Якщо main column вже є grid-item 
-   в app-shell{height:100vh}, це автоматично виконується.
-   Перевірити при реалізації.
-  */
+  flex: 1;
+  min-height: 0;
 }
 ```
 
-**Крок 3** — `frontend/src/styles/counterparties.css`: видалити `height: calc(100vh - 160px)`, замінити на flex:
+**Крок 3 — `CounterpartiesScreen.svelte`**: додати клас на root `<section>`:
+```html
+<section class="panel panel-fill" data-testid="counterparties-screen" ...>
+```
+
+**Крок 4 — `counterparties.css`**: замінити `height: calc(100vh - 160px)` на flex:
 ```css
 .counterparties-layout {
   display: grid;
   grid-template-columns: 380px minmax(0, 1fr);
   gap: 16px;
   margin-top: 18px;
-  flex: 1;           /* заповнює .panel-fill */
-  min-height: 0;     /* дозволяє flex-item стискатись */
-  overflow: hidden;  /* клипає content всередині layout */
+  flex: 1;        /* ← замість height: calc(...) */
+  min-height: 0;
+  overflow: hidden;
 }
 ```
-
-**Примітка для реалізації**: якщо `flex: 1` не дає очікуваного результату (layout не заповнює панель), потрібно перевірити чи main column у `app-shell` є flex-контейнером. Якщо ні — або зробити main column flex-колонкою, або повернутись до Підходу A з token-based calc.
 
 ---
 
@@ -169,22 +193,24 @@ height: calc(100vh - 160px);  /* магічне число */
 
 | Файл | Зміна |
 |---|---|
-| `frontend/src/styles.css` | Додати `.nav-tabs`, `.nav-tab`, `.nav-tab-active`; додати `.panel-fill` |
+| `frontend/src/styles.css` | Додати `.nav-tabs`, `.nav-tab`, `.nav-tab-active`; додати `.panel-fill`; розширити `.screen-outlet` flex column |
 | `frontend/src/lib/screens/PaymentsScreen.svelte` | HTML: nav-tabs/nav-tab класи; style: видалити payments-tab CSS |
-| `frontend/src/lib/screens/DocumentsScreen.svelte` | Style: видалити scoped `.documents-nav-tabs`, `.nav-tab`, `.nav-tab-active` |
-| `frontend/src/lib/screens/TasksScreen.svelte` | Видалити весь `<style>` блок; HTML: додати `.panel-fill` на root `<section>` |  
+| `frontend/src/lib/screens/DocumentsScreen.svelte` | HTML: `documents-nav-tabs` → `nav-tabs`; style: видалити scoped `.documents-nav-tabs`, `.nav-tab`, `.nav-tab-active` |
+| `frontend/src/lib/screens/TasksScreen.svelte` | HTML: `editor-sheet` → `tasks-editor-sheet`; видалити весь `<style>` блок |
 | `frontend/src/lib/screens/CounterpartiesScreen.svelte` | HTML: додати `.panel-fill` на root `<section>` |
-| `frontend/src/styles/tasks.css` | Замінити `.task-kpis` (grid) → flex-strip з `--acta-*` токенами; видалити `.task-kpi-card`; додати всі screen-специфічні класи з TasksScreen |
+| `frontend/src/styles/tasks.css` | Повна перезапис: видалити конфліктний `.task-kpis`/`.task-kpi-card`; додати всі перенесені стилі з `--acta-*` токенами; namespace generic класи |
 | `frontend/src/styles/counterparties.css` | Замінити `height: calc(100vh - 160px)` на `flex: 1; min-height: 0; overflow: hidden` |
 
 ## Що НЕ змінюється
-- Tasks HTML структура (`.kpi-cell`, `.kpi-divider`, `.task-row`, тощо) — без змін
+- Tasks HTML структура (`.kpi-cell`, `.kpi-divider`, `.task-row`, тощо) — без змін, крім drawer class
 - Логіка Svelte stores, компонентів, TypeScript
-- DocumentsScreen HTML (`.nav-tab` вже відповідає глобальному класу)
-- `.task-tabs` (pill) — залишається у tasks.css без змін
+- `.task-tabs` (pill) — залишається у tasks.css без namespace (card-internal)
+- `.task-pill`, `.linked-row` — залишаються без `.tasks-panel` prefix (shared з Counterparties)
+- `App.svelte` — не змінюється
 
 ## Тести
-- Жодних нових тестів не потрібно — це суто CSS fixes
-- Візуальна перевірка: Tasks KPI strip (border + background), Payments taб (underline), Counterparties layout (заповнює висоту без скролу на пустому місці)
+- Жодних нових тестів — суто CSS fixes
+- Візуальна перевірка: Tasks KPI strip (border + background), Payments таб (underline), Counterparties layout (заповнює висоту)
 - Перевірити dark mode (всі `--acta-*` токени підтримують обидві теми)
-- Перевірити responsive breakpoints у TasksScreen (media queries також переносяться в tasks.css)
+- Перевірити responsive breakpoints у TasksScreen (media queries переносяться в tasks.css)
+- Перевірити Documents scrolling (screen-outlet з flex-column + overflow-y:auto має скролити як раніше)
