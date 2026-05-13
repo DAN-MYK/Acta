@@ -488,17 +488,14 @@ mod tests {
         let _ = list;
         let _ = list_by_counterparty;
         let _ = list_for_select;
-        let _ = get_by_id;
         let _ = get_by_id_scoped;
-        let _ = find_by_bas_id;
+        let _ = find_by_bas_id_scoped;
         let _ = find_by_number;
         let _ = list_by_number_exact;
         let _ = create;
         let _ = create_imported;
-        let _ = update;
         let _ = update_scoped;
         let _ = update_imported;
-        let _ = delete;
         let _ = delete_scoped;
     }
 }

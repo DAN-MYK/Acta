@@ -618,13 +618,13 @@ mod tests {
         let _ = counterparties_for_select;
         let _ = list;
         let _ = list_filtered;
-        let _ = get_by_id;
+        let _ = get_by_id_scoped;
         let _ = create;
-        let _ = update_with_items;
-        let _ = change_status;
-        let _ = get_for_edit;
-        let _ = delete;
-        let _ = advance_status;
+        let _ = update_with_items_scoped;
+        let _ = change_status_scoped;
+        let _ = get_for_edit_scoped;
+        let _ = delete_scoped;
+        let _ = advance_status_scoped;
         let _ = count_by_status;
         let _ = get_kpi;
     }

@@ -361,13 +361,14 @@ mod tests {
         // Перевіряємо що всі публічні функції доступні та компілюються
         let _ = list;
         let _ = get_by_id;
+        let _ = get_by_id_scoped;
         let _ = search;
         let _ = list_filtered;
         let _ = create;
-        let _ = update;
-        let _ = archive;
+        let _ = update_scoped;
+        let _ = archive_scoped;
         let _ = count_archived;
-        let _ = find_by_bas_id;
+        let _ = find_by_bas_id_scoped;
         let _ = find_by_edrpou;
         let _ = find_by_name;
         let _ = list_by_name_exact;

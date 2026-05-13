@@ -322,12 +322,12 @@ mod tests {
         let _ = list_open;
         let _ = list_all;
         let _ = list_due_today;
-        let _ = get_by_id;
-        let _ = list_by_act;
+        let _ = get_by_id_scoped;
+        let _ = list_by_act_scoped;
         let _ = create;
-        let _ = update;
-        let _ = set_status;
-        let _ = delete;
+        let _ = update_scoped;
+        let _ = set_status_scoped;
+        let _ = delete_scoped;
         let _ = due_reminders;
     }
 }

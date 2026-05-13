@@ -1231,9 +1231,9 @@ mod tests {
         let _ = counterparties_for_select;
         let _ = list;
         let _ = list_filtered;
-        let _ = get_by_id;
+        let _ = get_by_id_scoped;
         let _ = list_open_invoice_candidates;
-        let _ = find_by_bas_id;
+        let _ = find_by_bas_id_scoped;
         let _ = find_import_candidate;
         let _ = list_import_candidates;
         let _ = find_import_candidate_loose;
@@ -1241,12 +1241,12 @@ mod tests {
         let _ = create;
         let _ = create_imported_header;
         let _ = create_imported_with_items;
-        let _ = update_with_items;
+        let _ = update_with_items_scoped;
         let _ = update_imported_header;
         let _ = update_imported_with_items;
-        let _ = change_status;
-        let _ = get_for_edit;
-        let _ = advance_status;
+        let _ = change_status_scoped;
+        let _ = get_for_edit_scoped;
+        let _ = advance_status_scoped;
         let _ = count_by_status;
         let _ = get_kpi;
     }

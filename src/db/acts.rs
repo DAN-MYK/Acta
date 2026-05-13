@@ -885,16 +885,15 @@ mod tests {
         let _ = count_by_status;
         let _ = get_kpi;
         let _ = list_open_act_candidates;
-        let _ = get_by_id;
-        let _ = find_by_bas_id;
+        let _ = get_by_id_scoped;
+        let _ = find_by_bas_id_scoped;
         let _ = find_import_candidate;
         let _ = list_import_candidates;
         let _ = create;
-        let _ = update;
-        let _ = change_status;
-        let _ = get_for_edit;
-        let _ = update_with_items;
-        let _ = advance_status;
-        let _ = delete;
+        let _ = change_status_scoped;
+        let _ = get_for_edit_scoped;
+        let _ = update_with_items_scoped;
+        let _ = advance_status_scoped;
+        let _ = delete_scoped;
     }
 }

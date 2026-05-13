@@ -610,6 +610,54 @@ pub async fn unreconcile_all_scoped(
     Ok(())
 }
 
+/// Позначити платіж як звірений без зміни allocation-зв'язків.
+///
+/// Використовується сумісним legacy surface, де звірка могла бути ручним toggle.
+pub async fn mark_reconciled_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    payment_id: Uuid,
+) -> Result<bool> {
+    let affected = sqlx::query(
+        r#"
+        UPDATE payments
+        SET is_reconciled = TRUE,
+            updated_at = NOW()
+        WHERE id = $1 AND company_id = $2
+        "#,
+    )
+    .bind(payment_id)
+    .bind(company_id)
+    .execute(pool)
+    .await?
+    .rows_affected();
+
+    Ok(affected > 0)
+}
+
+/// Зняти ручну позначку звірки без зміни allocation-зв'язків.
+pub async fn mark_unreconciled_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    payment_id: Uuid,
+) -> Result<bool> {
+    let affected = sqlx::query(
+        r#"
+        UPDATE payments
+        SET is_reconciled = FALSE,
+            updated_at = NOW()
+        WHERE id = $1 AND company_id = $2
+        "#,
+    )
+    .bind(payment_id)
+    .bind(company_id)
+    .execute(pool)
+    .await?
+    .rows_affected();
+
+    Ok(affected > 0)
+}
+
 /// Атомарно замінити всі links платежу на новий набір allocation-ів.
 ///
 /// Уся валідація (існування платежу і документів, доступні залишки) виконується
