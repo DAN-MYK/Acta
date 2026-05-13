@@ -88,19 +88,25 @@
 
 ---
 
-### A2. Формат дати — `lang="uk"`
+### A2. Формат дати — гіпотеза `lang="uk"` з fallback
 
 **Проблема:** native `<input type="date">` показує `mm/dd/yyyy` у date-picker і у заповненому стані, бо webview успадковує локаль ОС/Chrome (US за замовчуванням). Стандарт проєкту — `dd.mm.yyyy` (`.claude/lessons.md` — `%d.%m.%Y`).
 
-**Рішення:** `frontend/index.html` — додати `lang="uk"` на корінь:
+**Гіпотеза (Крок 1):** `frontend/index.html` — додати `lang="uk"` на корінь:
 ```html
 <!DOCTYPE html>
 <html lang="uk">
 ```
 
-WebView2/Chrome формат date-picker і display-формат заповненого input напряму керується атрибутом `lang` на `<html>` або на самому input. Один атрибут — всі date inputs у застосунку отримають укр локаль (формат `dd.mm.yyyy`, локалізовані назви місяців у picker).
+WebView2/Chrome **зазвичай** використовує `lang` атрибут на `<html>` для визначення формату date-picker. Але поведінка не гарантована і може залежати від версії Chromium/WebView, локалі ОС, і user accept-language preferences. На Windows WebView2 інколи фолбекає на системний format-pattern незалежно від `lang`.
 
-**Тести:** jsdom (vitest) не рендерить native date picker, тому існуючі тести не зачепить. Перевірити вручну: відкрити Documents → Фільтр → date input має показати `дд.мм.рррр` placeholder і вибраний день у форматі `13.05.2026`.
+**Fallback (Крок 2, якщо Крок 1 не спрацював на цільовій ОС):**
+- Варіант A: явно ставити `lang="uk"` на самих `<input type="date">` (вибірково, у date-полях DocumentsScreen).
+- Варіант B: ввести display-layer — поряд із прихованим `<input type="date">` показувати форматований span з `Intl.DateTimeFormat("uk-UA")` для відображення, а picker викликати програмно. Це збільшує scope і виходить за межі цієї спеки — окрема задача.
+
+**Acceptance:** вручну на цільовій ОС (Windows + WebView2). Відкрити Documents → Фільтр → date input має показати `дд.мм.рррр` placeholder і вибраний день у форматі `13.05.2026`. Якщо ні — створити окрему задачу на fallback Варіант A/B.
+
+**Тести:** jsdom (vitest) не рендерить native date picker, тому існуючі тести не зачепить.
 
 ---
 
@@ -146,23 +152,26 @@ WebView2/Chrome формат date-picker і display-формат заповне�
 
 ```ts
 function getDocumentStatusLabel(): string {
-  // Знайти поточний документ у chain.steps за form.id і повернути його status.
+  // Знайти поточний документ у chain.steps за form.id і повернути UI label.
   // Fallback на "Чернетка" — для щойно створеного документа, який ще не у ланцюгу.
   const id = $documents.editor?.form.id ?? "";
   const steps = $documents.chain?.steps ?? [];
   const own = steps.find((s) => s.documentId === id);
-  return own?.status ?? "Чернетка";
+  return own?.statusLabel ?? "Чернетка";
 }
 
 function hasChainBeyondSelf(): boolean {
+  // load_document_chain ЗАВЖДИ повертає 3 кроки (invoice/act/waybill), включно
+  // з virtual exists=false. Тому не достатньо `documentId !== id` —
+  // virtual кроки мають documentId=null і завжди дають true.
+  // Реальні related docs = exists=true AND інший documentId.
   const id = $documents.editor?.form.id ?? "";
   const steps = $documents.chain?.steps ?? [];
-  // Ланцюг має кроки крім поточного документа (exists=true або virtual).
-  return steps.some((s) => s.documentId !== id);
+  return steps.some((s) => s.exists && s.documentId && s.documentId !== id);
 }
 ```
 
-**DTO зміна (обов'язкова):** Поточний `ChainStepDto` (`src/tauri_api/documents/dto.rs:95–101`) має поля `doc_type`, `doc_number`, `amount_str`, `status`, `exists` — без id. Без id неможливо визначити, який крок ланцюга — це поточний документ. Додаємо:
+**DTO зміна (обов'язкова):** Поточний `ChainStepDto` (`src/tauri_api/documents/dto.rs:95–101`) має поля `doc_type`, `doc_number`, `amount_str`, `status`, `exists` — без id, і `status` зберігає **код** (`issued`/`draft`/…), а не UI label. Додаємо два поля:
 
 ```rust
 // src/tauri_api/documents/dto.rs
@@ -173,16 +182,37 @@ pub struct ChainStepDto {
     pub doc_type: String,
     pub doc_number: String,
     pub amount_str: String,
-    pub status: String,
+    pub status: String,                // код (issued/draft/…) — як зараз
+    pub status_label: String,          // ← новий, UI label (узгоджено з list.statusLabel)
     pub exists: bool,
 }
 ```
 
-Заповнення у `load_document_chain` (`api.rs:700+`) — додати `Some(doc.id.to_string())` для існуючих кроків, `None` для відсутніх (`exists: false`).
+Заповнення у `load_document_chain` (`api.rs:700+`):
+- `document_id`: `Some(doc.id.to_string())` для існуючих кроків (`exists: true`), `None` для віртуальних (`exists: false` — placeholder для ще не створених документів типу invoice/act/waybill).
+- `status_label`: викликати `.status.label()` (як вже робиться у `list_documents` — `api.rs:881`, `:899`, `:917`) для existing, для virtual — порожній рядок або «Не створено». Конкретне значення virtual випадку визначити під час реалізації, узгодити з UI.
 
-TypeScript дзеркало у `frontend/src/lib/types.ts` — додати `documentId: string | null` у `ChainStep`.
+TypeScript дзеркало у `frontend/src/lib/types.ts`:
+```ts
+export interface ChainStep {
+  documentId: string | null;
+  docType: string;
+  docNumber: string;
+  amountStr: string;
+  status: string;
+  statusLabel: string;
+  exists: boolean;
+}
+```
 
-Якщо `cargo sqlx prepare` залежить від нового запиту — без змін query macros не вимагається, бо `ChainStepDto` будується програмно у Rust, не через `query_as!`.
+**Ripple у fixtures і тестах** — додати поля у наступних файлах (інакше TS strict моде зламається):
+- `frontend/src/lib/browser-fixtures.ts` — кожен `ChainStep` mock.
+- `frontend/src/lib/stores/__tests__/documents-store.test.ts` — chain steps fixtures.
+- `frontend/src/lib/stores/__tests__/shell-documents.test.ts` — chain steps fixtures (якщо є).
+- `frontend/src/lib/screens/__tests__/DocumentsScreen.test.ts` — drawer chain fixtures.
+- Rust integration тести у `tests/db_integration.rs` і `tests/tauri_vertical_slice.rs` — якщо створюють `ChainStepDto` напряму.
+
+`cargo sqlx prepare` не потрібен: `ChainStepDto` будується програмно у Rust, не через `query_as!`.
 
 **CSS (`documents.css`):**
 ```css
@@ -266,7 +296,7 @@ TypeScript дзеркало у `frontend/src/lib/types.ts` — додати `doc
 **Скрипт (нові функції):**
 ```ts
 let createMenuOpen = false;
-let createMenuPopover: HTMLElement | null = null;
+let createMenuRoot: HTMLElement | null = null;  // bind на <div class="split-button"> — обгортка обох кнопок і menu
 
 function toggleCreateMenu() { createMenuOpen = !createMenuOpen; }
 function closeCreateMenu() { createMenuOpen = false; }
@@ -274,7 +304,7 @@ function closeCreateMenu() { createMenuOpen = false; }
 function onPickCreateKind(kind: DocumentKind) {
   createKind = kind;
   try { localStorage.setItem("acta:documents:lastCreateKind", kind); } catch {}
-  createMenuOpen = false;
+  closeCreateMenu();
   void documents.create(createCounterpartyId || undefined, kind);
 }
 
@@ -290,18 +320,39 @@ let createKind: DocumentKind = (() => {
 })();
 ```
 
-Window click listener вже є (`onWindowClickForChainMenu`) — розширити, щоб закривав і `createMenuOpen`:
+**HTML коректива:** обгортка `<div class="split-button">` має `bind:this={createMenuRoot}`, primary button і caret button — всередині цього root. Menu також всередині root. Це означає, що `createMenuRoot.contains(target)` істинне для будь-якого кліку **в межах split-button** (primary, caret, menu items).
+
+**Закрити меню при click на primary:** primary CTA повинен **завжди** закривати меню (бо одразу створює документ — нема сенсу залишати дропдаун відкритим). Додаємо у `onCreateDraft`:
+
+```ts
+function onCreateDraft() {
+  closeCreateMenu();
+  void documents.create(createCounterpartyId || undefined, createKind);
+}
+```
+
+**Window click listener** — переробити поточний `onWindowClickForChainMenu` у уніфікований handler:
 ```ts
 function onWindowClickGlobalMenus(event: MouseEvent) {
-  // ... existing chain menu logic ...
+  const target = event.target as Node | null;
+
+  if (chainMenuOpen) {
+    if (target && chainMenuButton?.contains(target)) return;
+    if (target && chainMenuPopover?.contains(target)) return;
+    closeChainMenu();
+  }
+
   if (createMenuOpen) {
-    const target = event.target as Node | null;
-    if (target && createMenuPopover?.contains(target)) return;
-    if (target && createButton?.contains(target)) return; // primary не закриває menu, але caret теж не повинен — caret обробляє свій stopPropagation
+    // Клік у межах split-button (primary/caret/menu) НЕ закриває meny через handler —
+    // primary та menu item самі закривають через closeCreateMenu().
+    // Клік ПОЗА split-button → закрити.
+    if (target && createMenuRoot?.contains(target)) return;
     closeCreateMenu();
   }
 }
 ```
+
+І замінити `<svelte:window on:click={onWindowClickForChainMenu}>` на `on:click={onWindowClickGlobalMenus}`.
 
 **CSS (`documents.css`):**
 ```css
@@ -418,14 +469,8 @@ function onWindowClickGlobalMenus(event: MouseEvent) {
 {/if}
 ```
 
-**Store додаток (`stores/documents.ts`):**
-Перевірити наявність метода `clearSelection`. Якщо немає — додати:
-```ts
-function clearSelection() {
-  update((state) => ({ ...state, selectedIds: [] }));
-}
-// + експорт у public API
-```
+**Store (`stores/documents.ts`):**
+Метод `clearSelection()` вже існує (`stores/documents.ts:266–268`) — використати його напряму через `documents.clearSelection()`. Жодних змін у store не потрібно.
 
 **CSS зміни:**
 ```css
@@ -796,7 +841,7 @@ Tab underline (`.nav-tab[aria-selected="true"]`) залишається сині
 | `frontend/index.html` | A2 | `<html lang="uk">` |
 | `frontend/src/styles/documents.css` | A1, B3, B4, B7, B9, C8 | Responsive breakpoint, split-button styles, list-header, action groups, direction-toggle, kind-chip token softer, видалити direction-fieldset/create-kind-chips/editor-actions-close |
 | `frontend/src/lib/screens/DocumentsScreen.svelte` | A5, B3, B4, B7, B9, C6, C8 | Split-button розмітка, list-header + conditional bulk-bar, header groups + next-status-chip + два status chips, direction-toggle inline, прибрати duplicate kind badge у списку, scoped style оновити (.kind-chip-active soft) |
-| `frontend/src/lib/stores/documents.ts` | B4 | Додати `clearSelection()` якщо немає в публічному API |
+<!-- B4: stores/documents.ts — clearSelection() вже існує, нічого додавати -->
 | `frontend/src/lib/config/ui.ts` | B7 | `DOCUMENTS_COPY`: `chainMenuLabel: "Створити пов'язаний"`, `generatePdfLabel: "Згенерувати PDF"` |
 | `frontend/src/lib/screens/__tests__/DocumentsScreen.test.ts` | B3, B4, B7 | Split-button menu test, conditional bulk-bar test, два status chips test |
 | `src/tauri_api/documents/dto.rs` | A5 | `ChainStepDto.document_id: Option<String>` |
@@ -812,7 +857,8 @@ Tab underline (`.nav-tab[aria-selected="true"]`) залишається сині
 - Drawer animation, backdrop, dirty-banner, confirm-delete-banner.
 - Active filter chips і filter panel content.
 - Empty state, skeleton, error banners.
-- Tauri commands (крім можливого додавання `document_id` у `ChainStepDto`).
+- Tauri commands (крім додавання `document_id` + `status_label` у `ChainStepDto`).
+- Store API (`clearSelection` вже є).
 - `presets-label`, `documents-active-filters`, `documents-filter-toolbar` — без змін.
 
 ---
@@ -852,8 +898,9 @@ Tab underline (`.nav-tab[aria-selected="true"]`) залишається сині
 ## Acceptance criteria
 
 - ✅ На 1024×800 viewport чекбокс рядка inline з карткою (не орфан).
-- ✅ Усі date input показують `dd.mm.yyyy`.
-- ✅ Drawer header показує 2 chips (документ статус + ланцюг) коли є related docs; 1 chip коли нема.
+- ✅ (manual) Усі date input показують `dd.mm.yyyy` на цільовій ОС після `lang="uk"`. Якщо ні — створено follow-up задачу на fallback.
+- ✅ Drawer header показує 2 chips (документ статус + ланцюг) тільки коли є інший exists=true документ у ланцюгу. Для самотнього документа — тільки 1 chip (статус самого документа).
+- ✅ Статус документа і chain-stage показуються через `statusLabel` (UI text), не raw status code.
 - ✅ Split-button: primary CTA — створює default kind; dropdown — змінює kind + одразу створює; вибір persist у localStorage.
 - ✅ Bulk-bar не видимий при 0 виборах; з'являється з slide-transition при першому виборі.
 - ✅ Drawer header кнопки в 3 групи з візуальним розділенням деструктивних.
