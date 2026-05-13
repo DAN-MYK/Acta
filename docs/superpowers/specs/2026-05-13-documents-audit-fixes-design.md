@@ -212,7 +212,7 @@ export interface ChainStep {
 - `frontend/src/lib/screens/__tests__/DocumentsScreen.test.ts` — drawer chain fixtures.
 - Rust integration тести у `tests/db_integration.rs` і `tests/tauri_vertical_slice.rs` — якщо створюють `ChainStepDto` напряму.
 
-`cargo sqlx prepare` не потрібен: `ChainStepDto` будується програмно у Rust, не через `query_as!`.
+`cargo sqlx prepare` не очікується, якщо не змінюються query macros (`ChainStepDto` будується програмно у Rust). Запускати тільки якщо реалізація зачепить SQL macros або offline `.sqlx/` cache.
 
 **CSS (`documents.css`):**
 ```css
@@ -413,7 +413,7 @@ function onWindowClickGlobalMenus(event: MouseEvent) {
 - Скрипт: функція `onSelectCreateKind` (заміщена `onPickCreateKind`).
 
 **Залишається без змін:**
-- `onCreateDraft()` — primary click тригерить існуючу логіку з поточним `createKind`.
+- Семантика створення документа: primary click → `documents.create(counterpartyId, createKind)`. Зміна тільки в тому, що перед викликом закриваємо меню (`closeCreateMenu()` всередині `onCreateDraft`), щоб не залишити дропдаун відкритим під час асинхронного create.
 - `createCounterpartyId` логіка — без змін.
 
 ---
@@ -844,9 +844,13 @@ Tab underline (`.nav-tab[aria-selected="true"]`) залишається сині
 <!-- B4: stores/documents.ts — clearSelection() вже існує, нічого додавати -->
 | `frontend/src/lib/config/ui.ts` | B7 | `DOCUMENTS_COPY`: `chainMenuLabel: "Створити пов'язаний"`, `generatePdfLabel: "Згенерувати PDF"` |
 | `frontend/src/lib/screens/__tests__/DocumentsScreen.test.ts` | B3, B4, B7 | Split-button menu test, conditional bulk-bar test, два status chips test |
-| `src/tauri_api/documents/dto.rs` | A5 | `ChainStepDto.document_id: Option<String>` |
-| `src/tauri_api/documents/api.rs` | A5 | `load_document_chain` — заповнити `document_id` (Some для existing, None для virtual) |
-| `frontend/src/lib/types.ts` | A5 | `ChainStep.documentId: string \| null` |
+| `src/tauri_api/documents/dto.rs` | A5 | `ChainStepDto.document_id: Option<String>` + `status_label: String` |
+| `src/tauri_api/documents/api.rs` | A5 | `load_document_chain` — заповнити `document_id` (Some для existing, None для virtual) і `status_label` через `.status.label()` |
+| `frontend/src/lib/types.ts` | A5 | `ChainStep.documentId: string \| null` + `statusLabel: string` |
+| `frontend/src/lib/browser-fixtures.ts` | A5 | Додати `documentId` і `statusLabel` у всі mock ChainStep |
+| `frontend/src/lib/stores/__tests__/documents-store.test.ts` | A5 | Оновити chain steps fixtures |
+| `frontend/src/lib/stores/__tests__/shell-documents.test.ts` | A5 | Оновити chain steps fixtures (якщо присутні) |
+| `tests/db_integration.rs`, `tests/tauri_vertical_slice.rs` | A5 | Оновити Rust ChainStepDto fixtures (якщо створюються напряму) |
 
 ---
 
