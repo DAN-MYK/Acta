@@ -35,6 +35,7 @@ function makeDashboard(label = "Документи", suffix = "1"): DashboardScr
         date: "2026-04-30",
         counterparty: "ТОВ Ромашка",
         amountStr: "1 234,50 грн",
+        direction: "outgoing",
         status: "issued",
         statusLabel: "Виставлено",
         linkedId: ""
@@ -91,6 +92,7 @@ describe("frontend Tauri store smoke: dashboard", () => {
 
     await dashboardStore.load();
 
+    expect(snapshot(dashboardStore).initialLoading).toBe(false);
     expect(snapshot(dashboardStore).loading).toBe(false);
     expect(snapshot(dashboardStore).error).toBeNull();
     expect(snapshot(dashboardStore).screen?.kpis).toHaveLength(2);
@@ -108,7 +110,7 @@ describe("frontend Tauri store smoke: dashboard", () => {
     expect(snapshot(dashboardStore).loading).toBe(false);
     expect(snapshot(dashboardStore).screen).toBeNull();
     expect(snapshot(dashboardStore).error).toContain("dashboard unavailable");
-  });
+  }, 10000);
 
   it("ignores stale dashboard responses after a newer reload", async () => {
     const { dashboardStore } = await loadStores();

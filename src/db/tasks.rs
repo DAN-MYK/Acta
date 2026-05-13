@@ -1,4 +1,4 @@
-use anyhow::Result;
+﻿use anyhow::Result;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -129,7 +129,7 @@ pub async fn list_by_counterparty(pool: &PgPool, counterparty_id: Uuid) -> Resul
     Ok(rows)
 }
 
-pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<Task>> {
+pub async fn get_by_id_scoped(pool: &PgPool, company_id: Uuid, id: Uuid) -> Result<Option<Task>> {
     let row = sqlx::query_as::<_, Task>(
         r#"
         SELECT id, title, description,
@@ -138,34 +138,15 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<Task>> {
                counterparty_id, act_id,
                created_at, updated_at
         FROM tasks
-        WHERE id = $1
+        WHERE id = $1 AND company_id = $2
         "#,
     )
     .bind(id)
+    .bind(company_id)
     .fetch_optional(pool)
     .await?;
 
     Ok(row)
-}
-
-pub async fn list_by_act(pool: &PgPool, act_id: Uuid) -> Result<Vec<Task>> {
-    let rows = sqlx::query_as::<_, Task>(
-        r#"
-        SELECT id, title, description,
-               status, priority,
-               due_date, reminder_at,
-               counterparty_id, act_id,
-               created_at, updated_at
-        FROM tasks
-        WHERE act_id = $1
-        ORDER BY created_at DESC
-        "#,
-    )
-    .bind(act_id)
-    .fetch_all(pool)
-    .await?;
-
-    Ok(rows)
 }
 
 pub async fn create(pool: &PgPool, company_id: Uuid, task: &NewTask) -> Result<Task> {
@@ -199,21 +180,51 @@ pub async fn create(pool: &PgPool, company_id: Uuid, task: &NewTask) -> Result<T
     Ok(row)
 }
 
-pub async fn update(pool: &PgPool, id: Uuid, task: &NewTask) -> Result<Option<Task>> {
+pub async fn list_by_act_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    act_id: Uuid,
+) -> Result<Vec<Task>> {
+    let rows = sqlx::query_as::<_, Task>(
+        r#"
+        SELECT id, title, description,
+               status, priority,
+               due_date, reminder_at,
+               counterparty_id, act_id,
+               created_at, updated_at
+        FROM tasks
+        WHERE act_id = $1 AND company_id = $2
+        ORDER BY created_at DESC
+        "#,
+    )
+    .bind(act_id)
+    .bind(company_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows)
+}
+
+pub async fn update_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+    task: &NewTask,
+) -> Result<Option<Task>> {
     let (counterparty_id, act_id) = normalized_parent_refs(task);
 
     let row = sqlx::query_as::<_, Task>(
         r#"
         UPDATE tasks
-        SET title = $2,
-            description = $3,
-            priority = $4,
-            due_date = $5,
-            reminder_at = $6,
-            counterparty_id = $7,
-            act_id = $8,
+        SET title = $3,
+            description = $4,
+            priority = $5,
+            due_date = $6,
+            reminder_at = $7,
+            counterparty_id = $8,
+            act_id = $9,
             updated_at = NOW()
-        WHERE id = $1
+        WHERE id = $1 AND company_id = $2
         RETURNING id, title, description,
                   status, priority,
                   due_date, reminder_at,
@@ -222,6 +233,7 @@ pub async fn update(pool: &PgPool, id: Uuid, task: &NewTask) -> Result<Option<Ta
         "#,
     )
     .bind(id)
+    .bind(company_id)
     .bind(&task.title)
     .bind(&task.description)
     .bind(task.priority.clone())
@@ -235,13 +247,18 @@ pub async fn update(pool: &PgPool, id: Uuid, task: &NewTask) -> Result<Option<Ta
     Ok(row)
 }
 
-pub async fn set_status(pool: &PgPool, id: Uuid, status: TaskStatus) -> Result<Option<Task>> {
+pub async fn set_status_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+    status: TaskStatus,
+) -> Result<Option<Task>> {
     let row = sqlx::query_as::<_, Task>(
         r#"
         UPDATE tasks
-        SET status = $2,
+        SET status = $3,
             updated_at = NOW()
-        WHERE id = $1
+        WHERE id = $1 AND company_id = $2
         RETURNING id, title, description,
                   status, priority,
                   due_date, reminder_at,
@@ -250,6 +267,7 @@ pub async fn set_status(pool: &PgPool, id: Uuid, status: TaskStatus) -> Result<O
         "#,
     )
     .bind(id)
+    .bind(company_id)
     .bind(status)
     .fetch_optional(pool)
     .await?;
@@ -257,14 +275,15 @@ pub async fn set_status(pool: &PgPool, id: Uuid, status: TaskStatus) -> Result<O
     Ok(row)
 }
 
-pub async fn delete(pool: &PgPool, id: Uuid) -> Result<bool> {
+pub async fn delete_scoped(pool: &PgPool, company_id: Uuid, id: Uuid) -> Result<bool> {
     let affected = sqlx::query(
         r#"
         DELETE FROM tasks
-        WHERE id = $1
+        WHERE id = $1 AND company_id = $2
         "#,
     )
     .bind(id)
+    .bind(company_id)
     .execute(pool)
     .await?
     .rows_affected();

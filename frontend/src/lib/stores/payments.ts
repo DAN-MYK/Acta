@@ -1,45 +1,221 @@
 import { get, writable } from "svelte/store";
 import {
-  paymentsList,
-  paymentsImportLatestCsv,
-  paymentsSyncBank,
-  paymentsOpenManualTemplate,
   paymentCreateOrUpdate,
+  paymentScheduleComplete,
+  paymentMatchApplyAuto,
+  paymentMatchManualCandidates,
+  paymentMatchPreview,
   paymentReconcile,
-  paymentUnreconcile
+  paymentReconcileSplit,
+  paymentsCalendarLoad,
+  paymentsImportCommit,
+  paymentsImportLatestCsv,
+  paymentsImportPickAndPreview,
+  paymentsImportPreview,
+  paymentsList,
+  paymentsOpenManualTemplate,
+  paymentsSyncBank,
+  paymentUnreconcileAll
 } from "../api";
+import { counterpartiesStore } from "./counterparties";
+import { navigationStore } from "./navigation";
+import {
+  cloneSnapshot,
+  isEditorFormDirty,
+  type CloseEditorResult
+} from "../editorDirty";
+import {
+  type PaymentActiveAction,
+  PAYMENT_MANUAL_MATCH_COPY,
+  PAYMENT_RECONCILE_MESSAGES
+} from "../config/ui";
+import { formatMinorMoney, parseMoneyToMinor } from "../money";
+import {
+  filterCalendarEvents,
+  formatLocalDate,
+  formatLocalMonth,
+  plusDays,
+  shiftMonth
+} from "./paymentsUtils";
+import { tasksStore } from "./tasks";
 import type {
   MutationResultDto,
   OpenTemplateResultDto,
+  PaymentCalendarEventDto,
+  PaymentCalendarFilterKind,
+  PaymentCalendarMonthDto,
   PaymentDraftFormDto,
+  PaymentImportPreviewDto,
   PaymentItemDto,
+  PaymentManualMatchCandidatesDto,
+  PaymentMatchCandidateDto,
+  PaymentMatchPreviewDto,
+  PaymentReconcileSplitResultDto,
   PaymentsScreenDto
 } from "../types";
 
+interface PaymentManualPickerState {
+  paymentId: string;
+  query: string;
+  candidates: PaymentMatchCandidateDto[];
+  selectedCandidateId: string | null;
+}
+
+interface PaymentSplitAllocationDraft {
+  documentId: string;
+  documentKind: PaymentMatchCandidateDto["documentKind"];
+  title: string;
+  openAmountStr: string;
+  amount: string;
+}
+
+interface PaymentSplitDraftState {
+  paymentId: string;
+  paymentAmountStr: string;
+  remainingAmountStr: string;
+  allocations: PaymentSplitAllocationDraft[];
+}
+
 interface PaymentsStoreState {
   list: PaymentsScreenDto | null;
+  calendar: PaymentCalendarMonthDto | null;
+  calendarInitialLoading: boolean;
+  calendarLoading: boolean;
+  calendarError: string | null;
+  calendarFilter: PaymentCalendarFilterKind;
+  selectedCalendarEventId: string | null;
+  initialLoading: boolean;
   loading: boolean;
   error: string | null;
   editor: PaymentDraftFormDto | null;
+  editorSnapshot: PaymentDraftFormDto | null;
   message: string | null;
+  matchPreview: PaymentMatchPreviewDto | null;
+  selectedCandidateId: string | null;
+  manualPicker: PaymentManualPickerState | null;
+  splitDraft: PaymentSplitDraftState | null;
+  importPreview: PaymentImportPreviewDto | null;
+  importPreviewStale: boolean;
+  activeAction: PaymentActiveAction | null;
+  activePaymentId: string | null;
 }
 
+const initialState: PaymentsStoreState = {
+  list: null,
+  calendar: null,
+  calendarInitialLoading: true,
+  calendarLoading: false,
+  calendarError: null,
+  calendarFilter: "all",
+  selectedCalendarEventId: null,
+  initialLoading: true,
+  loading: false,
+  error: null,
+  editor: null,
+  editorSnapshot: null,
+  message: null,
+  matchPreview: null,
+  selectedCandidateId: null,
+  manualPicker: null,
+  splitDraft: null,
+  importPreview: null,
+  importPreviewStale: false,
+  activeAction: null,
+  activePaymentId: null
+};
+
 function createPaymentsStore() {
-  const { subscribe, update } = writable<PaymentsStoreState>({
-    list: null,
-    loading: false,
-    error: null,
-    editor: null,
-    message: null
-  });
+  const { subscribe, set, update } = writable<PaymentsStoreState>(initialState);
+
+  function selectedEventIdForCalendar(
+    calendar: PaymentCalendarMonthDto,
+    filter: PaymentCalendarFilterKind,
+    preferredEventId?: string | null
+  ) {
+    const selectedDay = calendar.days.find((day) => day.selected) ?? calendar.days[0] ?? null;
+    const visibleEvents = filterCalendarEvents(selectedDay, filter);
+
+    if (preferredEventId && visibleEvents.some((event) => event.id === preferredEventId)) {
+      return preferredEventId;
+    }
+
+    return visibleEvents[0]?.id ?? null;
+  }
+
+  async function loadCalendarMonth(month: string, selectedDate?: string | null) {
+    update((state) => ({ ...state, calendarLoading: true, calendarError: null }));
+
+    try {
+      const calendar = await paymentsCalendarLoad({
+        month,
+        selectedDate: selectedDate ?? null
+      });
+      update((state) => ({
+        ...state,
+        calendar,
+        calendarInitialLoading: false,
+        calendarLoading: false,
+        selectedCalendarEventId: selectedEventIdForCalendar(
+          calendar,
+          state.calendarFilter,
+          state.selectedCalendarEventId
+        )
+      }));
+    } catch (error) {
+      update((state) => ({
+        ...state,
+        calendarLoading: false,
+        calendarInitialLoading: false,
+        calendarError: String(error)
+      }));
+    }
+  }
 
   async function loadPayments() {
-    update((state) => ({ ...state, loading: true, error: null }));
+    const snapshot = get({ subscribe });
+    const month = snapshot.calendar?.month ?? formatLocalMonth(new Date());
+    const selectedDate = snapshot.calendar?.selectedDate ?? null;
+
+    update((state) => ({
+      ...state,
+      loading: true,
+      error: null,
+      calendarLoading: true,
+      calendarError: null
+    }));
     try {
-      const list = await paymentsList();
-      update((state) => ({ ...state, list, loading: false }));
+      const [list, calendar] = await Promise.all([
+        paymentsList(),
+        paymentsCalendarLoad({
+          month,
+          selectedDate
+        })
+      ]);
+      update((state) => ({
+        ...state,
+        list,
+        calendar,
+        initialLoading: false,
+        calendarInitialLoading: false,
+        loading: false,
+        calendarLoading: false,
+        selectedCalendarEventId: selectedEventIdForCalendar(
+          calendar,
+          state.calendarFilter,
+          state.selectedCalendarEventId
+        )
+      }));
     } catch (error) {
-      update((state) => ({ ...state, loading: false, error: String(error) }));
+      const message = String(error);
+      update((state) => ({
+        ...state,
+        loading: false,
+        calendarLoading: false,
+        initialLoading: false,
+        calendarInitialLoading: false,
+        error: message,
+        calendarError: message
+      }));
     }
   }
 
@@ -60,92 +236,965 @@ function createPaymentsStore() {
     description: ""
   });
 
+  const clearPreview = (state: PaymentsStoreState): PaymentsStoreState => ({
+    ...state,
+    matchPreview: null,
+    selectedCandidateId: null
+  });
+
+  const clearManualPicker = (state: PaymentsStoreState): PaymentsStoreState => ({
+    ...state,
+    manualPicker: null
+  });
+
+  const clearSplitDraft = (state: PaymentsStoreState): PaymentsStoreState => ({
+    ...state,
+    splitDraft: null
+  });
+
+  const beginAction = (action: PaymentActiveAction, paymentId: string | null = null) => {
+    update((state) => ({
+      ...state,
+      loading: true,
+      error: null,
+      activeAction: action,
+      activePaymentId: paymentId
+    }));
+  };
+
+  const finishAction = () => {
+    update((state) => ({
+      ...state,
+      loading: false,
+      activeAction: null,
+      activePaymentId: null
+    }));
+  };
+
+  const failMutation = (message: string): MutationResultDto => ({ ok: false, message });
+  const isImportPreviewStaleMessage = (message: string): boolean =>
+    message.includes("Файл виписки змінився") || message.includes("Вміст файлу виписки змінився");
+
+  const runMutationAction = async <T extends MutationResultDto>(
+    action: PaymentActiveAction,
+    task: () => Promise<T>,
+    paymentId: string | null = null
+  ): Promise<T | MutationResultDto> => {
+    beginAction(action, paymentId);
+    try {
+      return await task();
+    } catch (error) {
+      const message = String(error);
+      update((state) => ({ ...state, message, error: message }));
+      return failMutation(message);
+    } finally {
+      finishAction();
+    }
+  };
+
+  const getSelectedPreviewCandidate = (
+    preview: PaymentMatchPreviewDto,
+    selectedCandidateId: string | null
+  ) => {
+    if (preview.decisionKind !== "ambiguous" || !selectedCandidateId) {
+      return null;
+    }
+
+    return preview.candidates.find((candidate) => candidate.documentId === selectedCandidateId) ?? null;
+  };
+
+  const getSelectedManualPickerCandidate = (manualPicker: PaymentManualPickerState | null) => {
+    if (!manualPicker?.selectedCandidateId) {
+      return null;
+    }
+
+    return (
+      manualPicker.candidates.find((candidate) => candidate.documentId === manualPicker.selectedCandidateId) ?? null
+    );
+  };
+
+  const toManualPickerState = (
+    manualPicker: PaymentManualMatchCandidatesDto
+  ): PaymentManualPickerState => ({
+    paymentId: manualPicker.paymentId,
+    query: manualPicker.query,
+    candidates: manualPicker.candidates,
+    selectedCandidateId: manualPicker.candidates[0]?.documentId ?? null
+  });
+
+  const parseAmountMinor = (value: string): bigint => parseMoneyToMinor(value) ?? 0n;
+
+  const formatRemainingMinor = (value: bigint): string =>
+    formatMinorMoney(value < 0n ? 0n : value);
+
+  const recalculateSplitDraft = (
+    splitDraft: PaymentSplitDraftState
+  ): PaymentSplitDraftState => {
+    const paymentAmount = parseAmountMinor(splitDraft.paymentAmountStr);
+    const allocatedAmount = splitDraft.allocations.reduce(
+      (sum, allocation) => sum + parseAmountMinor(allocation.amount),
+      0n
+    );
+
+    return {
+      ...splitDraft,
+      remainingAmountStr: formatRemainingMinor(paymentAmount - allocatedAmount)
+    };
+  };
+
+  const buildInitialSplitDraft = (
+    state: PaymentsStoreState,
+    paymentId: string,
+    candidates: PaymentMatchCandidateDto[] = []
+  ): PaymentSplitDraftState => {
+    const paymentAmountStr = state.list?.items.find((item) => item.id === paymentId)?.amountStr;
+    const fallbackAmount = candidates.reduce(
+      (sum, candidate) => sum + parseAmountMinor(candidate.openAmountStr),
+      0n
+    );
+    const paymentAmount = parseAmountMinor(paymentAmountStr ?? "0");
+    const resolvedAmount = formatMinorMoney(paymentAmount > 0n ? paymentAmount : fallbackAmount);
+
+    return {
+      paymentId,
+      paymentAmountStr: resolvedAmount,
+      remainingAmountStr: resolvedAmount,
+      allocations: []
+    };
+  };
+
+  const buildSplitDraftFromCandidates = (
+    state: PaymentsStoreState,
+    paymentId: string,
+    candidates: PaymentMatchCandidateDto[]
+  ): PaymentSplitDraftState => {
+    const draft = buildInitialSplitDraft(state, paymentId, candidates);
+    let remainingAmount = parseAmountMinor(draft.paymentAmountStr);
+
+    draft.allocations = candidates
+      .map((candidate) => {
+        const candidateOpen = parseAmountMinor(candidate.openAmountStr);
+        const cap = remainingAmount > 0n ? remainingAmount : 0n;
+        const allocationAmount = cap < candidateOpen ? cap : candidateOpen;
+        remainingAmount -= allocationAmount;
+
+        if (allocationAmount <= 0n) {
+          return null;
+        }
+
+        return {
+          documentId: candidate.documentId,
+          documentKind: candidate.documentKind,
+          title: candidate.title,
+          openAmountStr: candidate.openAmountStr,
+          amount: formatMinorMoney(allocationAmount)
+        };
+      })
+      .filter((allocation): allocation is PaymentSplitAllocationDraft => allocation !== null);
+
+    return recalculateSplitDraft(draft);
+  };
+
   return {
     subscribe,
+
+    reset() {
+      set(initialState);
+    },
 
     async load() {
       await loadPayments();
     },
 
+    async loadCalendar(month?: string, selectedDate?: string | null) {
+      const snapshot = get({ subscribe });
+      await loadCalendarMonth(month ?? snapshot.calendar?.month ?? formatLocalMonth(new Date()), selectedDate);
+    },
+
+    selectCalendarDate(date: string) {
+      update((state) => {
+        if (!state.calendar) {
+          return state;
+        }
+
+        const calendar = {
+          ...state.calendar,
+          selectedDate: date,
+          days: state.calendar.days.map((day) => ({
+            ...day,
+            selected: day.date === date
+          }))
+        };
+
+        return {
+          ...state,
+          calendar,
+          selectedCalendarEventId: selectedEventIdForCalendar(calendar, state.calendarFilter, null)
+        };
+      });
+    },
+
+    async shiftCalendarMonth(delta: number) {
+      const snapshot = get({ subscribe });
+      const month = shiftMonth(snapshot.calendar?.month ?? formatLocalMonth(new Date()), delta);
+      await loadCalendarMonth(month);
+    },
+
+    async moveCalendarSelection(deltaDays: number) {
+      const snapshot = get({ subscribe });
+      const selectedDate = snapshot.calendar?.selectedDate;
+      if (!snapshot.calendar || !selectedDate) {
+        return;
+      }
+
+      const nextDate = plusDays(selectedDate, deltaDays);
+      const nextMonth = nextDate.slice(0, 7);
+
+      if (nextMonth !== snapshot.calendar.month) {
+        await loadCalendarMonth(nextMonth, nextDate);
+        return;
+      }
+
+      this.selectCalendarDate(nextDate);
+    },
+
+    setCalendarFilter(filter: PaymentCalendarFilterKind) {
+      update((state) => {
+        if (!state.calendar) {
+          return {
+            ...state,
+            calendarFilter: filter,
+            selectedCalendarEventId: null
+          };
+        }
+
+        return {
+          ...state,
+          calendarFilter: filter,
+          selectedCalendarEventId: selectedEventIdForCalendar(
+            state.calendar,
+            filter,
+            state.selectedCalendarEventId
+          )
+        };
+      });
+    },
+
+    selectCalendarEvent(eventId: string) {
+      update((state) => ({
+        ...state,
+        selectedCalendarEventId: eventId
+      }));
+    },
+
+    async completeSchedule(scheduleId: string): Promise<MutationResultDto> {
+      return runMutationAction("calendar-complete", async () => {
+        const result = await paymentScheduleComplete({ scheduleId });
+        if (result.ok) {
+          const snapshot = get({ subscribe });
+          await loadCalendarMonth(snapshot.calendar?.month ?? formatLocalMonth(new Date()), snapshot.calendar?.selectedDate);
+          update((state) => ({ ...state, message: result.message, error: null }));
+        } else {
+          update((state) => ({ ...state, message: result.message, error: result.message }));
+        }
+        return result;
+      }, scheduleId);
+    },
+
+    async openCalendarTask(taskId: string) {
+      navigationStore.go("tasks");
+      await tasksStore.openEditor(taskId);
+    },
+
+    async openCalendarCounterparty(counterpartyId: string) {
+      if (!counterpartyId) {
+        return;
+      }
+
+      navigationStore.go("counterparties");
+      await counterpartiesStore.open(counterpartyId);
+    },
+
+    createPaymentFromSchedule(event: PaymentCalendarEventDto) {
+      const editor: PaymentDraftFormDto = {
+        id: "",
+        date: event.date,
+        amount: event.amountStr || "",
+        direction: event.direction === "income" ? "income" : "expense",
+        counterpartyId: event.counterpartyId,
+        counterpartyName: event.counterpartyName,
+        bankName: "",
+        reference: "",
+        description: event.title
+      };
+
+      update((state) => ({
+        ...state,
+        editor,
+        message: "Підготовлено чернетку платежу з календаря.",
+        error: null
+      }));
+    },
+
     async importCsv(): Promise<MutationResultDto> {
-      try {
+      return runMutationAction("import", async () => {
         const result = await paymentsImportLatestCsv();
         if (result.ok) {
           await refreshAfterMutation(result.message);
         } else {
-          update((state) => ({ ...state, message: result.message }));
+          update((state) => ({ ...state, message: result.message, error: result.message }));
+        }
+        return result;
+      });
+    },
+
+    /// Запускає file picker, парсить виписку і кладе план у `importPreview`.
+    /// Користувач підтверджує commit окремо через `commitImportPreview()`.
+    async pickAndPreviewImport(): Promise<PaymentImportPreviewDto | null> {
+      beginAction("import-pick");
+      try {
+        const preview = await paymentsImportPickAndPreview();
+        if (!preview) {
+          update((state) => ({
+            ...state,
+            message: "Імпорт скасовано — файл не вибрано.",
+            error: null
+          }));
+          return null;
+        }
+        update((state) => ({
+          ...state,
+          importPreview: preview,
+          importPreviewStale: false,
+          message: preview.message,
+          error: null
+        }));
+        return preview;
+      } catch (error) {
+        const message = String(error);
+        update((state) => ({
+          ...state,
+          message,
+          error: message,
+          importPreview: null,
+          importPreviewStale: false
+        }));
+        return null;
+      } finally {
+        finishAction();
+      }
+    },
+
+    /// Підтверджує preview і фактично записує платежі у БД.
+    async commitImportPreview(): Promise<MutationResultDto> {
+      const preview = get({ subscribe }).importPreview;
+      if (!preview) {
+        const message = "Немає підготованого preview для імпорту.";
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message };
+      }
+      beginAction("import-commit");
+      try {
+        const result = await paymentsImportCommit({
+          path: preview.path,
+          fileSize: preview.fileSize,
+          fileMtimeSecs: preview.fileMtimeSecs,
+          fileHash: preview.fileHash,
+        });
+        if (result.ok) {
+          update((state) => ({ ...state, importPreview: null, importPreviewStale: false }));
+          await refreshAfterMutation(result.message);
+        } else {
+          update((state) => ({
+            ...state,
+            message: result.message,
+            error: result.message,
+            importPreviewStale: isImportPreviewStaleMessage(result.message)
+          }));
         }
         return result;
       } catch (error) {
         const message = String(error);
-        update((state) => ({ ...state, message }));
+        update((state) => ({
+          ...state,
+          message,
+          error: message,
+          importPreviewStale: isImportPreviewStaleMessage(message)
+        }));
         return { ok: false, message };
+      } finally {
+        finishAction();
+      }
+    },
+
+    /// Закриває preview не імпортуючи нічого.
+    cancelImportPreview() {
+      update((state) => ({
+        ...state,
+        importPreview: null,
+        importPreviewStale: false,
+        message: "Попередній перегляд імпорту відкладено.",
+        error: null
+      }));
+    },
+
+    /// Перезавантажує preview за вже відомим шляхом (без re-pick).
+    async refreshImportPreview(): Promise<void> {
+      const existing = get({ subscribe }).importPreview;
+      if (!existing) return;
+      beginAction("import-pick");
+      try {
+        const preview = await paymentsImportPreview(existing.path);
+        update((state) => ({
+          ...state,
+          importPreview: preview,
+          importPreviewStale: false,
+          message: preview.message,
+          error: null
+        }));
+      } catch (error) {
+        const message = String(error);
+        update((state) => ({
+          ...state,
+          message,
+          error: message,
+          importPreviewStale: isImportPreviewStaleMessage(message)
+        }));
+      } finally {
+        finishAction();
       }
     },
 
     async syncBank(): Promise<MutationResultDto> {
-      try {
+      return runMutationAction("sync", async () => {
         const result = await paymentsSyncBank();
         if (result.ok) {
           await refreshAfterMutation(result.message);
         } else {
-          update((state) => ({ ...state, message: result.message }));
+          update((state) => ({ ...state, message: result.message, error: result.message }));
+        }
+        return result;
+      });
+    },
+
+    async reconcile(id: string) {
+      beginAction("reconcile", id);
+      try {
+        const preview = await paymentMatchPreview({ paymentId: id });
+        const selectedCandidateId = preview.candidates[0]?.documentId ?? preview.autoMatch?.documentId ?? null;
+
+        const message = PAYMENT_RECONCILE_MESSAGES[preview.decisionKind];
+
+        update((state) => ({
+          ...state,
+          loading: false,
+          error: null,
+          message,
+          matchPreview: preview,
+          selectedCandidateId,
+          manualPicker: state.manualPicker?.paymentId === id ? state.manualPicker : null,
+          splitDraft:
+            preview.decisionKind === "split"
+              ? buildSplitDraftFromCandidates(state, id, preview.candidates)
+              : state.splitDraft?.paymentId === id
+                ? state.splitDraft
+                : null
+        }));
+      } catch (error) {
+        const message = String(error);
+        update((state) => ({
+          ...clearSplitDraft(clearManualPicker(clearPreview(state))),
+          loading: false,
+          error: message,
+          message
+        }));
+      } finally {
+        update((state) => ({
+          ...state,
+          activeAction: null,
+          activePaymentId: null
+        }));
+      }
+    },
+
+    async confirmPreviewAutoMatch(): Promise<MutationResultDto> {
+      const preview = get({ subscribe }).matchPreview;
+
+      if (!preview?.autoMatch) {
+        const message = PAYMENT_MANUAL_MATCH_COPY.missingAutoMatch;
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message };
+      }
+
+      beginAction("confirm-auto-match", preview.paymentId);
+      try {
+        const result = await paymentMatchApplyAuto({ paymentId: preview.paymentId });
+        if (result.ok) {
+          update((state) =>
+            clearSplitDraft(clearManualPicker(clearPreview({ ...state, message: result.message })))
+          );
+          await loadPayments();
+        } else {
+          update((state) => ({ ...state, message: result.message, error: result.message }));
         }
         return result;
       } catch (error) {
         const message = String(error);
-        update((state) => ({ ...state, message }));
+        update((state) => ({ ...state, message, error: message }));
         return { ok: false, message };
+      } finally {
+        finishAction();
       }
     },
 
-    async reconcile(id: string) {
+    async confirmSelectedPreviewCandidate(): Promise<MutationResultDto> {
+      const { matchPreview, selectedCandidateId } = get({ subscribe });
+
+      if (!matchPreview || matchPreview.decisionKind !== "ambiguous") {
+        const message = PAYMENT_MANUAL_MATCH_COPY.previewCandidateUnavailable;
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message };
+      }
+
+      const candidate = getSelectedPreviewCandidate(matchPreview, selectedCandidateId);
+      if (!candidate) {
+        const message = PAYMENT_MANUAL_MATCH_COPY.previewCandidateMissing;
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message };
+      }
+
+      beginAction("confirm-candidate", matchPreview.paymentId);
       try {
-        const result = await paymentReconcile(id);
+        const result = await paymentReconcile({
+          paymentId: matchPreview.paymentId,
+          documentKind: candidate.documentKind,
+          documentId: candidate.documentId,
+          amount: candidate.openAmountStr
+        });
         if (result.ok) {
-          await refreshAfterMutation(result.message);
+          update((state) =>
+            clearSplitDraft(clearManualPicker(clearPreview({ ...state, message: result.message })))
+          );
+          await loadPayments();
+        } else {
+          update((state) => ({ ...state, message: result.message, error: result.message }));
         }
+        return result;
       } catch (error) {
-        update((state) => ({ ...state, message: String(error) }));
+        const message = String(error);
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message };
+      } finally {
+        finishAction();
+      }
+    },
+
+    selectPreviewCandidate(documentId: string) {
+      update((state) => {
+        if (!state.matchPreview) {
+          return state;
+        }
+
+        return {
+          ...state,
+          selectedCandidateId: documentId,
+          message: PAYMENT_MANUAL_MATCH_COPY.previewCandidateSelected
+        };
+      });
+    },
+
+    async openManualMatchPicker(paymentId: string, query = ""): Promise<MutationResultDto> {
+      beginAction("manual-search", paymentId);
+      try {
+        const manualPicker = await paymentMatchManualCandidates({ paymentId, query });
+        update((state) => ({
+          ...state,
+          loading: false,
+          error: null,
+          message: manualPicker.candidates.length
+            ? PAYMENT_MANUAL_MATCH_COPY.manualSearchClosed
+            : PAYMENT_MANUAL_MATCH_COPY.manualPickerClosed,
+          manualPicker: toManualPickerState(manualPicker),
+          splitDraft:
+            state.splitDraft?.paymentId === paymentId
+              ? state.splitDraft
+              : buildInitialSplitDraft(state, paymentId, manualPicker.candidates)
+        }));
+        return {
+          ok: true,
+          message: manualPicker.candidates.length
+            ? PAYMENT_MANUAL_MATCH_COPY.manualSearchClosed
+            : PAYMENT_MANUAL_MATCH_COPY.manualPickerClosed
+        };
+      } catch (error) {
+        const message = String(error);
+        update((state) => ({
+          ...clearSplitDraft(clearManualPicker(state)),
+          loading: false,
+          error: message,
+          message
+        }));
+        return { ok: false, message };
+      } finally {
+        update((state) => ({
+          ...state,
+          activeAction: null,
+          activePaymentId: null
+        }));
+      }
+    },
+
+    updateManualMatchQuery(query: string) {
+      update((state) => {
+        if (!state.manualPicker) {
+          return state;
+        }
+
+        return {
+          ...state,
+          manualPicker: {
+            ...state.manualPicker,
+            query
+          }
+        };
+      });
+    },
+
+    async searchManualMatchCandidates(): Promise<MutationResultDto> {
+      const manualPicker = get({ subscribe }).manualPicker;
+      if (!manualPicker) {
+        const message = PAYMENT_MANUAL_MATCH_COPY.manualSearchClosed;
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message };
+      }
+
+      return await this.openManualMatchPicker(manualPicker.paymentId, manualPicker.query);
+    },
+
+    selectManualPickerCandidate(documentId: string) {
+      update((state) => {
+        if (!state.manualPicker) {
+          return state;
+        }
+
+        return {
+          ...state,
+          manualPicker: {
+            ...state.manualPicker,
+            selectedCandidateId: documentId
+          },
+          message: PAYMENT_MANUAL_MATCH_COPY.manualCandidateSelected
+        };
+      });
+    },
+
+    async addSelectedManualPickerCandidateToSplit(): Promise<MutationResultDto> {
+      const { manualPicker, splitDraft } = get({ subscribe });
+      const candidate = getSelectedManualPickerCandidate(manualPicker);
+
+      if (!manualPicker || !splitDraft) {
+        const message = PAYMENT_MANUAL_MATCH_COPY.splitPickerClosed;
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message };
+      }
+
+      if (!candidate) {
+        const message = PAYMENT_MANUAL_MATCH_COPY.splitCandidateMissing;
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message };
+      }
+
+      if (splitDraft.allocations.some((allocation) => allocation.documentId === candidate.documentId)) {
+        const message = PAYMENT_MANUAL_MATCH_COPY.splitCandidateDuplicate;
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message };
+      }
+
+      const remainingAmount = parseAmountMinor(splitDraft.remainingAmountStr);
+      if (remainingAmount <= 0n) {
+        const message = PAYMENT_MANUAL_MATCH_COPY.splitFullyAllocated;
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message };
+      }
+
+      const candidateOpen = parseAmountMinor(candidate.openAmountStr);
+      const allocationAmount = remainingAmount < candidateOpen ? remainingAmount : candidateOpen;
+
+      update((state) => {
+        if (!state.splitDraft) {
+          return state;
+        }
+
+        return {
+          ...state,
+          splitDraft: recalculateSplitDraft({
+            ...state.splitDraft,
+            allocations: [
+              ...state.splitDraft.allocations,
+              {
+                documentId: candidate.documentId,
+                documentKind: candidate.documentKind,
+                title: candidate.title,
+                openAmountStr: candidate.openAmountStr,
+                amount: formatMinorMoney(allocationAmount)
+              }
+            ]
+          }),
+          message: PAYMENT_MANUAL_MATCH_COPY.splitDraftUpdated,
+          error: null
+        };
+      });
+
+      return { ok: true, message: PAYMENT_MANUAL_MATCH_COPY.splitCandidateAdded };
+    },
+
+    updateSplitAllocationAmount(documentId: string, amount: string) {
+      update((state) => {
+        if (!state.splitDraft) {
+          return state;
+        }
+
+        const current = state.splitDraft.allocations.find((allocation) => allocation.documentId === documentId);
+        if (!current) {
+          return state;
+        }
+
+        const parsedNext = parseMoneyToMinor(amount);
+        if (parsedNext === null) {
+          return {
+            ...state,
+            message: PAYMENT_MANUAL_MATCH_COPY.splitAmountInvalid,
+            error: PAYMENT_MANUAL_MATCH_COPY.splitAmountInvalid
+          };
+        }
+
+        const nextAmount = parsedNext;
+        const documentOpenAmount = parseAmountMinor(current.openAmountStr);
+        const otherAllocationsTotal = state.splitDraft.allocations
+          .filter((allocation) => allocation.documentId !== documentId)
+          .reduce((sum, allocation) => sum + parseAmountMinor(allocation.amount), 0n);
+        const paymentAmount = parseAmountMinor(state.splitDraft.paymentAmountStr);
+
+        if (nextAmount <= 0n) {
+          return {
+            ...state,
+            message: PAYMENT_MANUAL_MATCH_COPY.splitAmountTooSmall,
+            error: PAYMENT_MANUAL_MATCH_COPY.splitAmountTooSmall
+          };
+        }
+
+        if (nextAmount > documentOpenAmount) {
+          return {
+            ...state,
+            message: PAYMENT_MANUAL_MATCH_COPY.splitAmountAboveDocument,
+            error: PAYMENT_MANUAL_MATCH_COPY.splitAmountAboveDocument
+          };
+        }
+
+        if (otherAllocationsTotal + nextAmount > paymentAmount) {
+          return {
+            ...state,
+            message: PAYMENT_MANUAL_MATCH_COPY.splitAmountAbovePayment,
+            error: PAYMENT_MANUAL_MATCH_COPY.splitAmountAbovePayment
+          };
+        }
+
+        return {
+          ...state,
+          splitDraft: recalculateSplitDraft({
+            ...state.splitDraft,
+            allocations: state.splitDraft.allocations.map((allocation) =>
+              allocation.documentId === documentId
+                ? { ...allocation, amount: amount.trim() || allocation.amount }
+                : allocation
+            )
+          }),
+          error: null
+        };
+      });
+    },
+
+    removeSplitAllocation(documentId: string) {
+      update((state) => {
+        if (!state.splitDraft) {
+          return state;
+        }
+
+        return {
+          ...state,
+          splitDraft: recalculateSplitDraft({
+            ...state.splitDraft,
+            allocations: state.splitDraft.allocations.filter(
+              (allocation) => allocation.documentId !== documentId
+            )
+          }),
+          message: PAYMENT_MANUAL_MATCH_COPY.splitDraftRemoved,
+          error: null
+        };
+      });
+    },
+
+    closeManualMatchPicker() {
+      update((state) => ({
+        ...clearManualPicker(state),
+        message: null
+      }));
+    },
+
+    async confirmManualPickerCandidate(): Promise<MutationResultDto> {
+      const { manualPicker } = get({ subscribe });
+      const candidate = getSelectedManualPickerCandidate(manualPicker);
+
+      if (!manualPicker) {
+        const message = PAYMENT_MANUAL_MATCH_COPY.manualPickerClosed;
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message };
+      }
+
+      if (!candidate) {
+        const message = PAYMENT_MANUAL_MATCH_COPY.manualPickerCandidateMissing;
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message };
+      }
+
+      beginAction("confirm-manual-picker", manualPicker.paymentId);
+      try {
+        const result = await paymentReconcile({
+          paymentId: manualPicker.paymentId,
+          documentKind: candidate.documentKind,
+          documentId: candidate.documentId,
+          amount: candidate.openAmountStr
+        });
+        if (result.ok) {
+          update((state) =>
+            clearSplitDraft(clearManualPicker(clearPreview({ ...state, message: result.message })))
+          );
+          await loadPayments();
+        } else {
+          update((state) => ({ ...state, message: result.message, error: result.message }));
+        }
+        return result;
+      } catch (error) {
+        const message = String(error);
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message };
+      } finally {
+        finishAction();
+      }
+    },
+
+    async confirmSplitDraft(): Promise<PaymentReconcileSplitResultDto> {
+      const { splitDraft } = get({ subscribe });
+
+      const errorResult = (message: string): PaymentReconcileSplitResultDto => ({
+        ok: false,
+        message,
+        paymentId: splitDraft?.paymentId ?? "",
+        allocationCount: 0,
+        totalAllocatedStr: "0",
+        allocations: []
+      });
+
+      if (!splitDraft) {
+        const message = PAYMENT_MANUAL_MATCH_COPY.splitDraftMissing;
+        update((state) => ({ ...state, message, error: message }));
+        return errorResult(message);
+      }
+
+      if (splitDraft.allocations.length === 0) {
+        const message = PAYMENT_MANUAL_MATCH_COPY.splitDraftEmpty;
+        update((state) => ({ ...state, message, error: message }));
+        return errorResult(message);
+      }
+
+      if (parseAmountMinor(splitDraft.remainingAmountStr) !== 0n) {
+        const message = PAYMENT_MANUAL_MATCH_COPY.splitDraftIncomplete;
+        update((state) => ({ ...state, message, error: message }));
+        return errorResult(message);
+      }
+
+      beginAction("confirm-split", splitDraft.paymentId);
+      try {
+        const result = await paymentReconcileSplit({
+          paymentId: splitDraft.paymentId,
+          allocations: splitDraft.allocations.map((allocation) => ({
+            documentKind: allocation.documentKind,
+            documentId: allocation.documentId,
+            amount: allocation.amount
+          }))
+        });
+
+        if (!result.ok) {
+          update((state) => ({ ...state, message: result.message, error: result.message }));
+          return result;
+        }
+
+        update((state) =>
+          clearSplitDraft(
+            clearManualPicker(clearPreview({ ...state, message: result.message, error: null }))
+          )
+        );
+        await loadPayments();
+        return result;
+      } catch (error) {
+        const message = String(error);
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message, paymentId: "", allocationCount: 0, totalAllocatedStr: "0", allocations: [] };
+      } finally {
+        finishAction();
       }
     },
 
     async unreconcile(id: string) {
+      beginAction("unreconcile", id);
       try {
-        const result = await paymentUnreconcile(id);
+        const result = await paymentUnreconcileAll({ paymentId: id });
         if (result.ok) {
+          update((state) => clearSplitDraft(clearManualPicker(clearPreview(state))));
           await refreshAfterMutation(result.message);
+        } else {
+          update((state) => ({ ...state, message: result.message, error: result.message }));
         }
+        return result;
       } catch (error) {
-        update((state) => ({ ...state, message: String(error) }));
+        const message = String(error);
+        update((state) => ({ ...state, message, error: message }));
+        return { ok: false, message };
+      } finally {
+        finishAction();
       }
     },
 
     openEditor(payment?: PaymentItemDto) {
       if (!payment) {
+        const blank = createBlankForm();
         update((state) => ({
           ...state,
-          editor: createBlankForm(),
+          editor: blank,
+          editorSnapshot: cloneSnapshot(blank),
           message: null
         }));
-      } else {
-        const editor: PaymentDraftFormDto = {
-          id: payment.id,
-          date: payment.date,
-          amount: payment.amountStr,
-          direction: payment.direction === "in" ? "income" : "expense",
-          counterpartyId: payment.counterpartyId,
-          counterpartyName: payment.counterparty,
-          bankName: payment.account,
-          reference: "",
-          description: payment.matchedDoc
-        };
-        update((state) => ({
-          ...state,
-          editor,
-          message: null
-        }));
+        return;
       }
+
+      const editor: PaymentDraftFormDto = {
+        id: payment.id,
+        date: payment.date,
+        amount: payment.amountStr,
+        direction: payment.direction === "in" ? "income" : "expense",
+        counterpartyId: payment.counterpartyId,
+        counterpartyName: payment.counterparty,
+        bankName: payment.account,
+        reference: "",
+        description: payment.matchedDoc
+      };
+
+      update((state) => ({
+        ...state,
+        editor,
+        editorSnapshot: cloneSnapshot(editor),
+        message: null
+      }));
     },
 
     async openById(paymentId: string) {
@@ -165,6 +1214,7 @@ function createPaymentsStore() {
       if (!payment) {
         update((current) => ({
           ...current,
+          error: "Платіж не знайдено у поточному списку",
           message: "Платіж не знайдено у поточному списку"
         }));
         return false;
@@ -174,26 +1224,51 @@ function createPaymentsStore() {
       return true;
     },
 
-    closeEditor() {
+    closeEditor(force = false): CloseEditorResult {
+      const snapshot = get({ subscribe });
+      if (!snapshot.editor) {
+        return { ok: true };
+      }
+
+      const dirty = isEditorFormDirty(snapshot.editorSnapshot, snapshot.editor);
+      if (dirty && !force) {
+        return { ok: false, reason: "dirty" };
+      }
+
       update((state) => ({
         ...state,
         editor: null,
+        editorSnapshot: null,
+        message: null
+      }));
+      return { ok: true };
+    },
+    isEditorDirty(): boolean {
+      const snapshot = get({ subscribe });
+      if (!snapshot.editor) return false;
+      return isEditorFormDirty(snapshot.editorSnapshot, snapshot.editor);
+    },
+
+    closeMatchPreview() {
+      update((state) => ({
+        ...clearSplitDraft(clearPreview(state)),
         message: null
       }));
     },
 
     updateFormField(field: keyof PaymentDraftFormDto, value: string) {
       update((state) => {
-        if (state.editor) {
-          return {
-            ...state,
-            editor: {
-              ...state.editor,
-              [field]: value
-            }
-          };
+        if (!state.editor) {
+          return state;
         }
-        return state;
+
+        return {
+          ...state,
+          editor: {
+            ...state.editor,
+            [field]: value
+          }
+        };
       });
     },
 
@@ -203,23 +1278,21 @@ function createPaymentsStore() {
         return { ok: false, message: "Немає відкритого платежу для збереження" };
       }
 
-      update((state) => ({ ...state, loading: true, error: null }));
-
+      beginAction("save", editor.id || undefined);
       try {
         const result = await paymentCreateOrUpdate(editor);
-
         if (result.ok) {
           update((state) => ({
             ...state,
             message: result.message,
-            editor: null
+            editor: null,
+            editorSnapshot: null
           }));
           await loadPayments();
         } else {
           update((state) => ({
             ...state,
             message: result.message,
-            loading: false,
             error: result.message
           }));
         }
@@ -228,11 +1301,12 @@ function createPaymentsStore() {
         const message = String(error);
         update((state) => ({
           ...state,
-          loading: false,
           error: message,
-          message: message
+          message
         }));
         return { ok: false, message };
+      } finally {
+        finishAction();
       }
     },
 

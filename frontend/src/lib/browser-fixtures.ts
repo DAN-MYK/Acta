@@ -18,7 +18,10 @@ import type {
   PaletteActivationResultDto,
   PaletteItemDto,
   PaletteSearchResultDto,
+  PaymentImportPreviewDto,
   PaymentItemDto,
+  PaymentManualMatchCandidatesDto,
+  PaymentMatchPreviewDto,
   ReportsExportResultDto,
   ReportsFilterDto,
   ReportsScreenDto,
@@ -36,8 +39,7 @@ import type {
 
 const state = {
   activeCompanyId: "company-act",
-  darkMode: false,
-  density: 1
+  darkMode: false
 };
 
 const companies = [
@@ -86,6 +88,7 @@ const documents: DocumentItemDto[] = [
     date: "2026-05-01",
     counterparty: "ТОВ Ромашка",
     amountStr: "48 200,00 грн",
+    direction: "outgoing",
     status: "issued",
     statusLabel: "Виставлено",
     linkedId: "chain-1"
@@ -97,6 +100,7 @@ const documents: DocumentItemDto[] = [
     date: "2026-04-29",
     counterparty: "ФОП Петренко",
     amountStr: "19 400,00 грн",
+    direction: "outgoing",
     status: "draft",
     statusLabel: "Чернетка",
     linkedId: "chain-2"
@@ -167,14 +171,15 @@ function documentsList(): DocumentsListDto {
 }
 
 function documentEditor(kind = "invoice", counterpartyId = "cp-1"): DocumentEditorDto {
-  const counterparty = counterparties.find((item) => item.id === counterpartyId) ?? counterparties[0];
+  const counterparty = counterparties.find((item) => item.id === counterpartyId);
 
   return {
     form: {
       id: "doc-1",
       kind,
-      counterpartyId: counterparty.id,
-      counterpartyName: counterparty.name,
+      direction: "outgoing",
+      counterpartyId: counterparty?.id ?? "",
+      counterpartyName: counterparty?.name ?? "",
       title: kind === "invoice" ? "Рахунок INV-2026-0042" : "Документ у роботі",
       number: kind === "invoice" ? "INV-2026-0042" : "ACT-2026-0018",
       date: "2026-05-01",
@@ -188,6 +193,14 @@ function documentEditor(kind = "invoice", counterpartyId = "cp-1"): DocumentEdit
         price: "6025,00"
       }
     ],
+    pdf: {
+      filePath: "C:/tmp/working.pdf",
+      pageCount: 1,
+      extractedText: "DRAFT STATUS",
+      hasTextOps: true,
+      editable: true,
+      warnings: []
+    },
     showTypePicker: false,
     showEditor: true
   };
@@ -228,11 +241,14 @@ function reportsScreen(filter?: ReportsFilterDto): ReportsScreenDto {
     scope: filter?.scope ?? "active",
     dateFrom: filter?.dateFrom ?? "2026-02-01",
     dateTo: filter?.dateTo ?? "2026-05-01",
-    query: filter?.query ?? ""
+    query: filter?.query ?? "",
+    selectedCounterpartyId: filter?.selectedCounterpartyId ?? null
   };
 
   return {
     filter: resolvedFilter,
+    selectedCounterparty: null,
+    topCounterparties: [],
     summary: {
       openingBalanceStr: "125 000,00 грн",
       incomeStr: "48 200,00 грн",
@@ -318,8 +334,7 @@ function settingsScreen(): SettingsScreenDto {
       }
     ],
     preferences: {
-      darkMode: state.darkMode,
-      density: state.density
+      darkMode: state.darkMode
     },
     backup: {
       label: "Остання резервна копія",
@@ -390,6 +405,56 @@ function paymentsScreen(): PaymentsScreenDto {
       outgoingSub: "Витрати",
       unmatchedCount: 1
     }
+  };
+}
+
+function paymentCalendarMonth(payload?: Record<string, unknown>) {
+  const request = (payload?.request as { month?: string; selectedDate?: string | null } | undefined) ?? {};
+  const month = request.month ?? "2026-05";
+  const selectedDate = request.selectedDate ?? `${month}-03`;
+  const dayNumber = Number.parseInt(selectedDate.slice(-2), 10) || 1;
+
+  return {
+    month,
+    monthLabel: "Травень 2026",
+    selectedDate,
+    today: "2026-05-01",
+    days: [
+      {
+        date: selectedDate,
+        dayNumber,
+        weekdayShort: "сб",
+        inCurrentMonth: true,
+        today: selectedDate === "2026-05-01",
+        selected: true,
+        hasOverdue: false,
+        incomeTotalStr: "0,00 грн",
+        expenseTotalStr: "14 500,00 грн",
+        eventCount: 1,
+        events: [
+          {
+            id: "schedule-1",
+            kind: "schedule",
+            title: "Оплата послуг банку",
+            subtitle: "mono",
+            date: selectedDate,
+            amountStr: "14 500,00 грн",
+            amount: "14500.00",
+            direction: "outgoing",
+            statusLabel: "Заплановано",
+            recurrenceLabel: "Разово",
+            counterpartyId: "cp-2",
+            counterpartyName: "ФОП Петренко",
+            linkKind: "payment",
+            linkId: "pay-2",
+            note: "Плановий платіж із browser fixture",
+            actionable: true,
+            overdue: false,
+            done: false
+          }
+        ]
+      }
+    ]
   };
 }
 
@@ -466,7 +531,7 @@ export async function browserFixtureInvoke<T>(command: string, payload?: Record<
       return clone(
         documentEditor(
           String((payload?.request as { kind?: string } | undefined)?.kind ?? "invoice"),
-          String((payload?.request as { counterpartyId?: string } | undefined)?.counterpartyId ?? "cp-1")
+          String((payload?.request as { counterpartyId?: string | null } | undefined)?.counterpartyId ?? "")
         )
       ) as T;
     case "document_save":
@@ -479,6 +544,30 @@ export async function browserFixtureInvoke<T>(command: string, payload?: Record<
       return clone(documentChain()) as T;
     case "document_chain_create_draft":
       return clone(documentEditor(String((payload?.request as { targetKind?: string } | undefined)?.targetKind ?? "act"))) as T;
+    case "document_pdf_attach_existing":
+      return clone({
+        editor: documentEditor(),
+        message: "PDF прив’язано"
+      }) as T;
+    case "document_pdf_apply_text_replace":
+      return clone({
+        editor: {
+          ...documentEditor(),
+          pdf: {
+            filePath: "C:/tmp/working.pdf",
+            pageCount: 1,
+            extractedText: "PAID STATUS",
+            hasTextOps: true,
+            editable: true,
+            warnings: []
+          }
+        },
+        message: "Текст у PDF оновлено"
+      }) as T;
+    case "document_pdf_open_current":
+      return clone({ ok: true, documentId: "doc-1", message: "PDF відкрито" } satisfies MutationResultDto) as T;
+    case "document_generate_pdf":
+      return clone({ ok: true, documentId: String(payload?.docId ?? "doc-1"), message: "PDF згенеровано" } satisfies MutationResultDto) as T;
     case "documents_bulk_delete":
       return clone({ total: 2, succeeded: 2, failed: 0, errors: [], message: "Вибрані документи видалено" } satisfies BulkMutationResultDto) as T;
     case "documents_bulk_advance_status":
@@ -583,7 +672,6 @@ export async function browserFixtureInvoke<T>(command: string, payload?: Record<
       return clone(settingsScreen()) as T;
     case "settings_save_preferences":
       state.darkMode = Boolean((payload?.request as { darkMode?: boolean } | undefined)?.darkMode);
-      state.density = Number((payload?.request as { density?: number } | undefined)?.density ?? state.density);
       return clone({ ok: true, message: "Налаштування вигляду збережено", screen: settingsScreen() } satisfies SettingsScreenMutationResultDto) as T;
     case "settings_save_company":
       return clone({ ok: true, message: "Дані компанії збережено", screen: settingsScreen() } satisfies SettingsScreenMutationResultDto) as T;
@@ -603,12 +691,146 @@ export async function browserFixtureInvoke<T>(command: string, payload?: Record<
       return clone({ ok: true, message: "Банк синхронізовано" } satisfies MutationResultDto) as T;
     case "payments_open_manual_template":
       return clone({ ok: true, path: "storage/import/bank/manual-template.csv", message: "Шаблон CSV відкрито" } satisfies OpenTemplateResultDto) as T;
+    case "payments_calendar_load":
+      return clone(paymentCalendarMonth(payload)) as T;
     case "payment_create_or_update":
       return clone({ ok: true, message: "Платіж збережено" } satisfies MutationResultDto) as T;
     case "payment_reconcile":
       return clone({ ok: true, message: "Платіж зведено" } satisfies MutationResultDto) as T;
+    case "payment_reconcile_split":
+      return clone({
+        ok: true,
+        message: "Розподіл платежу підтверджено",
+        paymentId: "pay-2",
+        allocationCount: 2,
+        totalAllocatedStr: "3 000,00",
+        allocations: [
+          {
+            documentId: "inv-7",
+            documentKind: "invoice",
+            title: "Накладна INV-007",
+            amountStr: "1 500,00"
+          },
+          {
+            documentId: "act-9",
+            documentKind: "act",
+            title: "Акт ACT-009",
+            amountStr: "1 500,00"
+          }
+        ]
+      }) as T;
     case "payment_unreconcile":
       return clone({ ok: true, message: "Зведення скасовано" } satisfies MutationResultDto) as T;
+    case "payment_unreconcile_all":
+      return clone({ ok: true, message: "Зведення скасовано" } satisfies MutationResultDto) as T;
+    case "payment_match_preview":
+      return clone({
+        paymentId: "pay-1",
+        isReconciled: false,
+        decisionKind: "exact",
+        candidates: [
+          {
+            documentId: "doc-1",
+            documentKind: "invoice",
+            title: "INV-2026-0042 ТОВ Ромашка",
+            openAmountStr: "48 200,00 грн",
+            totalScore: 160,
+            sameIban: true,
+            referenceHit: true,
+            textHits: 2,
+            daysDistance: 0
+          }
+        ],
+        autoMatch: {
+          documentId: "doc-1",
+          documentKind: "invoice",
+          title: "INV-2026-0042 ТОВ Ромашка",
+          amountStr: "48 200,00 грн"
+        }
+      } satisfies PaymentMatchPreviewDto) as T;
+    case "payment_match_apply_auto":
+      return clone({ ok: true, message: "Автозіставлення платежу застосовано" } satisfies MutationResultDto) as T;
+    case "payment_match_manual_candidates":
+      return clone({
+        paymentId: (payload?.request as { paymentId?: string } | undefined)?.paymentId ?? "pay-1",
+        query: (payload?.request as { query?: string } | undefined)?.query ?? "",
+        candidates: [
+          {
+            documentId: "doc-2",
+            documentKind: "invoice",
+            title: "INV-2026-0040 ТОВ Барвінок",
+            openAmountStr: "12 000,00 грн",
+            totalScore: 65,
+            sameIban: false,
+            referenceHit: false,
+            textHits: 1,
+            daysDistance: 4
+          },
+          {
+            documentId: "doc-3",
+            documentKind: "act",
+            title: "АКТ-2026-0007 ФОП Маленко",
+            openAmountStr: "8 500,00 грн",
+            totalScore: 50,
+            sameIban: false,
+            referenceHit: false,
+            textHits: 0,
+            daysDistance: 7
+          }
+        ]
+      } satisfies PaymentManualMatchCandidatesDto) as T;
+    case "payments_import_pick_and_preview":
+    case "payments_import_preview":
+      return clone({
+        ok: true,
+        message: "Знайдено 5 рядків. Буде створено 4, пропущено 1",
+        path: "C:\\fixtures\\bank-statement.csv",
+        bankName: "ПриватБанк",
+        parsed: 5,
+        willCreate: 4,
+        willSkip: 1,
+        conflicts: 0,
+        fileSize: 12345,
+        fileMtimeSecs: 1746355200,
+        fileHash: "0000000000000000",
+        rows: [
+          {
+            action: "create",
+            bankRef: "REF-001",
+            description: "Оплата за послуги",
+            note: "create: bank_ref відсутній у БД"
+          },
+          {
+            action: "create",
+            bankRef: "REF-002",
+            description: "Платіж постачальнику",
+            note: "create: bank_ref відсутній у БД"
+          },
+          {
+            action: "create",
+            bankRef: "REF-003",
+            description: "Повернення депозиту",
+            note: "create: bank_ref відсутній у БД"
+          },
+          {
+            action: "create",
+            bankRef: "REF-004",
+            description: "Аванс для оренди",
+            note: "create: bank_ref відсутній у БД"
+          },
+          {
+            action: "skip",
+            bankRef: "REF-005",
+            description: "Дубль попереднього платежу",
+            note: "skip: знайдено existing row за bank_ref"
+          }
+        ]
+      } satisfies PaymentImportPreviewDto) as T;
+    case "payments_import_commit":
+      return clone({
+        ok: true,
+        message: "Імпортовано 4 нових платежів з C:\\fixtures\\bank-statement.csv (пропущено 1)"
+      } satisfies MutationResultDto) as T;
     case "import_bas_pick_directory":
       return "C:\\tmp\\bas-export" as T;
     case "import_bas_plan":

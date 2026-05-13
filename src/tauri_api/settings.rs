@@ -59,7 +59,6 @@ pub struct SettingsNumberingRowDto {
 #[serde(rename_all = "camelCase")]
 pub struct SettingsPreferencesDto {
     pub dark_mode: bool,
-    pub density: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -87,7 +86,6 @@ pub struct SettingsScreenDto {
 #[serde(rename_all = "camelCase")]
 pub struct SettingsPreferencesRequest {
     pub dark_mode: bool,
-    pub density: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -147,7 +145,6 @@ fn optional_string(value: &str) -> Option<String> {
 fn preferences_from_config(config: &AppConfig) -> SettingsPreferencesDto {
     SettingsPreferencesDto {
         dark_mode: config.dark_mode,
-        density: i32::from(config.density),
     }
 }
 
@@ -183,10 +180,6 @@ fn company_to_dto(company: Option<&Company>) -> SettingsCompanyDto {
             "Без ПДВ".to_string()
         },
     }
-}
-
-fn density_value(raw: i32) -> u8 {
-    raw.clamp(0, 2) as u8
 }
 
 fn numbering_rows() -> Vec<SettingsNumberingRowDto> {
@@ -492,7 +485,6 @@ pub async fn settings_save_preferences(
 ) -> Result<SettingsScreenMutationResultDto> {
     let mut config = AppConfig::load();
     config.dark_mode = request.dark_mode;
-    config.density = density_value(request.density);
     config.save();
 
     Ok(SettingsScreenMutationResultDto {
@@ -582,13 +574,6 @@ pub async fn settings_backup_open_latest(_ctx: &AppCtx) -> Result<SettingsAction
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn density_value_is_clamped() {
-        assert_eq!(density_value(-5), 0);
-        assert_eq!(density_value(1), 1);
-        assert_eq!(density_value(9), 2);
-    }
 
     #[test]
     fn company_to_dto_maps_optional_fields() {

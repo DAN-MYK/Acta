@@ -60,6 +60,6 @@ describe("Acta smoke для shell, задач і контрагентів", () =
 
     await byTestId("counterparties-list").waitForExist({ timeout: 30000 });
     await waitForAny(["counterparty-detail", "counterparties-empty-state"]);
-    await waitForAny(["counterparty-overview", "counterparties-empty-state"]);
+    await waitForAny(["counterparty-scenario", "counterparties-empty-state"]);
   });
 });

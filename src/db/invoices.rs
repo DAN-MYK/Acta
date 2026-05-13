@@ -1,4 +1,4 @@
-// CRUD операції для видаткових накладних
+﻿// CRUD операції для видаткових накладних
 //
 // Всі запити — runtime-style (sqlx::query_as::<_, T>()) без макросів,
 // щоб не потребувати cargo sqlx prepare при зміні схеми.
@@ -12,6 +12,7 @@ use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::models::payment::PaymentDirection;
 use crate::models::{
     invoice::{
         Invoice, InvoiceItem, InvoiceListRow, InvoiceStatus, NewInvoice, NewInvoiceItem,
@@ -19,7 +20,6 @@ use crate::models::{
     },
     DocumentDirection,
 };
-use crate::models::payment::PaymentDirection;
 use crate::services::payment_matching::MatchCandidate;
 
 /// Згенерувати наступний номер рахунку у форматі "РАХ-РРРР-NNN".
@@ -70,39 +70,49 @@ pub async fn counterparties_for_select(
         .collect())
 }
 
-/// Отримати список накладних компанії. `status_filter = None` → всі.
-pub async fn list(
-    pool: &PgPool,
-    company_id: Uuid,
-    status_filter: Option<InvoiceStatus>,
-) -> Result<Vec<InvoiceListRow>> {
+/// Отримати список накладних компанії. Зручна обгортка без додаткових фільтрів.
+pub async fn list(pool: &PgPool, company_id: Uuid) -> Result<Vec<InvoiceListRow>> {
     list_filtered(
         pool,
         company_id,
-        status_filter,
         None,
         None,
         None,
         None,
         None,
+        None,
+        None,
+        None,
+        false,
+        chrono::Utc::now().date_naive(),
     )
     .await
 }
 
-/// Список накладних з фільтром за статусом, текстовим пошуком,
-/// контрагентом і діапазоном дат.
+/// Список накладних з фільтром за статусами, напрямом, текстовим пошуком,
+/// контрагентом, діапазоном дат, сумами та ознакою прострочення.
 ///
 /// Використовує `QueryBuilder` для динамічної побудови WHERE-умов
 /// аналогічно acts::list_filtered.
+///
+/// - `statuses` — масив рядкових значень статусу; `None` = всі.
+/// - `amount_min` / `amount_max` — фільтр за сумою `total_amount`.
+/// - `overdue_only` — лише прострочені: `expected_payment_date < today` та статус issued/signed.
+/// - `today` — поточна дата для розрахунку прострочення.
+#[allow(clippy::too_many_arguments)]
 pub async fn list_filtered(
     pool: &PgPool,
     company_id: Uuid,
-    status_filter: Option<InvoiceStatus>,
+    statuses: Option<&[String]>,
     direction: Option<DocumentDirection>,
     search_query: Option<&str>,
     counterparty_id: Option<Uuid>,
     date_from: Option<chrono::NaiveDate>,
     date_to: Option<chrono::NaiveDate>,
+    amount_min: Option<Decimal>,
+    amount_max: Option<Decimal>,
+    overdue_only: bool,
+    today: chrono::NaiveDate,
 ) -> Result<Vec<InvoiceListRow>> {
     let search_query = search_query.map(str::trim).filter(|q| !q.is_empty());
     let has_search = search_query.is_some();
@@ -117,9 +127,11 @@ pub async fn list_filtered(
     );
     qb.push_bind(company_id);
 
-    if let Some(status) = status_filter {
-        qb.push(" AND i.status = ");
-        qb.push_bind(status);
+    if let Some(statuses) = statuses.filter(|s| !s.is_empty()) {
+        let owned: Vec<String> = statuses.to_vec();
+        qb.push(" AND i.status::text = ANY(")
+            .push_bind(owned)
+            .push("::text[])");
     }
     if let Some(direction) = direction {
         qb.push(" AND i.direction = ");
@@ -145,6 +157,18 @@ pub async fn list_filtered(
         qb.push(" AND i.date <= ");
         qb.push_bind(dt);
     }
+    if let Some(min) = amount_min {
+        qb.push(" AND i.total_amount >= ").push_bind(min);
+    }
+    if let Some(max) = amount_max {
+        qb.push(" AND i.total_amount <= ").push_bind(max);
+    }
+    if overdue_only {
+        qb.push(" AND i.expected_payment_date IS NOT NULL")
+            .push(" AND i.expected_payment_date < ")
+            .push_bind(today)
+            .push(" AND i.status::text IN ('issued','signed')");
+    }
     qb.push(" ORDER BY i.date DESC, i.number");
     if has_search {
         qb.push(" LIMIT 100");
@@ -159,7 +183,10 @@ pub async fn list_filtered(
 
 /// Отримати одну накладну разом з усіма позиціями.
 /// Повертає `None` якщо накладну не знайдено.
-pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<(Invoice, Vec<InvoiceItem>)>> {
+async fn get_by_id_unscoped(
+    pool: &PgPool,
+    id: Uuid,
+) -> Result<Option<(Invoice, Vec<InvoiceItem>)>> {
     let invoice = sqlx::query_as::<_, Invoice>(
         r#"
         SELECT id, company_id, number, counterparty_id, contract_id, category_id, direction,
@@ -192,9 +219,91 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<(Invoice, Vec<I
     Ok(Some((invoice, items)))
 }
 
+async fn exists_in_company(pool: &PgPool, company_id: Uuid, id: Uuid) -> Result<bool> {
+    let exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM invoices WHERE id = $1 AND company_id = $2)",
+    )
+    .bind(id)
+    .bind(company_id)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(exists)
+}
+
+pub async fn get_by_id_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+) -> Result<Option<(Invoice, Vec<InvoiceItem>)>> {
+    if !exists_in_company(pool, company_id, id).await? {
+        return Ok(None);
+    }
+
+    get_by_id_unscoped(pool, id).await
+}
+
+pub async fn find_by_notes_marker(
+    pool: &PgPool,
+    company_id: Uuid,
+    marker: &str,
+) -> Result<Option<(Invoice, Vec<InvoiceItem>)>> {
+    let pattern = format!("%{marker}%");
+    let id = sqlx::query_scalar::<_, Uuid>(
+        r#"
+        SELECT id
+        FROM invoices
+        WHERE company_id = $1
+          AND notes LIKE $2
+        ORDER BY updated_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(company_id)
+    .bind(pattern)
+    .fetch_optional(pool)
+    .await?;
+
+    match id {
+        Some(id) => get_by_id_unscoped(pool, id).await,
+        None => Ok(None),
+    }
+}
+
 /// Завантажити накладну з позиціями для форми редагування.
-pub async fn get_for_edit(pool: &PgPool, id: Uuid) -> Result<Option<(Invoice, Vec<InvoiceItem>)>> {
-    get_by_id(pool, id).await
+pub async fn get_for_edit_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+) -> Result<Option<(Invoice, Vec<InvoiceItem>)>> {
+    get_by_id_scoped(pool, company_id, id).await
+}
+
+/// Оновити шлях до керованої PDF-копії для документа в межах активної компанії.
+pub async fn set_pdf_path(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+    pdf_path: Option<String>,
+) -> Result<Option<Invoice>> {
+    let invoice = sqlx::query_as::<_, Invoice>(
+        r#"
+        UPDATE invoices
+        SET pdf_path = $3,
+            updated_at = NOW()
+        WHERE id = $1 AND company_id = $2
+        RETURNING id, company_id, number, counterparty_id, contract_id, category_id, direction,
+                  date, expected_payment_date, total_amount, vat_amount,
+                  status, notes, pdf_path, bas_id, created_at, updated_at
+        "#,
+    )
+    .bind(id)
+    .bind(company_id)
+    .bind(pdf_path)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(invoice)
 }
 
 /// Повернути відкриті накладні як кандидатів для автозіставлення платежу.
@@ -207,6 +316,8 @@ pub async fn list_open_invoice_candidates(
     struct Row {
         id: Uuid,
         title: String,
+        reference_text: String,
+        match_text: String,
         open_amount: Decimal,
         counterparty_iban: Option<String>,
         match_date: Option<chrono::NaiveDate>,
@@ -222,6 +333,8 @@ pub async fn list_open_invoice_candidates(
         SELECT
             i.id,
             trim(concat_ws(' ', i.number, cp.name))               AS title,
+            i.number                                              AS reference_text,
+            trim(concat_ws(' ', i.number, cp.name))               AS match_text,
             i.total_amount - COALESCE(SUM(pi.amount), 0::numeric) AS open_amount,
             cp.iban                                               AS counterparty_iban,
             COALESCE(i.expected_payment_date, i.date)             AS match_date
@@ -249,6 +362,8 @@ pub async fn list_open_invoice_candidates(
                 row.open_amount,
                 row.counterparty_iban,
                 row.title,
+                row.reference_text,
+                row.match_text,
                 row.match_date,
             )
         })
@@ -256,16 +371,25 @@ pub async fn list_open_invoice_candidates(
 }
 
 /// Знайти накладну за bas_id для ідемпотентного імпорту з BAS.
-pub async fn find_by_bas_id(pool: &PgPool, bas_id: &str) -> Result<Option<Invoice>> {
+/// Створити header-level накладну з BAS без позицій.
+///
+/// Це partial importer: зберігаємо заголовок документа і суми, а line items
+/// буде імпортовано окремим наступним кроком.
+pub async fn find_by_bas_id_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    bas_id: &str,
+) -> Result<Option<Invoice>> {
     let invoice = sqlx::query_as::<_, Invoice>(
         r#"
         SELECT id, company_id, number, counterparty_id, contract_id, category_id, direction,
                date, expected_payment_date, total_amount, vat_amount,
                status, notes, pdf_path, bas_id, created_at, updated_at
         FROM invoices
-        WHERE bas_id = $1
+        WHERE company_id = $1 AND bas_id = $2
         "#,
     )
+    .bind(company_id)
     .bind(bas_id)
     .fetch_optional(pool)
     .await?;
@@ -273,10 +397,6 @@ pub async fn find_by_bas_id(pool: &PgPool, bas_id: &str) -> Result<Option<Invoic
     Ok(invoice)
 }
 
-/// Створити header-level накладну з BAS без позицій.
-///
-/// Це partial importer: зберігаємо заголовок документа і суми, а line items
-/// буде імпортовано окремим наступним кроком.
 #[allow(clippy::too_many_arguments)]
 pub async fn create_imported_header(
     pool: &PgPool,
@@ -807,7 +927,7 @@ pub async fn create(pool: &PgPool, company_id: Uuid, data: &NewInvoice) -> Resul
 ///
 /// Паттерн "replace all": DELETE старих позицій → INSERT нових.
 /// Простіше ніж diff, достатньо для документів управлінського обліку.
-pub async fn update_with_items(
+async fn update_with_items_unscoped(
     pool: &PgPool,
     id: Uuid,
     data: UpdateInvoice,
@@ -826,6 +946,7 @@ pub async fn update_with_items(
             date                  = $6,
             expected_payment_date = $7,
             notes                 = $8,
+            direction             = $9,
             updated_at            = NOW()
         WHERE id = $1
         RETURNING id, company_id, number, counterparty_id, contract_id, category_id, direction,
@@ -841,6 +962,7 @@ pub async fn update_with_items(
     .bind(data.date)
     .bind(data.expected_payment_date)
     .bind(&data.notes)
+    .bind(data.direction)
     .fetch_optional(&mut *tx)
     .await?;
 
@@ -901,7 +1023,7 @@ pub async fn update_with_items(
 /// Змінити статус накладної з перевіркою допустимості переходу.
 ///
 /// Дозволені переходи: Draft → Issued → Signed → Paid (лише вперед).
-pub async fn change_status(
+async fn change_status_unscoped(
     pool: &PgPool,
     id: Uuid,
     new_status: InvoiceStatus,
@@ -948,7 +1070,20 @@ pub async fn change_status(
 }
 
 /// Перевести накладну до наступного статусу (зручна обгортка над `change_status`).
-pub async fn advance_status(pool: &PgPool, id: Uuid) -> Result<Option<Invoice>> {
+pub async fn change_status_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+    new_status: InvoiceStatus,
+) -> Result<Option<Invoice>> {
+    if !exists_in_company(pool, company_id, id).await? {
+        return Ok(None);
+    }
+
+    change_status_unscoped(pool, id, new_status).await
+}
+
+async fn advance_status_unscoped(pool: &PgPool, id: Uuid) -> Result<Option<Invoice>> {
     let current =
         sqlx::query_scalar::<_, InvoiceStatus>("SELECT status FROM invoices WHERE id = $1")
             .bind(id)
@@ -963,7 +1098,33 @@ pub async fn advance_status(pool: &PgPool, id: Uuid) -> Result<Option<Invoice>> 
         bail!("Накладна вже в фінальному статусі '{}'", current);
     };
 
-    change_status(pool, id, next).await
+    change_status_unscoped(pool, id, next).await
+}
+
+pub async fn update_with_items_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+    data: UpdateInvoice,
+    items: Vec<NewInvoiceItem>,
+) -> Result<Option<Invoice>> {
+    if !exists_in_company(pool, company_id, id).await? {
+        return Ok(None);
+    }
+
+    update_with_items_unscoped(pool, id, data, items).await.map(Some)
+}
+
+pub async fn advance_status_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+) -> Result<Option<Invoice>> {
+    if !exists_in_company(pool, company_id, id).await? {
+        return Ok(None);
+    }
+
+    advance_status_unscoped(pool, id).await
 }
 
 /// Допоміжна функція: парсинг рядка статусу з БД в InvoiceStatus.
@@ -979,15 +1140,18 @@ fn parse_status(s: &str) -> Result<InvoiceStatus> {
 }
 
 /// Видалити накладну та всі її позиції (ON DELETE CASCADE у БД).
-pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
-    sqlx::query("DELETE FROM invoices WHERE id = $1")
+/// KPI-агрегати для сторінки списку рахунків.
+pub async fn delete_scoped(pool: &PgPool, company_id: Uuid, id: Uuid) -> Result<bool> {
+    let affected = sqlx::query("DELETE FROM invoices WHERE id = $1 AND company_id = $2")
         .bind(id)
+        .bind(company_id)
         .execute(pool)
-        .await?;
-    Ok(())
+        .await?
+        .rows_affected();
+
+    Ok(affected > 0)
 }
 
-/// KPI-агрегати для сторінки списку рахунків.
 pub struct InvoiceKpi {
     pub invoices_this_month: i64,
     pub revenue_this_month: Decimal,

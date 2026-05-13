@@ -1,6 +1,8 @@
 /**
  * @vitest-environment jsdom
  */
+// @ts-ignore Node typings are not included in the frontend test tsconfig.
+import { readFileSync } from "fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { tick } from "svelte";
 import DashboardScreen from "../DashboardScreen.svelte";
@@ -28,6 +30,7 @@ const mocks = vi.hoisted(() => {
 
   const dashboardState = createMockStore({
     screen: null as DashboardScreenDto | null,
+    initialLoading: false,
     loading: false,
     error: null as string | null
   });
@@ -100,6 +103,7 @@ function makeDashboard(): DashboardScreenDto {
         date: "2026-04-30",
         counterparty: "ТОВ Ромашка",
         amountStr: "9 600,00 грн",
+        direction: "outgoing",
         status: "issued",
         statusLabel: "Виставлено",
         linkedId: ""
@@ -150,8 +154,10 @@ function buttonByText(target: HTMLElement, text: string): HTMLButtonElement {
 }
 
 describe("DashboardScreen component", () => {
+  const styles = readFileSync("frontend/src/styles/dashboard.css", "utf8");
+
   beforeEach(() => {
-    mocks.dashboardState.set({ screen: makeDashboard(), loading: false, error: null });
+    mocks.dashboardState.set({ screen: makeDashboard(), initialLoading: false, loading: false, error: null });
     mocks.dashboardLoad.mockReset();
     mocks.documentOpen.mockReset();
     mocks.navigationGo.mockReset();
@@ -166,12 +172,21 @@ describe("DashboardScreen component", () => {
   it("renders operational dashboard sections from the screen store", () => {
     const { component, target } = renderDashboard();
 
-    expect(target.textContent).toContain("Дашборд");
+    expect(target.textContent).toContain("Операційна картина по активній компанії");
     expect(target.textContent).toContain("Документи");
     expect(target.textContent).toContain("Грошовий потік");
     expect(target.textContent).toContain("ACT-42");
     expect(target.textContent).toContain("Найближчі платежі");
     expect(target.textContent).toContain("Підписати акт");
+
+    component.$destroy();
+  });
+
+  it("renders recent-documents card as full-width (wide class)", () => {
+    const { component, target } = renderDashboard();
+
+    const card = target.querySelector('[data-testid="dashboard-recent-documents"]');
+    expect(card?.classList.contains("wide")).toBe(true);
 
     component.$destroy();
   });
@@ -200,6 +215,7 @@ describe("DashboardScreen component", () => {
   it("keeps an explicit empty state for upcoming payments", () => {
     mocks.dashboardState.set({
       screen: { ...makeDashboard(), upcomingPayments: [] },
+      initialLoading: false,
       loading: false,
       error: null
     });
@@ -209,5 +225,37 @@ describe("DashboardScreen component", () => {
     expect(target.textContent).toContain("Очікуваних платежів поки немає.");
 
     component.$destroy();
+  });
+
+  it("keeps header visible and skeletonizes each dashboard section during initial loading", () => {
+    mocks.dashboardState.set({
+      screen: null,
+      initialLoading: true,
+      loading: false,
+      error: null
+    });
+
+    const { component, target } = renderDashboard();
+
+    expect(target.textContent).toContain("Операційна картина по активній компанії");
+    expect(buttonByText(target, "Оновити")).toBeTruthy();
+    expect(target.querySelector('[data-testid="dashboard-kpis"] [data-testid="skeleton-card-grid"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="dashboard-cashflow"] [data-testid="skeleton-row-item"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="dashboard-recent-documents"] [data-testid="skeleton-row-item"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="dashboard-upcoming-payments"] [data-testid="skeleton-row-item"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="dashboard-urgent-tasks"] [data-testid="skeleton-row-item"]')).toBeTruthy();
+    expect(target.textContent).not.toContain("Очікуваних платежів поки немає.");
+
+    component.$destroy();
+  });
+
+  it("uses denser compact KPI and card spacing before collapsing to a single KPI column", () => {
+    expect(styles).toMatch(/@media\s*\(max-width:\s*980px\)[\s\S]*\.dashboard-kpis\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*980px\)[\s\S]*\.dashboard-card\s*\{[\s\S]*padding:\s*16px/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*720px\)[\s\S]*\.dashboard-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*720px\)[\s\S]*\.dashboard-kpis\s*\{[\s\S]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*720px\)[\s\S]*\.cashflow-row\s*\{[\s\S]*border:\s*1px solid/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*560px\)[\s\S]*\.dashboard-grid[\s\S]*grid-template-columns:\s*1fr/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*560px\)[\s\S]*\.dashboard-kpis[\s\S]*grid-template-columns:\s*1fr/);
   });
 });
