@@ -11,7 +11,6 @@
     DOCUMENT_KIND_META,
     DOCUMENT_KIND_OPTIONS,
     DOCUMENT_TAB_OPTIONS,
-    DOCUMENT_FILTER_PRESETS,
     DOCUMENT_STATUS_OPTIONS,
     DOCUMENTS_FILTER_COPY,
     formatDocumentItemsLabel,
@@ -31,12 +30,15 @@
   const counterparties = counterpartiesStore;
 
   let createCounterpartyId = "";
-  let createKind: DocumentKind = "act";
   let filterCounterpartyId = "";
   let lastCounterpartyFilterId = "";
   let lastDraftContextCounterpartyId = "";
-  let createButton: HTMLButtonElement | null = null;
   let filtersOpen = false;
+  let filterButton: HTMLButtonElement | null = null;
+  let filterPopover: HTMLElement | null = null;
+  let createMenuOpen = false;
+  let createMenuButton: HTMLButtonElement | null = null;
+  let createMenuPopover: HTMLElement | null = null;
   let pdfFindText = "";
   let pdfReplaceText = "";
   let lastPdfDocumentId = "";
@@ -113,10 +115,36 @@
       return;
     }
 
+    if (filtersOpen) {
+      event.preventDefault();
+      filtersOpen = false;
+      filterButton?.focus();
+      return;
+    }
+
+    if (createMenuOpen) {
+      event.preventDefault();
+      createMenuOpen = false;
+      createMenuButton?.focus();
+      return;
+    }
+
     if ($documents.editor) {
       event.preventDefault();
       requestCloseDrawer();
     }
+  }
+
+  function onWindowKeydown(event: KeyboardEvent) {
+    if (event.key !== "Escape") return;
+    // Close floating menus first — if any were open, stop here (don't close editor too).
+    if (filtersOpen || createMenuOpen) {
+      filtersOpen = false;
+      createMenuOpen = false;
+      return;
+    }
+    // No floating menus were open: delegate to drawer keydown handler for editor close.
+    onDrawerKeydown(event);
   }
 
   function closeEditor(force = false) {
@@ -158,18 +186,26 @@
     chainMenuOpen = false;
   }
 
-  function onWindowClickForChainMenu(event: MouseEvent) {
-    if (!chainMenuOpen) {
-      return;
+  function onWindowClick(event: MouseEvent) {
+    const target = event.target instanceof Node ? event.target : null;
+
+    if (chainMenuOpen) {
+      if (target && chainMenuButton?.contains(target)) return;
+      if (target && chainMenuPopover?.contains(target)) return;
+      closeChainMenu();
     }
-    const target = event.target as Node | null;
-    if (target && chainMenuButton?.contains(target)) {
-      return;
+
+    if (filtersOpen) {
+      if (target && filterButton?.contains(target)) return;
+      if (target && filterPopover?.contains(target)) return;
+      filtersOpen = false;
     }
-    if (target && chainMenuPopover?.contains(target)) {
-      return;
+
+    if (createMenuOpen) {
+      if (target && createMenuButton?.contains(target)) return;
+      if (target && createMenuPopover?.contains(target)) return;
+      createMenuOpen = false;
     }
-    closeChainMenu();
   }
 
   function onChainMenuAdvanceStatus() {
@@ -189,6 +225,15 @@
     if (!editorDocId && chainMenuOpen) {
       chainMenuOpen = false;
     }
+  }
+
+  $: if ($documents.kindFilter && createMenuOpen) {
+    createMenuOpen = false;
+  }
+
+  $: if ($documents.loading) {
+    filtersOpen = false;
+    createMenuOpen = false;
   }
 
   $: if (!$documents.editor && pendingDirtyClose) {
@@ -329,16 +374,25 @@
     filtersOpen = false;
   }
 
+  $: selectedCreateKind = $documents.kindFilter;
+
+  $: createButtonKind = selectedCreateKind ?? null;
+
+  $: createButtonLabel = createButtonKind
+    ? getDocumentCreateLabel(createButtonKind, $documents.activeTab)
+    : "Створити ▾";
+
   function onCreateDraft() {
-    void documents.create(createCounterpartyId || undefined, createKind);
+    if (!createButtonKind) {
+      createMenuOpen = !createMenuOpen;
+      return;
+    }
+    void documents.create(createCounterpartyId || undefined, createButtonKind);
   }
 
-  function onSelectCreateKind(kind: string) {
-    createKind = kind as DocumentKind;
-  }
-
-  function focusCreateButton() {
-    createButton?.focus();
+  function onCreateMenuKind(kind: DocumentKind) {
+    void documents.create(createCounterpartyId || undefined, kind);
+    createMenuOpen = false;
   }
 
   function toggleFilters() {
@@ -448,13 +502,14 @@
   class="panel"
   data-testid="documents-screen"
 >
-  <div class="documents-nav-tabs" role="tablist" aria-label="Напрямок документів">
+  <div class="nav-tabs" role="tablist" aria-label="Напрямок документів">
     {#each navTabs as tab}
       <button
         role="tab"
         type="button"
         class="nav-tab"
         class:nav-tab-active={$documents.activeTab === tab.value}
+        aria-selected={$documents.activeTab === tab.value}
         on:click={() => documents.setTab(tab.value)}
         disabled={$documents.loading}
       >
@@ -463,58 +518,171 @@
     {/each}
   </div>
 
-  <div class="documents-kind-chips" role="group" aria-label="Тип документа">
-    {#each kindChips as chip}
-      <button
-        type="button"
-        class="kind-chip"
-        class:kind-chip-active={$documents.kindFilter === chip.value}
-        on:click={() => documents.setKindFilter(chip.value)}
-        disabled={$documents.loading}
-      >
-        {chip.label}
-      </button>
-    {/each}
-  </div>
+  <div class="documents-toolbar" data-testid="documents-toolbar">
+    <div class="documents-kind-chips" role="group" aria-label="Тип документа">
+      {#each kindChips as chip}
+        <button
+          type="button"
+          class="kind-chip"
+          class:kind-chip-active={$documents.kindFilter === chip.value}
+          on:click={() => documents.setKindFilter(chip.value)}
+          disabled={$documents.loading}
+        >
+          {chip.label}
+        </button>
+      {/each}
+    </div>
 
-  <div class="documents-presets-row" role="group" aria-label="Швидкі фільтри">
-    <span class="documents-presets-label">{DOCUMENTS_FILTER_COPY.presetsLabel}</span>
-    {#each DOCUMENT_FILTER_PRESETS as preset}
-      <button
-        type="button"
-        class="kind-chip"
-        class:kind-chip-active={$documents.activePresetId === preset.id}
-        data-testid={`documents-preset-${preset.id}`}
-        on:click={() => void documents.applyPreset(preset.id)}
-        disabled={$documents.loading}
-      >
-        {preset.label}
-      </button>
-    {/each}
-  </div>
+    <div class="documents-toolbar-actions">
+      <div class="documents-toolbar-popover-anchor">
+        <button
+          bind:this={filterButton}
+          class="btn-secondary"
+          class:filter-popover-btn-active={filtersOpen}
+          data-testid="documents-filter-button"
+          type="button"
+          aria-expanded={filtersOpen}
+          aria-controls="documents-filter-popover"
+          on:click={toggleFilters}
+          disabled={$documents.loading}
+        >
+          <span>{filterButtonLabel}</span>
+        </button>
 
-  <div class="documents-filter-toolbar">
-    <button
-      class="btn-secondary"
-      data-testid="documents-filter-button"
-      type="button"
-      aria-expanded={filtersOpen}
-      on:click={toggleFilters}
-      disabled={$documents.loading}
-    >
-      <span>{filterButtonLabel}</span>
-    </button>
-    {#if activeFilterCount > 0}
-      <button
-        class="btn-ghost"
-        type="button"
-        data-testid="documents-clear-filters"
-        on:click={onClearAllFilters}
-        disabled={$documents.loading}
-      >
-        {DOCUMENTS_FILTER_COPY.clearAll}
-      </button>
-    {/if}
+        {#if filtersOpen}
+          <div
+            bind:this={filterPopover}
+            id="documents-filter-popover"
+            class="filter-popover"
+            data-testid="documents-filter-panel"
+            role="dialog"
+            aria-label="Фільтр документів"
+          >
+            <fieldset class="filter-panel-section">
+              <legend>{DOCUMENTS_FILTER_COPY.periodLabel}</legend>
+              <div class="filter-panel-subpresets">
+                <button type="button" class="kind-chip" on:click={() => onDateSubpreset('today')}>{DOCUMENTS_FILTER_COPY.periodSubpresets.today}</button>
+                <button type="button" class="kind-chip" on:click={() => onDateSubpreset('week')}>{DOCUMENTS_FILTER_COPY.periodSubpresets.week}</button>
+                <button type="button" class="kind-chip" on:click={() => onDateSubpreset('month')}>{DOCUMENTS_FILTER_COPY.periodSubpresets.month}</button>
+                <button type="button" class="kind-chip" on:click={() => onDateSubpreset('quarter')}>{DOCUMENTS_FILTER_COPY.periodSubpresets.quarter}</button>
+                <button type="button" class="kind-chip" on:click={() => onDateSubpreset('year')}>{DOCUMENTS_FILTER_COPY.periodSubpresets.year}</button>
+              </div>
+              <div class="filter-panel-grid-2">
+                <label>{DOCUMENTS_FILTER_COPY.periodFrom}<input type="date" bind:value={panelDateFrom} /></label>
+                <label>{DOCUMENTS_FILTER_COPY.periodTo}<input type="date" bind:value={panelDateTo} /></label>
+              </div>
+              {#if dateRangeError}
+                <p class="filter-error" role="alert">{dateRangeError}</p>
+              {/if}
+            </fieldset>
+
+            <fieldset class="filter-panel-section">
+              <legend>{DOCUMENTS_FILTER_COPY.statusLabel}</legend>
+              <div class="filter-panel-statuses">
+                {#each DOCUMENT_STATUS_OPTIONS as opt}
+                  <label class="status-checkbox">
+                    <input type="checkbox" value={opt.value}
+                      checked={panelStatuses.includes(opt.value)}
+                      on:change={() => toggleStatus(opt.value, !panelStatuses.includes(opt.value))} />
+                    {opt.label}
+                  </label>
+                {/each}
+              </div>
+            </fieldset>
+
+            <fieldset class="filter-panel-section">
+              <legend>{DOCUMENTS_FILTER_COPY.counterpartyLabel}</legend>
+              <select
+                bind:value={filterCounterpartyId}
+                disabled={$documents.loading}
+                data-testid="documents-counterparty-filter"
+                aria-label="Фільтр за контрагентом"
+              >
+                <option value="">{DOCUMENTS_FILTER_COPY.counterpartyAll}</option>
+                {#each $counterparties.screen?.items ?? [] as cp}
+                  <option value={cp.id}>{cp.name}</option>
+                {/each}
+              </select>
+            </fieldset>
+
+            <fieldset class="filter-panel-section">
+              <legend>{DOCUMENTS_FILTER_COPY.amountLabel}</legend>
+              <div class="filter-panel-grid-2">
+                <label>{DOCUMENTS_FILTER_COPY.amountFrom}<input type="text" inputmode="decimal" bind:value={panelAmountMin} placeholder="0,00" /></label>
+                <label>{DOCUMENTS_FILTER_COPY.amountTo}<input type="text" inputmode="decimal" bind:value={panelAmountMax} placeholder="0,00" /></label>
+              </div>
+              {#if amountRangeError}
+                <p class="filter-error" role="alert">{amountRangeError}</p>
+              {/if}
+            </fieldset>
+
+            <div class="documents-filter-actions">
+              <button class="btn-ghost" type="button" on:click={resetPanelDraft} disabled={$documents.loading}>
+                {DOCUMENTS_FILTER_COPY.reset}
+              </button>
+              <button class="btn-primary" type="button" on:click={applyPanel} disabled={$documents.loading || !!dateRangeError || !!amountRangeError}>
+                {DOCUMENTS_FILTER_COPY.apply}
+              </button>
+            </div>
+          </div>
+        {/if}
+      </div>
+
+      {#if activeFilterCount > 0}
+        <button
+          class="btn-ghost"
+          type="button"
+          data-testid="documents-clear-filters"
+          on:click={onClearAllFilters}
+          disabled={$documents.loading}
+        >
+          {DOCUMENTS_FILTER_COPY.clearAll}
+        </button>
+      {/if}
+
+      <div class="documents-toolbar-popover-anchor">
+        <button
+          bind:this={createMenuButton}
+          class="btn-primary"
+          data-testid="documents-create-button"
+          type="button"
+          disabled={$documents.loading}
+          on:click={onCreateDraft}
+          aria-expanded={createMenuOpen}
+          aria-controls="documents-create-picker"
+          aria-busy={$documents.loading ? "true" : "false"}
+        >
+          {#if createButtonKind}
+            <AppIcon name={documentKindMeta[createButtonKind].icon} surface={true} />
+          {/if}
+          <span>{createButtonLabel}</span>
+        </button>
+
+        {#if createMenuOpen}
+          <div
+            bind:this={createMenuPopover}
+            id="documents-create-picker"
+            class="create-picker-popover"
+            data-testid="documents-create-picker"
+            role="menu"
+            aria-label="Створити документ"
+          >
+            {#each DOCUMENT_KIND_OPTIONS as option}
+              <button
+                type="button"
+                class="create-picker-item"
+                data-testid={`documents-create-picker-${option.value}`}
+                role="menuitem"
+                on:click={() => onCreateMenuKind(option.value)}
+              >
+                <AppIcon name={documentKindMeta[option.value].icon} surface={true} />
+                <span>{option.label}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    </div>
   </div>
 
   {#if activeFilterCount > 0}
@@ -559,106 +727,6 @@
       {/if}
     </div>
   {/if}
-
-  {#if filtersOpen}
-    <div class="documents-filter-panel" data-testid="documents-filter-panel">
-      <fieldset class="filter-panel-section">
-        <legend>{DOCUMENTS_FILTER_COPY.periodLabel}</legend>
-        <div class="filter-panel-subpresets">
-          <button type="button" class="kind-chip" on:click={() => onDateSubpreset('today')}>{DOCUMENTS_FILTER_COPY.periodSubpresets.today}</button>
-          <button type="button" class="kind-chip" on:click={() => onDateSubpreset('week')}>{DOCUMENTS_FILTER_COPY.periodSubpresets.week}</button>
-          <button type="button" class="kind-chip" on:click={() => onDateSubpreset('month')}>{DOCUMENTS_FILTER_COPY.periodSubpresets.month}</button>
-          <button type="button" class="kind-chip" on:click={() => onDateSubpreset('quarter')}>{DOCUMENTS_FILTER_COPY.periodSubpresets.quarter}</button>
-          <button type="button" class="kind-chip" on:click={() => onDateSubpreset('year')}>{DOCUMENTS_FILTER_COPY.periodSubpresets.year}</button>
-        </div>
-        <div class="filter-panel-grid-2">
-          <label>{DOCUMENTS_FILTER_COPY.periodFrom}<input type="date" bind:value={panelDateFrom} /></label>
-          <label>{DOCUMENTS_FILTER_COPY.periodTo}<input type="date" bind:value={panelDateTo} /></label>
-        </div>
-        {#if dateRangeError}
-          <p class="filter-error" role="alert">{dateRangeError}</p>
-        {/if}
-      </fieldset>
-
-      <fieldset class="filter-panel-section">
-        <legend>{DOCUMENTS_FILTER_COPY.statusLabel}</legend>
-        <div class="filter-panel-statuses">
-          {#each DOCUMENT_STATUS_OPTIONS as opt}
-            <label class="status-checkbox">
-              <input type="checkbox" value={opt.value}
-                checked={panelStatuses.includes(opt.value)}
-                on:change={() => toggleStatus(opt.value, !panelStatuses.includes(opt.value))} />
-              {opt.label}
-            </label>
-          {/each}
-        </div>
-      </fieldset>
-
-      <fieldset class="filter-panel-section">
-        <legend>{DOCUMENTS_FILTER_COPY.counterpartyLabel}</legend>
-        <select
-          bind:value={filterCounterpartyId}
-          disabled={$documents.loading}
-          data-testid="documents-counterparty-filter"
-          aria-label="Фільтр за контрагентом"
-        >
-          <option value="">{DOCUMENTS_FILTER_COPY.counterpartyAll}</option>
-          {#each $counterparties.screen?.items ?? [] as cp}
-            <option value={cp.id}>{cp.name}</option>
-          {/each}
-        </select>
-      </fieldset>
-
-      <fieldset class="filter-panel-section">
-        <legend>{DOCUMENTS_FILTER_COPY.amountLabel}</legend>
-        <div class="filter-panel-grid-2">
-          <label>{DOCUMENTS_FILTER_COPY.amountFrom}<input type="text" inputmode="decimal" bind:value={panelAmountMin} placeholder="0,00" /></label>
-          <label>{DOCUMENTS_FILTER_COPY.amountTo}<input type="text" inputmode="decimal" bind:value={panelAmountMax} placeholder="0,00" /></label>
-        </div>
-        {#if amountRangeError}
-          <p class="filter-error" role="alert">{amountRangeError}</p>
-        {/if}
-      </fieldset>
-
-      <div class="documents-filter-actions">
-        <button class="btn-ghost" type="button" on:click={resetPanelDraft} disabled={$documents.loading}>
-          {DOCUMENTS_FILTER_COPY.reset}
-        </button>
-        <button class="btn-primary" type="button" on:click={applyPanel} disabled={$documents.loading || !!dateRangeError || !!amountRangeError}>
-          {DOCUMENTS_FILTER_COPY.apply}
-        </button>
-      </div>
-    </div>
-  {/if}
-
-  <div class="documents-create-bar" data-testid="documents-create-strip">
-    <div class="documents-create-kind-chips" role="group" aria-label="Тип документа">
-      {#each DOCUMENT_KIND_OPTIONS as option}
-        <button
-          type="button"
-          class="kind-chip"
-          class:kind-chip-active={createKind === option.value}
-          on:click={() => onSelectCreateKind(option.value)}
-          disabled={$documents.loading}
-        >
-          {option.label}
-        </button>
-      {/each}
-    </div>
-
-    <button
-      bind:this={createButton}
-      class="btn-primary"
-      data-testid="documents-create-button"
-      type="button"
-      disabled={$documents.loading}
-      on:click={onCreateDraft}
-      aria-busy={$documents.loading ? "true" : "false"}
-    >
-      <AppIcon name={documentKindMeta[createKind].icon} surface={true} />
-      <span>{getDocumentCreateLabel(createKind, $documents.activeTab)}</span>
-    </button>
-  </div>
 
   {#if ($documents.list?.items.length ?? 0) > 0}
   <div
@@ -740,7 +808,7 @@
           class="btn-primary"
           type="button"
           data-testid="documents-empty-primary-action"
-          on:click={focusCreateButton}
+          on:click={onCreateDraft}
         >
           {DOCUMENTS_COPY.emptyAction}
         </button>
@@ -793,7 +861,7 @@
   {/if}
 </section>
 
-<svelte:window on:keydown={onDrawerKeydown} on:click={onWindowClickForChainMenu} />
+<svelte:window on:keydown={onWindowKeydown} on:click={onWindowClick} />
 
 {#if $documents.editor}
   <button
@@ -897,35 +965,36 @@
             <span>Дії далі</span>
             <span aria-hidden="true" class="chain-menu-caret">▾</span>
           </button>
-          <div
-            bind:this={chainMenuPopover}
-            class="chain-menu-popover"
-            role="menu"
-            hidden={!chainMenuOpen}
-          >
-            <button
-              role="menuitem"
-              type="button"
-              class="chain-menu-item"
-              on:click={onChainMenuAdvanceStatus}
-              disabled={$documents.loading}
+          {#if chainMenuOpen}
+            <div
+              bind:this={chainMenuPopover}
+              class="chain-menu-popover"
+              role="menu"
             >
-              Наступний статус
-            </button>
-            {#each getDocumentChainTargets($documents.editor.form.kind) as targetKind}
               <button
                 role="menuitem"
                 type="button"
                 class="chain-menu-item"
-                data-testid={`documents-chain-create-${targetKind}`}
-                on:click={() => onChainMenuCreateChain(targetKind)}
+                on:click={onChainMenuAdvanceStatus}
                 disabled={$documents.loading}
               >
-                <AppIcon name={documentKindMeta[targetKind].icon} size={16} />
-                <span>Створити {documentKindMeta[targetKind].actionLabel}</span>
+                Наступний статус
               </button>
-            {/each}
-          </div>
+              {#each getDocumentChainTargets($documents.editor.form.kind) as targetKind}
+                <button
+                  role="menuitem"
+                  type="button"
+                  class="chain-menu-item"
+                  data-testid={`documents-chain-create-${targetKind}`}
+                  on:click={() => onChainMenuCreateChain(targetKind)}
+                  disabled={$documents.loading}
+                >
+                  <AppIcon name={documentKindMeta[targetKind].icon} size={16} />
+                  <span>Створити {documentKindMeta[targetKind].actionLabel}</span>
+                </button>
+              {/each}
+            </div>
+          {/if}
         </div>
 
         {#if supportsDocumentPdfGeneration($documents.editor.form.kind)}
@@ -1157,29 +1226,6 @@
 {/if}
 
 <style>
-  .documents-nav-tabs {
-    display: flex;
-    gap: 2px;
-    border-bottom: 1px solid var(--acta-color-border);
-    padding: 0 16px;
-  }
-
-  .nav-tab {
-    padding: 8px 16px;
-    border: none;
-    background: none;
-    cursor: pointer;
-    color: var(--acta-color-text-muted);
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-  }
-
-  .nav-tab-active {
-    color: var(--acta-color-accent);
-    border-bottom-color: var(--acta-color-accent);
-    font-weight: 500;
-  }
-
   .documents-kind-chips {
     display: flex;
     gap: 6px;

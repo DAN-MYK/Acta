@@ -6,7 +6,7 @@ import { readFileSync } from "fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { tick } from "svelte";
 import DocumentsScreen from "../DocumentsScreen.svelte";
-import type { DocumentChainDto, DocumentEditorDto, DocumentsListDto } from "../../types";
+import type { DocumentChainDto, DocumentEditorDto, DocumentKind, DocumentsListDto } from "../../types";
 
 const mocks = vi.hoisted(() => {
   function createMockStore<T>(initialValue: T) {
@@ -38,8 +38,8 @@ const mocks = vi.hoisted(() => {
     loading: false,
     error: null as string | null,
     message: null as string | null,
-    activeTab: "all" as const,
-    kindFilter: null,
+    activeTab: "all" as "all" | "outgoing" | "incoming",
+    kindFilter: null as DocumentKind | null,
     counterpartyFilterId: null as string | null,
     dateFrom: null as string | null,
     dateTo: null as string | null,
@@ -295,6 +295,7 @@ function buttonByText(target: HTMLElement, text: string): HTMLButtonElement {
 describe("DocumentsScreen component", () => {
   const source = readFileSync("frontend/src/lib/screens/DocumentsScreen.svelte", "utf8");
   const styles = readFileSync("frontend/src/styles/documents.css", "utf8");
+  const globalStyles = readFileSync("frontend/src/styles.css", "utf8");
 
   beforeEach(() => {
     setDocumentsState();
@@ -352,15 +353,15 @@ describe("DocumentsScreen component", () => {
     expect(target.textContent).toContain("Позиції документа");
     expect(target.textContent).toContain("5 000,00 грн");
     expect(target.textContent).toContain("Існуючий PDF");
-    expect(target.textContent).toContain("Створити акт");
-    expect(target.textContent).toContain("Створити накладну");
+    expect(target.textContent).toContain("Створити ▾");
+    expect(target.textContent).not.toContain("Створити накладну");
 
     expect(target.querySelector('[data-testid="documents-bulk-actions"]')?.classList.contains("bulk-actions-idle")).toBe(true);
 
     component.$destroy();
   });
 
-  it("uses canonical button hierarchy in create strip and editor header", () => {
+  it("uses canonical button hierarchy in toolbar and editor header", () => {
     const { component, target } = renderDocuments();
 
     expect((target.querySelector('[data-testid="documents-create-button"]') as HTMLButtonElement).className).toContain("btn-primary");
@@ -430,17 +431,51 @@ describe("DocumentsScreen component", () => {
     component.$destroy();
   });
 
-  it("creates a draft without a preliminary counterparty selection", () => {
+  it("opens the create picker when no document kind filter is selected", async () => {
     setDocumentsStateWithoutDraftContext();
     const { component, target } = renderDocuments();
 
     const createButton = target.querySelector('[data-testid="documents-create-button"]') as HTMLButtonElement;
-    expect(target.querySelector('[data-testid="documents-create-strip"] select')).toBeNull();
+    expect(createButton.textContent).toContain("Створити ▾");
+    expect(target.querySelector('[data-testid="documents-create-picker"]')).toBeNull();
 
     createButton.click();
+    await tick();
 
-    expect(createButton.disabled).toBe(false);
+    const picker = target.querySelector('[data-testid="documents-create-picker"]');
+    expect(picker).toBeTruthy();
+    expect(mocks.create).not.toHaveBeenCalled();
+
+    (target.querySelector('[data-testid="documents-create-picker-act"]') as HTMLButtonElement).click();
+    await tick();
+
     expect(mocks.create).toHaveBeenCalledWith(undefined, "act");
+    expect(target.querySelector('[data-testid="documents-create-picker"]')).toBeNull();
+
+    component.$destroy();
+  });
+
+  it("creates the filtered document kind directly", async () => {
+    mocks.documentsState.set({
+      list: makeList(), editor: null, chain: null,
+      draftContext: { counterpartyId: "counterparty-1", counterpartyName: "ТОВ Ромашка" },
+      selectedIds: [], initialLoading: false,
+      loading: false, error: null, message: null,
+      activeTab: "all" as const, kindFilter: "act" as const,
+      counterpartyFilterId: null, dateFrom: null, dateTo: null,
+      statusFilter: [], amountMin: null, amountMax: null,
+      overdueOnly: false, activePresetId: null
+    });
+    const { component, target } = renderDocuments();
+
+    const createButton = target.querySelector('[data-testid="documents-create-button"]') as HTMLButtonElement;
+    expect(createButton.textContent).toContain("Створити акт");
+
+    createButton.click();
+    await tick();
+
+    expect(mocks.create).toHaveBeenCalledWith("counterparty-1", "act");
+    expect(target.querySelector('[data-testid="documents-create-picker"]')).toBeNull();
 
     component.$destroy();
   });
@@ -452,6 +487,8 @@ describe("DocumentsScreen component", () => {
     await tick();
 
     (target.querySelector('[data-testid="documents-create-button"]') as HTMLButtonElement).click();
+    await tick();
+    (target.querySelector('[data-testid="documents-create-picker-act"]') as HTMLButtonElement).click();
 
     expect(mocks.create).toHaveBeenCalledWith(undefined, "act");
 
@@ -506,18 +543,54 @@ describe("DocumentsScreen component", () => {
   it("uses a compact mode that de-emphasizes idle bulk actions", () => {
     expect(source).toContain('data-testid="documents-bulk-actions"');
     expect(styles).toMatch(/@media\s*\(max-width:\s*980px\)[\s\S]*\.bulk-actions-idle\s+button\s*\{[\s\S]*display:\s*none/);
-    expect(styles).toMatch(/@media\s*\(max-width:\s*980px\)[\s\S]*\.documents-create-bar\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto/);
-    expect(styles).toMatch(/@media\s*\(max-width:\s*980px\)[\s\S]*\.documents-create-bar\s+\.btn-primary:disabled\s*\{[\s\S]*display:\s*none/);
-    expect(source).toContain('class="documents-create-kind-chips"');
+    expect(source).toContain('class="documents-toolbar"');
+    expect(source).not.toContain('class="documents-create-kind-chips"');
+    expect(styles).toMatch(/@media\s*\(max-width:\s*980px\)[\s\S]*\.documents-toolbar\s*\{[\s\S]*align-items:\s*stretch/);
+    expect(styles).toMatch(/@media\s*\(max-width:\s*720px\)[\s\S]*\.filter-popover\s*\{[\s\S]*width:\s*min\(340px,\s*calc\(100vw - 32px\)\)/);
+  });
+
+  it("uses shared underline nav tabs instead of documents-scoped tab styles", () => {
+    expect(source).toContain('class="nav-tabs"');
+    expect(source).not.toContain('class="documents-nav-tabs"');
+    expect(source).not.toMatch(/\.documents-nav-tabs\s*\{/);
+    expect(source).not.toMatch(/\.nav-tab\s*\{/);
+    expect(styles).not.toContain(".documents-nav-tabs");
+    expect(globalStyles).toMatch(/\.nav-tabs\s*\{/);
+    expect(globalStyles).toMatch(/\.nav-tab\s*\{/);
+  });
+
+  it("marks the active documents tab with aria-selected", () => {
+    mocks.documentsState.set({
+      ...{
+        list: makeList(), editor: null, chain: null,
+        draftContext: null, selectedIds: [], initialLoading: false,
+        loading: false, error: null, message: null,
+        kindFilter: null, dateFrom: null, dateTo: null,
+        amountMin: null, amountMax: null, overdueOnly: false, activePresetId: null,
+        counterpartyFilterId: null, statusFilter: []
+      },
+      activeTab: "incoming" as const
+    });
+
+    const { component, target } = renderDocuments();
+    const tabs = Array.from(target.querySelectorAll('[role="tab"]')) as HTMLButtonElement[];
+
+    expect(tabs.map((tab) => tab.getAttribute("aria-selected"))).toEqual(["false", "false", "true"]);
+
+    component.$destroy();
   });
 
   it("routes create and editor actions into the documents store", async () => {
     const { component, target } = renderDocuments();
 
     (target.querySelector('[data-testid="documents-create-button"]') as HTMLButtonElement).click();
+    await tick();
+    (target.querySelector('[data-testid="documents-create-picker-act"]') as HTMLButtonElement).click();
     buttonByText(target, "Додати позицію").click();
     buttonByText(target, "Зберегти").click();
     buttonByText(target, "Відкрити PDF").click();
+    buttonByText(target, "Дії далі").click();
+    await tick();
     (target.querySelector('[data-testid="documents-chain-create-act"]') as HTMLButtonElement).click();
     await tick();
 
@@ -716,16 +789,6 @@ describe("DocumentsScreen component", () => {
     component.$destroy();
   });
 
-  it("preset chip calls applyPreset with correct id", () => {
-    const { component, target } = renderDocuments();
-
-    (target.querySelector('[data-testid="documents-preset-drafts"]') as HTMLButtonElement).click();
-
-    expect(mocks.applyPreset).toHaveBeenCalledWith("drafts");
-
-    component.$destroy();
-  });
-
   it("filter button shows active filter count badge", () => {
     mocks.documentsState.set({
       ...{
@@ -744,6 +807,57 @@ describe("DocumentsScreen component", () => {
 
     const filterBtn = target.querySelector('[data-testid="documents-filter-button"]') as HTMLButtonElement;
     expect(filterBtn.textContent?.trim()).toBe("Фільтр · 2");
+
+    component.$destroy();
+  });
+
+  it("opens and closes the filter popover from the toolbar", async () => {
+    const { component, target } = renderDocuments();
+
+    const filterButton = target.querySelector('[data-testid="documents-filter-button"]') as HTMLButtonElement;
+    filterButton.click();
+    await tick();
+
+    expect(target.querySelector('[data-testid="documents-filter-panel"]')).toBeTruthy();
+    expect(filterButton.className).toContain("filter-popover-btn-active");
+
+    filterButton.click();
+    await tick();
+
+    expect(target.querySelector('[data-testid="documents-filter-panel"]')).toBeNull();
+
+    component.$destroy();
+  });
+
+  it("closes floating document menus on outside click", async () => {
+    const { component, target } = renderDocuments();
+
+    (target.querySelector('[data-testid="documents-filter-button"]') as HTMLButtonElement).click();
+    (target.querySelector('[data-testid="documents-create-button"]') as HTMLButtonElement).click();
+    await tick();
+
+    window.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await tick();
+
+    expect(target.querySelector('[data-testid="documents-filter-panel"]')).toBeNull();
+    expect(target.querySelector('[data-testid="documents-create-picker"]')).toBeNull();
+
+    component.$destroy();
+  });
+
+  it("closes floating document menus on Escape", async () => {
+    const { component, target } = renderDocuments();
+
+    (target.querySelector('[data-testid="documents-filter-button"]') as HTMLButtonElement).click();
+    (target.querySelector('[data-testid="documents-create-button"]') as HTMLButtonElement).click();
+    await tick();
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true }));
+    await tick();
+
+    expect(target.querySelector('[data-testid="documents-filter-panel"]')).toBeNull();
+    expect(target.querySelector('[data-testid="documents-create-picker"]')).toBeNull();
+    expect(mocks.closeEditor).not.toHaveBeenCalled();
 
     component.$destroy();
   });
