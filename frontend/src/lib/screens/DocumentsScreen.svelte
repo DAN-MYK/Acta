@@ -115,20 +115,6 @@
       return;
     }
 
-    if (filtersOpen) {
-      event.preventDefault();
-      filtersOpen = false;
-      filterButton?.focus();
-      return;
-    }
-
-    if (createMenuOpen) {
-      event.preventDefault();
-      createMenuOpen = false;
-      createMenuButton?.focus();
-      return;
-    }
-
     if ($documents.editor) {
       event.preventDefault();
       requestCloseDrawer();
@@ -542,7 +528,7 @@
           data-testid="documents-filter-button"
           type="button"
           aria-expanded={filtersOpen}
-          aria-controls="documents-filter-popover"
+          aria-controls={filtersOpen ? "documents-filter-popover" : undefined}
           on:click={toggleFilters}
           disabled={$documents.loading}
         >
@@ -649,11 +635,11 @@
           disabled={$documents.loading}
           on:click={onCreateDraft}
           aria-expanded={createMenuOpen}
-          aria-controls="documents-create-picker"
+          aria-controls={createMenuOpen ? "documents-create-picker" : undefined}
           aria-busy={$documents.loading ? "true" : "false"}
         >
           {#if createButtonKind}
-            <AppIcon name={documentKindMeta[createButtonKind].icon} surface={true} />
+            <AppIcon name={resolveDocumentKindMeta(createButtonKind).icon} surface={true} />
           {/if}
           <span>{createButtonLabel}</span>
         </button>
