@@ -2,6 +2,7 @@
  * @vitest-environment jsdom
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ComponentProps } from "svelte";
 import CounterpartyModal from "../CounterpartyModal.svelte";
 import type { CounterpartyDraftFormDto } from "../../types";
 
@@ -18,10 +19,10 @@ const mockForm: CounterpartyDraftFormDto = {
   notes: "",
 };
 
-function mount(props: Record<string, unknown>) {
+function mount(props: Partial<ComponentProps<CounterpartyModal>>) {
   const target = document.createElement("div");
   document.body.appendChild(target);
-  const component = new CounterpartyModal({ target, props });
+  const component = new CounterpartyModal({ target, props: props as ComponentProps<CounterpartyModal> });
   return { component, target };
 }
 
