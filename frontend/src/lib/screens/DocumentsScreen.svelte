@@ -2,6 +2,7 @@
   import { tick } from "svelte";
   import AppIcon from "../components/AppIcon.svelte";
   import SkeletonRow from "../components/SkeletonRow.svelte";
+  import CounterpartyModal from "../components/CounterpartyModal.svelte";
   import {
     EDITOR_DIRTY_COPY,
     DOCUMENTS_COPY,
@@ -52,6 +53,20 @@
   let chainMenuPopover: HTMLElement | null = null;
   let pendingDirtyClose = false;
   let panelElement: HTMLElement | null = null;
+
+  let isReassigning = false;
+  let reassignTargetId = "";
+
+  // Reset reassign mode when counterpartyId changes (after successful changeCounterparty)
+  $: if ($documents.editor?.form.counterpartyId !== undefined && !$documents.pendingNew) {
+    if (!isReassigning) reassignTargetId = $documents.editor.form.counterpartyId;
+  }
+
+  $: isDirtyCpModal = (() => {
+    const m = $documents.cpModal;
+    if (!m?.form || !m.snapshot) return false;
+    return JSON.stringify(m.form) !== JSON.stringify(m.snapshot);
+  })();
 
   type SortField = "number" | "counterparty" | "date" | "amount" | "kind" | "status" | "direction";
   let sortField: SortField | null = null;
@@ -435,6 +450,11 @@
   function onEditorCounterpartyChange(event: Event) {
     const select = event.currentTarget as HTMLSelectElement;
     const id = select.value;
+    if (id === "__new__") {
+      select.value = "";
+      void documents.openCpCreate();
+      return;
+    }
     const name = select.options[select.selectedIndex]?.text ?? "";
     documents.updateCounterparty(id, id ? name : "");
   }
@@ -1171,13 +1191,50 @@
             {#each $counterparties.screen?.items ?? [] as cp}
               <option value={cp.id}>{cp.name}</option>
             {/each}
+            <option value="__new__">+ Новий контрагент...</option>
           </select>
         </label>
+      {:else if isReassigning}
+        <div class="editor-field-readonly editor-grid-span">
+          <span class="editor-field-readonly-label">Контрагент</span>
+          <div class="cp-reassign-row">
+            <select bind:value={reassignTargetId} disabled={$documents.loading}>
+              {#each $counterparties.screen?.items ?? [] as cp}
+                <option value={cp.id}>{cp.name}</option>
+              {/each}
+            </select>
+            <button
+              class="btn-primary"
+              disabled={$documents.loading || !reassignTargetId || reassignTargetId === $documents.editor?.form.counterpartyId}
+              on:click={() => void documents.changeCounterparty($documents.editor?.form.id ?? "", reassignTargetId)}
+            >
+              Зберегти
+            </button>
+            <button class="btn-ghost" on:click={() => { isReassigning = false; }}>
+              Скасувати
+            </button>
+          </div>
+        </div>
       {:else}
         <div class="editor-field-readonly editor-grid-span">
           <span class="editor-field-readonly-label">Контрагент</span>
           <span class="editor-field-readonly-value">{$documents.editor.form.counterpartyName}</span>
-          <span class="editor-field-readonly-hint">тільки перегляд</span>
+          <div class="cp-actions">
+            <button
+              class="btn-ghost btn-sm"
+              on:click={() => void documents.openCpEdit($documents.editor?.form.counterpartyId ?? "")}
+              disabled={$documents.loading}
+            >
+              Редагувати
+            </button>
+            <button
+              class="btn-ghost btn-sm"
+              on:click={() => { isReassigning = true; reassignTargetId = $documents.editor?.form.counterpartyId ?? ""; }}
+              disabled={$documents.loading}
+            >
+              Змінити
+            </button>
+          </div>
         </div>
       {/if}
     </div>
@@ -1351,6 +1408,22 @@
         {/if}
       </div>
     {/if}
+
+    {#if $documents.cpModal?.isOpen}
+      <CounterpartyModal
+        isOpen={$documents.cpModal.isOpen}
+        mode={$documents.cpModal.mode}
+        form={$documents.cpModal.form}
+        loading={$documents.cpModal.loading}
+        isDirty={isDirtyCpModal}
+        showCloseConfirm={$documents.cpModal.confirmClose}
+        on:fieldChange={(e) => documents.updateCpField(e.detail.field, e.detail.value)}
+        on:save={async () => { await documents.saveCp(); await counterparties.load(); }}
+        on:close={() => documents.closeCpModal()}
+        on:closeConfirmed={() => documents.confirmCloseCpModal()}
+        on:closeCancelled={() => documents.cancelCloseCpModal()}
+      />
+    {/if}
   </section>
 {/if}
 
@@ -1408,5 +1481,22 @@
     gap: 6px;
     margin-right: 16px;
     cursor: pointer;
+  }
+
+  .cp-reassign-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 4px;
+  }
+
+  .cp-reassign-row select {
+    flex: 1;
+  }
+
+  .cp-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 4px;
   }
 </style>
