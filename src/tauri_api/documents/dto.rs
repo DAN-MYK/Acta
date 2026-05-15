@@ -229,3 +229,11 @@ pub struct BulkMutationResultDto {
     pub errors: Vec<String>,
     pub message: String,
 }
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeCounterpartyResultDto {
+    pub ok: bool,
+    pub counterparty_id: String,
+    pub counterparty_name: String,
+}

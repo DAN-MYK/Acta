@@ -1553,6 +1553,69 @@ pub async fn documents_bulk_delete_live(
     Ok(result)
 }
 
+pub async fn document_change_counterparty(
+    ctx: &AppCtx,
+    doc_id: String,
+    counterparty_id: String,
+) -> Result<ChangeCounterpartyResultDto> {
+    let doc_ref = parse_document_ref(&doc_id)
+        .ok_or_else(|| anyhow!("Некоректний ідентифікатор документа: {}", doc_id))?;
+    let cp_uuid = Uuid::parse_str(&counterparty_id)
+        .map_err(|_| anyhow!("Некоректний UUID контрагента: {}", counterparty_id))?;
+    let company_id = ctx.company_id();
+    let pool = ctx.pool();
+
+    match doc_ref {
+        DocumentRef::Act(id) => {
+            sqlx::query(
+                "UPDATE acts SET counterparty_id = $1, updated_at = now() \
+                 WHERE id = $2 AND company_id = $3",
+            )
+            .bind(cp_uuid)
+            .bind(id)
+            .bind(company_id)
+            .execute(pool)
+            .await?;
+        }
+        DocumentRef::Invoice(id) => {
+            sqlx::query(
+                "UPDATE invoices SET counterparty_id = $1, updated_at = now() \
+                 WHERE id = $2 AND company_id = $3",
+            )
+            .bind(cp_uuid)
+            .bind(id)
+            .bind(company_id)
+            .execute(pool)
+            .await?;
+        }
+        DocumentRef::Waybill(id) => {
+            sqlx::query(
+                "UPDATE waybills SET counterparty_id = $1, updated_at = now() \
+                 WHERE id = $2 AND company_id = $3",
+            )
+            .bind(cp_uuid)
+            .bind(id)
+            .bind(company_id)
+            .execute(pool)
+            .await?;
+        }
+    }
+
+    let cp_name: String = sqlx::query_scalar(
+        "SELECT name FROM counterparties WHERE id = $1 AND company_id = $2",
+    )
+    .bind(cp_uuid)
+    .bind(company_id)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(ChangeCounterpartyResultDto {
+        ok: true,
+        counterparty_id,
+        counterparty_name: cp_name,
+    })
+}
+
 pub async fn documents_bulk_advance_status_live(
     ctx: &AppCtx,
     request: BulkDocumentRequest,
