@@ -180,6 +180,7 @@ function freezeLocalKyivMidnight() {
 
 describe("TasksScreen component", () => {
   const source = readFileSync("frontend/src/lib/screens/TasksScreen.svelte", "utf8");
+  const cssSource = readFileSync("frontend/src/styles/tasks.css", "utf8");
 
   beforeEach(() => {
     freezeLocalKyivMidnight();
@@ -350,8 +351,8 @@ describe("TasksScreen component", () => {
   });
 
   it("collapses the two-column layout on compact widths to avoid page-level horizontal scroll", () => {
-    expect(source).toMatch(/@media\s*\(max-width:\s*1100px\)[\s\S]*\.tasks-layout\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
-    expect(source).toMatch(/@media\s*\(max-width:\s*1100px\)[\s\S]*\.tasks-card-header\s*\{[\s\S]*flex-wrap:\s*wrap/);
+    expect(cssSource).toMatch(/@media\s*\(max-width:\s*1100px\)[\s\S]*\.tasks-layout\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+    expect(cssSource).toMatch(/@media\s*\(max-width:\s*1100px\)[\s\S]*\.tasks-card-header\s*\{[\s\S]*flex-wrap:\s*wrap/);
   });
 
 });

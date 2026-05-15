@@ -33,6 +33,7 @@ const mocks = vi.hoisted(() => {
     editor: null as DocumentEditorDto | null,
     chain: null as DocumentChainDto | null,
     draftContext: null as { counterpartyId: string; counterpartyName: string } | null,
+    pendingNew: false,
     selectedIds: [] as string[],
     initialLoading: false,
     loading: false,
@@ -59,9 +60,31 @@ const mocks = vi.hoisted(() => {
     }
   });
 
+  const shellState = createMockStore({
+    state: {
+      chrome: {
+        companyName: "ТОВ Акт",
+        userName: "Олена Бухгалтер",
+        userInitials: "ОБ",
+        userRole: "Бухгалтер",
+        documentsBadge: 2,
+        tasksBadge: 1
+      },
+      companyItems: [],
+      activeCompanyId: "company-1",
+      isDark: false
+    },
+    loading: false,
+    error: null,
+    phase: "idle",
+    pendingCompanyId: null,
+    progressLabel: null
+  });
+
   return {
     counterpartiesState,
     documentsState,
+    shellState,
     addItem: vi.fn(),
     advanceStatus: vi.fn(),
     applyPdfTextReplace: vi.fn(),
@@ -70,6 +93,8 @@ const mocks = vi.hoisted(() => {
     bulkDelete: vi.fn(),
     closeEditor: vi.fn(() => ({ ok: true })),
     create: vi.fn(),
+    openNewEditor: vi.fn(),
+    updateCounterparty: vi.fn(),
     createChainDraft: vi.fn(),
     deleteCurrent: vi.fn(),
     generatePdf: vi.fn(),
@@ -105,6 +130,8 @@ vi.mock("../../stores/documents", () => ({
     bulkDelete: mocks.bulkDelete,
     closeEditor: mocks.closeEditor,
     create: mocks.create,
+    openNewEditor: mocks.openNewEditor,
+    updateCounterparty: mocks.updateCounterparty,
     createChainDraft: mocks.createChainDraft,
     deleteCurrent: mocks.deleteCurrent,
     generatePdf: mocks.generatePdf,
@@ -132,6 +159,12 @@ vi.mock("../../stores/documents", () => ({
 vi.mock("../../stores/counterparties", () => ({
   counterpartiesStore: {
     subscribe: mocks.counterpartiesState.subscribe
+  }
+}));
+
+vi.mock("../../stores/shell", () => ({
+  shellStore: {
+    subscribe: mocks.shellState.subscribe
   }
 }));
 
@@ -233,6 +266,7 @@ function setDocumentsState(selectedIds: string[] = [], items: boolean | Document
       counterpartyId: "counterparty-1",
       counterpartyName: "ТОВ Ромашка"
     },
+    pendingNew: false,
     selectedIds,
     initialLoading: false,
     loading: false,
@@ -257,6 +291,7 @@ function setDocumentsStateWithoutDraftContext() {
     editor: makeEditor(),
     chain: makeChain(),
     draftContext: null,
+    pendingNew: false,
     selectedIds: [],
     initialLoading: false,
     loading: false,
@@ -290,6 +325,12 @@ function buttonByText(target: HTMLElement, text: string): HTMLButtonElement {
 
   expect(button).toBeTruthy();
   return button as HTMLButtonElement;
+}
+
+function editorGridText(target: HTMLElement): string {
+  const grid = target.querySelector(".editor-grid");
+  expect(grid).toBeTruthy();
+  return grid?.textContent ?? "";
 }
 
 describe("DocumentsScreen component", () => {
@@ -375,6 +416,77 @@ describe("DocumentsScreen component", () => {
     component.$destroy();
   });
 
+  it("renders company and existing counterparty inside the drawer form, not the header", () => {
+    const { component, target } = renderDocuments();
+    try {
+      const header = target.querySelector(".documents-drawer > .editor-header");
+      const grid = target.querySelector(".documents-drawer .editor-grid");
+      const readonlyFields = Array.from(target.querySelectorAll(".documents-drawer .editor-field-readonly"));
+
+      expect(header).toBeTruthy();
+      expect(grid).toBeTruthy();
+      expect(header?.textContent ?? "").not.toContain("ТОВ Ромашка");
+      expect(grid?.textContent).toContain("Компанія");
+      expect(grid?.textContent).toContain("ТОВ Акт");
+      expect(grid?.textContent).toContain("Контрагент");
+      expect(grid?.textContent).toContain("ТОВ Ромашка");
+      expect(readonlyFields.length).toBeGreaterThanOrEqual(2);
+    } finally {
+      component.$destroy();
+    }
+  });
+
+  it("keeps the new document counterparty select after direction and number/date", () => {
+    mocks.documentsState.set({
+      list: makeList(),
+      editor: makeEditor(),
+      chain: makeChain(),
+      draftContext: null,
+      pendingNew: true,
+      selectedIds: [],
+      initialLoading: false,
+      loading: false,
+      error: null,
+      message: "Готово",
+      activeTab: "all",
+      kindFilter: null,
+      counterpartyFilterId: null,
+      dateFrom: null,
+      dateTo: null,
+      statusFilter: [],
+      amountMin: null,
+      amountMax: null,
+      overdueOnly: false,
+      activePresetId: null
+    });
+    const { component, target } = renderDocuments();
+    try {
+      const text = editorGridText(target);
+      const companyIndex = text.indexOf("Компанія");
+      const directionIndex = text.indexOf("Напрямок");
+      const numberIndex = text.indexOf("Номер");
+      const dateIndex = text.indexOf("Дата");
+      const counterpartyIndex = text.indexOf("Контрагент");
+
+      expect(companyIndex).toBeGreaterThanOrEqual(0);
+      expect(directionIndex).toBeGreaterThan(companyIndex);
+      expect(numberIndex).toBeGreaterThan(directionIndex);
+      expect(dateIndex).toBeGreaterThan(numberIndex);
+      expect(counterpartyIndex).toBeGreaterThan(dateIndex);
+      expect(target.querySelector(".documents-drawer .editor-grid select")?.textContent).toContain("Оберіть контрагента");
+    } finally {
+      component.$destroy();
+    }
+  });
+
+  it("moves editor notes outside the grid and keeps textarea styling in document CSS", () => {
+    expect(source).toContain('class="editor-notes-field"');
+    expect(source).toMatch(/<div class="editor-items-card">[\s\S]*<\/div>[\s\S]*<label class="editor-notes-field">/);
+    expect(styles).toContain(".editor-notes-field textarea");
+    expect(styles).toMatch(/\.editor-notes-field textarea\s*\{[\s\S]*min-height:\s*96px/);
+    expect(styles).toMatch(/\.editor-notes-field textarea\s*\{[\s\S]*resize:\s*vertical/);
+  });
+
   it("marks the main panel inert while the editor drawer is open", () => {
     const { component, target } = renderDocuments();
 
@@ -449,7 +561,8 @@ describe("DocumentsScreen component", () => {
     (target.querySelector('[data-testid="documents-create-picker-act"]') as HTMLButtonElement).click();
     await tick();
 
-    expect(mocks.create).toHaveBeenCalledWith(undefined, "act");
+    expect(mocks.openNewEditor).toHaveBeenCalledWith("act");
+    expect(mocks.create).not.toHaveBeenCalled();
     expect(target.querySelector('[data-testid="documents-create-picker"]')).toBeNull();
 
     component.$destroy();
@@ -459,6 +572,7 @@ describe("DocumentsScreen component", () => {
     mocks.documentsState.set({
       list: makeList(), editor: null, chain: null,
       draftContext: { counterpartyId: "counterparty-1", counterpartyName: "ТОВ Ромашка" },
+      pendingNew: false,
       selectedIds: [], initialLoading: false,
       loading: false, error: null, message: null,
       activeTab: "all" as const, kindFilter: "act" as const,
@@ -490,7 +604,8 @@ describe("DocumentsScreen component", () => {
     await tick();
     (target.querySelector('[data-testid="documents-create-picker-act"]') as HTMLButtonElement).click();
 
-    expect(mocks.create).toHaveBeenCalledWith(undefined, "act");
+    expect(mocks.openNewEditor).toHaveBeenCalledWith("act");
+    expect(mocks.create).not.toHaveBeenCalled();
 
     component.$destroy();
   });
@@ -563,7 +678,7 @@ describe("DocumentsScreen component", () => {
     mocks.documentsState.set({
       ...{
         list: makeList(), editor: null, chain: null,
-        draftContext: null, selectedIds: [], initialLoading: false,
+        draftContext: null, pendingNew: false, selectedIds: [], initialLoading: false,
         loading: false, error: null, message: null,
         kindFilter: null, dateFrom: null, dateTo: null,
         amountMin: null, amountMax: null, overdueOnly: false, activePresetId: null,
@@ -661,6 +776,7 @@ describe("DocumentsScreen component", () => {
       editor: null,
       chain: null,
       draftContext: null,
+      pendingNew: false,
       selectedIds: [],
       initialLoading: true,
       loading: false,
@@ -725,6 +841,7 @@ describe("DocumentsScreen component", () => {
         counterpartyId: "counterparty-1",
         counterpartyName: "ТОВ Ромашка"
       },
+      pendingNew: false,
       selectedIds: [],
       initialLoading: false,
       loading: false,
@@ -764,6 +881,7 @@ describe("DocumentsScreen component", () => {
       editor: null,
       chain: null,
       draftContext: null,
+      pendingNew: false,
       selectedIds: [],
       initialLoading: false,
       loading: false,
@@ -793,7 +911,7 @@ describe("DocumentsScreen component", () => {
     mocks.documentsState.set({
       ...{
         list: makeList(), editor: makeEditor(), chain: makeChain(),
-        draftContext: null, selectedIds: [], initialLoading: false,
+        draftContext: null, pendingNew: false, selectedIds: [], initialLoading: false,
         loading: false, error: null, message: null,
         activeTab: "all" as const, kindFilter: null,
         dateFrom: null, dateTo: null,
@@ -866,7 +984,7 @@ describe("DocumentsScreen component", () => {
     mocks.documentsState.set({
       ...{
         list: makeList(), editor: makeEditor(), chain: makeChain(),
-        draftContext: null, selectedIds: [], initialLoading: false,
+        draftContext: null, pendingNew: false, selectedIds: [], initialLoading: false,
         loading: false, error: null, message: null,
         activeTab: "all" as const, kindFilter: null,
         dateFrom: null, dateTo: null,
@@ -913,7 +1031,7 @@ describe("DocumentsScreen component", () => {
     mocks.documentsState.set({
       ...{
         list: makeList(), editor: makeEditor(), chain: makeChain(),
-        draftContext: null, selectedIds: [], initialLoading: false,
+        draftContext: null, pendingNew: false, selectedIds: [], initialLoading: false,
         loading: false, error: null, message: null,
         activeTab: "all" as const, kindFilter: null,
         dateFrom: null, dateTo: null,

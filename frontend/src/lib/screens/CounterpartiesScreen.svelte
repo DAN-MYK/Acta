@@ -102,7 +102,7 @@
 <svelte:window on:keydown={onWindowKeydown} />
 
 <section
-  class="panel"
+  class="panel panel-fill"
   data-testid="counterparties-screen"
   inert={$counterparties.editor ? true : undefined}
   aria-hidden={$counterparties.editor ? "true" : undefined}

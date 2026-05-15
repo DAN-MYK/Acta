@@ -3,7 +3,9 @@
   grid-template-columns: 380px minmax(0, 1fr);
   gap: 16px;
   margin-top: 18px;
-  height: calc(100vh - 160px);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .counterparties-list-wrap {

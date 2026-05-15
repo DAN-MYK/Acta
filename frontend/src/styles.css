@@ -451,6 +451,8 @@ textarea {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Topbar */
@@ -602,8 +604,45 @@ textarea {
 }
 
 .panel {
-  margin-top: var(--acta-space-5);
+  margin: var(--acta-space-5);
   padding: var(--acta-space-5);
+}
+
+.panel-fill {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+}
+
+.nav-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--acta-color-border);
+  padding: 0 16px;
+}
+
+.nav-tab {
+  padding: 8px 16px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--acta-color-text-muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  font-weight: 500;
+  transition: color var(--acta-motion-fast), border-color var(--acta-motion-fast);
+}
+
+.nav-tab:hover {
+  color: var(--acta-color-text);
+}
+
+.nav-tab-active,
+.nav-tab[aria-selected="true"] {
+  color: var(--acta-color-accent);
+  border-bottom-color: var(--acta-color-accent);
 }
 
 .panel-header {

@@ -22,12 +22,14 @@
   } from "../config/ui";
   import { documentsStore } from "../stores/documents";
   import { counterpartiesStore } from "../stores/counterparties";
+  import { shellStore } from "../stores/shell";
   import { formatDocumentDraftTotal, formatDocumentItemTotal } from "../documentMoney";
-  import { isFormattedMoneyNegative } from "../money";
+  import { isFormattedMoneyNegative, parseMoneyToMinor } from "../money";
   import type { DocumentDraftItemDto, DocumentKind } from "../types";
 
   const documents = documentsStore;
   const counterparties = counterpartiesStore;
+  const shell = shellStore;
 
   let createCounterpartyId = "";
   let filterCounterpartyId = "";
@@ -50,6 +52,47 @@
   let chainMenuPopover: HTMLElement | null = null;
   let pendingDirtyClose = false;
   let panelElement: HTMLElement | null = null;
+
+  type SortField = "number" | "counterparty" | "date" | "amount" | "kind" | "status" | "direction";
+  let sortField: SortField | null = null;
+  let sortDir: "asc" | "desc" = "asc";
+
+  function toggleSort(field: SortField) {
+    if (sortField === field) {
+      if (sortDir === "asc") {
+        sortDir = "desc";
+      } else {
+        sortField = null;
+        sortDir = "asc";
+      }
+    } else {
+      sortField = field;
+      sortDir = "asc";
+    }
+  }
+
+  $: sortedItems = (() => {
+    const items = $documents.list?.items ?? [];
+    if (!sortField) return items;
+    const sf = sortField;
+    const dir = sortDir === "asc" ? 1 : -1;
+    return [...items].sort((a, b) => {
+      switch (sf) {
+        case "number":      return dir * a.number.localeCompare(b.number, "uk", { numeric: true });
+        case "counterparty": return dir * a.counterparty.localeCompare(b.counterparty, "uk");
+        case "date":        return dir * a.date.localeCompare(b.date);
+        case "amount": {
+          const av = parseMoneyToMinor(a.amountStr) ?? 0n;
+          const bv = parseMoneyToMinor(b.amountStr) ?? 0n;
+          return dir * (av < bv ? -1 : av > bv ? 1 : 0);
+        }
+        case "kind":      return dir * a.kind.localeCompare(b.kind);
+        case "status":    return dir * a.status.localeCompare(b.status);
+        case "direction": return dir * a.direction.localeCompare(b.direction);
+        default:          return 0;
+      }
+    });
+  })();
 
   $: {
     const nextDraftContextCounterpartyId = $documents.draftContext?.counterpartyId ?? "";
@@ -373,12 +416,27 @@
       createMenuOpen = !createMenuOpen;
       return;
     }
-    void documents.create(createCounterpartyId || undefined, createButtonKind);
+    if (createCounterpartyId) {
+      void documents.create(createCounterpartyId, createButtonKind);
+    } else {
+      documents.openNewEditor(createButtonKind);
+    }
   }
 
   function onCreateMenuKind(kind: DocumentKind) {
-    void documents.create(createCounterpartyId || undefined, kind);
+    if (createCounterpartyId) {
+      void documents.create(createCounterpartyId, kind);
+    } else {
+      documents.openNewEditor(kind);
+    }
     createMenuOpen = false;
+  }
+
+  function onEditorCounterpartyChange(event: Event) {
+    const select = event.currentTarget as HTMLSelectElement;
+    const id = select.value;
+    const name = select.options[select.selectedIndex]?.text ?? "";
+    documents.updateCounterparty(id, id ? name : "");
   }
 
   function toggleFilters() {
@@ -554,8 +612,8 @@
                 <button type="button" class="kind-chip" on:click={() => onDateSubpreset('year')}>{DOCUMENTS_FILTER_COPY.periodSubpresets.year}</button>
               </div>
               <div class="filter-panel-grid-2">
-                <label>{DOCUMENTS_FILTER_COPY.periodFrom}<input type="date" bind:value={panelDateFrom} /></label>
-                <label>{DOCUMENTS_FILTER_COPY.periodTo}<input type="date" bind:value={panelDateTo} /></label>
+                <label><span>{DOCUMENTS_FILTER_COPY.periodFrom}</span><input type="date" bind:value={panelDateFrom} /></label>
+                <label><span>{DOCUMENTS_FILTER_COPY.periodTo}</span><input type="date" bind:value={panelDateTo} /></label>
               </div>
               {#if dateRangeError}
                 <p class="filter-error" role="alert">{dateRangeError}</p>
@@ -594,8 +652,8 @@
             <fieldset class="filter-panel-section">
               <legend>{DOCUMENTS_FILTER_COPY.amountLabel}</legend>
               <div class="filter-panel-grid-2">
-                <label>{DOCUMENTS_FILTER_COPY.amountFrom}<input type="text" inputmode="decimal" bind:value={panelAmountMin} placeholder="0,00" /></label>
-                <label>{DOCUMENTS_FILTER_COPY.amountTo}<input type="text" inputmode="decimal" bind:value={panelAmountMax} placeholder="0,00" /></label>
+                <label><span>{DOCUMENTS_FILTER_COPY.amountFrom}</span><input type="text" inputmode="decimal" bind:value={panelAmountMin} placeholder="0,00" /></label>
+                <label><span>{DOCUMENTS_FILTER_COPY.amountTo}</span><input type="text" inputmode="decimal" bind:value={panelAmountMax} placeholder="0,00" /></label>
               </div>
               {#if amountRangeError}
                 <p class="filter-error" role="alert">{amountRangeError}</p>
@@ -801,48 +859,103 @@
       </div>
     </div>
   {:else}
-    <div class="documents-list" data-testid="documents-list">
-      {#each $documents.list?.items ?? [] as item}
-        <div class="doc-row doc-row-rich" data-testid={`documents-row-${item.id}`}>
-          <label class="doc-row-checkbox" aria-label={`Вибрати ${item.number}`}>
-            <input
-              type="checkbox"
-              checked={$documents.selectedIds.includes(item.id)}
-              on:click|stopPropagation={() => onToggleSelection(item.id)}
-            />
-          </label>
-
-          <button
-            class="doc-row-open"
-            type="button"
-            on:click={() => documents.open(item.id)}
-            disabled={$documents.loading}
-            aria-label={`Відкрити документ ${item.number}`}
-          >
-            <div class="doc-row-body">
-              <div>
-                <strong class="doc-row-title">
-                  <AppIcon name={resolveDocumentKindMeta(item.kind).icon} surface={true} size={16} />
-                  <span>{item.number}</span>
-                </strong>
-                <p>{item.counterparty}</p>
-              </div>
-              <div class="doc-row-meta">
-                <span>{item.date}</span>
-                <span class="money-value" data-negative={isFormattedMoneyNegative(item.amountStr)}>{item.amountStr}</span>
-                <span class="doc-kind-badge">
-                  <AppIcon name={resolveDocumentKindMeta(item.kind).icon} size={14} />
-                  <span>{getDocumentKindLabel(item.kind)}</span>
-                </span>
-                <span class="doc-status-chip">{item.statusLabel}</span>
-                <span class="doc-direction-badge" data-direction={item.direction}>
-                  {DOCUMENT_DIRECTION_LABELS[item.direction] ?? item.direction}
-                </span>
-              </div>
-            </div>
+    <div class="documents-table-card" data-testid="documents-list">
+      <div class="documents-table-scroll">
+        <div class="doc-trow doc-trow-head">
+          <div></div>
+          <button class="doc-sort-btn" type="button" on:click={() => toggleSort("number")} aria-label="Сортувати за номером" data-active={sortField === "number" || null}>
+            <span>Номер</span>
+            <svg width="10" height="12" viewBox="0 0 10 12" aria-hidden="true" fill="currentColor">
+              <path d="M5 1.5L2 5h6L5 1.5Z" opacity={sortField === "number" ? (sortDir === "asc" ? 1 : 0.22) : 0.38}/>
+              <path d="M5 10.5L8 7H2l3 3.5Z" opacity={sortField === "number" ? (sortDir === "desc" ? 1 : 0.22) : 0.38}/>
+            </svg>
+          </button>
+          <button class="doc-sort-btn" type="button" on:click={() => toggleSort("counterparty")} aria-label="Сортувати за контрагентом" data-active={sortField === "counterparty" || null}>
+            <span>Контрагент</span>
+            <svg width="10" height="12" viewBox="0 0 10 12" aria-hidden="true" fill="currentColor">
+              <path d="M5 1.5L2 5h6L5 1.5Z" opacity={sortField === "counterparty" ? (sortDir === "asc" ? 1 : 0.22) : 0.38}/>
+              <path d="M5 10.5L8 7H2l3 3.5Z" opacity={sortField === "counterparty" ? (sortDir === "desc" ? 1 : 0.22) : 0.38}/>
+            </svg>
+          </button>
+          <button class="doc-sort-btn" type="button" on:click={() => toggleSort("date")} aria-label="Сортувати за датою" data-active={sortField === "date" || null}>
+            <span>Дата</span>
+            <svg width="10" height="12" viewBox="0 0 10 12" aria-hidden="true" fill="currentColor">
+              <path d="M5 1.5L2 5h6L5 1.5Z" opacity={sortField === "date" ? (sortDir === "asc" ? 1 : 0.22) : 0.38}/>
+              <path d="M5 10.5L8 7H2l3 3.5Z" opacity={sortField === "date" ? (sortDir === "desc" ? 1 : 0.22) : 0.38}/>
+            </svg>
+          </button>
+          <button class="doc-sort-btn doc-sort-btn-right" type="button" on:click={() => toggleSort("amount")} aria-label="Сортувати за сумою" data-active={sortField === "amount" || null}>
+            <span>Сума</span>
+            <svg width="10" height="12" viewBox="0 0 10 12" aria-hidden="true" fill="currentColor">
+              <path d="M5 1.5L2 5h6L5 1.5Z" opacity={sortField === "amount" ? (sortDir === "asc" ? 1 : 0.22) : 0.38}/>
+              <path d="M5 10.5L8 7H2l3 3.5Z" opacity={sortField === "amount" ? (sortDir === "desc" ? 1 : 0.22) : 0.38}/>
+            </svg>
+          </button>
+          <button class="doc-sort-btn" type="button" on:click={() => toggleSort("kind")} aria-label="Сортувати за типом" data-active={sortField === "kind" || null}>
+            <span>Тип</span>
+            <svg width="10" height="12" viewBox="0 0 10 12" aria-hidden="true" fill="currentColor">
+              <path d="M5 1.5L2 5h6L5 1.5Z" opacity={sortField === "kind" ? (sortDir === "asc" ? 1 : 0.22) : 0.38}/>
+              <path d="M5 10.5L8 7H2l3 3.5Z" opacity={sortField === "kind" ? (sortDir === "desc" ? 1 : 0.22) : 0.38}/>
+            </svg>
+          </button>
+          <button class="doc-sort-btn" type="button" on:click={() => toggleSort("status")} aria-label="Сортувати за статусом" data-active={sortField === "status" || null}>
+            <span>Статус</span>
+            <svg width="10" height="12" viewBox="0 0 10 12" aria-hidden="true" fill="currentColor">
+              <path d="M5 1.5L2 5h6L5 1.5Z" opacity={sortField === "status" ? (sortDir === "asc" ? 1 : 0.22) : 0.38}/>
+              <path d="M5 10.5L8 7H2l3 3.5Z" opacity={sortField === "status" ? (sortDir === "desc" ? 1 : 0.22) : 0.38}/>
+            </svg>
+          </button>
+          <button class="doc-sort-btn" type="button" on:click={() => toggleSort("direction")} aria-label="Сортувати за напрямком" data-active={sortField === "direction" || null}>
+            <span>Напрямок</span>
+            <svg width="10" height="12" viewBox="0 0 10 12" aria-hidden="true" fill="currentColor">
+              <path d="M5 1.5L2 5h6L5 1.5Z" opacity={sortField === "direction" ? (sortDir === "asc" ? 1 : 0.22) : 0.38}/>
+              <path d="M5 10.5L8 7H2l3 3.5Z" opacity={sortField === "direction" ? (sortDir === "desc" ? 1 : 0.22) : 0.38}/>
+            </svg>
           </button>
         </div>
-      {/each}
+
+        {#each sortedItems as item}
+          <div class="doc-trow doc-trow-data" data-testid={`documents-row-${item.id}`}>
+            <button
+              class="doc-row-open"
+              type="button"
+              on:click={() => documents.open(item.id)}
+              disabled={$documents.loading}
+              aria-label={`Відкрити документ ${item.number}`}
+            ></button>
+
+            <label class="doc-row-checkbox doc-tcell" aria-label={`Вибрати ${item.number}`}>
+              <input
+                type="checkbox"
+                checked={$documents.selectedIds.includes(item.id)}
+                on:click|stopPropagation={() => onToggleSelection(item.id)}
+              />
+            </label>
+
+            <span class="doc-tcell doc-tcell-number">
+              <AppIcon name={resolveDocumentKindMeta(item.kind).icon} surface={true} size={16} />
+              <span>{item.number}</span>
+            </span>
+            <span class="doc-tcell doc-tcell-counterparty">{item.counterparty}</span>
+            <span class="doc-tcell doc-tcell-date">{item.date}</span>
+            <span class="doc-tcell doc-tcell-amount money-value" data-negative={isFormattedMoneyNegative(item.amountStr)}>{item.amountStr}</span>
+            <span class="doc-tcell doc-tcell-kind">
+              <span class="doc-kind-badge">
+                <AppIcon name={resolveDocumentKindMeta(item.kind).icon} size={14} />
+                <span>{getDocumentKindLabel(item.kind)}</span>
+              </span>
+            </span>
+            <span class="doc-tcell doc-tcell-status">
+              <span class="doc-status-chip">{item.statusLabel}</span>
+            </span>
+            <span class="doc-tcell doc-tcell-direction">
+              <span class="doc-direction-badge" data-direction={item.direction}>
+                {DOCUMENT_DIRECTION_LABELS[item.direction] ?? item.direction}
+              </span>
+            </span>
+          </div>
+        {/each}
+      </div>
     </div>
   {/if}
 </section>
@@ -926,7 +1039,6 @@
           <span class="doc-status-chip">{getCurrentChainStatus()}</span>
         </div>
         <h3 id="documents-drawer-title" tabindex="-1">{$documents.editor.form.title}</h3>
-        <p>{$documents.editor.form.counterpartyName}</p>
       </div>
       <div class="editor-actions">
         <button
@@ -1000,28 +1112,12 @@
     </div>
 
     <div class="editor-grid">
-      <label>
-        Номер
-        <input value={$documents.editor.form.number} on:input={onEditorNumberChange} disabled={$documents.loading} />
-      </label>
-      <label class="editor-date-field">
-        Дата
-        <input
-          type="date"
-          value={$documents.editor.form.date}
-          on:input={onEditorDateChange}
-          disabled={$documents.loading}
-        />
-      </label>
-      <label class="editor-grid-span">
-        Примітки
-        <textarea
-          rows="3"
-          value={$documents.editor.form.notes}
-          on:input={onEditorNotesChange}
-          disabled={$documents.loading}
-        ></textarea>
-      </label>
+      <div class="editor-field-readonly editor-grid-span">
+        <span class="editor-field-readonly-label">Компанія</span>
+        <span class="editor-field-readonly-value">{$shell.state?.chrome.companyName ?? ""}</span>
+        <span class="editor-field-readonly-hint">тільки перегляд</span>
+      </div>
+
       <fieldset class="editor-direction-fieldset editor-grid-span">
         <legend>Напрямок</legend>
         <label class="editor-direction-option">
@@ -1047,6 +1143,43 @@
           {DOCUMENT_DIRECTION_OPTIONS[1].label}
         </label>
       </fieldset>
+
+      <label>
+        Номер
+        <input value={$documents.editor.form.number} on:input={onEditorNumberChange} disabled={$documents.loading} placeholder="Буде згенеровано автоматично" />
+      </label>
+      <label class="editor-date-field">
+        Дата
+        <input
+          type="date"
+          value={$documents.editor.form.date}
+          on:input={onEditorDateChange}
+          disabled={$documents.loading}
+        />
+      </label>
+
+      {#if $documents.pendingNew}
+        <label class="editor-grid-span">
+          Контрагент
+          <select
+            value={$documents.editor.form.counterpartyId}
+            on:change={onEditorCounterpartyChange}
+            disabled={$documents.loading}
+            required
+          >
+            <option value="">— Оберіть контрагента —</option>
+            {#each $counterparties.screen?.items ?? [] as cp}
+              <option value={cp.id}>{cp.name}</option>
+            {/each}
+          </select>
+        </label>
+      {:else}
+        <div class="editor-field-readonly editor-grid-span">
+          <span class="editor-field-readonly-label">Контрагент</span>
+          <span class="editor-field-readonly-value">{$documents.editor.form.counterpartyName}</span>
+          <span class="editor-field-readonly-hint">тільки перегляд</span>
+        </div>
+      {/if}
     </div>
 
     <div class="editor-items-card">
@@ -1130,6 +1263,16 @@
         {/if}
       </div>
     </div>
+
+    <label class="editor-notes-field">
+      Примітки
+      <textarea
+        rows="3"
+        value={$documents.editor.form.notes}
+        on:input={onEditorNotesChange}
+        disabled={$documents.loading}
+      ></textarea>
+    </label>
 
     {#if supportsExistingPdfFlow($documents.editor.form.kind)}
       <div class="editor-items-card existing-pdf-card" data-testid="documents-existing-pdf">

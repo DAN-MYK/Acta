@@ -35,6 +35,7 @@ interface DocumentsState {
   editorSnapshot: EditorPayload | null;
   chain: DocumentChainDto | null;
   draftContext: { counterpartyId: string; counterpartyName: string } | null;
+  pendingNew: boolean;
   selectedIds: string[];
   initialLoading: boolean;
   loading: boolean;
@@ -58,6 +59,7 @@ const initialState: DocumentsState = {
   editorSnapshot: null,
   chain: null,
   draftContext: null,
+  pendingNew: false,
   selectedIds: [],
   initialLoading: true,
   loading: false,
@@ -212,7 +214,8 @@ function createDocumentsStore() {
         editor: null,
         editorSnapshot: null,
         chain: null,
-        message: null
+        message: null,
+        pendingNew: false
       }));
       return { ok: true };
     },
@@ -271,6 +274,59 @@ function createDocumentsStore() {
         ...state,
         editor,
         editorSnapshot: snapshotEditor(editor)
+      }));
+    },
+    openNewEditor(kind: string) {
+      const snap = get({ subscribe });
+      const direction: "outgoing" | "incoming" =
+        snap.activeTab === "incoming" ? "incoming" : "outgoing";
+      const today = new Date().toISOString().slice(0, 10);
+      const kindTitles: Record<string, string> = {
+        invoice: "Новий рахунок",
+        act: "Новий акт",
+        waybill: "Нова накладна",
+      };
+      const blankEditor: DocumentEditorDto = {
+        form: {
+          id: "",
+          kind,
+          direction,
+          counterpartyId: "",
+          counterpartyName: "",
+          title: kindTitles[kind] ?? "Новий документ",
+          number: "",
+          date: today,
+          notes: "",
+        },
+        items: [],
+        pdf: null,
+        showTypePicker: false,
+        showEditor: true,
+      };
+      update((state) => ({
+        ...state,
+        pendingNew: true,
+        editor: blankEditor,
+        editorSnapshot: snapshotEditor(blankEditor),
+        chain: null,
+        error: null,
+        message: null,
+        draftContext: null,
+      }));
+    },
+    updateCounterparty(id: string, name: string) {
+      update((state) => ({
+        ...state,
+        editor: state.editor
+          ? {
+              ...state.editor,
+              form: {
+                ...state.editor.form,
+                counterpartyId: id,
+                counterpartyName: name,
+              }
+            }
+          : null
       }));
     },
     async create(counterpartyId: string | undefined, kind: string) {
@@ -364,6 +420,46 @@ function createDocumentsStore() {
     async save() {
       const snapshot = get({ subscribe });
       if (!snapshot.editor) {
+        return;
+      }
+
+      if (snapshot.pendingNew) {
+        if (!snapshot.editor.form.counterpartyId) {
+          update((state) => ({ ...state, error: "Оберіть контрагента" }));
+          return;
+        }
+        update((state) => ({ ...state, loading: true, error: null, message: null }));
+        try {
+          const created = await documentCreateDraft(
+            snapshot.editor.form.counterpartyId,
+            snapshot.editor.form.kind,
+            snapshot.editor.form.direction
+          );
+          const mergedForm = {
+            ...created.form,
+            number: snapshot.editor.form.number || created.form.number,
+            date: snapshot.editor.form.date || created.form.date,
+            notes: snapshot.editor.form.notes,
+            direction: snapshot.editor.form.direction,
+          };
+          const response = await documentSave(mergedForm, snapshot.editor.items);
+          const [{ editor, chain }, list] = await Promise.all([
+            loadEditorAndChain(response.documentId),
+            reloadList(snapshot)
+          ]);
+          update((state) => ({
+            ...state,
+            pendingNew: false,
+            editor,
+            editorSnapshot: snapshotEditor(editor),
+            chain,
+            list,
+            loading: false,
+            message: response.message,
+          }));
+        } catch (error) {
+          update((state) => ({ ...state, loading: false, error: String(error) }));
+        }
         return;
       }
 

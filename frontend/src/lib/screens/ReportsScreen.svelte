@@ -4,6 +4,7 @@
     formatOverdueDaysLabel,
     getReportActiveRowsCount,
     getReportContextText,
+    getReportHeadline,
     getReportKpiCards,
     getReportTopCounterpartiesSubtitle,
     hasReportActiveRows,
@@ -130,16 +131,19 @@
   data-testid="reports-screen"
   aria-busy={$reports.loading && !$reports.initialLoading ? "true" : undefined}
 >
-  <div class="reports-toolbar">
-    <button class="btn-secondary" on:click={() => reports.exportExcelAndOpen()} disabled={$reports.loading}>
-      Відкрити Excel
-    </button>
-    <button class="btn-ghost" on:click={() => reports.exportExcel()} disabled={$reports.loading}>
-      Експортувати Excel
-    </button>
-    <button class="btn-ghost" on:click={() => reports.exportCsv()} disabled={$reports.loading}>
-      Експортувати CSV
-    </button>
+  <div class="panel-header">
+    <strong>{getReportHeadline($reports.screen?.filter.tab)}</strong>
+    <div class="panel-actions">
+      <button class="btn-secondary" on:click={() => reports.exportExcelAndOpen()} disabled={$reports.loading}>
+        Відкрити Excel
+      </button>
+      <button class="btn-ghost" on:click={() => reports.exportExcel()} disabled={$reports.loading}>
+        Експортувати Excel
+      </button>
+      <button class="btn-ghost" on:click={() => reports.exportCsv()} disabled={$reports.loading}>
+        Експортувати CSV
+      </button>
+    </div>
   </div>
 
   <div class="reports-filters">

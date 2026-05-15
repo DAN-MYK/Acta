@@ -127,8 +127,8 @@ acta/
 ## Команди
 ```bash
 # Основний запуск — Tauri + Svelte
-cd src-tauri && cargo tauri dev                   # dev режим (hot reload)
-cd src-tauri && cargo tauri build                 # production build
+npm run tauri dev                                 # dev режим (hot reload) — з кореня проекту
+npm run tauri build                               # production build — з кореня проекту
 
 # Frontend
 cd frontend && npm run test:frontend              # всі frontend тести (vitest)

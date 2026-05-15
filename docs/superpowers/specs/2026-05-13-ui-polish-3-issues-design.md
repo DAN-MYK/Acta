@@ -201,11 +201,16 @@ height: calc(100vh - 160px);  /* магічне число */
 | `frontend/src/styles/tasks.css` | Повна перезапис: видалити конфліктний `.task-kpis`/`.task-kpi-card`; додати всі перенесені стилі з `--acta-*` токенами; namespace generic класи |
 | `frontend/src/styles/counterparties.css` | Замінити `height: calc(100vh - 160px)` на `flex: 1; min-height: 0; overflow: hidden` |
 
+## Уточнення (внесені до плану реалізації)
+
+1. **`documents.css`** також містить `.documents-nav-tabs` → потрібно перевести на `.nav-tabs` (не тільки scoped у компоненті).
+2. **`.task-kpis`** використовується у `Payments/BankTabContent` → Tasks KPI стилі мають бути `.tasks-panel .task-kpis`, не просто `.task-kpis`.
+3. **`.linked-row`** shared з Counterparties, але Tasks today-panel має свій варіант → стилі для Tasks мають бути `.task-today-panel .linked-row`, не глобально.
+
 ## Що НЕ змінюється
 - Tasks HTML структура (`.kpi-cell`, `.kpi-divider`, `.task-row`, тощо) — без змін, крім drawer class
 - Логіка Svelte stores, компонентів, TypeScript
 - `.task-tabs` (pill) — залишається у tasks.css без namespace (card-internal)
-- `.task-pill`, `.linked-row` — залишаються без `.tasks-panel` prefix (shared з Counterparties)
 - `App.svelte` — не змінюється
 
 ## Тести

@@ -60,17 +60,17 @@
   inert={$payments.editor ? true : undefined}
   aria-hidden={$payments.editor ? "true" : undefined}
 >
-  <div class="payments-tabs" role="tablist">
+  <div class="nav-tabs payments-nav-tabs" role="tablist">
     <button
-      class="payments-tab"
-      class:active={activeTab === "bank"}
+      class="nav-tab"
+      class:nav-tab-active={activeTab === "bank"}
       role="tab"
       aria-selected={activeTab === "bank"}
       on:click={() => (activeTab = "bank")}
     >Банк</button>
     <button
-      class="payments-tab"
-      class:active={activeTab === "calendar"}
+      class="nav-tab"
+      class:nav-tab-active={activeTab === "calendar"}
       role="tab"
       aria-selected={activeTab === "calendar"}
       on:click={() => (activeTab = "calendar")}
@@ -215,40 +215,8 @@
 {/if}
 
 <style>
-  .payments-tabs {
-    display: flex;
-    gap: 0;
-    border-bottom: 1px solid var(--acta-color-border);
+  .payments-nav-tabs {
     margin-top: 18px;
-  }
-
-  .payments-tab {
-    padding: 10px 20px;
-    border: 0;
-    background: transparent;
-    color: var(--acta-color-text-muted);
-    font-weight: 500;
-    cursor: pointer;
-    position: relative;
-  }
-
-  .payments-tab:hover {
-    color: var(--acta-color-text);
-  }
-
-  .payments-tab.active {
-    color: var(--acta-color-accent-text);
-  }
-
-  .payments-tab.active::after {
-    content: "";
-    position: absolute;
-    bottom: -1px;
-    left: 0;
-    right: 0;
-    height: 2px;
-    background: var(--acta-color-accent);
-    border-radius: 2px 2px 0 0;
   }
 
   .editor-sheet {

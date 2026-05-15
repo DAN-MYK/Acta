@@ -913,3 +913,33 @@ pub async fn complete_schedule_scoped(pool: &PgPool, company_id: Uuid, id: Uuid)
     .rows_affected();
     Ok(affected > 0)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[allow(dead_code)]
+    fn all_functions_compile() {
+        let _ = list;
+        let _ = payment_kpi;
+        let _ = exists_imported_row;
+        let _ = list_by_counterparty;
+        let _ = get_by_id_scoped;
+        let _ = list_open_document_candidates;
+        let _ = create;
+        let _ = update_scoped;
+        let _ = delete_scoped;
+        let _ = link_act;
+        let _ = link_invoice;
+        let _ = reconcile_document_scoped;
+        let _ = unreconcile_document_scoped;
+        let _ = unreconcile_all_scoped;
+        let _ = mark_reconciled_scoped;
+        let _ = mark_unreconciled_scoped;
+        let _ = reconcile_split_scoped;
+        let _ = list_upcoming_schedule;
+        let _ = list_schedule_in_range;
+        let _ = create_schedule;
+        let _ = complete_schedule;
+        let _ = complete_schedule_scoped;
+    }
+}
