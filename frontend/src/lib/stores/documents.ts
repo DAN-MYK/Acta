@@ -1005,6 +1005,33 @@ function createDocumentsStore() {
         cpModal: state.cpModal ? { ...state.cpModal, confirmClose: false } : null,
       }));
     },
+    async changeCounterparty(docId: string, counterpartyId: string): Promise<void> {
+      try {
+        const result = await documentChangeCounterparty(docId, counterpartyId);
+        update((state) => {
+          if (!state.editor) return state;
+          const updatedFields = {
+            counterpartyId: result.counterpartyId,
+            counterpartyName: result.counterpartyName,
+          };
+          return {
+            ...state,
+            editor: {
+              ...state.editor,
+              form: { ...state.editor.form, ...updatedFields },
+            },
+            editorSnapshot: state.editorSnapshot
+              ? {
+                  ...state.editorSnapshot,
+                  form: { ...state.editorSnapshot.form, ...updatedFields },
+                }
+              : null,
+          };
+        });
+      } catch (error) {
+        update((state) => ({ ...state, error: String(error) }));
+      }
+    },
   };
 }
 

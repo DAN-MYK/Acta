@@ -176,3 +176,57 @@ describe("documentsStore cpModal", () => {
     expect(state.cpModal.confirmClose).toBe(false);
   });
 });
+
+describe("documentsStore changeCounterparty", () => {
+  beforeEach(() => {
+    documentChangeCounterpartyMock.mockReset();
+  });
+
+  it("calls documentChangeCounterparty with correct args", async () => {
+    documentChangeCounterpartyMock.mockResolvedValue({
+      ok: true,
+      counterpartyId: "cp-2",
+      counterpartyName: "ФОП Петренко",
+    });
+
+    await documentsStore.changeCounterparty("act:some-uuid", "cp-2");
+
+    expect(documentChangeCounterpartyMock).toHaveBeenCalledWith("act:some-uuid", "cp-2");
+  });
+
+  it("updates editor.form and editorSnapshot when editor is open", async () => {
+    const mockDocOpenResult = api.documentOpen as ReturnType<typeof vi.fn>;
+    const mockChainGet = api.documentChainGet as ReturnType<typeof vi.fn>;
+    mockDocOpenResult.mockResolvedValue({
+      form: {
+        id: "act:some-uuid",
+        kind: "act",
+        number: "АКТ-001",
+        date: "2026-05-01",
+        counterpartyId: "cp-1",
+        counterpartyName: "ТОВ Ромашка",
+        direction: "outgoing",
+        notes: "",
+        status: "draft",
+        statusLabel: "Чернетка",
+      },
+      items: [],
+      pdf: null,
+    });
+    mockChainGet.mockResolvedValue({ items: [] });
+    await documentsStore.open("act:some-uuid");
+
+    documentChangeCounterpartyMock.mockResolvedValue({
+      ok: true,
+      counterpartyId: "cp-2",
+      counterpartyName: "ФОП Петренко",
+    });
+    await documentsStore.changeCounterparty("act:some-uuid", "cp-2");
+
+    const state = getState();
+    expect(state.editor?.form.counterpartyId).toBe("cp-2");
+    expect(state.editor?.form.counterpartyName).toBe("ФОП Петренко");
+    expect(state.editorSnapshot?.form.counterpartyId).toBe("cp-2");
+    expect(state.editorSnapshot?.form.counterpartyName).toBe("ФОП Петренко");
+  });
+});
