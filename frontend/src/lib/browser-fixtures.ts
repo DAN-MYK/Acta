@@ -1,5 +1,6 @@
 import type {
   BulkMutationResultDto,
+  ChangeCounterpartyResultDto,
   CounterpartyDetailScreenDto,
   CounterpartyEditorDto,
   CounterpartyItemDto,
@@ -601,22 +602,42 @@ export async function browserFixtureInvoke<T>(command: string, payload?: Record<
         documents: clone(documents),
         payments: clone(payments)
       } satisfies CounterpartyDetailScreenDto) as T;
-    case "counterparty_open_editor":
+    case "counterparty_open_editor": {
+      const cpId = (payload as { counterpartyId?: string | null } | undefined)?.counterpartyId;
+      if (!cpId) {
+        return clone({
+          form: {
+            id: "",
+            title: "Новий контрагент",
+            name: "",
+            edrpou: "",
+            ipn: "",
+            iban: "",
+            address: "",
+            phone: "",
+            email: "",
+            notes: "",
+          },
+          showEditor: true,
+        } satisfies CounterpartyEditorDto) as T;
+      }
+      const found = counterparties.find((cp) => cp.id === cpId);
       return clone({
         form: {
-          id: "",
-          title: "Новий контрагент",
-          name: "",
-          edrpou: "",
+          id: cpId,
+          title: found?.name ?? "Контрагент",
+          name: found?.name ?? "",
+          edrpou: found?.edrpou ?? "",
           ipn: "",
           iban: "UA123456789012345678901234567",
           address: "м. Київ, вул. Хрещатик, 1",
           phone: "+380671112233",
           email: "office@example.com",
-          notes: "Потребує уваги щодо термінів оплат."
+          notes: "",
         },
-        showEditor: true
+        showEditor: true,
       } satisfies CounterpartyEditorDto) as T;
+    }
     case "counterparty_save":
       return clone({
         ok: true,
@@ -625,6 +646,15 @@ export async function browserFixtureInvoke<T>(command: string, payload?: Record<
         updatedList: clone(counterparties),
         updatedDetail: null
       } satisfies CounterpartySaveResultDto) as T;
+    case "document_change_counterparty": {
+      const p = payload as { counterpartyId: string };
+      const found = counterparties.find((cp) => cp.id === p.counterpartyId);
+      return clone({
+        ok: true,
+        counterpartyId: p.counterpartyId,
+        counterpartyName: found?.name ?? "Контрагент",
+      } satisfies ChangeCounterpartyResultDto) as T;
+    }
     case "counterparty_archive":
       return clone({ ok: true, message: "Контрагента архівовано" } satisfies MutationResultDto) as T;
     case "counterparty_create_document_context":
