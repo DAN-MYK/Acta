@@ -277,6 +277,12 @@ export interface CreateDocumentContextDto {
   counterpartyName: string;
 }
 
+export interface ChangeCounterpartyResultDto {
+  ok: boolean;
+  counterpartyId: string;
+  counterpartyName: string;
+}
+
 export interface PaymentItemDto {
   id: string;
   date: string;

@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { invokeInBrowser, isBrowserFallbackEnabled } from "./browser-api";
 import type {
   BulkMutationResultDto,
+  ChangeCounterpartyResultDto,
   CounterpartyDetailScreenDto,
   CounterpartyEditorDto,
   CounterpartiesScreenDto,
@@ -145,6 +146,13 @@ export function documentAdvanceStatus(docId: string): Promise<MutationResultDto>
 
 export function documentDelete(docId: string): Promise<MutationResultDto> {
   return appInvoke("document_delete", { docId });
+}
+
+export function documentChangeCounterparty(
+  docId: string,
+  counterpartyId: string,
+): Promise<ChangeCounterpartyResultDto> {
+  return appInvoke("document_change_counterparty", { docId, counterpartyId });
 }
 
 export function documentChainGet(docId: string): Promise<DocumentChainDto> {
