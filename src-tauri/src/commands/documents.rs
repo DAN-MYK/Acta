@@ -1,8 +1,8 @@
 use acta::tauri_api::documents::{
-    BulkDocumentRequest, BulkMutationResultDto, CreateChainDraftRequest,
-    CreateDocumentDraftRequest, DocumentChainDto, DocumentEditorDto, DocumentPdfActionResultDto,
-    DocumentsListDto, DocumentsListRequest, MutationResultDto, ReplaceDocumentPdfTextRequest,
-    SaveDocumentRequest, SaveDocumentResponse,
+    BulkDocumentRequest, BulkMutationResultDto, ChangeCounterpartyResultDto,
+    CreateChainDraftRequest, CreateDocumentDraftRequest, DocumentChainDto, DocumentEditorDto,
+    DocumentPdfActionResultDto, DocumentsListDto, DocumentsListRequest, MutationResultDto,
+    ReplaceDocumentPdfTextRequest, SaveDocumentRequest, SaveDocumentResponse,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
@@ -67,6 +67,17 @@ pub async fn document_delete(
     doc_id: String,
 ) -> CommandResult<MutationResultDto> {
     acta::tauri_api::documents::document_delete(&state.ctx, doc_id)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn document_change_counterparty(
+    state: State<'_, TauriState>,
+    doc_id: String,
+    counterparty_id: String,
+) -> CommandResult<ChangeCounterpartyResultDto> {
+    acta::tauri_api::documents::document_change_counterparty(&state.ctx, doc_id, counterparty_id)
         .await
         .map_err(|error| error.to_string())
 }
