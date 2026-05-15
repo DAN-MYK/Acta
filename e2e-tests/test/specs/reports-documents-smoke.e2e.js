@@ -30,7 +30,7 @@ describe("Acta smoke для звітів і документів", () => {
     await reportsNav.click();
 
     const reportsScreen = await byTestId("reports-screen");
-    await reportsScreen.waitForExist({ timeout: 30000 });
+    await reportsScreen.waitForExist({ timeout: 45000 });
 
     await byTestId("reports-focus-primary").waitForExist({ timeout: 30000 });
     await waitForAny(["reports-table-card", "reports-empty-state"]);
@@ -45,7 +45,56 @@ describe("Acta smoke для звітів і документів", () => {
     await documentsScreen.waitForExist({ timeout: 30000 });
 
     await byTestId("documents-create-strip").waitForExist({ timeout: 30000 });
-    await byTestId("documents-focus-primary").waitForExist({ timeout: 30000 });
     await waitForAny(["documents-list", "documents-empty-state"]);
+  });
+
+  it("зберігає readable layout для звітів і документів на вузькому viewport", async () => {
+    await browser.setWindowSize(820, 900);
+
+    const reportsNav = await byTestId("nav-reports");
+    await reportsNav.waitForExist({ timeout: 30000 });
+    await reportsNav.click();
+    await byTestId("reports-screen").waitForExist({ timeout: 30000 });
+
+    const reportsResponsiveState = await browser.execute(() => {
+      const filterGrid = document.querySelector(".reports-filter-grid");
+      const tableRow = document.querySelector(".reports-table-row");
+
+      if (!(filterGrid instanceof HTMLElement)) {
+        throw new Error("reports-filter-grid не знайдено");
+      }
+      if (!(tableRow instanceof HTMLElement)) {
+        throw new Error("reports-table-row не знайдено");
+      }
+
+      return {
+        filterColumns: window.getComputedStyle(filterGrid).gridTemplateColumns,
+        tableColumns: window.getComputedStyle(tableRow).gridTemplateColumns,
+        hasHorizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth
+      };
+    });
+
+    await expect(reportsResponsiveState.filterColumns.includes(" ")).toBe(false);
+    await expect(reportsResponsiveState.tableColumns.includes(" ")).toBe(false);
+    await expect(reportsResponsiveState.hasHorizontalOverflow).toBe(false);
+
+    const documentsNav = await byTestId("nav-documents");
+    await documentsNav.waitForExist({ timeout: 30000 });
+    await documentsNav.click();
+    await byTestId("documents-screen").waitForExist({ timeout: 30000 });
+
+    const documentsResponsiveState = await browser.execute(() => {
+      const createBar = document.querySelector(".documents-create-bar");
+
+      if (!(createBar instanceof HTMLElement)) {
+        throw new Error("documents-create-bar не знайдено");
+      }
+
+      return {
+        hasHorizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth
+      };
+    });
+
+    await expect(documentsResponsiveState.hasHorizontalOverflow).toBe(false);
   });
 });

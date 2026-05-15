@@ -85,6 +85,14 @@ ui.on_callback(move |...| {
 **Що сталось:** `cargo test --lib` успішно компілював 150 тестів навіть коли `tests/db_integration.rs` і `src/ui/helpers.rs` (бінарний модуль) мали помилки типів. Lib тести і integration/binary тести компілюються окремо — помилка в одному не блокує інший.
 **Правило:** ЗАВЖДИ запускати `cargo build --tests` (не тільки `--lib`) для перевірки повної компіляції. Для підтвердження "all tests passing" потрібен `cargo test` без флагів або принаймні `cargo build --tests` з успішним `Finished`.
 
+## [2026-05-04] Спільні утиліти для CSV+XLSX bank парсингу через `bank_common`
+**Що сталось:** Перший підхід дублював `parse_decimal`, `parse_date`, header-aliases у `bank_csv.rs` та новому `bank_xlsx.rs`. Це штовхало до розбіжностей між форматами — зміна формату дати в одному не передавалась іншому, IBAN normalize працював лише для CSV тощо.
+**Правило:** ЗАВЖДИ виносити header-aliases, decimal/date нормалізатори і `HeaderLayout` у спільний модуль `bank_common.rs`. CSV/XLSX парсери лише читають комірки/рядки і викликають утиліти з common. Це гарантує що всі формати виписок підтримують ті самі заголовки і ту саму суму/дату нормалізацію.
+
+## [2026-05-04] `git stash --keep-index` плутає stash workflow на гілці що рухається
+**Що сталось:** Спроба `git stash --keep-index` для тестування "чистого HEAD" — на гілці яка одночасно отримала push нового коміту — викликала складний конфлікт у `git stash pop`. Файли частково затерлися, частково залишились — частина змін була у HEAD (бо паралельний коміт включив частину work), частина у stash. `git stash apply` поверх HEAD не давало чистого результату.
+**Правило:** НЕ використовувати `git stash` для перевірки "чи компілюється HEAD" коли HEAD може зрушитись паралельно. Замість цього: `git fetch && git diff origin/branch HEAD` (порівняти з ремоутом), або робити роботу в окремій worktree (`git worktree add`). Для перевірки compile-status — `cargo build` напряму на стейджі або в скриптах CI.
+
 ## [2026-04-08] upgrade_in_event_loop до ui.run() — "flash of empty content"
 **Що сталось:** Початкове завантаження даних викликало `reload_*()` з `block_on` до `ui.run()`. Всередині `reload_*` використовувався `upgrade_in_event_loop` — він лише ставить closure у чергу event loop, не виконує одразу. Вікно відкривалось порожнім, дані з'являлись після першого кадру.
 **Правило:** НІКОЛИ не використовувати `upgrade_in_event_loop` для початкового завантаження даних до `ui.run()`. ЗАВЖДИ розділяти reload функції на `prepare_*_data` (async, повертає Send-safe struct) та `apply_*_to_ui(&MainWindow, data)` (sync, викликає `ui.set_*()`). У `block_on` до `ui.run()` — викликати `prepare_*` паралельно через `tokio::join!`, потім `apply_*(&ui, data)` напряму. `reload_*` (для callbacks з `tokio::spawn`) використовує `upgrade_in_event_loop(|ui| apply_*(ui, data))`.

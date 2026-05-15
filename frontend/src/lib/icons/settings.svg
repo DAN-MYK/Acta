@@ -1,4 +1,11 @@
 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <path d="M12 9.25C10.48 9.25 9.25 10.48 9.25 12C9.25 13.52 10.48 14.75 12 14.75C13.52 14.75 14.75 13.52 14.75 12C14.75 10.48 13.52 9.25 12 9.25Z" stroke="currentColor" stroke-width="1.8"/>
-  <path d="M4.75 13.4L3.75 12L4.75 10.6L6.55 10.25C6.74 9.75 6.98 9.29 7.29 8.88L6.54 7.2L7.95 5.79L9.63 6.54C10.04 6.23 10.5 5.99 11 5.8L11.35 4H12.65L13 5.8C13.5 5.99 13.96 6.23 14.37 6.54L16.05 5.79L17.46 7.2L16.71 8.88C17.02 9.29 17.26 9.75 17.45 10.25L19.25 10.6L20.25 12L19.25 13.4L17.45 13.75C17.26 14.25 17.02 14.71 16.71 15.12L17.46 16.8L16.05 18.21L14.37 17.46C13.96 17.77 13.5 18.01 13 18.2L12.65 20H11.35L11 18.2C10.5 18.01 10.04 17.77 9.63 17.46L7.95 18.21L6.54 16.8L7.29 15.12C6.98 14.71 6.74 14.25 6.55 13.75L4.75 13.4Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+  <circle cx="12" cy="12" r="2.75" stroke="currentColor" stroke-width="1.8"/>
+  <path d="M12 5.5V7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M12 17V18.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M18.5 12H17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M7 12H5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M16.6 7.4L15.55 8.45" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M8.45 15.55L7.4 16.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M16.6 16.6L15.55 15.55" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M8.45 8.45L7.4 7.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
 </svg>

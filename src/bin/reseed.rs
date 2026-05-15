@@ -86,8 +86,8 @@ fn cleanup_statements() -> [&'static str; 7] {
 #[tokio::main]
 async fn main() -> Result<()> {
     let _ = dotenvy::dotenv();
-    let database_url = std::env::var("DATABASE_URL")
-        .expect("DATABASE_URL РЅРµ Р·Р°РґР°РЅРѕ. РџРµСЂРµРІС–СЂ .env С„Р°Р№Р».");
+    let database_url =
+        std::env::var("DATABASE_URL").expect("DATABASE_URL не задано. Перевір .env файл.");
 
     let pool = PgPoolOptions::new()
         .max_connections(5)
@@ -95,7 +95,7 @@ async fn main() -> Result<()> {
         .await?;
 
     sqlx::migrate!("./migrations").run(&pool).await?;
-    println!("РњС–РіСЂР°С†С–С— Р·Р°СЃС‚РѕСЃРѕРІР°РЅРѕ.");
+    println!("Міграції застосовано.");
 
     let mut tx = pool.begin().await?;
 
@@ -106,7 +106,7 @@ async fn main() -> Result<()> {
     sqlx::query(SEED_SQL).execute(&mut *tx).await?;
     tx.commit().await?;
 
-    println!("Р”РµРјРѕ-РґР°РЅС– СѓСЃРїС–С€РЅРѕ РїРµСЂРµРІРёСЃС–СЏРЅС–.");
+    println!("Демо-дані успішно перевисіяні.");
     Ok(())
 }
 

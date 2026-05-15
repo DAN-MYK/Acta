@@ -175,9 +175,11 @@ fn parse_reminder_at(value: &str) -> Result<Option<DateTime<Utc>>> {
     parse_local_datetime(parsed, "Нагадування").map(Some)
 }
 
-async fn resolve_link_label(ctx: &AppCtx, task: &Task) -> Result<(String, String)> {
+pub(crate) async fn resolve_link_label(ctx: &AppCtx, task: &Task) -> Result<(String, String)> {
     if let Some(act_id) = task.act_id {
-        if let Some((act, _)) = db::acts::get_by_id(ctx.pool(), act_id).await? {
+        if let Some((act, _)) =
+            db::acts::get_by_id_scoped(ctx.pool(), ctx.company_id(), act_id).await?
+        {
             return Ok(("act".to_string(), format!("Акт {}", act.number)));
         }
     }
@@ -331,7 +333,7 @@ pub async fn task_open_editor(ctx: &AppCtx, task_id: Option<String>) -> Result<T
 
     let task_id = Uuid::parse_str(&task_id)
         .with_context(|| format!("Некоректний ідентифікатор завдання: {task_id}"))?;
-    let task = db::tasks::get_by_id(ctx.pool(), task_id)
+    let task = db::tasks::get_by_id_scoped(ctx.pool(), ctx.company_id(), task_id)
         .await?
         .ok_or_else(|| anyhow!("Завдання не знайдено"))?;
 
@@ -346,15 +348,15 @@ pub async fn task_save(ctx: &AppCtx, request: TaskSaveRequest) -> Result<TaskSav
     let saved_id = if let Some(task_id) = maybe_id {
         let task_id = Uuid::parse_str(&task_id)
             .with_context(|| format!("Некоректний ідентифікатор завдання: {task_id}"))?;
-        db::tasks::get_by_id(ctx.pool(), task_id)
+        db::tasks::get_by_id_scoped(ctx.pool(), ctx.company_id(), task_id)
             .await?
             .ok_or_else(|| anyhow!("Завдання не знайдено"))?;
 
-        let updated = db::tasks::update(ctx.pool(), task_id, &payload)
+        let updated = db::tasks::update_scoped(ctx.pool(), ctx.company_id(), task_id, &payload)
             .await?
             .ok_or_else(|| anyhow!("Завдання не знайдено"))?;
         if updated.status != desired_status {
-            db::tasks::set_status(ctx.pool(), task_id, desired_status)
+            db::tasks::set_status_scoped(ctx.pool(), ctx.company_id(), task_id, desired_status)
                 .await?
                 .ok_or_else(|| anyhow!("Завдання не знайдено"))?;
         }
@@ -362,7 +364,7 @@ pub async fn task_save(ctx: &AppCtx, request: TaskSaveRequest) -> Result<TaskSav
     } else {
         let created = db::tasks::create(ctx.pool(), ctx.company_id(), &payload).await?;
         if !matches!(desired_status, TaskStatus::Open) {
-            db::tasks::set_status(ctx.pool(), created.id, desired_status)
+            db::tasks::set_status_scoped(ctx.pool(), ctx.company_id(), created.id, desired_status)
                 .await?
                 .ok_or_else(|| anyhow!("Завдання не знайдено"))?;
         }
@@ -384,7 +386,7 @@ pub async fn task_save(ctx: &AppCtx, request: TaskSaveRequest) -> Result<TaskSav
 pub async fn task_delete(ctx: &AppCtx, task_id: String) -> Result<TaskMutationResultDto> {
     let task_id = Uuid::parse_str(&task_id)
         .with_context(|| format!("Некоректний ідентифікатор завдання: {task_id}"))?;
-    let deleted = db::tasks::delete(ctx.pool(), task_id).await?;
+    let deleted = db::tasks::delete_scoped(ctx.pool(), ctx.company_id(), task_id).await?;
     if !deleted {
         return Err(anyhow!("Завдання не знайдено"));
     }
@@ -404,7 +406,7 @@ pub async fn task_set_status(
     let task_id = Uuid::parse_str(&task_id)
         .with_context(|| format!("Некоректний ідентифікатор завдання: {task_id}"))?;
     let status = parse_status(&status);
-    db::tasks::set_status(ctx.pool(), task_id, status)
+    db::tasks::set_status_scoped(ctx.pool(), ctx.company_id(), task_id, status)
         .await?
         .ok_or_else(|| anyhow!("Завдання не знайдено"))?;
 

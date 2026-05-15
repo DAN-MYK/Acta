@@ -1,4 +1,4 @@
-use anyhow::Result;
+﻿use anyhow::Result;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -23,7 +23,7 @@ pub async fn list(pool: &PgPool, company_id: Uuid) -> Result<Vec<TemplateListRow
 }
 
 /// Один шаблон за ID.
-pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<DocumentTemplate>> {
+async fn get_by_id_unscoped(pool: &PgPool, id: Uuid) -> Result<Option<DocumentTemplate>> {
     let row = sqlx::query_as::<_, DocumentTemplate>(
         r#"
         SELECT id, company_id, name, description, template_type,
@@ -40,6 +40,26 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<DocumentTemplat
 
 /// Створити новий шаблон.
 /// Якщо is_default = true, попередній дефолтний того ж типу скидається.
+pub async fn get_by_id_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+) -> Result<Option<DocumentTemplate>> {
+    let row = sqlx::query_as::<_, DocumentTemplate>(
+        r#"
+        SELECT id, company_id, name, description, template_type,
+               template_path, is_default, created_at, updated_at
+        FROM document_templates
+        WHERE id = $1 AND company_id = $2
+        "#,
+    )
+    .bind(id)
+    .bind(company_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row)
+}
+
 pub async fn create(
     pool: &PgPool,
     company_id: Uuid,
@@ -84,12 +104,12 @@ pub async fn create(
 
 /// Оновити шаблон.
 /// Якщо is_default = true, попередній дефолтний того ж типу скидається.
-pub async fn update(
+async fn update_unscoped(
     pool: &PgPool,
     id: Uuid,
     data: UpdateDocumentTemplate,
 ) -> Result<DocumentTemplate> {
-    let existing = get_by_id(pool, id)
+    let existing = get_by_id_unscoped(pool, id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("Шаблон не знайдено"))?;
 
@@ -145,12 +165,27 @@ pub async fn update(
 }
 
 /// Видалити шаблон.
-pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
-    sqlx::query("DELETE FROM document_templates WHERE id = $1")
+pub async fn update_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+    data: UpdateDocumentTemplate,
+) -> Result<Option<DocumentTemplate>> {
+    if get_by_id_scoped(pool, company_id, id).await?.is_none() {
+        return Ok(None);
+    }
+
+    update_unscoped(pool, id, data).await.map(Some)
+}
+
+pub async fn delete_scoped(pool: &PgPool, company_id: Uuid, id: Uuid) -> Result<bool> {
+    let affected = sqlx::query("DELETE FROM document_templates WHERE id = $1 AND company_id = $2")
         .bind(id)
+        .bind(company_id)
         .execute(pool)
-        .await?;
-    Ok(())
+        .await?
+        .rows_affected();
+    Ok(affected > 0)
 }
 
 /// Дефолтний шаблон для типу ('act' або 'invoice').

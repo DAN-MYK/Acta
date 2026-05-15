@@ -4,6 +4,6 @@ pub mod documents;
 pub mod import;
 pub mod payments;
 pub mod reports;
-pub mod shell;
 pub mod settings;
+pub mod shell;
 pub mod tasks;

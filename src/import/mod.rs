@@ -1,4 +1,6 @@
+pub mod bank_common;
 pub mod bank_csv;
+pub mod bank_xlsx;
 pub mod bas_acts;
 pub mod bas_contracts;
 pub mod bas_counterparties;

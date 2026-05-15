@@ -525,3 +525,11 @@
   scenario-first header, clearer filter semantics, KPI context by active tab, overdue emphasis у wide rows.
 - Tasks:
   unified toolbar/editor, stronger priority and deadline presentation, more useful `Сьогодні` empty state.
+
+### Дополіровано станом на 2026-05-04
+
+- `Command palette`: focus trap, keyboard-only навігація стрілками, явні dialog/aria semantics, передбачуваний цикл `Tab`/`Shift+Tab`.
+- `Reports`: keyboard navigation між tabs через `ArrowLeft/ArrowRight/Home/End`, зв'язок `tab` ↔ `tabpanel`, сильніші status banners.
+- `Documents` / `Payments` / `Reports`: уніфіковані semantically stronger success/error banners з live-region поведінкою.
+- Shell/shared controls: підсилені hit areas для критичних верхньорівневих дій і краща видимість active state в palette.
+- `Reports / top-counterparties`: завершено live UI-сценарій. Рейтинг показує позиційні номери, легенду метрик у subtitle, тег `без картки` для платежів без `counterparty_id`, чіп фокусу з кількістю записів у поточній таблиці, focus-state з `:focus-visible` і `aria-pressed` на рядку, drill-CTA `Відкрити картку контрагента` лише для активного рядка з реальним UUID у scope `active`. Action bar Reports: `Відкрити Excel` понижено до `secondary`, `Експортувати …` — до `ghost`; пошук перенесено всередину `reports-filters` як окрему рядкову зону. Empty state отримав додатковий CTA `Скинути фільтри` (через новий `reports.resetFilters`). Section отримала `aria-busy` під час operational reload, експорти — `disabled` під час `loading`.

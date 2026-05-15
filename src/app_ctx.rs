@@ -3,9 +3,9 @@
 // Передається через Arc<AppCtx> у всі модулі UI wiring.
 // Всі accessor'и безпечні при отруєному mutex.
 
+use sqlx::PgPool;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use sqlx::PgPool;
 
 // ---------------------------------------------------------------------------
 // List state structs — клонуються для кожного refresh

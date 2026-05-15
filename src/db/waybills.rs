@@ -1,4 +1,4 @@
-// CRUD операції для видаткових накладних (товарних накладних)
+﻿// CRUD операції для видаткових накладних (товарних накладних)
 //
 // Всі запити — runtime-style (sqlx::query_as::<_, T>()) без макросів.
 // Транзакційна вставка: create() та update_with_items() відкривають транзакцію,
@@ -61,36 +61,33 @@ pub async fn counterparties_for_select(
         .collect())
 }
 
-/// Отримати список накладних компанії. `status_filter = None` → всі.
-pub async fn list(
-    pool: &PgPool,
-    company_id: Uuid,
-    status_filter: Option<WaybillStatus>,
-) -> Result<Vec<WaybillListRow>> {
+/// Отримати список накладних компанії. Зручна обгортка без додаткових фільтрів.
+pub async fn list(pool: &PgPool, company_id: Uuid) -> Result<Vec<WaybillListRow>> {
     list_filtered(
-        pool,
-        company_id,
-        status_filter,
-        None,
-        None,
-        None,
-        None,
-        None,
+        pool, company_id, None, None, None, None, None, None, None, None,
     )
     .await
 }
 
-/// Список накладних з фільтром за статусом, текстовим пошуком,
-/// контрагентом і діапазоном дат.
+/// Список накладних з фільтром за статусами, напрямом, текстовим пошуком,
+/// контрагентом, діапазоном дат та сумами.
+///
+/// Примітка: waybills не мають `expected_payment_date`, тому `overdue_only` не підтримується.
+///
+/// - `statuses` — масив рядкових значень статусу; `None` = всі.
+/// - `amount_min` / `amount_max` — фільтр за сумою `total_amount`.
+#[allow(clippy::too_many_arguments)]
 pub async fn list_filtered(
     pool: &PgPool,
     company_id: Uuid,
-    status_filter: Option<WaybillStatus>,
+    statuses: Option<&[String]>,
     direction: Option<DocumentDirection>,
     search_query: Option<&str>,
     counterparty_id: Option<Uuid>,
     date_from: Option<chrono::NaiveDate>,
     date_to: Option<chrono::NaiveDate>,
+    amount_min: Option<Decimal>,
+    amount_max: Option<Decimal>,
 ) -> Result<Vec<WaybillListRow>> {
     let search_query = search_query.map(str::trim).filter(|q| !q.is_empty());
     let has_search = search_query.is_some();
@@ -105,9 +102,11 @@ pub async fn list_filtered(
     );
     qb.push_bind(company_id);
 
-    if let Some(status) = status_filter {
-        qb.push(" AND w.status = ");
-        qb.push_bind(status);
+    if let Some(statuses) = statuses.filter(|s| !s.is_empty()) {
+        let owned: Vec<String> = statuses.to_vec();
+        qb.push(" AND w.status::text = ANY(")
+            .push_bind(owned)
+            .push("::text[])");
     }
     if let Some(direction) = direction {
         qb.push(" AND w.direction = ");
@@ -133,6 +132,12 @@ pub async fn list_filtered(
         qb.push(" AND w.date <= ");
         qb.push_bind(dt);
     }
+    if let Some(min) = amount_min {
+        qb.push(" AND w.total_amount >= ").push_bind(min);
+    }
+    if let Some(max) = amount_max {
+        qb.push(" AND w.total_amount <= ").push_bind(max);
+    }
     qb.push(" ORDER BY w.date DESC, w.number");
     if has_search {
         qb.push(" LIMIT 100");
@@ -146,7 +151,10 @@ pub async fn list_filtered(
 }
 
 /// Отримати одну накладну разом з усіма позиціями.
-pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<(Waybill, Vec<WaybillItem>)>> {
+async fn get_by_id_unscoped(
+    pool: &PgPool,
+    id: Uuid,
+) -> Result<Option<(Waybill, Vec<WaybillItem>)>> {
     let waybill = sqlx::query_as::<_, Waybill>(
         r#"
         SELECT id, company_id, number, counterparty_id, contract_id, category_id, direction,
@@ -178,9 +186,90 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<(Waybill, Vec<W
     Ok(Some((waybill, items)))
 }
 
+async fn exists_in_company(pool: &PgPool, company_id: Uuid, id: Uuid) -> Result<bool> {
+    let exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM waybills WHERE id = $1 AND company_id = $2)",
+    )
+    .bind(id)
+    .bind(company_id)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(exists)
+}
+
+pub async fn get_by_id_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+) -> Result<Option<(Waybill, Vec<WaybillItem>)>> {
+    if !exists_in_company(pool, company_id, id).await? {
+        return Ok(None);
+    }
+
+    get_by_id_unscoped(pool, id).await
+}
+
+pub async fn find_by_notes_marker(
+    pool: &PgPool,
+    company_id: Uuid,
+    marker: &str,
+) -> Result<Option<(Waybill, Vec<WaybillItem>)>> {
+    let pattern = format!("%{marker}%");
+    let id = sqlx::query_scalar::<_, Uuid>(
+        r#"
+        SELECT id
+        FROM waybills
+        WHERE company_id = $1
+          AND notes LIKE $2
+        ORDER BY updated_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(company_id)
+    .bind(pattern)
+    .fetch_optional(pool)
+    .await?;
+
+    match id {
+        Some(id) => get_by_id_unscoped(pool, id).await,
+        None => Ok(None),
+    }
+}
+
 /// Завантажити накладну з позиціями для форми редагування.
-pub async fn get_for_edit(pool: &PgPool, id: Uuid) -> Result<Option<(Waybill, Vec<WaybillItem>)>> {
-    get_by_id(pool, id).await
+pub async fn get_for_edit_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+) -> Result<Option<(Waybill, Vec<WaybillItem>)>> {
+    get_by_id_scoped(pool, company_id, id).await
+}
+
+/// Оновити шлях до керованої PDF-копії для документа в межах активної компанії.
+pub async fn set_pdf_path(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+    pdf_path: Option<String>,
+) -> Result<Option<Waybill>> {
+    let waybill = sqlx::query_as::<_, Waybill>(
+        r#"
+        UPDATE waybills
+        SET pdf_path = $3,
+            updated_at = NOW()
+        WHERE id = $1 AND company_id = $2
+        RETURNING id, company_id, number, counterparty_id, contract_id, category_id, direction,
+                  date, total_amount, status, notes, pdf_path, bas_id, created_at, updated_at
+        "#,
+    )
+    .bind(id)
+    .bind(company_id)
+    .bind(pdf_path)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(waybill)
 }
 
 /// Створити нову накладну разом з позиціями в одній транзакції.
@@ -251,7 +340,7 @@ pub async fn create(pool: &PgPool, company_id: Uuid, data: &NewWaybill) -> Resul
 /// Оновити накладну разом з позиціями в одній транзакції.
 ///
 /// Паттерн "replace all": DELETE старих позицій → INSERT нових.
-pub async fn update_with_items(
+async fn update_with_items_unscoped(
     pool: &PgPool,
     id: Uuid,
     data: UpdateWaybill,
@@ -268,6 +357,7 @@ pub async fn update_with_items(
             category_id     = $5,
             date            = $6,
             notes           = $7,
+            direction       = $8,
             updated_at      = NOW()
         WHERE id = $1
         RETURNING id, company_id, number, counterparty_id, contract_id, category_id, direction,
@@ -281,6 +371,7 @@ pub async fn update_with_items(
     .bind(data.category_id)
     .bind(data.date)
     .bind(&data.notes)
+    .bind(data.direction)
     .fetch_optional(&mut *tx)
     .await?;
 
@@ -335,7 +426,7 @@ pub async fn update_with_items(
 }
 
 /// Змінити статус накладної з перевіркою допустимості переходу.
-pub async fn change_status(
+async fn change_status_unscoped(
     pool: &PgPool,
     id: Uuid,
     new_status: WaybillStatus,
@@ -379,16 +470,32 @@ pub async fn change_status(
 }
 
 /// Видалити накладну та всі її позиції (ON DELETE CASCADE у БД).
-pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
-    sqlx::query("DELETE FROM waybills WHERE id = $1")
+pub async fn delete_scoped(pool: &PgPool, company_id: Uuid, id: Uuid) -> Result<bool> {
+    let affected = sqlx::query("DELETE FROM waybills WHERE id = $1 AND company_id = $2")
         .bind(id)
+        .bind(company_id)
         .execute(pool)
-        .await?;
-    Ok(())
+        .await?
+        .rows_affected();
+
+    Ok(affected > 0)
 }
 
 /// Перевести накладну до наступного статусу.
-pub async fn advance_status(pool: &PgPool, id: Uuid) -> Result<Option<Waybill>> {
+pub async fn change_status_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+    new_status: WaybillStatus,
+) -> Result<Option<Waybill>> {
+    if !exists_in_company(pool, company_id, id).await? {
+        return Ok(None);
+    }
+
+    change_status_unscoped(pool, id, new_status).await
+}
+
+async fn advance_status_unscoped(pool: &PgPool, id: Uuid) -> Result<Option<Waybill>> {
     let current =
         sqlx::query_scalar::<_, WaybillStatus>("SELECT status FROM waybills WHERE id = $1")
             .bind(id)
@@ -403,7 +510,33 @@ pub async fn advance_status(pool: &PgPool, id: Uuid) -> Result<Option<Waybill>> 
         bail!("Накладна вже в фінальному статусі '{}'", current);
     };
 
-    change_status(pool, id, next).await
+    change_status_unscoped(pool, id, next).await
+}
+
+pub async fn update_with_items_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+    data: UpdateWaybill,
+    items: Vec<NewWaybillItem>,
+) -> Result<Option<Waybill>> {
+    if !exists_in_company(pool, company_id, id).await? {
+        return Ok(None);
+    }
+
+    update_with_items_unscoped(pool, id, data, items).await.map(Some)
+}
+
+pub async fn advance_status_scoped(
+    pool: &PgPool,
+    company_id: Uuid,
+    id: Uuid,
+) -> Result<Option<Waybill>> {
+    if !exists_in_company(pool, company_id, id).await? {
+        return Ok(None);
+    }
+
+    advance_status_unscoped(pool, id).await
 }
 
 /// KPI-агрегати для сторінки списку накладних.
@@ -485,13 +618,13 @@ mod tests {
         let _ = counterparties_for_select;
         let _ = list;
         let _ = list_filtered;
-        let _ = get_by_id;
+        let _ = get_by_id_scoped;
         let _ = create;
-        let _ = update_with_items;
-        let _ = change_status;
-        let _ = get_for_edit;
-        let _ = delete;
-        let _ = advance_status;
+        let _ = update_with_items_scoped;
+        let _ = change_status_scoped;
+        let _ = get_for_edit_scoped;
+        let _ = delete_scoped;
+        let _ = advance_status_scoped;
         let _ = count_by_status;
         let _ = get_kpi;
     }

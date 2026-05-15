@@ -9,6 +9,19 @@ export type ScreenId =
 
 export type DocumentKind = "invoice" | "act" | "waybill";
 export type DocumentStatus = "draft" | "issued" | "signed" | "paid" | "delivered";
+export type DocumentDirection = "outgoing" | "incoming";
+
+export interface DocumentsListRequest {
+  direction?: "outgoing" | "incoming";
+  kind?: string;
+  counterpartyId?: string;
+  dateFrom?: string;        // "YYYY-MM-DD"
+  dateTo?: string;          // "YYYY-MM-DD"
+  statuses?: DocumentStatus[];
+  amountMin?: string;       // major-units decimal string e.g. "1000.00"
+  amountMax?: string;
+  overdueOnly?: boolean;
+}
 
 export interface ShellChromeDto {
   companyName: string;
@@ -66,6 +79,7 @@ export interface DocumentItemDto {
   status: DocumentStatus;
   statusLabel: string;
   linkedId: string;
+  direction: DocumentDirection;
 }
 
 export interface DocumentDraftFormDto {
@@ -77,6 +91,7 @@ export interface DocumentDraftFormDto {
   number: string;
   date: string;
   notes: string;
+  direction: DocumentDirection;
 }
 
 export interface DocumentDraftItemDto {
@@ -102,8 +117,23 @@ export interface DocumentChainDto {
 export interface DocumentEditorDto {
   form: DocumentDraftFormDto;
   items: DocumentDraftItemDto[];
+  pdf: DocumentPdfStateDto | null;
   showTypePicker: boolean;
   showEditor: boolean;
+}
+
+export interface DocumentPdfStateDto {
+  filePath: string;
+  pageCount: number;
+  extractedText: string;
+  hasTextOps: boolean;
+  editable: boolean;
+  warnings: string[];
+}
+
+export interface DocumentPdfActionResultDto {
+  editor: DocumentEditorDto;
+  message: string;
 }
 
 export interface PaletteActivationResultDto {
@@ -279,6 +309,61 @@ export interface PaymentsScreenDto {
   kpi: PaymentsKpiDto;
 }
 
+export interface PaymentCalendarMonthRequest {
+  month: string;
+  selectedDate?: string | null;
+}
+
+export interface PaymentScheduleCompleteRequest {
+  scheduleId: string;
+}
+
+export type PaymentCalendarEventKind = "schedule" | "task";
+export type PaymentCalendarFilterKind = "all" | PaymentCalendarEventKind;
+
+export interface PaymentCalendarEventDto {
+  id: string;
+  kind: PaymentCalendarEventKind;
+  title: string;
+  subtitle: string;
+  date: string;
+  amountStr: string;
+  amount: string;
+  direction: string;
+  statusLabel: string;
+  recurrenceLabel: string;
+  counterpartyId: string;
+  counterpartyName: string;
+  linkKind: string;
+  linkId: string;
+  note: string;
+  actionable: boolean;
+  overdue: boolean;
+  done: boolean;
+}
+
+export interface PaymentCalendarDayDto {
+  date: string;
+  dayNumber: number;
+  weekdayShort: string;
+  inCurrentMonth: boolean;
+  today: boolean;
+  selected: boolean;
+  hasOverdue: boolean;
+  incomeTotalStr: string;
+  expenseTotalStr: string;
+  eventCount: number;
+  events: PaymentCalendarEventDto[];
+}
+
+export interface PaymentCalendarMonthDto {
+  month: string;
+  monthLabel: string;
+  selectedDate: string;
+  today: string;
+  days: PaymentCalendarDayDto[];
+}
+
 export interface PaymentDraftFormDto {
   id: string;
   date: string;
@@ -289,6 +374,127 @@ export interface PaymentDraftFormDto {
   bankName: string;
   reference: string;
   description: string;
+}
+
+export interface PaymentReconcileRequest {
+  paymentId: string;
+  documentKind: "act" | "invoice";
+  documentId: string;
+  amount: string;
+}
+
+export interface PaymentReconcileSplitAllocationRequest {
+  documentKind: "act" | "invoice";
+  documentId: string;
+  amount: string;
+}
+
+export interface PaymentReconcileSplitRequest {
+  paymentId: string;
+  allocations: PaymentReconcileSplitAllocationRequest[];
+}
+
+export interface PaymentReconcileSplitAllocationResultDto {
+  documentId: string;
+  documentKind: "act" | "invoice";
+  title: string;
+  amountStr: string;
+}
+
+export interface PaymentReconcileSplitResultDto {
+  ok: boolean;
+  message: string;
+  paymentId: string;
+  allocationCount: number;
+  totalAllocatedStr: string;
+  allocations: PaymentReconcileSplitAllocationResultDto[];
+}
+
+export interface PaymentUnreconcileRequest {
+  paymentId: string;
+  documentKind: "act" | "invoice";
+  documentId: string;
+}
+
+export interface PaymentUnreconcileAllRequest {
+  paymentId: string;
+}
+
+export type PaymentMatchDecisionKind = "exact" | "ambiguous" | "split" | "none";
+
+export interface PaymentMatchPreviewRequest {
+  paymentId: string;
+}
+
+export interface PaymentMatchApplyAutoRequest {
+  paymentId: string;
+}
+
+export interface PaymentMatchManualCandidatesRequest {
+  paymentId: string;
+  query: string;
+}
+
+export interface PaymentMatchCandidateDto {
+  documentId: string;
+  documentKind: "act" | "invoice";
+  title: string;
+  openAmountStr: string;
+  totalScore: number;
+  sameIban: boolean;
+  referenceHit: boolean;
+  textHits: number;
+  daysDistance: number;
+}
+
+export interface PaymentAutoMatchDto {
+  documentId: string;
+  documentKind: "act" | "invoice";
+  title: string;
+  amountStr: string;
+}
+
+export interface PaymentMatchPreviewDto {
+  paymentId: string;
+  isReconciled: boolean;
+  decisionKind: PaymentMatchDecisionKind;
+  candidates: PaymentMatchCandidateDto[];
+  autoMatch: PaymentAutoMatchDto | null;
+}
+
+export interface PaymentManualMatchCandidatesDto {
+  paymentId: string;
+  query: string;
+  candidates: PaymentMatchCandidateDto[];
+}
+
+export interface PaymentImportPreviewRowDto {
+  action: "create" | "skip";
+  bankRef: string;
+  description: string;
+  note: string;
+}
+
+export interface PaymentImportPreviewDto {
+  ok: boolean;
+  message: string;
+  path: string;
+  bankName: string;
+  parsed: number;
+  willCreate: number;
+  willSkip: number;
+  conflicts: number;
+  rows: PaymentImportPreviewRowDto[];
+  fileSize: number;
+  fileMtimeSecs: number;
+  fileHash: string;
+}
+
+export interface PaymentImportCommitRequest {
+  path: string;
+  fileSize: number;
+  fileMtimeSecs: number;
+  fileHash: string;
 }
 
 export type TaskStatus = "open" | "in_progress" | "done" | "cancelled";
@@ -350,7 +556,7 @@ export interface TaskMutationResultDto {
   message: string;
 }
 
-export type ReportsTab = "bank" | "receivables" | "payables";
+export type ReportsTab = "bank" | "pnl" | "receivables" | "payables";
 export type ReportsScope = "active" | "all";
 export type SettingsSection =
   | "appearance"
@@ -366,6 +572,7 @@ export interface ReportsFilterDto {
   dateFrom: string;
   dateTo: string;
   query: string;
+  selectedCounterpartyId: string | null;
 }
 
 export interface ReportsSummaryDto {
@@ -375,6 +582,9 @@ export interface ReportsSummaryDto {
   closingBalanceStr: string;
   receivablesTotalStr: string;
   payablesTotalStr: string;
+  pnlIncomeStr?: string;
+  pnlExpenseStr?: string;
+  pnlNetResultStr?: string;
 }
 
 export interface BankReportRowDto {
@@ -409,10 +619,27 @@ export interface PayableRowDto {
   recurrence: string;
 }
 
+export interface SelectedCounterpartyDto {
+  id: string;
+  name: string;
+}
+
+export interface TopCounterpartyRowDto {
+  counterpartyId: string;
+  counterpartyName: string;
+  primaryAmountStr: string;
+  secondaryLabel: string;
+  secondaryValue: string;
+  sharePercent: number;
+}
+
 export interface ReportsScreenDto {
   filter: ReportsFilterDto;
+  selectedCounterparty: SelectedCounterpartyDto | null;
+  topCounterparties: TopCounterpartyRowDto[];
   summary: ReportsSummaryDto;
   bankRows: BankReportRowDto[];
+  pnlRows?: BankReportRowDto[];
   receivablesRows: ReceivableRowDto[];
   payablesRows: PayableRowDto[];
 }
@@ -459,7 +686,6 @@ export interface SettingsNumberingRowDto {
 
 export interface SettingsPreferencesDto {
   darkMode: boolean;
-  density: number;
 }
 
 export interface SettingsBackupDto {

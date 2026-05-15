@@ -7,35 +7,74 @@ import {
   documentDelete,
   documentGeneratePdf,
   documentOpen,
+  documentPdfApplyTextReplace,
+  documentPdfAttachExisting,
+  documentPdfOpenCurrent,
   documentSave,
   documentsBulkAdvanceStatus,
   documentsBulkDelete,
   documentsList
 } from "../api";
-import type { DocumentChainDto, DocumentEditorDto, DocumentsListDto } from "../types";
+import {
+  cloneSnapshot,
+  isEditorFormDirty,
+  type CloseEditorResult
+} from "../editorDirty";
+import type { DocumentChainDto, DocumentEditorDto, DocumentKind, DocumentsListDto } from "../types";
+import { DOCUMENT_FILTER_PRESETS } from "../config/documents";
+
+type EditorPayload = Pick<DocumentEditorDto, "form" | "items">;
+
+function snapshotEditor(editor: DocumentEditorDto): EditorPayload {
+  return cloneSnapshot({ form: editor.form, items: editor.items });
+}
 
 interface DocumentsState {
   list: DocumentsListDto | null;
   editor: DocumentEditorDto | null;
+  editorSnapshot: EditorPayload | null;
   chain: DocumentChainDto | null;
   draftContext: { counterpartyId: string; counterpartyName: string } | null;
+  pendingNew: boolean;
   selectedIds: string[];
+  initialLoading: boolean;
   loading: boolean;
   error: string | null;
   message: string | null;
-  query: string;
+  activeTab: "all" | "outgoing" | "incoming";
+  kindFilter: DocumentKind | null;
+  counterpartyFilterId: string | null;
+  dateFrom: string | null;
+  dateTo: string | null;
+  statusFilter: string[];
+  amountMin: string | null;
+  amountMax: string | null;
+  overdueOnly: boolean;
+  activePresetId: string | null;
 }
 
 const initialState: DocumentsState = {
   list: null,
   editor: null,
+  editorSnapshot: null,
   chain: null,
   draftContext: null,
+  pendingNew: false,
   selectedIds: [],
+  initialLoading: true,
   loading: false,
   error: null,
   message: null,
-  query: ""
+  activeTab: "all",
+  kindFilter: null,
+  counterpartyFilterId: null,
+  dateFrom: null,
+  dateTo: null,
+  statusFilter: [],
+  amountMin: null,
+  amountMax: null,
+  overdueOnly: false,
+  activePresetId: null,
 };
 
 async function loadEditorAndChain(docId: string): Promise<{
@@ -47,25 +86,51 @@ async function loadEditorAndChain(docId: string): Promise<{
 }
 
 function createDocumentsStore() {
-  const { subscribe, update } = writable<DocumentsState>(initialState);
+  const { subscribe, set, update } = writable<DocumentsState>(initialState);
+
+  let filterSeq = 0;
+
+  function tabToDirection(tab: "all" | "outgoing" | "incoming"): "outgoing" | "incoming" | undefined {
+    if (tab === "outgoing") return "outgoing";
+    if (tab === "incoming") return "incoming";
+    return undefined;
+  }
+
+  async function reloadList(state: DocumentsState): Promise<DocumentsListDto> {
+    return documentsList({
+      direction: tabToDirection(state.activeTab),
+      kind: state.kindFilter ?? undefined,
+      counterpartyId: state.counterpartyFilterId ?? undefined,
+      dateFrom: state.dateFrom ?? undefined,
+      dateTo: state.dateTo ?? undefined,
+      statuses: state.statusFilter.length > 0 ? (state.statusFilter as any) : undefined,
+      amountMin: state.amountMin ?? undefined,
+      amountMax: state.amountMax ?? undefined,
+      overdueOnly: state.overdueOnly || undefined,
+    });
+  }
 
   return {
     subscribe,
-    async load(query = "") {
+    reset() {
+      filterSeq += 1;
+      set(initialState);
+    },
+    async load() {
       update((state) => ({
         ...state,
         loading: true,
         error: null,
-        message: state.message,
-        query
       }));
 
       try {
-        const list = await documentsList(query);
+        const snap = get({ subscribe });
+        const list = await reloadList(snap);
         update((state) => ({
           ...state,
           list,
           selectedIds: state.selectedIds.filter((id) => list.items.some((item) => item.id === id)),
+          initialLoading: false,
           loading: false
         }));
       } catch (error) {
@@ -77,7 +142,13 @@ function createDocumentsStore() {
 
       try {
         const { editor, chain } = await loadEditorAndChain(docId);
-        update((state) => ({ ...state, editor, chain, loading: false }));
+        update((state) => ({
+          ...state,
+          editor,
+          editorSnapshot: snapshotEditor(editor),
+          chain,
+          loading: false
+        }));
       } catch (error) {
         update((state) => ({ ...state, loading: false, error: String(error) }));
       }
@@ -94,9 +165,16 @@ function createDocumentsStore() {
       try {
         const [{ editor, chain }, list] = await Promise.all([
           loadEditorAndChain(documentId),
-          documentsList(snapshot.query)
+          reloadList(snapshot)
         ]);
-        update((state) => ({ ...state, editor, chain, list, loading: false }));
+        update((state) => ({
+          ...state,
+          editor,
+          editorSnapshot: snapshotEditor(editor),
+          chain,
+          list,
+          loading: false
+        }));
       } catch (error) {
         update((state) => ({ ...state, loading: false, error: String(error) }));
       }
@@ -117,8 +195,37 @@ function createDocumentsStore() {
         update((state) => ({ ...state, loading: false, error: String(error) }));
       }
     },
-    closeEditor() {
-      update((state) => ({ ...state, editor: null, chain: null, message: null }));
+    closeEditor(force = false): CloseEditorResult {
+      const snapshot = get({ subscribe });
+      if (!snapshot.editor) {
+        return { ok: true };
+      }
+
+      const dirty = isEditorFormDirty(
+        snapshot.editorSnapshot,
+        { form: snapshot.editor.form, items: snapshot.editor.items }
+      );
+      if (dirty && !force) {
+        return { ok: false, reason: "dirty" };
+      }
+
+      update((state) => ({
+        ...state,
+        editor: null,
+        editorSnapshot: null,
+        chain: null,
+        message: null,
+        pendingNew: false
+      }));
+      return { ok: true };
+    },
+    isEditorDirty(): boolean {
+      const snapshot = get({ subscribe });
+      if (!snapshot.editor) return false;
+      return isEditorFormDirty(
+        snapshot.editorSnapshot,
+        { form: snapshot.editor.form, items: snapshot.editor.items }
+      );
     },
     setDraftContext(counterpartyId: string, counterpartyName: string) {
       update((state) => ({
@@ -163,20 +270,81 @@ function createDocumentsStore() {
       update((state) => ({ ...state, selectedIds: [] }));
     },
     setEditor(editor: DocumentEditorDto) {
-      update((state) => ({ ...state, editor }));
+      update((state) => ({
+        ...state,
+        editor,
+        editorSnapshot: snapshotEditor(editor)
+      }));
     },
-    async create(counterpartyId: string, kind: string) {
+    openNewEditor(kind: string) {
+      const snap = get({ subscribe });
+      const direction: "outgoing" | "incoming" =
+        snap.activeTab === "incoming" ? "incoming" : "outgoing";
+      const today = new Date().toISOString().slice(0, 10);
+      const kindTitles: Record<string, string> = {
+        invoice: "Новий рахунок",
+        act: "Новий акт",
+        waybill: "Нова накладна",
+      };
+      const blankEditor: DocumentEditorDto = {
+        form: {
+          id: "",
+          kind,
+          direction,
+          counterpartyId: "",
+          counterpartyName: "",
+          title: kindTitles[kind] ?? "Новий документ",
+          number: "",
+          date: today,
+          notes: "",
+        },
+        items: [],
+        pdf: null,
+        showTypePicker: false,
+        showEditor: true,
+      };
+      update((state) => ({
+        ...state,
+        pendingNew: true,
+        editor: blankEditor,
+        editorSnapshot: snapshotEditor(blankEditor),
+        chain: null,
+        error: null,
+        message: null,
+        draftContext: null,
+      }));
+    },
+    updateCounterparty(id: string, name: string) {
+      update((state) => ({
+        ...state,
+        editor: state.editor
+          ? {
+              ...state.editor,
+              form: {
+                ...state.editor.form,
+                counterpartyId: id,
+                counterpartyName: name,
+              }
+            }
+          : null
+      }));
+    },
+    async create(counterpartyId: string | undefined, kind: string) {
       update((state) => ({ ...state, loading: true, error: null, message: null }));
+      const snap = get({ subscribe });
+      const direction: "outgoing" | "incoming" =
+        snap.activeTab === "incoming" ? "incoming" : "outgoing";
 
       try {
         const [editor, list] = await Promise.all([
-          documentCreateDraft(counterpartyId, kind),
-          documentsList(get({ subscribe }).query)
+          documentCreateDraft(counterpartyId, kind, direction),
+          reloadList(snap)
         ]);
         const chain = await documentChainGet(editor.form.id);
         update((state) => ({
           ...state,
           editor,
+          editorSnapshot: snapshotEditor(editor),
           chain,
           list,
           loading: false,
@@ -255,17 +423,58 @@ function createDocumentsStore() {
         return;
       }
 
+      if (snapshot.pendingNew) {
+        if (!snapshot.editor.form.counterpartyId) {
+          update((state) => ({ ...state, error: "Оберіть контрагента" }));
+          return;
+        }
+        update((state) => ({ ...state, loading: true, error: null, message: null }));
+        try {
+          const created = await documentCreateDraft(
+            snapshot.editor.form.counterpartyId,
+            snapshot.editor.form.kind,
+            snapshot.editor.form.direction
+          );
+          const mergedForm = {
+            ...created.form,
+            number: snapshot.editor.form.number || created.form.number,
+            date: snapshot.editor.form.date || created.form.date,
+            notes: snapshot.editor.form.notes,
+            direction: snapshot.editor.form.direction,
+          };
+          const response = await documentSave(mergedForm, snapshot.editor.items);
+          const [{ editor, chain }, list] = await Promise.all([
+            loadEditorAndChain(response.documentId),
+            reloadList(snapshot)
+          ]);
+          update((state) => ({
+            ...state,
+            pendingNew: false,
+            editor,
+            editorSnapshot: snapshotEditor(editor),
+            chain,
+            list,
+            loading: false,
+            message: response.message,
+          }));
+        } catch (error) {
+          update((state) => ({ ...state, loading: false, error: String(error) }));
+        }
+        return;
+      }
+
       update((state) => ({ ...state, loading: true, error: null, message: null }));
 
       try {
         const response = await documentSave(snapshot.editor.form, snapshot.editor.items);
         const [{ editor, chain }, list] = await Promise.all([
           loadEditorAndChain(response.documentId),
-          documentsList(snapshot.query)
+          reloadList(snapshot)
         ]);
         update((state) => ({
           ...state,
           editor,
+          editorSnapshot: snapshotEditor(editor),
           chain,
           list,
           loading: false,
@@ -288,11 +497,12 @@ function createDocumentsStore() {
         const response = await documentAdvanceStatus(documentId);
         const [{ editor, chain }, list] = await Promise.all([
           loadEditorAndChain(documentId),
-          documentsList(snapshot.query)
+          reloadList(snapshot)
         ]);
         update((state) => ({
           ...state,
           editor,
+          editorSnapshot: snapshotEditor(editor),
           chain,
           list,
           loading: false,
@@ -315,6 +525,67 @@ function createDocumentsStore() {
         update((state) => ({ ...state, loading: false, error: String(error) }));
       }
     },
+    async attachExistingPdf(sourcePath?: string) {
+      const snapshot = get({ subscribe });
+      const docId = snapshot.editor?.form.id;
+      if (!docId) {
+        return;
+      }
+
+      update((state) => ({ ...state, loading: true, error: null, message: null }));
+      try {
+        const response = await documentPdfAttachExisting(docId, sourcePath);
+        update((state) => ({
+          ...state,
+          editor: response.editor,
+          editorSnapshot: snapshotEditor(response.editor),
+          loading: false,
+          message: response.message
+        }));
+      } catch (error) {
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      }
+    },
+    async applyPdfTextReplace(findText: string, replaceText: string) {
+      const snapshot = get({ subscribe });
+      const docId = snapshot.editor?.form.id;
+      if (!docId) {
+        return;
+      }
+
+      update((state) => ({ ...state, loading: true, error: null, message: null }));
+      try {
+        const response = await documentPdfApplyTextReplace(docId, findText, replaceText);
+        update((state) => ({
+          ...state,
+          editor: response.editor,
+          editorSnapshot: snapshotEditor(response.editor),
+          loading: false,
+          message: response.message
+        }));
+      } catch (error) {
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      }
+    },
+    async openCurrentPdf() {
+      const snapshot = get({ subscribe });
+      const docId = snapshot.editor?.form.id;
+      if (!docId) {
+        return;
+      }
+
+      update((state) => ({ ...state, loading: true, error: null, message: null }));
+      try {
+        const response = await documentPdfOpenCurrent(docId);
+        update((state) => ({
+          ...state,
+          loading: false,
+          message: response.message
+        }));
+      } catch (error) {
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      }
+    },
     async deleteCurrent() {
       const snapshot = get({ subscribe });
       const documentId = snapshot.editor?.form.id;
@@ -326,11 +597,12 @@ function createDocumentsStore() {
 
       try {
         const response = await documentDelete(documentId);
-        const list = await documentsList(snapshot.query);
+        const list = await reloadList(snapshot);
         update((state) => ({
           ...state,
           list,
           editor: null,
+          editorSnapshot: null,
           chain: null,
           loading: false,
           message: response.message
@@ -352,11 +624,12 @@ function createDocumentsStore() {
         const editor = await documentChainCreateDraft(sourceId, targetKind);
         const [chain, list] = await Promise.all([
           documentChainGet(editor.form.id),
-          documentsList(snapshot.query)
+          reloadList(snapshot)
         ]);
         update((state) => ({
           ...state,
           editor,
+          editorSnapshot: snapshotEditor(editor),
           chain,
           list,
           loading: false,
@@ -376,7 +649,7 @@ function createDocumentsStore() {
 
       try {
         const response = await documentsBulkDelete(snapshot.selectedIds);
-        const list = await documentsList(snapshot.query);
+        const list = await reloadList(snapshot);
         const deletedCurrent = snapshot.editor
           ? snapshot.selectedIds.includes(snapshot.editor.form.id)
           : false;
@@ -385,6 +658,7 @@ function createDocumentsStore() {
           ...state,
           list,
           editor: deletedCurrent ? null : state.editor,
+          editorSnapshot: deletedCurrent ? null : state.editorSnapshot,
           chain: deletedCurrent ? null : state.chain,
           selectedIds: [],
           loading: false,
@@ -404,24 +678,27 @@ function createDocumentsStore() {
 
       try {
         const response = await documentsBulkAdvanceStatus(snapshot.selectedIds);
-        const list = await documentsList(snapshot.query);
+        const list = await reloadList(snapshot);
         const reopenedCurrent = snapshot.editor
           ? snapshot.selectedIds.includes(snapshot.editor.form.id)
           : false;
 
         let nextEditor = snapshot.editor;
         let nextChain = snapshot.chain;
+        let nextEditorSnapshot = snapshot.editorSnapshot;
 
         if (reopenedCurrent && snapshot.editor) {
           const { editor, chain } = await loadEditorAndChain(snapshot.editor.form.id);
           nextEditor = editor;
           nextChain = chain;
+          nextEditorSnapshot = snapshotEditor(editor);
         }
 
         update((state) => ({
           ...state,
           list,
           editor: nextEditor,
+          editorSnapshot: nextEditorSnapshot,
           chain: nextChain,
           selectedIds: [],
           loading: false,
@@ -430,7 +707,187 @@ function createDocumentsStore() {
       } catch (error) {
         update((state) => ({ ...state, loading: false, error: String(error) }));
       }
-    }
+    },
+    setTab(tab: "all" | "outgoing" | "incoming") {
+      update((state) => ({ ...state, activeTab: tab, loading: true, error: null }));
+      const seq = ++filterSeq;
+      const snap = get({ subscribe });
+      reloadList(snap).then((list) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, list, loading: false }));
+      }).catch((error) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      });
+    },
+    setKindFilter(kind: DocumentKind | null) {
+      update((state) => ({ ...state, kindFilter: kind, loading: true, error: null }));
+      const seq = ++filterSeq;
+      const snap = get({ subscribe });
+      reloadList(snap).then((list) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, list, loading: false }));
+      }).catch((error) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      });
+    },
+    setCounterpartyFilter(counterpartyId: string | null) {
+      update((state) => ({
+        ...state,
+        counterpartyFilterId: counterpartyId,
+        activePresetId: null,
+        loading: true,
+        error: null
+      }));
+      const seq = ++filterSeq;
+      const snap = get({ subscribe });
+      reloadList(snap).then((list) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, list, loading: false }));
+      }).catch((error) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      });
+    },
+    setDateRange(from: string | null, to: string | null) {
+      update((state) => ({
+        ...state,
+        dateFrom: from,
+        dateTo: to,
+        activePresetId: null,
+        loading: true,
+        error: null,
+      }));
+      const seq = ++filterSeq;
+      const snap = get({ subscribe });
+      reloadList(snap).then((list) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, list, loading: false }));
+      }).catch((error) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      });
+    },
+    setStatusFilter(statuses: string[]) {
+      update((state) => ({
+        ...state,
+        statusFilter: statuses,
+        activePresetId: null,
+        loading: true,
+        error: null,
+      }));
+      const seq = ++filterSeq;
+      const snap = get({ subscribe });
+      reloadList(snap).then((list) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, list, loading: false }));
+      }).catch((error) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      });
+    },
+    setAmountRange(min: string | null, max: string | null) {
+      update((state) => ({
+        ...state,
+        amountMin: min,
+        amountMax: max,
+        activePresetId: null,
+        loading: true,
+        error: null,
+      }));
+      const seq = ++filterSeq;
+      const snap = get({ subscribe });
+      reloadList(snap).then((list) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, list, loading: false }));
+      }).catch((error) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      });
+    },
+    async applyPreset(presetId: string) {
+      const today = new Date();
+      const preset = DOCUMENT_FILTER_PRESETS.find((p) => p.id === presetId);
+      if (!preset) return;
+      const draft = preset.build(today);
+
+      update((state) => ({
+        ...state,
+        dateFrom: draft.dateFrom,
+        dateTo: draft.dateTo,
+        statusFilter: draft.statusFilter,
+        amountMin: draft.amountMin,
+        amountMax: draft.amountMax,
+        overdueOnly: draft.overdueOnly,
+        activePresetId: presetId,
+        loading: true,
+        error: null,
+      }));
+      const seq = ++filterSeq;
+      const snap = get({ subscribe });
+      return reloadList(snap).then((list) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, list, loading: false }));
+      }).catch((error) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      });
+    },
+    async applyFilters(draft: {
+      dateFrom: string | null;
+      dateTo: string | null;
+      statusFilter: string[];
+      amountMin: string | null;
+      amountMax: string | null;
+      counterpartyFilterId: string | null;
+    }) {
+      update((state) => ({
+        ...state,
+        dateFrom: draft.dateFrom,
+        dateTo: draft.dateTo,
+        statusFilter: draft.statusFilter,
+        amountMin: draft.amountMin,
+        amountMax: draft.amountMax,
+        counterpartyFilterId: draft.counterpartyFilterId,
+        activePresetId: null,
+        loading: true,
+        error: null,
+      }));
+      const seq = ++filterSeq;
+      const snap = get({ subscribe });
+      return reloadList(snap).then((list) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, list, loading: false }));
+      }).catch((error) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      });
+    },
+    clearAllFilters() {
+      update((state) => ({
+        ...state,
+        dateFrom: null,
+        dateTo: null,
+        statusFilter: [],
+        amountMin: null,
+        amountMax: null,
+        counterpartyFilterId: null,
+        overdueOnly: false,
+        activePresetId: null,
+        loading: true,
+        error: null,
+      }));
+      const seq = ++filterSeq;
+      const snap = get({ subscribe });
+      reloadList(snap).then((list) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, list, loading: false }));
+      }).catch((error) => {
+        if (seq !== filterSeq) return;
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      });
+    },
   };
 }
 

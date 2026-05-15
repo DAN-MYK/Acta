@@ -12,6 +12,10 @@ import type {
 } from "../../types";
 import { invokeMock, loadStores, snapshot } from "./helpers";
 
+function normalizeMoneyText(value: string | undefined): string {
+  return (value ?? "").replace(/\u00a0/g, " ");
+}
+
 function makeCounterparties(ids: string[]): CounterpartiesScreenDto {
   return {
     items: ids.map((id, index) => ({
@@ -98,6 +102,35 @@ function makePayments(ids: string[]): PaymentsScreenDto {
   };
 }
 
+function makePaymentCalendarMonth(payload?: unknown) {
+  const request = (payload as { request?: { month?: string; selectedDate?: string | null } } | undefined)?.request;
+  const month = request?.month ?? "2026-04";
+  const selectedDate = request?.selectedDate ?? `${month}-30`;
+  const dayNumber = Number.parseInt(selectedDate.slice(-2), 10) || 1;
+
+  return {
+    month,
+    monthLabel: "Квітень 2026",
+    selectedDate,
+    today: "2026-04-30",
+    days: [
+      {
+        date: selectedDate,
+        dayNumber,
+        weekdayShort: "пн",
+        inCurrentMonth: true,
+        today: selectedDate === "2026-04-30",
+        selected: true,
+        hasOverdue: false,
+        incomeTotalStr: "0,00 грн",
+        expenseTotalStr: "0,00 грн",
+        eventCount: 0,
+        events: []
+      }
+    ]
+  };
+}
+
 function makeSettingsScreen(): SettingsScreenDto {
   return {
     company: {
@@ -130,8 +163,7 @@ function makeSettingsScreen(): SettingsScreenDto {
       }
     ],
     preferences: {
-      darkMode: false,
-      density: 1
+      darkMode: false
     },
     backup: {
       label: "Остання копія",
@@ -156,6 +188,10 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     let currentDetail = makeCounterpartyDetail("cp-1");
 
     invokeMock.mockImplementation(async (command, payload) => {
+      if (command === "payments_calendar_load") {
+        return makePaymentCalendarMonth(payload);
+      }
+
       switch (command) {
         case "counterparties_list":
           return screen;
@@ -193,6 +229,8 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     await counterpartiesStore.load();
     expect(snapshot(counterpartiesStore).selectedId).toBe("cp-1");
     expect(snapshot(counterpartiesStore).detail?.info.id).toBe("cp-1");
+    expect(snapshot(counterpartiesStore).initialLoading).toBe(false);
+    expect(snapshot(counterpartiesStore).loading).toBe(false);
 
     await counterpartiesStore.open("cp-2");
     expect(snapshot(counterpartiesStore).detail?.info.id).toBe("cp-2");
@@ -215,12 +253,16 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     });
   });
 
-  it("covers payments load, editor, save, reconcile, import/sync and template flow", async () => {
+  it("covers payments load, editor, save, preview reconcile, import/sync and template flow", async () => {
     const { paymentsStore } = await loadStores();
 
     let list = makePayments(["pay-1"]);
 
-    invokeMock.mockImplementation(async (command) => {
+    invokeMock.mockImplementation(async (command, payload) => {
+      if (command === "payments_calendar_load") {
+        return makePaymentCalendarMonth(payload);
+      }
+
       switch (command) {
         case "payments_list":
           return list;
@@ -230,12 +272,38 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
             ok: true,
             message: "Платіж збережено"
           };
-        case "payment_reconcile":
+        case "payment_match_preview":
+          expect(payload).toEqual({ request: { paymentId: "pay-2" } });
+          return {
+            paymentId: "pay-2",
+            isReconciled: false,
+            decisionKind: "exact",
+            candidates: [
+              {
+                documentId: "act-1",
+                documentKind: "act",
+                title: "Акт ACT-001",
+                openAmountStr: "1 000,00 грн",
+                totalScore: 0.98,
+                sameIban: true,
+                referenceHit: true,
+                textHits: 2,
+                daysDistance: 0
+              }
+            ],
+            autoMatch: {
+              documentId: "act-1",
+              documentKind: "act",
+              title: "Акт ACT-001",
+              amountStr: "1 000,00 грн"
+            }
+          };
+        case "payment_match_apply_auto":
           return {
             ok: true,
-            message: "Платіж зведено"
+            message: "Автозіставлення платежу застосовано"
           };
-        case "payment_unreconcile":
+        case "payment_unreconcile_all":
           return {
             ok: true,
             message: "Зведення скасовано"
@@ -264,6 +332,8 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
 
     await paymentsStore.load();
     expect(snapshot(paymentsStore).list?.items).toHaveLength(1);
+    expect(snapshot(paymentsStore).initialLoading).toBe(false);
+    expect(snapshot(paymentsStore).loading).toBe(false);
 
     const emptySave = await paymentsStore.save();
     expect(emptySave.ok).toBe(false);
@@ -281,7 +351,12 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     expect(snapshot(paymentsStore).editor?.counterpartyId).toBe("cp-1");
 
     await paymentsStore.reconcile("pay-2");
-    expect(snapshot(paymentsStore).message).toBe("Платіж зведено");
+    expect(snapshot(paymentsStore).matchPreview?.decisionKind).toBe("exact");
+    expect(snapshot(paymentsStore).matchPreview?.autoMatch?.title).toBe("Акт ACT-001");
+
+    await paymentsStore.confirmPreviewAutoMatch();
+    expect(snapshot(paymentsStore).message).toBe("Автозіставлення платежу застосовано");
+    expect(snapshot(paymentsStore).matchPreview).toBeNull();
 
     await paymentsStore.unreconcile("pay-2");
     expect(snapshot(paymentsStore).message).toBe("Зведення скасовано");
@@ -298,6 +373,902 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
 
     const templateResult = await paymentsStore.openManualTemplate();
     expect(templateResult.path).toContain("manual-template.csv");
+  }, 10000);
+
+  it("opens reconcile preview before apply and persists manual confirm for ambiguous candidates", async () => {
+    const { paymentsStore } = await loadStores();
+
+    let list = makePayments(["pay-1", "pay-2", "pay-3"]);
+
+    invokeMock.mockImplementation(async (command, payload) => {
+      if (command === "payments_calendar_load") {
+        return makePaymentCalendarMonth(payload);
+      }
+
+      switch (command) {
+        case "payments_list":
+          return list;
+        case "payment_match_preview": {
+          const paymentId = (payload as { request: { paymentId: string } }).request.paymentId;
+
+          if (paymentId === "pay-1") {
+            return {
+              paymentId,
+              isReconciled: false,
+              decisionKind: "exact",
+              candidates: [
+                {
+                  documentId: "act-1",
+                  documentKind: "act",
+                  title: "Акт ACT-001",
+                  openAmountStr: "1 000,00 грн",
+                  totalScore: 0.99,
+                  sameIban: true,
+                  referenceHit: true,
+                  textHits: 2,
+                  daysDistance: 0
+                }
+              ],
+              autoMatch: {
+                documentId: "act-1",
+                documentKind: "act",
+                title: "Акт ACT-001",
+                amountStr: "1 000,00 грн"
+              }
+            };
+          }
+
+          if (paymentId === "pay-2") {
+            return {
+              paymentId,
+              isReconciled: false,
+              decisionKind: "ambiguous",
+              candidates: [
+                {
+                  documentId: "inv-1",
+                  documentKind: "invoice",
+                  title: "Накладна INV-001",
+                  openAmountStr: "2 000,00 грн",
+                  totalScore: 0.83,
+                  sameIban: true,
+                  referenceHit: false,
+                  textHits: 1,
+                  daysDistance: 3
+                },
+                {
+                  documentId: "act-2",
+                  documentKind: "act",
+                  title: "Акт ACT-002",
+                  openAmountStr: "2 000,00 грн",
+                  totalScore: 0.74,
+                  sameIban: false,
+                  referenceHit: true,
+                  textHits: 2,
+                  daysDistance: 5
+                }
+              ],
+              autoMatch: null
+            };
+          }
+
+          return {
+            paymentId,
+            isReconciled: false,
+            decisionKind: "none",
+            candidates: [],
+            autoMatch: null
+          };
+        }
+        case "payment_match_apply_auto":
+          expect(payload).toEqual({ request: { paymentId: "pay-1" } });
+          list = {
+            ...list,
+            items: list.items.map((item) =>
+              item.id === "pay-1" ? { ...item, matchedDoc: "Акт ACT-001" } : item
+            )
+          };
+          return {
+            ok: true,
+            message: "Автозіставлення платежу застосовано"
+          };
+        case "payment_reconcile":
+          expect((payload as { request: { paymentId: string; documentKind: string; documentId: string; amount: string } }).request).toMatchObject({
+            paymentId: "pay-2",
+            documentKind: "act",
+            documentId: "act-2"
+          });
+          expect((payload as { request: { amount: string } }).request.amount).toContain("2 000,00");
+          list = {
+            ...list,
+            items: list.items.map((item) =>
+              item.id === "pay-2" ? { ...item, matchedDoc: "Акт ACT-002" } : item
+            )
+          };
+          return {
+            ok: true,
+            message: "Звірку платежу підтверджено"
+          };
+        default:
+          throw new Error(`unexpected command: ${command}`);
+      }
+    });
+
+    await paymentsStore.load();
+
+    await paymentsStore.reconcile("pay-1");
+    expect(snapshot(paymentsStore).matchPreview?.paymentId).toBe("pay-1");
+    expect(snapshot(paymentsStore).matchPreview?.decisionKind).toBe("exact");
+    expect(snapshot(paymentsStore).matchPreview?.autoMatch?.title).toBe("Акт ACT-001");
+    expect(invokeMock.mock.calls.filter(([command]) => command === "payment_match_apply_auto")).toHaveLength(0);
+
+    await paymentsStore.confirmPreviewAutoMatch();
+    expect(snapshot(paymentsStore).matchPreview).toBeNull();
+    expect(snapshot(paymentsStore).message).toBe("Автозіставлення платежу застосовано");
+
+    await paymentsStore.reconcile("pay-2");
+    expect(snapshot(paymentsStore).matchPreview?.decisionKind).toBe("ambiguous");
+    expect(snapshot(paymentsStore).selectedCandidateId).toBe("inv-1");
+    paymentsStore.selectPreviewCandidate("act-2");
+    expect(snapshot(paymentsStore).selectedCandidateId).toBe("act-2");
+    expect(snapshot(paymentsStore).message).toContain("Ручне підтвердження");
+    const confirmResult = await paymentsStore.confirmSelectedPreviewCandidate();
+    expect(snapshot(paymentsStore).matchPreview).toBeNull();
+    expect(snapshot(paymentsStore).selectedCandidateId).toBeNull();
+    expect(confirmResult.ok).toBe(true);
+    expect(snapshot(paymentsStore).message).toBe(confirmResult.message);
+    expect(snapshot(paymentsStore).list?.items.find((item) => item.id === "pay-2")?.matchedDoc).toContain("ACT-002");
+    expect(invokeMock.mock.calls.filter(([command]) => command === "payment_reconcile")).toHaveLength(1);
+
+    await paymentsStore.reconcile("pay-3");
+    expect(snapshot(paymentsStore).matchPreview?.decisionKind).toBe("none");
+    expect(snapshot(paymentsStore).matchPreview?.candidates).toHaveLength(0);
+  });
+
+  it("returns a clear message when ambiguous confirm has no selected candidate", async () => {
+    const { paymentsStore } = await loadStores();
+
+    invokeMock.mockImplementation(async (command, payload) => {
+      if (command === "payments_calendar_load") {
+        return makePaymentCalendarMonth(payload);
+      }
+
+      switch (command) {
+        case "payments_list":
+          return makePayments(["pay-2"]);
+        case "payment_match_preview":
+          expect(payload).toEqual({ request: { paymentId: "pay-2" } });
+          return {
+            paymentId: "pay-2",
+            isReconciled: false,
+            decisionKind: "ambiguous",
+            candidates: [
+              {
+                documentId: "inv-1",
+                documentKind: "invoice",
+                title: "Накладна INV-001",
+                openAmountStr: "2 000,00 грн",
+                totalScore: 0.83,
+                sameIban: true,
+                referenceHit: false,
+                textHits: 1,
+                daysDistance: 3
+              }
+            ],
+            autoMatch: null
+          };
+        default:
+          throw new Error(`unexpected command: ${command}`);
+      }
+    });
+
+    await paymentsStore.load();
+    await paymentsStore.reconcile("pay-2");
+
+    paymentsStore.selectPreviewCandidate("");
+    const result = await paymentsStore.confirmSelectedPreviewCandidate();
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("Виберіть кандидата");
+    expect(snapshot(paymentsStore).message).toContain("Виберіть кандидата");
+    expect(snapshot(paymentsStore).matchPreview?.paymentId).toBe("pay-2");
+    expect(invokeMock.mock.calls.filter(([command]) => command === "payment_reconcile")).toHaveLength(0);
+  });
+
+  it("prefills split draft from split preview candidates", async () => {
+    const { paymentsStore } = await loadStores();
+
+    invokeMock.mockImplementation(async (command, payload) => {
+      if (command === "payments_calendar_load") {
+        return makePaymentCalendarMonth(payload);
+      }
+
+      switch (command) {
+        case "payments_list":
+          return makePayments(["pay-1", "pay-2", "pay-3"]);
+        case "payment_match_preview":
+          expect(payload).toEqual({ request: { paymentId: "pay-3" } });
+          return {
+            paymentId: "pay-3",
+            isReconciled: false,
+            decisionKind: "split",
+            candidates: [
+              {
+                documentId: "inv-7",
+                documentKind: "invoice",
+                title: "Накладна INV-007",
+                openAmountStr: "1 500,00 грн",
+                totalScore: 88,
+                sameIban: true,
+                referenceHit: true,
+                textHits: 2,
+                daysDistance: 1
+              },
+              {
+                documentId: "act-9",
+                documentKind: "act",
+                title: "Акт ACT-009",
+                openAmountStr: "1 500,00 грн",
+                totalScore: 86,
+                sameIban: true,
+                referenceHit: true,
+                textHits: 2,
+                daysDistance: 0
+              }
+            ],
+            autoMatch: null
+          };
+        default:
+          throw new Error(`unexpected command: ${command}`);
+      }
+    });
+
+    await paymentsStore.load();
+    await paymentsStore.reconcile("pay-3");
+
+    expect(snapshot(paymentsStore).matchPreview?.decisionKind).toBe("split");
+    expect(snapshot(paymentsStore).splitDraft?.allocations).toHaveLength(2);
+    expect(snapshot(paymentsStore).splitDraft?.allocations.map((allocation) => allocation.documentId)).toEqual([
+      "inv-7",
+      "act-9"
+    ]);
+    expect(normalizeMoneyText(snapshot(paymentsStore).splitDraft?.remainingAmountStr)).toContain("0,00");
+    expect(snapshot(paymentsStore).manualPicker).toBeNull();
+  });
+
+  it("opens manual picker for no-match preview and confirms a searched document", async () => {
+    const { paymentsStore } = await loadStores();
+
+    let list = makePayments(["pay-1", "pay-2", "pay-3"]);
+
+    invokeMock.mockImplementation(async (command, payload) => {
+      if (command === "payments_calendar_load") {
+        return makePaymentCalendarMonth(payload);
+      }
+
+      switch (command) {
+        case "payments_list":
+          return list;
+        case "payment_match_preview":
+          expect(payload).toEqual({ request: { paymentId: "pay-3" } });
+          return {
+            paymentId: "pay-3",
+            isReconciled: false,
+            decisionKind: "none",
+            candidates: [],
+            autoMatch: null
+          };
+        case "payment_match_manual_candidates": {
+          const request = (payload as { request: { paymentId: string; query: string } }).request;
+          expect(request.paymentId).toBe("pay-3");
+
+          if (request.query === "ACT") {
+            return {
+              paymentId: "pay-3",
+              query: "ACT",
+              candidates: [
+                {
+                  documentId: "act-9",
+                  documentKind: "act",
+                  title: "Акт ACT-009",
+                  openAmountStr: "3 000,00 грн",
+                  totalScore: 40,
+                  sameIban: false,
+                  referenceHit: false,
+                  textHits: 1,
+                  daysDistance: 4
+                }
+              ]
+            };
+          }
+
+          return {
+            paymentId: "pay-3",
+            query: request.query,
+            candidates: [
+              {
+                documentId: "inv-7",
+                documentKind: "invoice",
+                title: "Накладна INV-007",
+                openAmountStr: "1 500,00 грн",
+                totalScore: 0,
+                sameIban: false,
+                referenceHit: false,
+                textHits: 0,
+                daysDistance: 365
+              },
+              {
+                documentId: "act-9",
+                documentKind: "act",
+                title: "Акт ACT-009",
+                openAmountStr: "3 000,00 грн",
+                totalScore: 40,
+                sameIban: false,
+                referenceHit: false,
+                textHits: 1,
+                daysDistance: 4
+              }
+            ]
+          };
+        }
+        case "payment_reconcile":
+          expect((payload as { request: { paymentId: string; documentId: string; documentKind: string } }).request).toMatchObject({
+            paymentId: "pay-3",
+            documentId: "act-9",
+            documentKind: "act"
+          });
+          list = {
+            ...list,
+            items: list.items.map((item) =>
+              item.id === "pay-3" ? { ...item, matchedDoc: "ACT-009" } : item
+            )
+          };
+          return {
+            ok: true,
+            message: "Ручну звірку підтверджено"
+          };
+        default:
+          throw new Error(`unexpected command: ${command}`);
+      }
+    });
+
+    await paymentsStore.load();
+    await paymentsStore.reconcile("pay-3");
+    expect(snapshot(paymentsStore).matchPreview?.decisionKind).toBe("none");
+
+    await paymentsStore.openManualMatchPicker("pay-3");
+    expect(snapshot(paymentsStore).manualPicker?.paymentId).toBe("pay-3");
+    expect(snapshot(paymentsStore).manualPicker?.candidates).toHaveLength(2);
+
+    paymentsStore.updateManualMatchQuery("ACT");
+    await paymentsStore.searchManualMatchCandidates();
+    expect(snapshot(paymentsStore).manualPicker?.query).toBe("ACT");
+    expect(snapshot(paymentsStore).manualPicker?.candidates).toHaveLength(1);
+    expect(snapshot(paymentsStore).manualPicker?.selectedCandidateId).toBe("act-9");
+
+    const result = await paymentsStore.confirmManualPickerCandidate();
+    expect(result.ok).toBe(true);
+    expect(snapshot(paymentsStore).manualPicker).toBeNull();
+    expect(snapshot(paymentsStore).matchPreview).toBeNull();
+    expect(snapshot(paymentsStore).message).toBe("Ручну звірку підтверджено");
+    expect(snapshot(paymentsStore).list?.items.find((item) => item.id === "pay-3")?.matchedDoc).toContain("ACT-009");
+    expect(invokeMock.mock.calls.filter(([command]) => command === "payment_match_manual_candidates")).toHaveLength(2);
+  });
+
+  it("builds a split draft from manual picker candidates", async () => {
+    const { paymentsStore } = await loadStores();
+
+    const list = makePayments(["pay-1", "pay-2", "pay-3"]);
+
+    invokeMock.mockImplementation(async (command, payload) => {
+      if (command === "payments_calendar_load") {
+        return makePaymentCalendarMonth(payload);
+      }
+
+      switch (command) {
+        case "payments_list":
+          return list;
+        case "payment_match_preview":
+          expect(payload).toEqual({ request: { paymentId: "pay-3" } });
+          return {
+            paymentId: "pay-3",
+            isReconciled: false,
+            decisionKind: "none",
+            candidates: [],
+            autoMatch: null
+          };
+        case "payment_match_manual_candidates":
+          return {
+            paymentId: "pay-3",
+            query: "",
+            candidates: [
+              {
+                documentId: "inv-7",
+                documentKind: "invoice",
+                title: "Накладна INV-007",
+                openAmountStr: "1 500,00 грн",
+                totalScore: 35,
+                sameIban: false,
+                referenceHit: false,
+                textHits: 0,
+                daysDistance: 6
+              },
+              {
+                documentId: "act-9",
+                documentKind: "act",
+                title: "Акт ACT-009",
+                openAmountStr: "3 000,00 грн",
+                totalScore: 40,
+                sameIban: false,
+                referenceHit: false,
+                textHits: 1,
+                daysDistance: 4
+              }
+            ]
+          };
+        default:
+          throw new Error(`unexpected command: ${command}`);
+      }
+    });
+
+    await paymentsStore.load();
+    await paymentsStore.reconcile("pay-3");
+    await paymentsStore.openManualMatchPicker("pay-3");
+
+    paymentsStore.selectManualPickerCandidate("inv-7");
+    await paymentsStore.addSelectedManualPickerCandidateToSplit();
+    expect(snapshot(paymentsStore).splitDraft?.allocations).toHaveLength(1);
+    expect(normalizeMoneyText(snapshot(paymentsStore).splitDraft?.remainingAmountStr)).toContain("1 500,00");
+
+    paymentsStore.selectManualPickerCandidate("act-9");
+    await paymentsStore.addSelectedManualPickerCandidateToSplit();
+
+    expect(snapshot(paymentsStore).splitDraft?.allocations).toHaveLength(2);
+    expect(normalizeMoneyText(snapshot(paymentsStore).splitDraft?.remainingAmountStr)).toContain("0,00");
+
+    paymentsStore.updateSplitAllocationAmount("act-9", "1 500,00");
+    paymentsStore.updateSplitAllocationAmount("inv-7", "1 500,00");
+
+    expect(snapshot(paymentsStore).splitDraft?.allocations).toHaveLength(2);
+    expect(snapshot(paymentsStore).splitDraft?.remainingAmountStr).toContain("0,00");
+  });
+
+  it("persists a split draft through one batch reconcile call", async () => {
+    const { paymentsStore } = await loadStores();
+
+    let list = makePayments(["pay-1", "pay-2", "pay-3"]);
+    const splitCalls: Array<{
+      paymentId: string;
+      allocations: Array<{
+        documentId: string;
+        documentKind: string;
+        amount: string;
+      }>;
+    }> = [];
+
+    invokeMock.mockImplementation(async (command, payload) => {
+      if (command === "payments_calendar_load") {
+        return makePaymentCalendarMonth(payload);
+      }
+
+      switch (command) {
+        case "payments_list":
+          return list;
+        case "payment_match_preview":
+          expect(payload).toEqual({ request: { paymentId: "pay-3" } });
+          return {
+            paymentId: "pay-3",
+            isReconciled: false,
+            decisionKind: "none",
+            candidates: [],
+            autoMatch: null
+          };
+        case "payment_match_manual_candidates":
+          return {
+            paymentId: "pay-3",
+            query: "",
+            candidates: [
+              {
+                documentId: "inv-7",
+                documentKind: "invoice",
+                title: "Накладна INV-007",
+                openAmountStr: "1 500,00 грн",
+                totalScore: 35,
+                sameIban: false,
+                referenceHit: false,
+                textHits: 0,
+                daysDistance: 6
+              },
+              {
+                documentId: "act-9",
+                documentKind: "act",
+                title: "Акт ACT-009",
+                openAmountStr: "3 000,00 грн",
+                totalScore: 40,
+                sameIban: false,
+                referenceHit: false,
+                textHits: 1,
+                daysDistance: 4
+              }
+            ]
+          };
+        case "payment_reconcile_split": {
+          const request = {
+            ...(payload as {
+              request: {
+                paymentId: string;
+                allocations: Array<{
+                  documentId: string;
+                  documentKind: string;
+                  amount: string;
+                }>;
+              };
+            }).request
+          };
+          splitCalls.push(request);
+
+          expect(request.paymentId).toBe("pay-3");
+          expect(request.allocations).toHaveLength(2);
+          expect(request.allocations.map((allocation) => allocation.documentId)).toEqual([
+            "inv-7",
+            "act-9"
+          ]);
+          expect(request.allocations.map((allocation) => allocation.documentKind)).toEqual([
+            "invoice",
+            "act"
+          ]);
+          expect(request.allocations.every((allocation) => normalizeMoneyText(allocation.amount).includes("1 500,00"))).toBe(true);
+
+          list = {
+            ...list,
+            items: list.items.map((item) =>
+              item.id === "pay-3"
+                ? {
+                    ...item,
+                    matchedDoc: "INV-007 + ACT-009"
+                  }
+                : item
+            )
+          };
+
+          return {
+            ok: true,
+            message: "Розподіл платежу підтверджено",
+            paymentId: "pay-3",
+            allocationCount: 2,
+            totalAllocatedStr: "3 000,00",
+            allocations: [
+              {
+                documentId: "inv-7",
+                documentKind: "invoice",
+                title: "Накладна INV-007",
+                amountStr: "1 500,00"
+              },
+              {
+                documentId: "act-9",
+                documentKind: "act",
+                title: "Акт ACT-009",
+                amountStr: "1 500,00"
+              }
+            ]
+          };
+        }
+        default:
+          throw new Error(`unexpected command: ${command}`);
+      }
+    });
+
+    await paymentsStore.load();
+    await paymentsStore.reconcile("pay-3");
+    await paymentsStore.openManualMatchPicker("pay-3");
+
+    await paymentsStore.addSelectedManualPickerCandidateToSplit();
+    paymentsStore.selectManualPickerCandidate("act-9");
+    await paymentsStore.addSelectedManualPickerCandidateToSplit();
+
+    const result = await paymentsStore.confirmSplitDraft();
+    const splitResult = result as unknown as {
+      totalAllocatedStr: string;
+      allocations: Array<{ title: string }>;
+    };
+
+    expect(result.ok).toBe(true);
+    expect(result.message).toBe("Розподіл платежу підтверджено");
+    expect(result).toMatchObject({
+      paymentId: "pay-3",
+      allocationCount: 2
+    });
+    expect(normalizeMoneyText(splitResult.totalAllocatedStr)).toContain("3 000,00");
+    expect(splitResult.allocations.map((allocation) => allocation.title)).toEqual([
+      "Накладна INV-007",
+      "Акт ACT-009"
+    ]);
+    expect(snapshot(paymentsStore).splitDraft).toBeNull();
+    expect(snapshot(paymentsStore).manualPicker).toBeNull();
+    expect(snapshot(paymentsStore).matchPreview).toBeNull();
+    expect(snapshot(paymentsStore).message).toBe("Розподіл платежу підтверджено");
+    expect(snapshot(paymentsStore).list?.items.find((item) => item.id === "pay-3")?.matchedDoc).toContain("ACT-009");
+    expect(splitCalls).toHaveLength(1);
+    expect(invokeMock.mock.calls.filter(([command]) => command === "payment_reconcile_split")).toHaveLength(1);
+    expect(invokeMock.mock.calls.filter(([command]) => command === "payments_list")).toHaveLength(2);
+  });
+
+  it("keeps split draft state when batch reconcile returns an error result", async () => {
+    const { paymentsStore } = await loadStores();
+
+    invokeMock.mockImplementation(async (command, payload) => {
+      if (command === "payments_calendar_load") {
+        return makePaymentCalendarMonth(payload);
+      }
+
+      switch (command) {
+        case "payments_list":
+          return makePayments(["pay-3"]);
+        case "payment_match_preview":
+          expect(payload).toEqual({ request: { paymentId: "pay-3" } });
+          return {
+            paymentId: "pay-3",
+            isReconciled: false,
+            decisionKind: "split",
+            candidates: [
+              {
+                documentId: "inv-7",
+                documentKind: "invoice",
+                title: "Накладна INV-007",
+                openAmountStr: "1 500,00 грн",
+                totalScore: 88,
+                sameIban: true,
+                referenceHit: true,
+                textHits: 2,
+                daysDistance: 1
+              },
+              {
+                documentId: "act-9",
+                documentKind: "act",
+                title: "Акт ACT-009",
+                openAmountStr: "1 500,00 грн",
+                totalScore: 86,
+                sameIban: true,
+                referenceHit: true,
+                textHits: 2,
+                daysDistance: 0
+              }
+            ],
+            autoMatch: null
+          };
+        case "payment_reconcile_split":
+          return {
+            ok: false,
+            message: "Розподіл не пройшов валідацію"
+          };
+        default:
+          throw new Error(`unexpected command: ${command}`);
+      }
+    });
+
+    await paymentsStore.load();
+    await paymentsStore.reconcile("pay-3");
+
+    const initialDraft = snapshot(paymentsStore).splitDraft;
+    expect(initialDraft).not.toBeNull();
+
+    const result = await paymentsStore.confirmSplitDraft();
+
+    expect(result).toEqual({
+      ok: false,
+      message: "Розподіл не пройшов валідацію"
+    });
+    expect(snapshot(paymentsStore).splitDraft).toEqual(initialDraft);
+    expect(snapshot(paymentsStore).matchPreview?.paymentId).toBe("pay-3");
+    expect(snapshot(paymentsStore).message).toBe("Розподіл не пройшов валідацію");
+    expect(snapshot(paymentsStore).error).toBe("Розподіл не пройшов валідацію");
+    expect(invokeMock.mock.calls.filter(([command]) => command === "payment_reconcile_split")).toHaveLength(1);
+    expect(invokeMock.mock.calls.filter(([command]) => command === "payments_list")).toHaveLength(1);
+  });
+
+  it("keeps ambiguous preview state when manual reconcile returns an error result", async () => {
+    const { paymentsStore } = await loadStores();
+
+    invokeMock.mockImplementation(async (command, payload) => {
+      if (command === "payments_calendar_load") {
+        return makePaymentCalendarMonth(payload);
+      }
+
+      switch (command) {
+        case "payments_list":
+          return makePayments(["pay-2"]);
+        case "payment_match_preview":
+          expect(payload).toEqual({ request: { paymentId: "pay-2" } });
+          return {
+            paymentId: "pay-2",
+            isReconciled: false,
+            decisionKind: "ambiguous",
+            candidates: [
+              {
+                documentId: "inv-1",
+                documentKind: "invoice",
+                title: "Накладна INV-001",
+                openAmountStr: "2 000,00 грн",
+                totalScore: 0.83,
+                sameIban: true,
+                referenceHit: false,
+                textHits: 1,
+                daysDistance: 3
+              },
+              {
+                documentId: "act-2",
+                documentKind: "act",
+                title: "Акт ACT-002",
+                openAmountStr: "2 000,00 грн",
+                totalScore: 0.74,
+                sameIban: false,
+                referenceHit: true,
+                textHits: 2,
+                daysDistance: 1
+              }
+            ],
+            autoMatch: null
+          };
+        case "payment_reconcile":
+          expect((payload as { request: { paymentId: string; documentKind: string; documentId: string } }).request).toMatchObject({
+            paymentId: "pay-2",
+            documentKind: "act",
+            documentId: "act-2"
+          });
+          return {
+            ok: false,
+            message: "Не вдалося підтвердити звірку"
+          };
+        default:
+          throw new Error(`unexpected command: ${command}`);
+      }
+    });
+
+    await paymentsStore.load();
+    await paymentsStore.reconcile("pay-2");
+    paymentsStore.selectPreviewCandidate("act-2");
+
+    const result = await paymentsStore.confirmSelectedPreviewCandidate();
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toBe("Не вдалося підтвердити звірку");
+    expect(snapshot(paymentsStore).message).toBe("Не вдалося підтвердити звірку");
+    expect(snapshot(paymentsStore).matchPreview?.paymentId).toBe("pay-2");
+    expect(snapshot(paymentsStore).matchPreview?.decisionKind).toBe("ambiguous");
+    expect(snapshot(paymentsStore).selectedCandidateId).toBe("act-2");
+    expect(snapshot(paymentsStore).list?.items.find((item) => item.id === "pay-2")?.matchedDoc).toBe("");
+    expect(invokeMock.mock.calls.filter(([command]) => command === "payment_reconcile")).toHaveLength(1);
+    expect(invokeMock.mock.calls.filter(([command]) => command === "payments_list")).toHaveLength(1);
+  });
+
+  it("keeps ambiguous preview state when manual reconcile throws", async () => {
+    const { paymentsStore } = await loadStores();
+
+    invokeMock.mockImplementation(async (command, payload) => {
+      if (command === "payments_calendar_load") {
+        return makePaymentCalendarMonth(payload);
+      }
+
+      switch (command) {
+        case "payments_list":
+          return makePayments(["pay-2"]);
+        case "payment_match_preview":
+          expect(payload).toEqual({ request: { paymentId: "pay-2" } });
+          return {
+            paymentId: "pay-2",
+            isReconciled: false,
+            decisionKind: "ambiguous",
+            candidates: [
+              {
+                documentId: "inv-1",
+                documentKind: "invoice",
+                title: "Накладна INV-001",
+                openAmountStr: "2 000,00 грн",
+                totalScore: 0.83,
+                sameIban: true,
+                referenceHit: false,
+                textHits: 1,
+                daysDistance: 3
+              },
+              {
+                documentId: "act-2",
+                documentKind: "act",
+                title: "Акт ACT-002",
+                openAmountStr: "2 000,00 грн",
+                totalScore: 0.74,
+                sameIban: false,
+                referenceHit: true,
+                textHits: 2,
+                daysDistance: 1
+              }
+            ],
+            autoMatch: null
+          };
+        case "payment_reconcile":
+          expect((payload as { request: { paymentId: string; documentKind: string; documentId: string } }).request).toMatchObject({
+            paymentId: "pay-2",
+            documentKind: "act",
+            documentId: "act-2"
+          });
+          throw new Error("Тестова помилка звірки");
+        default:
+          throw new Error(`unexpected command: ${command}`);
+      }
+    });
+
+    await paymentsStore.load();
+    await paymentsStore.reconcile("pay-2");
+    paymentsStore.selectPreviewCandidate("act-2");
+
+    const result = await paymentsStore.confirmSelectedPreviewCandidate();
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("Тестова помилка звірки");
+    expect(snapshot(paymentsStore).message).toContain("Тестова помилка звірки");
+    expect(snapshot(paymentsStore).matchPreview?.paymentId).toBe("pay-2");
+    expect(snapshot(paymentsStore).matchPreview?.decisionKind).toBe("ambiguous");
+    expect(snapshot(paymentsStore).selectedCandidateId).toBe("act-2");
+    expect(snapshot(paymentsStore).list?.items.find((item) => item.id === "pay-2")?.matchedDoc).toBe("");
+    expect(invokeMock.mock.calls.filter(([command]) => command === "payment_reconcile")).toHaveLength(1);
+    expect(invokeMock.mock.calls.filter(([command]) => command === "payments_list")).toHaveLength(1);
+  });
+
+  it("clears stale preview when the next reconcile preview request fails", async () => {
+    const { paymentsStore } = await loadStores();
+
+    invokeMock.mockImplementation(async (command, payload) => {
+      if (command === "payments_calendar_load") {
+        return makePaymentCalendarMonth(payload);
+      }
+
+      switch (command) {
+        case "payments_list":
+          return makePayments(["pay-1", "pay-2"]);
+        case "payment_match_preview": {
+          const paymentId = (payload as { request: { paymentId: string } }).request.paymentId;
+
+          if (paymentId === "pay-1") {
+            return {
+              paymentId,
+              isReconciled: false,
+              decisionKind: "exact",
+              candidates: [
+                {
+                  documentId: "act-1",
+                  documentKind: "act",
+                  title: "Акт ACT-001",
+                  openAmountStr: "1 000,00 грн",
+                  totalScore: 0.99,
+                  sameIban: true,
+                  referenceHit: true,
+                  textHits: 2,
+                  daysDistance: 0
+                }
+              ],
+              autoMatch: {
+                documentId: "act-1",
+                documentKind: "act",
+                title: "Акт ACT-001",
+                amountStr: "1 000,00 грн"
+              }
+            };
+          }
+
+          throw new Error("preview failed");
+        }
+        default:
+          throw new Error(`unexpected command: ${command}`);
+      }
+    });
+
+    await paymentsStore.load();
+
+    await paymentsStore.reconcile("pay-1");
+    expect(snapshot(paymentsStore).matchPreview?.paymentId).toBe("pay-1");
+
+    await paymentsStore.reconcile("pay-2");
+    expect(snapshot(paymentsStore).matchPreview).toBeNull();
+    expect(snapshot(paymentsStore).selectedCandidateId).toBeNull();
+    expect(snapshot(paymentsStore).message).toContain("preview failed");
   });
 
   it("covers settings load, preferences, company, integrations, team and backup flows", async () => {
@@ -313,8 +1284,7 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
           screen = {
             ...screen,
             preferences: {
-              darkMode: true,
-              density: 2
+              darkMode: true
             }
           };
           return {
@@ -385,11 +1355,9 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     expect(snapshot(settingsStore).screen?.company.fullName).toBe("ТОВ Акт");
 
     settingsStore.updatePreference("darkMode", true);
-    settingsStore.updatePreference("density", 2);
     await settingsStore.savePreferences();
     expect(snapshot(settingsStore).screen?.preferences).toEqual({
-      darkMode: true,
-      density: 2
+      darkMode: true
     });
 
     settingsStore.updateCompanyField("fullName", "ТОВ Акт Плюс");
@@ -409,13 +1377,10 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     expect(snapshot(settingsStore).message).toContain("storage/backups/latest.zip");
   });
 
-  it("keeps the sidebar theme toggle on the persisted settings flow", () => {
-    expect(appSource).toContain("async function onQuickThemeToggle()");
-    expect(appSource).toContain("settings.savePreferences()");
-    expect(appSource).toContain("shell.load()");
-    expect(appSource).toContain("shellState.isDark");
-    expect(appSource).toContain("on:click={onQuickThemeToggle}");
-    expect(appSource).not.toContain("on:click={() => theme.toggle()}");
+  it("theme toggle is removed from topbar — only available in settings", () => {
+    expect(appSource).not.toContain("onQuickThemeToggle");
+    expect(appSource).not.toContain('data-testid="theme-toggle"');
+    expect(appSource).toContain("appShell.bootstrap()");
   });
 
   it("keeps unused document commands out of the public Tauri invoke surface", () => {
@@ -428,3 +1393,4 @@ describe("frontend Tauri store smoke: counterparties + payments + settings", () 
     }
   });
 });
+

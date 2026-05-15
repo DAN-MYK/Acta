@@ -1,6 +1,8 @@
 /**
  * @vitest-environment jsdom
  */
+// @ts-ignore Node typings are not included in the frontend test tsconfig.
+import { readFileSync } from "fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { tick } from "svelte";
 import TasksScreen from "../TasksScreen.svelte";
@@ -33,6 +35,7 @@ const mocks = vi.hoisted(() => {
   const tasksState = createMockStore({
     screen: null as TasksScreenDto | null,
     editor: null as TaskEditorDto | null,
+    initialLoading: false,
     loading: false,
     error: null as string | null,
     message: null as string | null,
@@ -41,7 +44,7 @@ const mocks = vi.hoisted(() => {
   });
 
   return {
-    closeEditor: vi.fn(),
+    closeEditor: vi.fn(() => ({ ok: true })),
     deleteCurrent: vi.fn(),
     load: vi.fn(),
     openEditor: vi.fn(),
@@ -118,6 +121,7 @@ function setTasksState(items: TaskItemDto[], overrides: Partial<{ tab: TasksTab 
   mocks.tasksState.set({
     screen: makeScreen(items),
     editor: makeEditor(),
+    initialLoading: false,
     loading: false,
     error: null,
     message: null,
@@ -175,6 +179,9 @@ function freezeLocalKyivMidnight() {
 }
 
 describe("TasksScreen component", () => {
+  const source = readFileSync("frontend/src/lib/screens/TasksScreen.svelte", "utf8");
+  const cssSource = readFileSync("frontend/src/styles/tasks.css", "utf8");
+
   beforeEach(() => {
     freezeLocalKyivMidnight();
 
@@ -200,6 +207,7 @@ describe("TasksScreen component", () => {
     ]) {
       fn.mockReset();
     }
+    mocks.closeEditor.mockReturnValue({ ok: true });
   });
 
   afterEach(() => {
@@ -213,7 +221,6 @@ describe("TasksScreen component", () => {
     expect(target.textContent).toContain("Завдання");
     expect(target.textContent).toContain("У фокусі");
     expect(target.textContent).toContain("На сьогодні");
-    expect(target.textContent).toContain("Потребують уваги зараз");
     expect(target.textContent).toContain("Пов'язано з INV-2026-0042");
 
     expect(buttonByText(target, "Нове завдання").className).toContain("btn-primary");
@@ -249,8 +256,7 @@ describe("TasksScreen component", () => {
 
     expect(target.textContent).toContain("На сьогодні");
     expect(target.textContent).toContain("Сьогодні немає нагадувань");
-    expect(target.textContent).toContain("Створіть нове завдання");
-    expect(target.textContent).toContain("або закрийте хвости");
+    expect(target.textContent).toContain("або закрити хвости");
 
     component.$destroy();
   });
@@ -266,8 +272,6 @@ describe("TasksScreen component", () => {
     ]);
 
     const { component, target } = renderTasks();
-
-    expect(target.textContent).toContain("Прострочено");
 
     const criticalPill = target.querySelector(".task-pill-critical");
     expect(criticalPill).toBeTruthy();
@@ -286,4 +290,69 @@ describe("TasksScreen component", () => {
 
     component.$destroy();
   });
+
+  it("shows compact skeleton rows during initial loading while chrome stays visible", () => {
+    mocks.tasksState.set({
+      screen: null,
+      editor: null,
+      initialLoading: true,
+      loading: false,
+      error: null,
+      message: null,
+      query: "",
+      tab: "open"
+    });
+
+    const { component, target } = renderTasks();
+
+    expect(target.textContent).toContain("Завдання");
+    expect(target.querySelector('[data-testid="tasks-focus-primary"]')).toBeTruthy();
+    expect(target.querySelector('.task-kpis')).toBeTruthy();
+    expect(target.querySelector('.task-tabs')).toBeTruthy();
+    expect(target.querySelector('[data-testid="tasks-today-panel"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="tasks-list"]')).toBeTruthy();
+    expect(
+      target.querySelector('[data-testid="tasks-list"]')?.querySelectorAll('[data-testid="skeleton-row-item"]')
+    ).toHaveLength(5);
+    expect(target.textContent).not.toContain("Сьогодні немає нагадувань");
+    expect(target.querySelector('[data-testid="tasks-today-skeleton"]')).toBeTruthy();
+
+    component.$destroy();
+  });
+
+  it("shows the dirty banner on Escape before closing the editor", async () => {
+    mocks.closeEditor.mockReturnValue({ ok: false, reason: "dirty" } as any);
+    const { component, target } = renderTasks();
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true }));
+    await tick();
+
+    expect(target.querySelector('[data-testid="tasks-dirty-banner"]')).toBeTruthy();
+    expect(target.textContent).toContain("У вас є незбережені зміни");
+    expect(target.textContent).toContain("Скасувати їх і закрити форму?");
+    expect(target.textContent).toContain("Залишитися");
+    expect(target.textContent).toContain("Так, закрити");
+    expect(mocks.closeEditor).toHaveBeenCalledWith(false);
+
+    component.$destroy();
+  });
+
+  it("shows the dirty banner on backdrop click before closing the editor", async () => {
+    mocks.closeEditor.mockReturnValue({ ok: false, reason: "dirty" } as any);
+    const { component, target } = renderTasks();
+
+    (target.querySelector(".editor-backdrop") as HTMLDivElement).click();
+    await tick();
+
+    expect(target.querySelector('[data-testid="tasks-dirty-banner"]')).toBeTruthy();
+    expect(mocks.closeEditor).toHaveBeenCalledWith(false);
+
+    component.$destroy();
+  });
+
+  it("collapses the two-column layout on compact widths to avoid page-level horizontal scroll", () => {
+    expect(cssSource).toMatch(/@media\s*\(max-width:\s*1100px\)[\s\S]*\.tasks-layout\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+    expect(cssSource).toMatch(/@media\s*\(max-width:\s*1100px\)[\s\S]*\.tasks-card-header\s*\{[\s\S]*flex-wrap:\s*wrap/);
+  });
+
 });
