@@ -24,16 +24,19 @@ Restructure the editor form fields into a clear, top-down logical order. Remove 
 
 ---
 
-## New Field Order (inside `editor-grid`)
+## New Visual Order
 
-| # | Поле | Поведінка |
-|---|------|-----------|
-| 1 | **Компанія** | Read-only, always visible. Value: `$shell.chrome.companyName`. Styled with light indigo background to indicate non-editable. |
-| 2 | **Напрямок** | Radio: Вихідний / Вхідний. `editor-grid-span`. Unchanged. |
-| 3 | **Номер + Дата** | Two-column row. Unchanged. |
-| 4 | **Контрагент** | Always visible (not only for `pendingNew`). For new docs: `<select>`. For existing docs: read-only display (same indigo style as Компанія). `editor-grid-span`. |
-| 5 | **Позиції документа** | The existing `editor-items-card` — position unchanged relative to other sections. |
-| 6 | **Примітки** | `<textarea>`, moves to after Позиції. `editor-grid-span`. |
+Fields are rendered top-to-bottom. Items 1–4 are **inside** `editor-grid`; items 5–6 are **siblings** of `editor-grid` inside `editor-sheet`.
+
+| # | Поле | Де | Поведінка |
+|---|------|----|-----------|
+| 1 | **Компанія** | `editor-grid`, full-width span | Read-only, always visible. See Data Sources. `editor-field-readonly` style. |
+| 2 | **Напрямок** | `editor-grid`, full-width span | Radio: Вихідний / Вхідний. Unchanged. |
+| 3 | **Номер** | `editor-grid`, half-column | Input. Unchanged. |
+| 3 | **Дата** | `editor-grid`, half-column | Date input. Unchanged. |
+| 4 | **Контрагент** | `editor-grid`, full-width span | For `pendingNew`: `<select>`. For existing: read-only `editor-field-readonly`. Always rendered. |
+| 5 | **Позиції документа** | Outside `editor-grid`, sibling | `editor-items-card`. No change to internals. |
+| 6 | **Примітки** | Outside `editor-grid`, sibling after items | `<label class="editor-notes-field">`. See HTML Structure. |
 
 ---
 
@@ -47,9 +50,10 @@ The `editor-header-meta` (kind badge + status chip) and `<h3>` title stay unchan
 
 ## Data Sources
 
-- **Компанія**: `$shell.chrome.companyName` via `shellStore` (already used in `App.svelte`).  
+- **Компанія**: `$shell.state?.chrome.companyName` via `shellStore`.  
   Import: `import { shellStore } from "../stores/shell";`  
-  Usage: `const shell = shellStore;` → `$shell.chrome?.companyName ?? ""`
+  Usage: `const shell = shellStore;` → `$shell.state?.chrome.companyName ?? ""`  
+  (In `App.svelte` line 83: `$: shellState = $shell.state` — верхній рівень store є `state`, не `chrome` напряму.)
 
 - **Контрагент (read-only)**: `$documents.editor.form.counterpartyName` — already on the form state.
 
@@ -116,13 +120,20 @@ editor-items-card    ← items section (outside grid)
 editor-items-card.existing-pdf-card  ← PDF (optional)
 ```
 
-Примітки currently lives **inside** `editor-grid`. To place it after `editor-items-card`, it moves **outside** as a sibling. Use a second single-element grid or a `<label>` with `display:grid; gap:8px` to preserve field styling:
+Примітки currently lives **inside** `editor-grid`. To place it after `editor-items-card`, it moves **outside** as a sibling `<label>`.
+
+`styles.css` applies `width`, `border`, `padding`, `background`, `min-height` and `resize` to `.editor-grid textarea` (lines 1285–1309). A textarea outside `.editor-grid` loses all of these. The `.editor-notes-field` CSS must replicate them explicitly:
 
 ```html
-<!-- after editor-items-card -->
+<!-- after editor-items-card, before existing-pdf-card -->
 <label class="editor-notes-field">
   Примітки
-  <textarea ...></textarea>
+  <textarea
+    rows="3"
+    value={$documents.editor.form.notes}
+    on:input={onEditorNotesChange}
+    disabled={$documents.loading}
+  ></textarea>
 </label>
 ```
 
@@ -131,6 +142,19 @@ Add to `documents.css`:
 .editor-notes-field {
   display: grid;
   gap: 8px;
+}
+
+.editor-notes-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 96px;
+  border: 1px solid var(--acta-color-border);
+  border-radius: var(--acta-radius-lg);
+  padding: 8px 12px;
+  background: var(--acta-color-bg-elevated);
+  color: inherit;
+  resize: vertical;
+  font: inherit;
 }
 ```
 
@@ -142,4 +166,8 @@ The `editor-grid` then contains only: Компанія, Напрямок, Ном
 
 1. `frontend/src/lib/screens/DocumentsScreen.svelte` — reorder form fields, add shell import, change header
 2. `frontend/src/styles/documents.css` — add `.editor-field-readonly` class family
-3. `frontend/src/lib/screens/__tests__/DocumentsScreen.test.ts` — update snapshots/assertions if needed
+3. `frontend/src/lib/screens/__tests__/DocumentsScreen.test.ts` — explicit test updates required:
+   - Existing-doc editor: assert counterparty is rendered inside the form (`.editor-field-readonly`), NOT in the header `<p>` tag
+   - Existing-doc editor: assert header has no `<p>` with counterparty name
+   - Any editor state: assert company name from shell is rendered (`.editor-field-readonly` with `shellStore` value)
+   - New-doc editor: assert counterparty `<select>` renders at position 4 (after Напрямок, after Номер/Дата)
