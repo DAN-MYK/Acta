@@ -161,8 +161,8 @@
 
   .cp-dirty-confirm {
     padding: 12px 16px;
-    background: var(--acta-color-warning-bg, #fef3c7);
-    border: 1px solid var(--acta-color-warning-border, #f59e0b);
+    background: color-mix(in srgb, var(--acta-color-warning-soft, #FAEFD8) 60%, var(--acta-color-bg-elevated));
+    border: 1px solid var(--acta-color-warning, #B5651A);
     border-radius: var(--acta-radius-md, 6px);
     display: flex;
     align-items: center;
@@ -220,7 +220,7 @@
   input:focus,
   textarea:focus {
     outline: none;
-    border-color: var(--acta-color-primary, #2563eb);
+    border-color: var(--acta-color-accent, #3D75F4);
   }
 
   textarea {
@@ -231,52 +231,5 @@
   .cp-modal-footer {
     display: flex;
     gap: 8px;
-  }
-
-  .btn-primary,
-  .btn-secondary,
-  .btn-danger {
-    padding: 8px 16px;
-    border-radius: var(--acta-radius-md, 6px);
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    border: 1px solid transparent;
-    transition: background 0.15s, color 0.15s;
-  }
-
-  .btn-primary {
-    background: var(--acta-color-primary, #2563eb);
-    color: #fff;
-    border-color: var(--acta-color-primary, #2563eb);
-  }
-
-  .btn-primary:hover:not(:disabled) {
-    background: var(--acta-color-primary-hover, #1d4ed8);
-  }
-
-  .btn-secondary {
-    background: transparent;
-    color: var(--acta-color-text, #111);
-    border-color: var(--acta-color-border, #e5e7eb);
-  }
-
-  .btn-secondary:hover:not(:disabled) {
-    background: var(--acta-color-bg-hover, #f3f4f6);
-  }
-
-  .btn-danger {
-    background: var(--acta-color-danger, #dc2626);
-    color: #fff;
-    border-color: var(--acta-color-danger, #dc2626);
-  }
-
-  .btn-danger:hover:not(:disabled) {
-    background: var(--acta-color-danger-hover, #b91c1c);
-  }
-
-  button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
 </style>
