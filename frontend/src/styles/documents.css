@@ -252,10 +252,6 @@
   margin: 4px 0 2px;
 }
 
-.documents-drawer > .editor-header > div > p {
-  margin: 0;
-  color: var(--acta-color-text-muted);
-}
 
 .editor-header,
 .chain-panel-header,
