@@ -1,6 +1,9 @@
 import { get, writable } from "svelte/store";
 import {
+  counterpartyOpenEditor,
+  counterpartySave,
   documentAdvanceStatus,
+  documentChangeCounterparty,
   documentChainCreateDraft,
   documentChainGet,
   documentCreateDraft,
@@ -20,10 +23,19 @@ import {
   isEditorFormDirty,
   type CloseEditorResult
 } from "../editorDirty";
-import type { DocumentChainDto, DocumentEditorDto, DocumentKind, DocumentsListDto } from "../types";
+import type { CounterpartyDraftFormDto, DocumentChainDto, DocumentEditorDto, DocumentKind, DocumentsListDto } from "../types";
 import { DOCUMENT_FILTER_PRESETS } from "../config/documents";
 
 type EditorPayload = Pick<DocumentEditorDto, "form" | "items">;
+
+type CpModalState = {
+  isOpen: boolean;
+  mode: "create" | "edit";
+  form: CounterpartyDraftFormDto;
+  snapshot: CounterpartyDraftFormDto;
+  loading: boolean;
+  confirmClose: boolean;
+};
 
 function snapshotEditor(editor: DocumentEditorDto): EditorPayload {
   return cloneSnapshot({ form: editor.form, items: editor.items });
@@ -51,6 +63,7 @@ interface DocumentsState {
   amountMax: string | null;
   overdueOnly: boolean;
   activePresetId: string | null;
+  cpModal: CpModalState | null;
 }
 
 const initialState: DocumentsState = {
@@ -75,6 +88,7 @@ const initialState: DocumentsState = {
   amountMax: null,
   overdueOnly: false,
   activePresetId: null,
+  cpModal: null,
 };
 
 async function loadEditorAndChain(docId: string): Promise<{
@@ -887,6 +901,109 @@ function createDocumentsStore() {
         if (seq !== filterSeq) return;
         update((state) => ({ ...state, loading: false, error: String(error) }));
       });
+    },
+    async openCpCreate(): Promise<void> {
+      const editor = await counterpartyOpenEditor(undefined);
+      update((state) => ({
+        ...state,
+        cpModal: {
+          isOpen: true,
+          mode: "create",
+          form: { ...editor.form },
+          snapshot: { ...editor.form },
+          loading: false,
+          confirmClose: false,
+        },
+      }));
+    },
+    async openCpEdit(counterpartyId: string): Promise<void> {
+      const editor = await counterpartyOpenEditor(counterpartyId);
+      update((state) => ({
+        ...state,
+        cpModal: {
+          isOpen: true,
+          mode: "edit",
+          form: { ...editor.form },
+          snapshot: { ...editor.form },
+          loading: false,
+          confirmClose: false,
+        },
+      }));
+    },
+    updateCpField(field: keyof CounterpartyDraftFormDto, value: string): void {
+      update((state) => {
+        if (!state.cpModal) return state;
+        return {
+          ...state,
+          cpModal: { ...state.cpModal, form: { ...state.cpModal.form, [field]: value } },
+        };
+      });
+    },
+    async saveCp(): Promise<void> {
+      const snap = get({ subscribe });
+      if (!snap.cpModal) return;
+
+      update((state) => ({
+        ...state,
+        cpModal: state.cpModal ? { ...state.cpModal, loading: true } : null,
+      }));
+
+      try {
+        const result = await counterpartySave(snap.cpModal.form);
+        const savedName =
+          result.updatedList.find((cp) => cp.id === result.savedId)?.name ?? snap.cpModal.form.name;
+
+        update((state) => {
+          if (!state.editor) return { ...state, cpModal: null };
+
+          const isCreate = snap.cpModal!.mode === "create";
+          const updatedFormFields = isCreate
+            ? { counterpartyId: result.savedId, counterpartyName: savedName }
+            : { counterpartyName: savedName };
+
+          const updatedEditorForm = { ...state.editor.form, ...updatedFormFields };
+
+          return {
+            ...state,
+            editor: { ...state.editor, form: updatedEditorForm },
+            editorSnapshot: state.editorSnapshot
+              ? {
+                  ...state.editorSnapshot,
+                  form: { ...state.editorSnapshot.form, ...updatedFormFields },
+                }
+              : null,
+            cpModal: null,
+          };
+        });
+      } catch (error) {
+        update((state) => ({
+          ...state,
+          cpModal: state.cpModal ? { ...state.cpModal, loading: false } : null,
+          error: String(error),
+        }));
+      }
+    },
+    closeCpModal(): void {
+      const snap = get({ subscribe });
+      if (!snap.cpModal) return;
+      const dirty = isEditorFormDirty(snap.cpModal.snapshot, snap.cpModal.form);
+      if (dirty) {
+        update((state) => ({
+          ...state,
+          cpModal: state.cpModal ? { ...state.cpModal, confirmClose: true } : null,
+        }));
+      } else {
+        update((state) => ({ ...state, cpModal: null }));
+      }
+    },
+    confirmCloseCpModal(): void {
+      update((state) => ({ ...state, cpModal: null }));
+    },
+    cancelCloseCpModal(): void {
+      update((state) => ({
+        ...state,
+        cpModal: state.cpModal ? { ...state.cpModal, confirmClose: false } : null,
+      }));
     },
   };
 }
