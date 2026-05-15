@@ -4,6 +4,8 @@ mod acts;
 mod companies;
 #[path = "counterparties.rs"]
 mod counterparties;
+#[path = "document_change_counterparty.rs"]
+mod document_change_counterparty;
 #[path = "document_imports.rs"]
 mod document_imports;
 #[path = "invoices.rs"]
