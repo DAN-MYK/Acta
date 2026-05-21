@@ -13,8 +13,9 @@ use crate::models::company::Company;
 use crate::models::counterparty::Counterparty;
 use crate::models::invoice::{Invoice, InvoiceItem};
 use crate::pdf::generator::{
-    amount_to_words, ensure_invoice_output_dir, ensure_output_dir, generate_act_pdf,
-    generate_invoice_pdf, PdfActData, PdfActItem, PdfCompany, PdfInvoiceData, PdfInvoiceItem,
+    amount_to_words, ensure_adj_output_dir, ensure_invoice_output_dir, ensure_output_dir,
+    generate_act_pdf, generate_adjustment_act_pdf, generate_invoice_pdf, PdfActData, PdfActItem,
+    PdfAdjustmentActData, PdfAdjustmentActItem, PdfCompany, PdfInvoiceData, PdfInvoiceItem,
 };
 use crate::pdf::reader::inspect_pdf;
 
@@ -515,8 +516,62 @@ pub async fn generate_document_pdf(ctx: &AppCtx, doc_id: String) -> Result<Mutat
         DocumentRef::Waybill(_) => {
             anyhow::bail!("PDF для накладних не підтримується");
         }
-        DocumentRef::AdjustmentAct(_) => {
-            anyhow::bail!("PDF для актів коригування не підтримується");
+        DocumentRef::AdjustmentAct(id) => {
+            let (adj, items) = db::adjustment_acts::get_full(pool, company_id, id)
+                .await?
+                .ok_or_else(|| anyhow!("Акт коригування не знайдено"))?;
+
+            let (company_res, counterparty_res) = tokio::join!(
+                db::companies::get_by_id(pool, company_id),
+                db::counterparties::get_by_id(pool, company_id, adj.counterparty_id)
+            );
+            let company = company_res?.ok_or_else(|| anyhow!("Компанію не знайдено"))?;
+            let counterparty =
+                counterparty_res?.ok_or_else(|| anyhow!("Контрагента не знайдено"))?;
+
+            let original_act_number: String = sqlx::query_scalar(
+                "SELECT number FROM acts WHERE id = $1 AND company_id = $2",
+            )
+            .bind(adj.original_act_id)
+            .bind(company_id)
+            .fetch_optional(pool)
+            .await?
+            .unwrap_or_default();
+
+            let pdf_items = items
+                .iter()
+                .enumerate()
+                .map(|(i, item)| PdfAdjustmentActItem {
+                    num: (i + 1) as u32,
+                    name: item.description.clone(),
+                    qty: format!("{:.4}", item.quantity),
+                    unit: String::new(),
+                    price: format!("{:.2}", item.unit_price),
+                    amount: format!("{:.2}", item.total_price),
+                })
+                .collect();
+
+            let data = PdfAdjustmentActData {
+                number: adj.number.clone(),
+                date: adj.date.format("%d.%m.%Y").to_string(),
+                original_act_number,
+                company: to_pdf_company(&company),
+                client: counterparty_to_pdf_company(&counterparty),
+                items: pdf_items,
+                total: format!("{:.2}", adj.total_amount),
+                total_words: amount_to_words(&adj.total_amount),
+                notes: adj.notes.clone().unwrap_or_default(),
+            };
+
+            let path = ensure_adj_output_dir(ctx.storage_dir(), &adj.number)?;
+            let template = ctx.template_dir().join("adjustment_act.typ");
+            let out = path.clone();
+            tokio::task::spawn_blocking(move || {
+                generate_adjustment_act_pdf(&data, &template, &out)
+            })
+            .await
+            .context("PDF thread error")??;
+            path
         }
     };
 

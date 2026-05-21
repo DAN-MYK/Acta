@@ -374,6 +374,79 @@ pub fn ensure_invoice_output_dir(storage_dir: &Path, invoice_number: &str) -> Re
     Ok(file_path)
 }
 
+// ── Акт коригування ──────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize)]
+pub struct PdfAdjustmentActItem {
+    pub num: u32,
+    pub name: String,
+    pub qty: String,
+    pub unit: String,
+    pub price: String,
+    pub amount: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PdfAdjustmentActData {
+    pub number: String,
+    pub date: String,
+    pub original_act_number: String,
+    pub company: PdfCompany,
+    pub client: PdfCompany,
+    pub items: Vec<PdfAdjustmentActItem>,
+    pub total: String,
+    pub total_words: String,
+    pub notes: String,
+}
+
+pub fn generate_adjustment_act_pdf(
+    data: &PdfAdjustmentActData,
+    template_path: &Path,
+    output_path: &Path,
+) -> Result<()> {
+    let json = serde_json::to_string(data)
+        .context("Серіалізація PdfAdjustmentActData у JSON")?;
+    let input_arg = format!("data={json}");
+
+    let output = std::process::Command::new("typst")
+        .args([
+            "compile",
+            template_path
+                .to_str()
+                .context("Невалідний шлях до шаблону adjustment_act.typ")?,
+            output_path
+                .to_str()
+                .context("Невалідний шлях до output PDF")?,
+            "--input",
+            &input_arg,
+        ])
+        .output()
+        .context("Не вдалось запустити typst. Перевір чи встановлено: scoop install typst")?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("typst завершився з помилкою:\n{stderr}");
+    }
+
+    tracing::info!(path = %output_path.display(), "PDF акту коригування згенеровано");
+    Ok(())
+}
+
+pub fn ensure_adj_output_dir(storage_dir: &Path, number: &str) -> Result<PathBuf> {
+    let year = number
+        .split('-')
+        .nth(1)
+        .filter(|s| s.len() == 4 && s.chars().all(|c| c.is_ascii_digit()))
+        .unwrap_or("misc");
+
+    let dir = storage_dir.join("adjustment_acts").join(year);
+    std::fs::create_dir_all(&dir)
+        .with_context(|| format!("Не вдалось створити директорію {}", dir.display()))?;
+
+    let safe_name = number.replace(['/', '\\', ':'], "_");
+    Ok(dir.join(format!("{safe_name}.pdf")))
+}
+
 // ── Тести ─────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
