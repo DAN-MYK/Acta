@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::models::act::ActStatus;
+use crate::models::adjustment_act::AdjustmentActStatus;
 use crate::models::invoice::InvoiceStatus;
 use crate::models::waybill::WaybillStatus;
 use crate::models::DocumentDirection;
@@ -11,6 +12,7 @@ pub enum DocumentKindDto {
     Invoice,
     Act,
     Waybill,
+    AdjustmentAct,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -21,6 +23,7 @@ pub enum DocumentStatusDto {
     Signed,
     Paid,
     Delivered,
+    Applied,
 }
 
 impl DocumentStatusDto {
@@ -48,6 +51,15 @@ impl DocumentStatusDto {
             WaybillStatus::Issued => Self::Issued,
             WaybillStatus::Signed => Self::Signed,
             WaybillStatus::Delivered => Self::Delivered,
+        }
+    }
+
+    pub fn from_adjustment_act_status(status: &AdjustmentActStatus) -> Self {
+        match status {
+            AdjustmentActStatus::Draft => Self::Draft,
+            AdjustmentActStatus::Issued => Self::Issued,
+            AdjustmentActStatus::Signed => Self::Signed,
+            AdjustmentActStatus::Applied => Self::Applied,
         }
     }
 }
@@ -79,6 +91,10 @@ pub struct DocumentDraftFormDto {
     pub date: String,
     pub notes: String,
     pub direction: String, // "outgoing" | "incoming"
+    #[serde(default)]
+    pub original_act_id: Option<String>,
+    #[serde(default)]
+    pub original_act_number: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -107,6 +123,7 @@ pub struct DocumentsListDto {
     pub invoice_items: Vec<DocumentItemDto>,
     pub act_items: Vec<DocumentItemDto>,
     pub waybill_items: Vec<DocumentItemDto>,
+    pub adjustment_act_items: Vec<DocumentItemDto>,
     pub total_count: i32,
     pub page_count: i32,
 }
@@ -173,7 +190,8 @@ pub struct DocumentsListRequest {
 pub struct CreateDocumentDraftRequest {
     pub counterparty_id: Option<String>,
     pub kind: String,
-    pub direction: String, // "outgoing" | "incoming"
+    pub direction: Option<String>, // None for adjustment_act; required for others
+    pub original_act_id: Option<String>, // Some(uuid) only for adjustment_act
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

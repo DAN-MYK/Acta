@@ -25,7 +25,7 @@ pub(super) async fn load_existing_pdf_path(
     doc_ref: DocumentRef,
 ) -> Result<Option<String>> {
     let stored_path = match doc_ref {
-        DocumentRef::Act(_) => None,
+        DocumentRef::Act(_) | DocumentRef::AdjustmentAct(_) => None,
         DocumentRef::Invoice(id) => db::invoices::get_by_id_scoped(pool, company_id, id)
             .await?
             .and_then(|(invoice, _)| invoice.pdf_path),
@@ -51,7 +51,9 @@ pub(super) async fn persist_existing_pdf_path(
     let path = managed_pdf_storage_path(storage_dir, Path::new(&path))?;
 
     match doc_ref {
-        DocumentRef::Act(_) => anyhow::bail!("Для актів flow існуючого PDF поки не підтримується"),
+        DocumentRef::Act(_) | DocumentRef::AdjustmentAct(_) => {
+            anyhow::bail!("Для актів flow існуючого PDF поки не підтримується")
+        }
         DocumentRef::Invoice(id) => {
             db::invoices::set_pdf_path(pool, company_id, id, Some(path))
                 .await?
@@ -91,6 +93,12 @@ pub(super) async fn load_document_kind_and_number(
                 .ok_or_else(|| anyhow!("Накладну не знайдено"))?;
             Ok(("waybill".to_string(), waybill.number))
         }
+        DocumentRef::AdjustmentAct(id) => {
+            let (adj, _) = db::adjustment_acts::get_full(pool, company_id, id)
+                .await?
+                .ok_or_else(|| anyhow!("Акт коригування не знайдено"))?;
+            Ok(("adjustment_act".to_string(), adj.number))
+        }
     }
 }
 
@@ -100,7 +108,10 @@ pub(super) fn supports_existing_pdf_flow(kind: &str) -> bool {
 
 pub(super) fn document_ref_uuid(doc_ref: DocumentRef) -> Uuid {
     match doc_ref {
-        DocumentRef::Act(id) | DocumentRef::Invoice(id) | DocumentRef::Waybill(id) => id,
+        DocumentRef::Act(id)
+        | DocumentRef::Invoice(id)
+        | DocumentRef::Waybill(id)
+        | DocumentRef::AdjustmentAct(id) => id,
     }
 }
 
@@ -503,6 +514,9 @@ pub async fn generate_document_pdf(ctx: &AppCtx, doc_id: String) -> Result<Mutat
         }
         DocumentRef::Waybill(_) => {
             anyhow::bail!("PDF для накладних не підтримується");
+        }
+        DocumentRef::AdjustmentAct(_) => {
+            anyhow::bail!("PDF для актів коригування не підтримується");
         }
     };
 

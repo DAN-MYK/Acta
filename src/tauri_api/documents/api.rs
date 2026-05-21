@@ -10,6 +10,9 @@ use uuid::Uuid;
 use crate::app_ctx::AppCtx;
 use crate::db;
 use crate::models::act::{Act, ActItem, ActStatus, NewAct, NewActItem, UpdateAct};
+use crate::models::adjustment_act::{
+    AdjustmentActStatus, NewAdjustmentActItem, UpdateAdjustmentAct,
+};
 use crate::models::invoice::{
     Invoice, InvoiceItem, InvoiceStatus, NewInvoice, NewInvoiceItem, UpdateInvoice,
 };
@@ -30,6 +33,7 @@ pub(super) enum DocumentRef {
     Act(Uuid),
     Invoice(Uuid),
     Waybill(Uuid),
+    AdjustmentAct(Uuid),
 }
 
 #[derive(Clone)]
@@ -86,9 +90,16 @@ pub(super) fn parse_document_ref(id: &str) -> Option<DocumentRef> {
         return Some(DocumentRef::Invoice(uuid));
     }
 
-    id.strip_prefix("wbl:")
+    if let Some(uuid) = id
+        .strip_prefix("wbl:")
         .and_then(|value| Uuid::parse_str(value).ok())
-        .map(DocumentRef::Waybill)
+    {
+        return Some(DocumentRef::Waybill(uuid));
+    }
+
+    id.strip_prefix("adj:")
+        .and_then(|value| Uuid::parse_str(value).ok())
+        .map(DocumentRef::AdjustmentAct)
 }
 
 fn document_ref_string(kind: &str, id: Uuid) -> String {
@@ -96,6 +107,7 @@ fn document_ref_string(kind: &str, id: Uuid) -> String {
         "act" => format!("act:{id}"),
         "invoice" => format!("inv:{id}"),
         "waybill" => format!("wbl:{id}"),
+        "adjustment_act" => format!("adj:{id}"),
         _ => id.to_string(),
     }
 }
@@ -395,6 +407,9 @@ async fn load_document_snapshot(
                 direction: waybill.direction,
             })
         }
+        DocumentRef::AdjustmentAct(_) => {
+            Err(anyhow!("Акти коригування не беруть участі у ланцюжку документів"))
+        }
     }
 }
 
@@ -520,6 +535,8 @@ async fn build_existing_document_form(
                     date: date_to_str(act.date),
                     notes: split_visible_notes_and_chain_parent(act.notes.as_deref()).0,
                     direction: act.direction.as_str().to_string(),
+                    original_act_id: None,
+                    original_act_number: None,
                 },
                 items: act_items_to_draft(items),
                 pdf: None,
@@ -548,6 +565,8 @@ async fn build_existing_document_form(
                     date: date_to_str(invoice.date),
                     notes: split_visible_notes_and_chain_parent(invoice.notes.as_deref()).0,
                     direction: invoice.direction.as_str().to_string(),
+                    original_act_id: None,
+                    original_act_number: None,
                 },
                 items: invoice_items_to_draft(items),
                 pdf,
@@ -576,9 +595,52 @@ async fn build_existing_document_form(
                     date: date_to_str(waybill.date),
                     notes: split_visible_notes_and_chain_parent(waybill.notes.as_deref()).0,
                     direction: waybill.direction.as_str().to_string(),
+                    original_act_id: None,
+                    original_act_number: None,
                 },
                 items: waybill_items_to_draft(items),
                 pdf,
+                show_type_picker: false,
+                show_editor: true,
+            })
+        }
+        DocumentRef::AdjustmentAct(id) => {
+            let (adj, items) = db::adjustment_acts::get_full(pool, company_id, id)
+                .await?
+                .ok_or_else(|| anyhow!("Акт коригування не знайдено"))?;
+            let counterparty_name =
+                load_counterparty_name(pool, company_id, adj.counterparty_id).await?;
+            let original_act_number: String = sqlx::query_scalar(
+                "SELECT number FROM acts WHERE id = $1"
+            )
+            .bind(adj.original_act_id)
+            .fetch_one(pool)
+            .await?;
+
+            Ok(DocumentEditorDto {
+                form: DocumentDraftFormDto {
+                    id: format!("adj:{id}"),
+                    kind: "adjustment_act".to_string(),
+                    counterparty_id: adj.counterparty_id.to_string(),
+                    counterparty_name,
+                    title: "Акт коригування".to_string(),
+                    number: adj.number,
+                    date: date_to_str(adj.date),
+                    notes: adj.notes.unwrap_or_default(),
+                    direction: adj.direction.as_str().to_string(),
+                    original_act_id: Some(adj.original_act_id.to_string()),
+                    original_act_number: Some(original_act_number),
+                },
+                items: items
+                    .into_iter()
+                    .map(|item| DocumentDraftItemDto {
+                        description: item.description,
+                        unit: String::new(),
+                        quantity: item.quantity.to_string(),
+                        price: item.unit_price.to_string(),
+                    })
+                    .collect(),
+                pdf: None,
                 show_type_picker: false,
                 show_editor: true,
             })
@@ -628,6 +690,8 @@ async fn create_draft_form(
                 date: date_to_str(today),
                 notes: String::new(),
                 direction: direction.as_str().to_string(),
+                original_act_id: None,
+                original_act_number: None,
             })
         }
         "invoice" => {
@@ -660,6 +724,8 @@ async fn create_draft_form(
                 date: date_to_str(today),
                 notes: String::new(),
                 direction: direction.as_str().to_string(),
+                original_act_id: None,
+                original_act_number: None,
             })
         }
         "waybill" => {
@@ -691,6 +757,8 @@ async fn create_draft_form(
                 date: date_to_str(today),
                 notes: String::new(),
                 direction: direction.as_str().to_string(),
+                original_act_id: None,
+                original_act_number: None,
             })
         }
         _ => Err(anyhow!("Невідомий тип документа: {kind}")),
@@ -702,6 +770,22 @@ async fn load_document_chain(
     company_id: Uuid,
     doc_ref: DocumentRef,
 ) -> Result<Vec<ChainStepDto>> {
+    // For adjustment acts the chain concept doesn't apply — return single-step chain
+    if let DocumentRef::AdjustmentAct(id) = doc_ref {
+        let adj = db::adjustment_acts::get_full(pool, company_id, id)
+            .await?
+            .ok_or_else(|| anyhow!("Акт коригування не знайдено"))?
+            .0;
+
+        return Ok(vec![ChainStepDto {
+            doc_type: "adjustment_act".to_string(),
+            doc_number: adj.number,
+            amount_str: format_money_ua(adj.total_amount),
+            status: adj.status.as_str().to_string(),
+            exists: true,
+        }]);
+    }
+
     let source = load_document_snapshot(pool, company_id, doc_ref).await?;
     let mut invoice = (source.kind == "invoice").then(|| source.clone());
     let mut act = (source.kind == "act").then(|| source.clone());
@@ -800,8 +884,10 @@ pub async fn documents_list(
     let include_invoices = request.kind.as_deref().map_or(true, |k| k == "invoice");
     let include_waybills =
         request.kind.as_deref().map_or(true, |k| k == "waybill") && !overdue_only;
+    let include_adj_acts =
+        request.kind.as_deref().map_or(true, |k| k == "adjustment_act") && !overdue_only;
 
-    let (acts, invoices, waybills) = tokio::join!(
+    let (acts, invoices, waybills, adj_acts) = tokio::join!(
         async {
             if include_acts {
                 db::acts::list_filtered(
@@ -847,6 +933,25 @@ pub async fn documents_list(
         async {
             if include_waybills {
                 db::waybills::list_filtered(
+                    ctx.pool(),
+                    company_id,
+                    statuses_slice,
+                    direction_filter,
+                    search,
+                    counterparty_filter,
+                    date_from,
+                    date_to,
+                    amount_min,
+                    amount_max,
+                )
+                .await
+            } else {
+                Ok(vec![])
+            }
+        },
+        async {
+            if include_adj_acts {
+                db::adjustment_acts::list_filtered(
                     ctx.pool(),
                     company_id,
                     statuses_slice,
@@ -921,6 +1026,24 @@ pub async fn documents_list(
         ));
     }
 
+    for row in adj_acts? {
+        combined.push((
+            row.date,
+            DocumentItemDto {
+                id: format!("adj:{}", row.id),
+                kind: DocumentKindDto::AdjustmentAct,
+                number: row.number,
+                date: date_to_str(row.date),
+                counterparty: row.counterparty_name,
+                amount_str: format_money_ua(row.total_amount),
+                status: DocumentStatusDto::from_adjustment_act_status(&row.status),
+                status_label: row.status.label().to_string(),
+                linked_id: row.original_act_id.to_string(),
+                direction: row.direction.as_str().to_string(),
+            },
+        ));
+    }
+
     combined.sort_by(|left, right| right.0.cmp(&left.0));
     let items = combined
         .into_iter()
@@ -941,6 +1064,11 @@ pub async fn documents_list(
         .filter(|item| matches!(item.kind, DocumentKindDto::Waybill))
         .cloned()
         .collect::<Vec<_>>();
+    let adjustment_act_items = items
+        .iter()
+        .filter(|item| matches!(item.kind, DocumentKindDto::AdjustmentAct))
+        .cloned()
+        .collect::<Vec<_>>();
 
     Ok(DocumentsListDto {
         total_count: items.len() as i32,
@@ -949,6 +1077,7 @@ pub async fn documents_list(
         invoice_items,
         act_items,
         waybill_items,
+        adjustment_act_items,
     })
 }
 
@@ -1096,7 +1225,33 @@ pub async fn document_create_draft(
     ctx: &AppCtx,
     request: CreateDocumentDraftRequest,
 ) -> Result<DocumentEditorDto> {
-    let direction = DocumentDirection::try_from(request.direction)
+    // Special path for adjustment acts — direction and counterparty come from the original act
+    if request.kind == "adjustment_act" {
+        let original_act_id_str = request
+            .original_act_id
+            .as_deref()
+            .ok_or_else(|| anyhow!("original_act_id є обов'язковим для adjustment_act"))?;
+        let original_act_id = Uuid::parse_str(original_act_id_str)
+            .with_context(|| format!("Некоректний original_act_id: {original_act_id_str}"))?;
+
+        let adj = db::adjustment_acts::create(ctx.pool(), ctx.company_id(), original_act_id)
+            .await?;
+
+        return build_existing_document_form(
+            ctx.storage_dir(),
+            ctx.pool(),
+            ctx.company_id(),
+            DocumentRef::AdjustmentAct(adj.id),
+        )
+        .await;
+    }
+
+    // Existing path for act / invoice / waybill
+    let direction_str = request
+        .direction
+        .as_deref()
+        .ok_or_else(|| anyhow!("direction є обов'язковим для документів цього типу"))?;
+    let direction = DocumentDirection::try_from(direction_str.to_string())
         .map_err(|_| anyhow!("Невідома направленість документа"))?;
     let (counterparty_id, counterparty_name) =
         resolve_draft_counterparty(ctx, request.counterparty_id).await?;
@@ -1227,12 +1382,46 @@ pub async fn document_save(
                 draft_items_to_new_waybill(request.items)?,
             )
             .await?
-            .ok_or_else(|| anyhow!("РќР°РєР»Р°РґРЅСѓ РЅРµ Р·РЅР°Р№РґРµРЅРѕ"))?;
+            .ok_or_else(|| anyhow!("Накладну не знайдено"))?;
 
             Ok(SaveDocumentResponse {
                 document_id: request.form.id,
                 kind: "waybill".to_string(),
                 message: "Накладну збережено".to_string(),
+            })
+        }
+        DocumentRef::AdjustmentAct(id) => {
+            let update = UpdateAdjustmentAct {
+                number: request.form.number.clone(),
+                date,
+                notes: optional_string(&request.form.notes),
+            };
+            let items: Vec<NewAdjustmentActItem> = request
+                .items
+                .into_iter()
+                .map(|item| {
+                    Ok(NewAdjustmentActItem {
+                        description: item.description,
+                        quantity: parse_decimal_input(&item.quantity, "Кількість")?,
+                        unit_price: parse_decimal_input(&item.price, "Ціна")?,
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?;
+
+            db::adjustment_acts::update_with_items_scoped(
+                ctx.pool(),
+                ctx.company_id(),
+                id,
+                update,
+                items,
+            )
+            .await?
+            .ok_or_else(|| anyhow!("Акт коригування не знайдено"))?;
+
+            Ok(SaveDocumentResponse {
+                document_id: request.form.id,
+                kind: "adjustment_act".to_string(),
+                message: "Акт коригування збережено".to_string(),
             })
         }
     }
@@ -1261,6 +1450,12 @@ pub async fn document_advance_status(ctx: &AppCtx, doc_id: String) -> Result<Mut
                 .ok_or_else(|| anyhow!("Накладну не знайдено"))?;
             "Статус накладної оновлено"
         }
+        DocumentRef::AdjustmentAct(id) => {
+            db::adjustment_acts::change_status_scoped(ctx.pool(), ctx.company_id(), id)
+                .await?
+                .ok_or_else(|| anyhow!("Акт коригування не знайдено"))?;
+            "Статус акту коригування оновлено"
+        }
     };
 
     Ok(MutationResultDto {
@@ -1287,7 +1482,12 @@ pub async fn document_delete(ctx: &AppCtx, doc_id: String) -> Result<MutationRes
         }
         DocumentRef::Waybill(id) => {
             if !db::waybills::delete_scoped(ctx.pool(), ctx.company_id(), id).await? {
-                return Err(anyhow!("РќР°РєР»Р°РґРЅСѓ РЅРµ Р·РЅР°Р№РґРµРЅРѕ"));
+                return Err(anyhow!("Накладну не знайдено"));
+            }
+        }
+        DocumentRef::AdjustmentAct(id) => {
+            if !db::adjustment_acts::delete_scoped(ctx.pool(), ctx.company_id(), id).await? {
+                return Err(anyhow!("Акт коригування не знайдено"));
             }
         }
     }
@@ -1395,6 +1595,8 @@ pub async fn document_chain_create_draft(
                 date: date_to_str(source.date),
                 notes: visible_notes.clone(),
                 direction: source.direction.as_str().to_string(),
+                original_act_id: None,
+                original_act_number: None,
             }
         }
         "invoice" => {
@@ -1427,6 +1629,8 @@ pub async fn document_chain_create_draft(
                 date: date_to_str(source.date),
                 notes: visible_notes.clone(),
                 direction: source.direction.as_str().to_string(),
+                original_act_id: None,
+                original_act_number: None,
             }
         }
         "waybill" => {
@@ -1458,6 +1662,8 @@ pub async fn document_chain_create_draft(
                 date: date_to_str(source.date),
                 notes: visible_notes.clone(),
                 direction: source.direction.as_str().to_string(),
+                original_act_id: None,
+                original_act_number: None,
             }
         }
         _ => return Err(anyhow!("Невідомий тип документа для ланцюжка")),
@@ -1524,6 +1730,17 @@ pub async fn documents_bulk_delete_live(
                             Ok(())
                         } else {
                             Err(anyhow!("РќР°РєР»Р°РґРЅСѓ РЅРµ Р·РЅР°Р№РґРµРЅРѕ"))
+                        }
+                    })
+            }
+            Some(DocumentRef::AdjustmentAct(id)) => {
+                db::adjustment_acts::delete_scoped(ctx.pool(), ctx.company_id(), id)
+                    .await
+                    .and_then(|deleted| {
+                        if deleted {
+                            Ok(())
+                        } else {
+                            Err(anyhow!("Акт коригування не знайдено"))
                         }
                     })
             }
@@ -1599,6 +1816,11 @@ pub async fn document_change_counterparty(
             .execute(pool)
             .await?;
         }
+        DocumentRef::AdjustmentAct(_) => {
+            return Err(anyhow!(
+                "Для актів коригування зміна контрагента не підтримується"
+            ));
+        }
     }
 
     let cp_name: String = sqlx::query_scalar(
@@ -1639,6 +1861,11 @@ pub async fn documents_bulk_advance_status_live(
             }
             Some(DocumentRef::Waybill(id)) => {
                 db::waybills::advance_status_scoped(ctx.pool(), ctx.company_id(), id)
+                    .await
+                    .map(|value| value.map(|_| ()))
+            }
+            Some(DocumentRef::AdjustmentAct(id)) => {
+                db::adjustment_acts::change_status_scoped(ctx.pool(), ctx.company_id(), id)
                     .await
                     .map(|value| value.map(|_| ()))
             }

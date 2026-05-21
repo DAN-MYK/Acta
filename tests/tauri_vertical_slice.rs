@@ -394,7 +394,8 @@ async fn tauri_vertical_slice_shell_and_documents_smoke() -> Result<()> {
             acta::tauri_api::documents::CreateDocumentDraftRequest {
                 counterparty_id: Some(counterparty.id.to_string()),
                 kind: "invoice".to_string(),
-                direction: "outgoing".to_string(),
+                direction: Some("outgoing".to_string()),
+                original_act_id: None,
             },
         )
         .await?;
@@ -477,7 +478,8 @@ async fn tauri_vertical_slice_shell_and_documents_smoke() -> Result<()> {
             acta::tauri_api::documents::CreateDocumentDraftRequest {
                 counterparty_id: Some(counterparty.id.to_string()),
                 kind: "invoice".to_string(),
-                direction: "outgoing".to_string(),
+                direction: Some("outgoing".to_string()),
+                original_act_id: None,
             },
         )
         .await?;
@@ -503,7 +505,8 @@ async fn tauri_vertical_slice_shell_and_documents_smoke() -> Result<()> {
             acta::tauri_api::documents::CreateDocumentDraftRequest {
                 counterparty_id: Some(counterparty.id.to_string()),
                 kind: "invoice".to_string(),
-                direction: "outgoing".to_string(),
+                direction: Some("outgoing".to_string()),
+                original_act_id: None,
             },
         )
         .await?;
@@ -1966,7 +1969,8 @@ async fn documents_direction_filter() -> Result<()> {
         CreateDocumentDraftRequest {
             counterparty_id: Some(counterparty.id.to_string()),
             kind: "invoice".to_string(),
-            direction: "outgoing".to_string(),
+            direction: Some("outgoing".to_string()),
+            original_act_id: None,
         },
     )
     .await?;
@@ -1976,7 +1980,8 @@ async fn documents_direction_filter() -> Result<()> {
         CreateDocumentDraftRequest {
             counterparty_id: Some(counterparty.id.to_string()),
             kind: "act".to_string(),
-            direction: "incoming".to_string(),
+            direction: Some("incoming".to_string()),
+            original_act_id: None,
         },
     )
     .await?;
