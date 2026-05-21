@@ -124,7 +124,19 @@ export function documentCreateDraft(
     request: {
       counterpartyId: counterpartyId || null,
       kind,
-      direction
+      direction,
+      originalActId: null
+    }
+  });
+}
+
+export function createAdjustmentActDraft(originalActId: string): Promise<DocumentEditorDto> {
+  return appInvoke("document_create_draft", {
+    request: {
+      counterpartyId: null,
+      kind: "adjustment_act",
+      direction: null,
+      originalActId
     }
   });
 }

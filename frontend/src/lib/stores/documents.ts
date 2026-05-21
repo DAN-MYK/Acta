@@ -2,6 +2,7 @@ import { get, writable } from "svelte/store";
 import {
   counterpartyOpenEditor,
   counterpartySave,
+  createAdjustmentActDraft as apiCreateAdjustmentActDraft,
   documentAdvanceStatus,
   documentChangeCounterparty,
   documentChainCreateDraft,
@@ -364,6 +365,29 @@ function createDocumentsStore() {
           loading: false,
           message: "Чернетку створено",
           draftContext: null
+        }));
+      } catch (error) {
+        update((state) => ({ ...state, loading: false, error: String(error) }));
+      }
+    },
+    async createAdjustmentActDraft(originalActId: string) {
+      update((state) => ({ ...state, loading: true, error: null, message: null }));
+      const snap = get({ subscribe });
+
+      try {
+        const [editor, list] = await Promise.all([
+          apiCreateAdjustmentActDraft(originalActId),
+          reloadList(snap)
+        ]);
+        const chain = await documentChainGet(editor.form.id);
+        update((state) => ({
+          ...state,
+          editor,
+          editorSnapshot: snapshotEditor(editor),
+          chain,
+          list,
+          loading: false,
+          message: "Акт коригування створено"
         }));
       } catch (error) {
         update((state) => ({ ...state, loading: false, error: String(error) }));
