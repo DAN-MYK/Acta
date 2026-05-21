@@ -7,8 +7,8 @@ export type ScreenId =
   | "tasks"
   | "settings";
 
-export type DocumentKind = "invoice" | "act" | "waybill";
-export type DocumentStatus = "draft" | "issued" | "signed" | "paid" | "delivered";
+export type DocumentKind = "invoice" | "act" | "waybill" | "adjustment_act";
+export type DocumentStatus = "draft" | "issued" | "signed" | "paid" | "delivered" | "applied";
 export type DocumentDirection = "outgoing" | "incoming";
 
 export interface DocumentsListRequest {
@@ -92,6 +92,8 @@ export interface DocumentDraftFormDto {
   date: string;
   notes: string;
   direction: DocumentDirection;
+  originalActId?: string | null;
+  originalActNumber?: string | null;
 }
 
 export interface DocumentDraftItemDto {
@@ -150,8 +152,27 @@ export interface DocumentsListDto {
   invoiceItems: DocumentItemDto[];
   actItems: DocumentItemDto[];
   waybillItems: DocumentItemDto[];
+  adjustmentActItems: DocumentItemDto[];
   totalCount: number;
   pageCount: number;
+}
+
+export interface AdjustmentActListItemDto {
+  id: string;
+  number: string;
+  date: string;
+  counterpartyId: string;
+  counterpartyName: string;
+  amountStr: string;
+  status: DocumentStatus;
+  statusLabel: string;
+  direction: string;
+  originalActId: string;
+  originalActNumber: string;
+}
+
+export interface AdjustmentActsForActDto {
+  items: AdjustmentActListItemDto[];
 }
 
 export interface MutationResultDto {

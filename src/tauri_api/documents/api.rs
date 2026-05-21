@@ -1906,6 +1906,35 @@ pub async fn documents_bulk_advance_status_live(
     Ok(result)
 }
 
+pub async fn act_adjustments_list(
+    ctx: &AppCtx,
+    original_act_id: String,
+) -> Result<AdjustmentActsForActDto> {
+    let act_id = Uuid::parse_str(&original_act_id)
+        .with_context(|| format!("Некоректний UUID акту: {original_act_id}"))?;
+
+    let rows = db::adjustment_acts::list_for_act(ctx.pool(), ctx.company_id(), act_id).await?;
+
+    let items = rows
+        .into_iter()
+        .map(|row| AdjustmentActListItemDto {
+            id: row.id.to_string(),
+            number: row.number.clone(),
+            date: row.date.format("%d.%m.%Y").to_string(),
+            counterparty_id: row.counterparty_id.to_string(),
+            counterparty_name: row.counterparty_name.clone(),
+            amount_str: format!("{:.2}", row.total_amount),
+            status: DocumentStatusDto::from_adjustment_act_status(&row.status),
+            status_label: row.status.label().to_string(),
+            direction: row.direction.as_str().to_string(),
+            original_act_id: row.original_act_id.to_string(),
+            original_act_number: row.original_act_number.clone(),
+        })
+        .collect();
+
+    Ok(AdjustmentActsForActDto { items })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

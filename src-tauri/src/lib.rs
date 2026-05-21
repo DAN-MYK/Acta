@@ -83,6 +83,7 @@ pub fn run() {
             commands::documents::document_pdf_attach_existing,
             commands::documents::document_pdf_apply_text_replace,
             commands::documents::document_pdf_open_current,
+            commands::documents::act_adjustments_list,
             commands::payments::payments_list,
             commands::payments::payments_import_latest_csv,
             commands::payments::payments_sync_bank,

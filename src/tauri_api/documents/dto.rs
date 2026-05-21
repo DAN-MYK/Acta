@@ -255,3 +255,25 @@ pub struct ChangeCounterpartyResultDto {
     pub counterparty_id: String,
     pub counterparty_name: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AdjustmentActListItemDto {
+    pub id: String,
+    pub number: String,
+    pub date: String,
+    pub counterparty_id: String,
+    pub counterparty_name: String,
+    pub amount_str: String,
+    pub status: DocumentStatusDto,
+    pub status_label: String,
+    pub direction: String,
+    pub original_act_id: String,
+    pub original_act_number: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct AdjustmentActsForActDto {
+    pub items: Vec<AdjustmentActListItemDto>,
+}

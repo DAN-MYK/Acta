@@ -1,4 +1,5 @@
 import type {
+  AdjustmentActsForActDto,
   BulkMutationResultDto,
   ChangeCounterpartyResultDto,
   CounterpartyDetailScreenDto,
@@ -166,6 +167,7 @@ function documentsList(): DocumentsListDto {
     invoiceItems: clone(documents.filter((item) => item.kind === "invoice")),
     actItems: clone(documents.filter((item) => item.kind === "act")),
     waybillItems: [],
+    adjustmentActItems: [],
     totalCount: documents.length,
     pageCount: 1
   };
@@ -567,6 +569,8 @@ export async function browserFixtureInvoke<T>(command: string, payload?: Record<
       }) as T;
     case "document_pdf_open_current":
       return clone({ ok: true, documentId: "doc-1", message: "PDF відкрито" } satisfies MutationResultDto) as T;
+    case "act_adjustments_list":
+      return clone({ items: [] } satisfies AdjustmentActsForActDto) as T;
     case "document_generate_pdf":
       return clone({ ok: true, documentId: String(payload?.docId ?? "doc-1"), message: "PDF згенеровано" } satisfies MutationResultDto) as T;
     case "documents_bulk_delete":

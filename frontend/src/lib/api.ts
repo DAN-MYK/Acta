@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { invokeInBrowser, isBrowserFallbackEnabled } from "./browser-api";
 import type {
+  AdjustmentActsForActDto,
   BulkMutationResultDto,
   ChangeCounterpartyResultDto,
   CounterpartyDetailScreenDto,
@@ -454,6 +455,10 @@ export function documentPdfApplyTextReplace(
 
 export function documentPdfOpenCurrent(docId: string): Promise<MutationResultDto> {
   return appInvoke("document_pdf_open_current", { docId });
+}
+
+export function actAdjustmentsList(originalActId: string): Promise<AdjustmentActsForActDto> {
+  return appInvoke("act_adjustments_list", { originalActId });
 }
 
 export const importBasPickDirectory = () => appInvoke<string | null>("import_bas_pick_directory");

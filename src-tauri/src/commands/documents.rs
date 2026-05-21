@@ -1,8 +1,9 @@
 use acta::tauri_api::documents::{
-    BulkDocumentRequest, BulkMutationResultDto, ChangeCounterpartyResultDto,
-    CreateChainDraftRequest, CreateDocumentDraftRequest, DocumentChainDto, DocumentEditorDto,
-    DocumentPdfActionResultDto, DocumentsListDto, DocumentsListRequest, MutationResultDto,
-    ReplaceDocumentPdfTextRequest, SaveDocumentRequest, SaveDocumentResponse,
+    AdjustmentActsForActDto, BulkDocumentRequest, BulkMutationResultDto,
+    ChangeCounterpartyResultDto, CreateChainDraftRequest, CreateDocumentDraftRequest,
+    DocumentChainDto, DocumentEditorDto, DocumentPdfActionResultDto, DocumentsListDto,
+    DocumentsListRequest, MutationResultDto, ReplaceDocumentPdfTextRequest, SaveDocumentRequest,
+    SaveDocumentResponse,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
@@ -174,6 +175,16 @@ pub async fn document_pdf_open_current(
     doc_id: String,
 ) -> CommandResult<MutationResultDto> {
     acta::tauri_api::documents::document_pdf_open_current(&state.ctx, doc_id)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn act_adjustments_list(
+    state: State<'_, TauriState>,
+    original_act_id: String,
+) -> CommandResult<AdjustmentActsForActDto> {
+    acta::tauri_api::documents::act_adjustments_list(&state.ctx, original_act_id)
         .await
         .map_err(|error| error.to_string())
 }
