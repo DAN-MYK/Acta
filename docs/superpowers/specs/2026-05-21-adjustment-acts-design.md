@@ -33,7 +33,8 @@ CREATE TABLE adjustment_acts (
     notes             TEXT,
     bas_id            VARCHAR(100) UNIQUE,
     created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(company_id, number)
 );
 
 CREATE TABLE adjustment_act_items (
@@ -43,7 +44,8 @@ CREATE TABLE adjustment_act_items (
     quantity          DECIMAL(15,4) NOT NULL,
     unit_price        DECIMAL(15,2) NOT NULL,
     total_price       DECIMAL(15,2) NOT NULL,
-    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_adjustment_acts_company ON adjustment_acts(company_id);
@@ -62,7 +64,7 @@ ALTER TABLE acts ADD COLUMN is_adjusted BOOLEAN NOT NULL DEFAULT FALSE;
 
 **Підтримка `is_adjusted` на рівні застосунку** (не тригер):
 - Встановити `TRUE` коли перший корегуючий акт переходить у статус `applied`
-- Встановити `FALSE` коли видалено останній корегуючий акт (перевірити COUNT)
+- Встановити `FALSE` коли видалено останній корегуючий акт (перевірити COUNT applied)
 
 ---
 
@@ -129,7 +131,7 @@ pub struct UpdateAdjustmentAct { /* редаговані поля */ }
 | Функція | Опис |
 |---|---|
 | `generate_next_number(pool, company_id, year)` | `КОР-РРРР-NNN`, rsplit_once('-') паттерн |
-| `create(pool, company_id, original_act_id, ...)` | INSERT з транзакцією |
+| `create(pool, company_id, original_act_id, ...)` | INSERT з транзакцією; верифікує що `original_act_id` належить до тієї самої компанії; копіює `counterparty_id` і `direction` з оригінального акту — не приймає їх від клієнта |
 | `get_full(pool, company_id, id)` | SELECT з items |
 | `list_filtered(pool, company_id, filter)` | QueryBuilder з пагінацією |
 | `update_with_items_scoped(pool, company_id, id, ...)` | DELETE items + INSERT в транзакції |
@@ -178,19 +180,31 @@ if remaining == 0 {
 
 ### Нові команди в `src-tauri/src/commands/documents.rs`:
 
-```rust
-#[tauri::command]
-pub async fn adjustment_acts_list(
-    state: State<'_, TauriState>,
-    request: DocumentsListRequest,
-) -> CommandResult<DocumentsListDto> { ... }
+`adjustment_acts_list` — **не потрібна**: `documents_list` із `kind = "adjustment_act"` покриває цей сценарій.
 
+`act_adjustments_list` — потрібна для drawer оригінального акту (список корекцій):
+
+```rust
 #[tauri::command]
 pub async fn act_adjustments_list(
     state: State<'_, TauriState>,
     act_id: String,
 ) -> CommandResult<Vec<DocumentItemDto>> { ... }
 ```
+
+**Повний wiring для `act_adjustments_list`:**
+
+1. `src-tauri/src/commands/documents.rs` — нова функція (вище)
+2. `src-tauri/src/lib.rs` — реєстрація в `invoke_handler!`:
+   ```rust
+   commands::documents::act_adjustments_list,
+   ```
+3. `frontend/src/lib/api.ts` — нова обгортка:
+   ```typescript
+   export function act_adjustments_list(actId: string): Promise<DocumentItemDto[]> {
+       return appInvoke("act_adjustments_list", { actId });
+   }
+   ```
 
 ### Зміни в `src/tauri_api/documents/dto.rs`:
 
@@ -199,7 +213,7 @@ pub async fn act_adjustments_list(
 - `DocumentsListDto` → додати `adjustment_act_items: Vec<DocumentItemDto>`
 - `CreateDocumentDraftRequest` → додати `original_act_id: Option<String>`
 - `DocumentDraftFormDto` → додати `original_act_id: Option<String>`, `original_act_number: Option<String>`
-- `DocumentItemDto` → `linked_id: Option<String>` для `adj:uuid → act:uuid` зв'язку
+- `DocumentItemDto.linked_id` → залишається обов'язковим `String` (як зараз у `dto.rs:66` і `types.ts:81`); для adj актів використовувати `original_act_id.to_string()` як значення; для документів без зв'язку — `""`
 
 ### Зміни в `src/tauri_api/documents/api.rs`:
 
@@ -245,8 +259,21 @@ type DocumentStatus = "draft" | "issued" | "signed" | "paid" | "delivered" | "ap
 Новий метод `createAdjustmentActDraft(actId: string)`:
 ```typescript
 async createAdjustmentActDraft(actId: string) {
+    // direction не передається — backend бере з оригінального акту
     const draft = await api.document_create_draft({ kind: "adjustment_act", original_act_id: actId });
     // відкрити drawer з новим adj draft
+}
+```
+
+**`direction` в `CreateDocumentDraftRequest`:** зробити `direction?: string` — optional. Коли `kind === "adjustment_act"`, backend ігнорує `direction` і бере його з оригінального акту через `original_act_id`. Для всіх інших типів `direction` — обов'язкове (перевіряти у бізнес-логіці, не через Serde).
+
+**`CreateDocumentDraftRequest` зміна в `dto.rs`:**
+```rust
+pub struct CreateDocumentDraftRequest {
+    pub counterparty_id: Option<String>,
+    pub kind: String,
+    pub direction: Option<String>, // None для adjustment_act — беремо з оригіналу
+    pub original_act_id: Option<String>,
 }
 ```
 
@@ -297,10 +324,12 @@ pub async fn generate_adjustment_act_pdf(data: &PdfAdjustmentActData) -> Result<
 
 ## Секція 6: Вплив на звіти та Dashboard
 
-**Принцип:** Скрізь де показується `a.total_amount` для актів — замінити на **ефективну суму**:
+**Принцип:** Скрізь де показується `a.total_amount` для актів — замінити на **ефективну суму**.
+
+**Бухгалтерська семантика:** коригування впливає на суму тільки коли воно `applied` — це момент бухгалтерського факту. Статуси `draft/issued/signed` є проміжними і до звітів не включаються. Це узгоджено з тим, що `is_adjusted = TRUE` теж виставляється тільки при `applied`.
 
 ```
-effective_amount = a.total_amount + COALESCE(SUM(adj.total_amount) WHERE adj.status != 'draft', 0)
+effective_amount = a.total_amount + COALESCE(SUM(adj.total_amount) WHERE adj.status = 'applied', 0)
 ```
 
 ### SQL Паттерн А — скалярний підзапит (для рядкових запитів / UNION ALL):
@@ -308,7 +337,7 @@ effective_amount = a.total_amount + COALESCE(SUM(adj.total_amount) WHERE adj.sta
 ```sql
 a.total_amount + COALESCE(
     (SELECT SUM(aa.total_amount) FROM adjustment_acts aa
-     WHERE aa.original_act_id = a.id AND aa.status != 'draft'),
+     WHERE aa.original_act_id = a.id AND aa.status = 'applied'),
     0
 ) AS amount
 ```
@@ -318,7 +347,7 @@ a.total_amount + COALESCE(
 ```sql
 WITH adj_sums AS (
     SELECT original_act_id, SUM(total_amount) AS adj_total
-    FROM adjustment_acts WHERE status != 'draft'
+    FROM adjustment_acts WHERE status = 'applied'
     GROUP BY original_act_id
 )
 -- FROM acts a LEFT JOIN adj_sums adj ON adj.original_act_id = a.id
