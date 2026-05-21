@@ -8,19 +8,23 @@ export const DOCUMENT_KIND_META: Record<
 > = {
   invoice: { label: "Рахунок", icon: "invoice", actionLabel: "рахунок" },
   act: { label: "Акт", icon: "act", actionLabel: "акт" },
-  waybill: { label: "Накладна", icon: "waybill", actionLabel: "накладну" }
+  waybill: { label: "Накладна", icon: "waybill", actionLabel: "накладну" },
+  adjustment_act: { label: "Акт коригування", icon: "act", actionLabel: "акт коригування" }
 };
 
-export const DOCUMENT_KIND_OPTIONS = Object.entries(DOCUMENT_KIND_META).map(([value, meta]) => ({
-  value: value as DocumentKind,
-  label: meta.label
+export const DOCUMENT_KIND_CREATBLE: DocumentKind[] = ["invoice", "act", "waybill"];
+
+export const DOCUMENT_KIND_OPTIONS = DOCUMENT_KIND_CREATBLE.map((value) => ({
+  value,
+  label: DOCUMENT_KIND_META[value].label
 }));
 
 export const DOCUMENT_KIND_FILTER_OPTIONS: Array<{ value: DocumentKind | null; label: string }> = [
   { value: null, label: "Всі" },
   { value: "act", label: "Акти" },
   { value: "invoice", label: "Рахунки" },
-  { value: "waybill", label: "Накладні" }
+  { value: "waybill", label: "Накладні" },
+  { value: "adjustment_act", label: "Коригування" }
 ];
 
 export const DOCUMENT_DIRECTION_LABELS: Record<DocumentDirection, string> = {
@@ -90,6 +94,9 @@ export function resolveDocumentKindMeta(kind: string): { label: string; icon: Ap
   if (normalized === "waybill" || normalized.includes("наклад")) {
     return { label: "Накладна", icon: "waybill" };
   }
+  if (normalized === "adjustment_act" || normalized.includes("кориг")) {
+    return { label: "Акт коригування", icon: "act" };
+  }
   if (normalized.includes("догов")) {
     return { label: "Договір", icon: "contract" };
   }
@@ -127,7 +134,7 @@ export function supportsExistingPdfFlow(kind: string): boolean {
 }
 
 export function supportsDocumentPdfGeneration(kind: string): boolean {
-  return kind === "act" || kind === "invoice";
+  return kind === "act" || kind === "invoice" || kind === "adjustment_act";
 }
 
 export const DOCUMENT_STATUS_OPTIONS: Array<{ value: DocumentStatus; label: string }> = [
@@ -135,7 +142,8 @@ export const DOCUMENT_STATUS_OPTIONS: Array<{ value: DocumentStatus; label: stri
   { value: "issued", label: "Виставлено" },
   { value: "signed", label: "Підписано" },
   { value: "paid", label: "Оплачено" },
-  { value: "delivered", label: "Доставлено" }
+  { value: "delivered", label: "Доставлено" },
+  { value: "applied", label: "Застосовано" }
 ];
 
 export interface DocumentFilterPresetSnapshot {

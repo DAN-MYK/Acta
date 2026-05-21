@@ -11,13 +11,15 @@ import type {
 export const documentKindLabels: Record<DocumentKind, string> = {
   invoice: "Рахунок",
   act: "Акт",
-  waybill: "Накладна"
+  waybill: "Накладна",
+  adjustment_act: "Акт коригування"
 };
 
 export const documentKindIcons: Record<DocumentKind, AppIconName> = {
   invoice: "invoice",
   act: "act",
-  waybill: "waybill"
+  waybill: "waybill",
+  adjustment_act: "act"
 };
 
 export const screenIcons: Record<ScreenId, AppIconName> = {
@@ -75,6 +77,7 @@ export function getDocumentKindIcon(kind: string): AppIconName {
   if (normalized === "invoice" || normalized.includes("рах")) return "invoice";
   if (normalized === "act" || normalized.includes("акт")) return "act";
   if (normalized === "waybill" || normalized.includes("наклад")) return "waybill";
+  if (normalized === "adjustment_act" || normalized.includes("кориг")) return "act";
   if (normalized.includes("догов")) return "contract";
   if (normalized.includes("pdf")) return "pdf";
   if (normalized.includes("excel") || normalized.includes("xls")) return "excel";
@@ -86,6 +89,7 @@ export function getDocumentKindLabel(kind: string): string {
   if (normalized === "invoice" || normalized.includes("рах")) return "Рахунок";
   if (normalized === "act" || normalized.includes("акт")) return "Акт";
   if (normalized === "waybill" || normalized.includes("наклад")) return "Накладна";
+  if (normalized === "adjustment_act" || normalized.includes("кориг")) return "Акт коригування";
   if (normalized.includes("догов")) return "Договір";
   if (normalized.includes("pdf")) return "PDF";
   if (normalized.includes("excel") || normalized.includes("xls")) return "Excel";

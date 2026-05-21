@@ -21,6 +21,7 @@ function makeDocumentsList(ids: string[]): DocumentsListDto {
     invoiceItems: items,
     actItems: [],
     waybillItems: [],
+    adjustmentActItems: [],
     totalCount: items.length,
     pageCount: 1
   };

@@ -94,6 +94,7 @@ const mocks = vi.hoisted(() => {
     closeEditor: vi.fn(() => ({ ok: true })),
     create: vi.fn(),
     openNewEditor: vi.fn(),
+    changeCounterparty: vi.fn(),
     updateCounterparty: vi.fn(),
     createChainDraft: vi.fn(),
     deleteCurrent: vi.fn(),
@@ -131,6 +132,7 @@ vi.mock("../../stores/documents", () => ({
     closeEditor: mocks.closeEditor,
     create: mocks.create,
     openNewEditor: mocks.openNewEditor,
+    changeCounterparty: mocks.changeCounterparty,
     updateCounterparty: mocks.updateCounterparty,
     createChainDraft: mocks.createChainDraft,
     deleteCurrent: mocks.deleteCurrent,
@@ -199,6 +201,7 @@ function makeList(): DocumentsListDto {
     invoiceItems: [],
     actItems: [],
     waybillItems: [],
+    adjustmentActItems: [],
     totalCount: 2,
     pageCount: 1
   };
@@ -335,6 +338,8 @@ function editorGridText(target: HTMLElement): string {
 
 describe("DocumentsScreen component", () => {
   const source = readFileSync("frontend/src/lib/screens/DocumentsScreen.svelte", "utf8");
+  const documentListSource = readFileSync("frontend/src/lib/components/documents/DocumentList.svelte", "utf8");
+  const documentEditorDrawerSource = readFileSync("frontend/src/lib/components/documents/DocumentEditorDrawer.svelte", "utf8");
   const styles = readFileSync("frontend/src/styles/documents.css", "utf8");
   const globalStyles = readFileSync("frontend/src/styles.css", "utf8");
 
@@ -351,6 +356,7 @@ describe("DocumentsScreen component", () => {
       mocks.closeEditor,
       mocks.create,
       mocks.createChainDraft,
+      mocks.changeCounterparty,
       mocks.deleteCurrent,
       mocks.generatePdf,
       mocks.open,
@@ -382,6 +388,7 @@ describe("DocumentsScreen component", () => {
     mocks.toggleSelected.mockImplementation((docId: string) => {
       setDocumentsState([docId]);
     });
+    mocks.changeCounterparty.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -480,8 +487,9 @@ describe("DocumentsScreen component", () => {
   });
 
   it("moves editor notes outside the grid and keeps textarea styling in document CSS", () => {
-    expect(source).toContain('class="editor-notes-field"');
-    expect(source).toMatch(/<div class="editor-items-card">[\s\S]*<\/div>[\s\S]*<label class="editor-notes-field">/);
+    expect(documentEditorDrawerSource).toContain('class="editor-notes-field"');
+    expect(documentEditorDrawerSource).toMatch(/<\/div>\s*<label class="editor-notes-field">/);
+    expect(source).toContain("<DocumentEditorDrawer");
     expect(styles).toContain(".editor-notes-field textarea");
     expect(styles).toMatch(/\.editor-notes-field textarea\s*\{[\s\S]*min-height:\s*96px/);
     expect(styles).toMatch(/\.editor-notes-field textarea\s*\{[\s\S]*resize:\s*vertical/);
@@ -568,6 +576,30 @@ describe("DocumentsScreen component", () => {
     component.$destroy();
   });
 
+  it("closes the create picker with Escape and outside click", async () => {
+    setDocumentsStateWithoutDraftContext();
+    const { component, target } = renderDocuments();
+
+    const createButton = target.querySelector('[data-testid="documents-create-button"]') as HTMLButtonElement;
+    createButton.click();
+    await tick();
+    expect(target.querySelector('[data-testid="documents-create-picker"]')).toBeTruthy();
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true }));
+    await tick();
+    expect(target.querySelector('[data-testid="documents-create-picker"]')).toBeNull();
+
+    createButton.click();
+    await tick();
+    expect(target.querySelector('[data-testid="documents-create-picker"]')).toBeTruthy();
+
+    document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await tick();
+    expect(target.querySelector('[data-testid="documents-create-picker"]')).toBeNull();
+
+    component.$destroy();
+  });
+
   it("creates the filtered document kind directly", async () => {
     mocks.documentsState.set({
       list: makeList(), editor: null, chain: null,
@@ -631,6 +663,28 @@ describe("DocumentsScreen component", () => {
     component.$destroy();
   });
 
+  it("closes counterparty reassign mode after the store accepts the change", async () => {
+    const { component, target } = renderDocuments();
+
+    const changeButton = target.querySelector(".documents-drawer .cp-actions button:last-child") as HTMLButtonElement;
+    changeButton.click();
+    await tick();
+
+    const row = target.querySelector(".documents-drawer .cp-reassign-row") as HTMLElement;
+    const select = row.querySelector("select") as HTMLSelectElement;
+    select.value = "counterparty-2";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await tick();
+
+    (row.querySelector(".btn-primary") as HTMLButtonElement).click();
+    await tick();
+
+    expect(mocks.changeCounterparty).toHaveBeenCalledWith("doc-1", "counterparty-2");
+    expect(target.querySelector(".documents-drawer .cp-reassign-row")).toBeNull();
+
+    component.$destroy();
+  });
+
   it("asks for confirmation before destructive document actions", async () => {
     setDocumentsState(["doc-1"]);
     const { component, target } = renderDocuments();
@@ -656,7 +710,7 @@ describe("DocumentsScreen component", () => {
   });
 
   it("uses a compact mode that de-emphasizes idle bulk actions", () => {
-    expect(source).toContain('data-testid="documents-bulk-actions"');
+    expect(documentListSource).toContain('data-testid="documents-bulk-actions"');
     expect(styles).toMatch(/@media\s*\(max-width:\s*980px\)[\s\S]*\.bulk-actions-idle\s+button\s*\{[\s\S]*display:\s*none/);
     expect(source).toContain('class="documents-toolbar"');
     expect(source).not.toContain('class="documents-create-kind-chips"');
@@ -875,6 +929,7 @@ describe("DocumentsScreen component", () => {
         invoiceItems: [],
         actItems: [],
         waybillItems: [],
+        adjustmentActItems: [],
         totalCount: 0,
         pageCount: 0
       },
@@ -945,6 +1000,25 @@ describe("DocumentsScreen component", () => {
     expect(target.querySelector('[data-testid="documents-filter-panel"]')).toBeNull();
 
     component.$destroy();
+  });
+
+  it("delegates the filter popover to the DocumentFilters component", () => {
+    expect(source).toContain("DocumentFilters");
+    expect(source).not.toContain('data-testid="documents-filter-panel"');
+    expect(source).not.toContain("function applyPanel()");
+  });
+
+  it("delegates the create picker to the DocumentCreateMenu component", () => {
+    expect(source).toContain("DocumentCreateMenu");
+    expect(source).not.toContain('data-testid="documents-create-picker"');
+    expect(source).not.toContain("DOCUMENT_KIND_OPTIONS as option");
+  });
+
+  it("delegates the document table to the DocumentList component", () => {
+    expect(source).toContain("DocumentList");
+    expect(source).not.toContain('data-testid="documents-bulk-actions"');
+    expect(source).not.toContain('data-testid="documents-list"');
+    expect(source).not.toContain("function toggleSort(");
   });
 
   it("closes floating document menus on outside click", async () => {
