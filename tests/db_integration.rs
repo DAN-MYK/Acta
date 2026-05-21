@@ -51,7 +51,7 @@ async fn relation_exists(pool: &PgPool, relation_name: &str) -> Result<bool> {
 
 async fn create_test_counterparty(
     pool: &PgPool,
-    suffix: &str,
+    _suffix: &str,
     name: &str,
     edrpou: Option<String>,
     bas_id: Option<String>,
@@ -68,7 +68,7 @@ async fn create_test_counterparty(
             phone: None,
             email: None,
             notes: None,
-            bas_id: bas_id.or_else(|| Some(format!("it-cp-{suffix}"))),
+            bas_id: bas_id.or_else(|| Some(format!("it-cp-{}", Uuid::new_v4().simple()))),
         },
     )
     .await
@@ -227,6 +227,8 @@ async fn create_test_payment_schedule(
     Ok(id)
 }
 
+#[path = "db_integration/adjustment_acts.rs"]
+mod adjustment_acts;
 #[path = "db_integration/bas.rs"]
 mod bas;
 #[path = "db_integration/catalog_and_numbering.rs"]
