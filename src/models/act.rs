@@ -126,6 +126,7 @@ pub struct ActListRow {
     pub counterparty_name: String,
     pub total_amount: Decimal,
     pub status: ActStatus,
+    pub is_adjusted: bool,
 }
 
 /// Дані для створення нового акту разом з позиціями (одна транзакція).

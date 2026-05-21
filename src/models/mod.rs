@@ -11,10 +11,16 @@ pub mod payment;
 pub mod reports;
 pub mod shared;
 pub mod task;
+pub mod adjustment_act;
 pub mod waybill;
 
 #[allow(unused_imports)]
 pub use act::{Act, ActItem, ActListRow, ActStatus, NewAct, NewActItem, UpdateAct};
+#[allow(unused_imports)]
+pub use adjustment_act::{
+    AdjustmentAct, AdjustmentActItem, AdjustmentActListRow, AdjustmentActStatus,
+    NewAdjustmentActItem, UpdateAdjustmentAct,
+};
 #[allow(unused_imports)]
 pub use category::{Category, CategoryKind, CategorySelectItem, NewCategory, UpdateCategory};
 #[allow(unused_imports)]
@@ -49,8 +55,8 @@ pub use waybill::{
 #[cfg(test)]
 mod tests {
     use super::{
-        ActStatus, BankAggregateRow, CategoryKind, DocumentDirection, NewCounterparty,
-        ReportsScope, ResolvedReportsFilter, TaskPriority, TaskStatus,
+        ActStatus, AdjustmentActStatus, BankAggregateRow, CategoryKind, DocumentDirection,
+        NewCounterparty, ReportsScope, ResolvedReportsFilter, TaskPriority, TaskStatus,
     };
     use chrono::NaiveDate;
     use rust_decimal::Decimal;
@@ -59,6 +65,7 @@ mod tests {
     fn reexports_are_available_for_consumers() {
         let status = ActStatus::Draft;
         assert_eq!(status.as_str(), "draft");
+        assert_eq!(AdjustmentActStatus::Applied.as_str(), "applied");
 
         assert_eq!(TaskStatus::Open.as_str(), "open");
         assert_eq!(TaskPriority::Critical.as_str(), "critical");
