@@ -202,7 +202,7 @@ pub async fn load_pnl_rows(
                 COALESCE(cat.id::text, 'uncategorized') AS key,
                 COALESCE(cat.name, 'Без категорії') AS label,
                 COALESCE(cat.kind::text, 'income') AS category_kind,
-                a.total_amount AS amount
+                (a.total_amount + COALESCE((SELECT SUM(aa.total_amount) FROM adjustment_acts aa WHERE aa.original_act_id = a.id AND aa.status = 'applied'), 0)) AS amount
             FROM acts a
             LEFT JOIN categories cat ON cat.id = a.category_id
             WHERE ($1::uuid IS NULL OR a.company_id = $1::uuid)
@@ -308,7 +308,7 @@ pub async fn load_receivables_rows(
             a.date AS doc_date,
             c.name AS company_name,
             cp.name AS counterparty,
-            a.total_amount AS amount,
+            (a.total_amount + COALESCE((SELECT SUM(aa.total_amount) FROM adjustment_acts aa WHERE aa.original_act_id = a.id AND aa.status = 'applied'), 0)) AS amount,
             a.expected_payment_date AS expected_date,
             CASE
                 WHEN a.expected_payment_date IS NOT NULL
@@ -635,7 +635,7 @@ pub async fn load_top_counterparties_receivables(
                 c.name AS company_name,
                 a.number AS doc_number,
                 a.status::text AS status,
-                a.total_amount AS amount
+                (a.total_amount + COALESCE((SELECT SUM(aa.total_amount) FROM adjustment_acts aa WHERE aa.original_act_id = a.id AND aa.status = 'applied'), 0)) AS amount
             FROM acts a
             JOIN companies c ON c.id = a.company_id
             JOIN counterparties cp ON cp.id = a.counterparty_id
@@ -831,7 +831,7 @@ pub async fn load_top_counterparties_pnl(
             SELECT
                 a.counterparty_id,
                 COALESCE(cat.kind::text, 'income') AS category_kind,
-                a.total_amount AS amount
+                (a.total_amount + COALESCE((SELECT SUM(aa.total_amount) FROM adjustment_acts aa WHERE aa.original_act_id = a.id AND aa.status = 'applied'), 0)) AS amount
             FROM acts a
             LEFT JOIN categories cat ON cat.id = a.category_id
             WHERE ($1::uuid IS NULL OR a.company_id = $1::uuid)

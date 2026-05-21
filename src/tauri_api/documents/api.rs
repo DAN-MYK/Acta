@@ -10,9 +10,7 @@ use uuid::Uuid;
 use crate::app_ctx::AppCtx;
 use crate::db;
 use crate::models::act::{Act, ActItem, ActStatus, NewAct, NewActItem, UpdateAct};
-use crate::models::adjustment_act::{
-    AdjustmentActStatus, NewAdjustmentActItem, UpdateAdjustmentAct,
-};
+use crate::models::adjustment_act::{NewAdjustmentActItem, UpdateAdjustmentAct};
 use crate::models::invoice::{
     Invoice, InvoiceItem, InvoiceStatus, NewInvoice, NewInvoiceItem, UpdateInvoice,
 };

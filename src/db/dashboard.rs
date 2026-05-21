@@ -222,7 +222,7 @@ pub async fn upcoming_payments(
             EXTRACT(DAY   FROM a.expected_payment_date)::int   AS date_day,
             EXTRACT(MONTH FROM a.expected_payment_date)::int   AS date_month,
             COALESCE(c.name, '__NO_COUNTERPARTY__')            AS contractor,
-            a.total_amount                                     AS amount,
+            (a.total_amount + COALESCE((SELECT SUM(aa.total_amount) FROM adjustment_acts aa WHERE aa.original_act_id = a.id AND aa.status = 'applied'), 0)) AS amount,
             a.expected_payment_date <= CURRENT_DATE            AS is_overdue
         FROM acts a
         LEFT JOIN counterparties c ON c.id = a.counterparty_id
@@ -307,7 +307,7 @@ pub async fn get_recent_acts(
         SELECT
             a.number          AS num,
             c.name            AS contractor,
-            a.total_amount    AS amount,
+            (a.total_amount + COALESCE((SELECT SUM(aa.total_amount) FROM adjustment_acts aa WHERE aa.original_act_id = a.id AND aa.status = 'applied'), 0)) AS amount,
             a.status::text    AS status,
             TO_CHAR(a.date, 'DD.MM.YYYY') AS date
         FROM acts a
@@ -372,7 +372,7 @@ pub async fn inbox_items(pool: &PgPool, company_id: Uuid) -> Result<Vec<InboxRow
             'act:' || a.id::text          AS doc_id,
             a.number                       AS doc_number,
             c.name                         AS counterparty,
-            a.total_amount                 AS amount,
+            (a.total_amount + COALESCE((SELECT SUM(aa.total_amount) FROM adjustment_acts aa WHERE aa.original_act_id = a.id AND aa.status = 'applied'), 0)) AS amount,
             (CURRENT_DATE - a.date)::int   AS age_days,
             'overdue'::text                AS kind,
             'Нагадати'::text               AS action_label
@@ -430,7 +430,7 @@ pub async fn expenses_by_month(
     let rows = sqlx::query_as::<_, Row>(
         r#"
         WITH expense_docs AS (
-            SELECT a.date, a.total_amount AS amount
+            SELECT a.date, (a.total_amount + COALESCE((SELECT SUM(aa.total_amount) FROM adjustment_acts aa WHERE aa.original_act_id = a.id AND aa.status = 'applied'), 0)) AS amount
             FROM acts a
             JOIN categories c ON c.id = a.category_id
             WHERE a.company_id = $1
@@ -503,7 +503,7 @@ pub async fn category_breakdown(
     let rows = sqlx::query_as::<_, Row>(
         r#"
         WITH expense_docs AS (
-            SELECT c.name AS label, a.total_amount AS amount
+            SELECT c.name AS label, (a.total_amount + COALESCE((SELECT SUM(aa.total_amount) FROM adjustment_acts aa WHERE aa.original_act_id = a.id AND aa.status = 'applied'), 0)) AS amount
             FROM acts a
             JOIN categories c ON c.id = a.category_id
             WHERE a.company_id = $1
