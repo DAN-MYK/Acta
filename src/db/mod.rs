@@ -11,6 +11,7 @@ pub fn ilike_pattern(q: &str) -> String {
     format!("%{escaped}%")
 }
 pub mod acts;
+pub mod adjustment_acts;
 pub mod categories;
 pub mod companies;
 pub mod contracts;
@@ -27,13 +28,14 @@ pub mod waybills;
 #[cfg(test)]
 mod tests {
     use super::{
-        acts, categories, companies, contracts, counterparties, dashboard, document_templates,
-        ilike_pattern, invoices, payments, reports, search, tasks, waybills,
+        acts, adjustment_acts, categories, companies, contracts, counterparties, dashboard,
+        document_templates, ilike_pattern, invoices, payments, reports, search, tasks, waybills,
     };
 
     #[test]
     fn db_submodules_are_available() {
         let _ = acts::list;
+        let _ = adjustment_acts::list_filtered;
         let _ = categories::list;
         let _ = companies::list;
         let _ = contracts::list;

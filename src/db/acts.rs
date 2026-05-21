@@ -161,7 +161,7 @@ pub async fn list_filtered(
     let mut qb = sqlx::QueryBuilder::<sqlx::Postgres>::new(
         r#"SELECT a.id, a.number, a.direction, a.date,
                c.name AS counterparty_name,
-               a.total_amount, a.status
+               a.total_amount, a.status, a.is_adjusted
         FROM acts a
         JOIN counterparties c ON c.id = a.counterparty_id
         WHERE a.company_id = "#,
