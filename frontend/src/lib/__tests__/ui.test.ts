@@ -30,7 +30,8 @@ describe("ui config", () => {
       { value: null, label: "Всі" },
       { value: "act", label: "Акти" },
       { value: "invoice", label: "Рахунки" },
-      { value: "waybill", label: "Накладні" }
+      { value: "waybill", label: "Накладні" },
+      { value: "adjustment_act", label: "Коригування" }
     ]);
   });
 
