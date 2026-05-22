@@ -510,7 +510,7 @@ async fn payments_reconcile_persists_links_and_derived_state_in_db() -> Result<(
         payment.id,
         "act",
         act.id,
-        dec!(3100.00),
+        dec!(2900.00),
     )
     .await?;
 
@@ -523,7 +523,7 @@ async fn payments_reconcile_persists_links_and_derived_state_in_db() -> Result<(
     .await?;
     assert_eq!(
         act_link_amount_after_repeat,
-        dec!(3100.00),
+        dec!(2900.00),
         "повторний reconcile має безпечно оновлювати amount через upsert"
     );
 
@@ -932,23 +932,23 @@ async fn payments_reconcile_supports_split_and_rejects_overallocation() -> Resul
     )
     .await?;
 
-    db::payments::reconcile_document_scoped(
+    // Тест split через reconcile_split_scoped — обидва документи одночасно
+    db::payments::reconcile_split_scoped(
         &pool,
         DEFAULT_COMPANY_ID,
         payment.id,
-        "act",
-        act.id,
-        dec!(1500.00),
-    )
-    .await?;
-
-    db::payments::reconcile_document_scoped(
-        &pool,
-        DEFAULT_COMPANY_ID,
-        payment.id,
-        "invoice",
-        invoice.id,
-        dec!(1500.00),
+        &[
+            db::payments::PaymentReconcileAllocation {
+                document_kind: "act".to_string(),
+                document_id: act.id,
+                amount: dec!(1500.00),
+            },
+            db::payments::PaymentReconcileAllocation {
+                document_kind: "invoice".to_string(),
+                document_id: invoice.id,
+                amount: dec!(1500.00),
+            },
+        ],
     )
     .await?;
 
@@ -957,25 +957,38 @@ async fn payments_reconcile_supports_split_and_rejects_overallocation() -> Resul
         .expect("payment exists after split reconcile");
     assert!(payment_after_split.is_reconciled);
 
-    let over_payment_err = db::payments::reconcile_document_scoped(
+    // Перевищення суми платежу: act(2000) + invoice(2000) = 4000 > payment(3000)
+    let over_payment_err = db::payments::reconcile_split_scoped(
         &pool,
         DEFAULT_COMPANY_ID,
         payment.id,
-        "invoice",
-        invoice.id,
-        dec!(2000.00),
+        &[
+            db::payments::PaymentReconcileAllocation {
+                document_kind: "act".to_string(),
+                document_id: act.id,
+                amount: dec!(2000.00),
+            },
+            db::payments::PaymentReconcileAllocation {
+                document_kind: "invoice".to_string(),
+                document_id: invoice.id,
+                amount: dec!(2000.00),
+            },
+        ],
     )
     .await
-    .expect_err("reconcile must reject allocation above remaining payment amount");
+    .expect_err("reconcile must reject total allocation above payment amount");
     assert!(over_payment_err.to_string().contains("Сума звірки"));
 
-    let over_document_err = db::payments::reconcile_document_scoped(
+    // Перевищення суми документа: act total=1500, але намагаємось 1600
+    let over_document_err = db::payments::reconcile_split_scoped(
         &pool,
         DEFAULT_COMPANY_ID,
         payment.id,
-        "act",
-        act.id,
-        dec!(1600.00),
+        &[db::payments::PaymentReconcileAllocation {
+            document_kind: "act".to_string(),
+            document_id: act.id,
+            amount: dec!(1600.00),
+        }],
     )
     .await
     .expect_err("reconcile must reject allocation above document open amount");
@@ -1017,7 +1030,7 @@ async fn payments_reconcile_split_is_atomic_on_failure() -> Result<()> {
             phone: None,
             email: None,
             notes: None,
-            bas_id: Some(format!("it-atomic-split-cp-{suffix}")),
+            bas_id: Some(format!("it-asp-cp-{suffix}")),
         },
     )
     .await?;
@@ -1026,7 +1039,7 @@ async fn payments_reconcile_split_is_atomic_on_failure() -> Result<()> {
         &pool,
         DEFAULT_COMPANY_ID,
         &models::NewAct {
-            number: format!("IT-ATOMIC-SPLIT-ACT-{suffix}"),
+            number: format!("IT-ASP-ACT-{suffix}"),
             counterparty_id: cp.id,
             contract_id: None,
             category_id: None,
@@ -1095,6 +1108,7 @@ async fn payments_reconcile_split_is_atomic_on_failure() -> Result<()> {
     )
     .await?;
 
+    // invoice(1000) + act(1600) = 2600 ≤ 3000 (платіж), але act(1600) > act.total(1500)
     let err = db::payments::reconcile_split_scoped(
         &pool,
         DEFAULT_COMPANY_ID,
@@ -1103,7 +1117,7 @@ async fn payments_reconcile_split_is_atomic_on_failure() -> Result<()> {
             db::payments::PaymentReconcileAllocation {
                 document_kind: "invoice".to_string(),
                 document_id: invoice.id,
-                amount: dec!(1500.00),
+                amount: dec!(1000.00),
             },
             db::payments::PaymentReconcileAllocation {
                 document_kind: "act".to_string(),
@@ -1182,7 +1196,7 @@ async fn payments_reconcile_split_waits_for_locked_document_row() -> Result<()> 
             phone: None,
             email: None,
             notes: None,
-            bas_id: Some(format!("it-locked-split-cp-{suffix}")),
+            bas_id: Some(format!("it-lsp-cp-{suffix}")),
         },
     )
     .await?;
@@ -1191,7 +1205,7 @@ async fn payments_reconcile_split_waits_for_locked_document_row() -> Result<()> 
         &pool,
         DEFAULT_COMPANY_ID,
         &models::NewAct {
-            number: format!("IT-LOCKED-SPLIT-ACT-{suffix}"),
+            number: format!("IT-LSP-ACT-{suffix}"),
             counterparty_id: cp.id,
             contract_id: None,
             category_id: None,
@@ -1296,7 +1310,7 @@ async fn payments_reconcile_document_waits_for_locked_document_row() -> Result<(
             phone: None,
             email: None,
             notes: None,
-            bas_id: Some(format!("it-locked-single-cp-{suffix}")),
+            bas_id: Some(format!("it-ls-cp-{suffix}")),
         },
     )
     .await?;
@@ -1305,7 +1319,7 @@ async fn payments_reconcile_document_waits_for_locked_document_row() -> Result<(
         &pool,
         DEFAULT_COMPANY_ID,
         &models::NewAct {
-            number: format!("IT-LOCKED-SINGLE-ACT-{suffix}"),
+            number: format!("IT-LS-ACT-{suffix}"),
             counterparty_id: cp.id,
             contract_id: None,
             category_id: None,

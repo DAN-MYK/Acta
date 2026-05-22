@@ -876,8 +876,8 @@ async fn acts_update_with_items_replaces_positions_and_recalculates_total() -> R
     assert_eq!(items_after[0].description, "Нова послуга");
     assert_eq!(items_after[0].amount, dec!(1200.00));
 
-    // Оновлення неіснуючого акту — anyhow помилка з текстом "не знайдено"
-    let missing_err = db::acts::update_with_items_scoped(
+    // Оновлення неіснуючого акту — scoped функція повертає Ok(None)
+    let missing_result = db::acts::update_with_items_scoped(
         &pool,
         DEFAULT_COMPANY_ID,
         Uuid::new_v4(),
@@ -893,12 +893,8 @@ async fn acts_update_with_items_replaces_positions_and_recalculates_total() -> R
         },
         vec![],
     )
-    .await
-    .expect_err("неіснуючий акт має повертати помилку");
-    assert!(
-        missing_err.to_string().contains("не знайдено"),
-        "повідомлення помилки: {missing_err}"
-    );
+    .await?;
+    assert!(missing_result.is_none(), "неіснуючий акт має повертати None");
 
     sqlx::query("DELETE FROM acts WHERE id = $1")
         .bind(original.id)

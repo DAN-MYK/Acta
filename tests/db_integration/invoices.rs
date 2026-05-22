@@ -871,7 +871,7 @@ async fn invoices_update_with_items_fails_for_missing_invoice() -> Result<()> {
         return Ok(());
     };
 
-    let err = db::invoices::update_with_items_scoped(
+    let result = db::invoices::update_with_items_scoped(
         &pool,
         DEFAULT_COMPANY_ID,
         Uuid::new_v4(),
@@ -893,10 +893,9 @@ async fn invoices_update_with_items_fails_for_missing_invoice() -> Result<()> {
             price: dec!(1.00),
         }],
     )
-    .await
-    .expect_err("missing invoice should fail");
+    .await?;
 
-    assert!(err.to_string().contains("не знайдена"));
+    assert!(result.is_none(), "missing invoice should return None");
     Ok(())
 }
 
