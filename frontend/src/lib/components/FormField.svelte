@@ -4,17 +4,21 @@
   export let required: boolean = false;
   export let error: string | undefined = undefined;
   export let helpText: string | undefined = undefined;
+
+  $: hasError = Boolean(error);
+  $: messageId = id ? `${id}-${hasError ? "error" : "help"}` : undefined;
+  $: ariaDescribedBy = error || helpText ? messageId : undefined;
 </script>
 
 <div class="field">
   <label class="label" for={id}>
     {label}{#if required}<span class="required" aria-hidden="true"> *</span>{/if}
   </label>
-  <slot />
+  <slot describedBy={ariaDescribedBy} invalid={hasError} />
   {#if error}
-    <p class="error-text" role="alert"><span aria-hidden="true">⚠</span> {error}</p>
+    <p id={messageId} class="error-text" role="alert"><span aria-hidden="true">⚠</span> {error}</p>
   {:else if helpText}
-    <p class="help-text">{helpText}</p>
+    <p id={messageId} class="help-text">{helpText}</p>
   {/if}
 </div>
 

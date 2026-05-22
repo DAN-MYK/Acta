@@ -42,7 +42,7 @@
 </script>
 
 <Modal open={isOpen} {title} on:close={handleClose}>
-  <div class="cp-modal-body">
+  <div class="cp-modal-body" data-dirty={isDirty}>
     {#if showCloseConfirm}
       <div class="cp-dirty-confirm" data-testid="cp-modal-dirty-confirm">
         <p class="cp-dirty-message">Є незбережені зміни. Закрити без збереження?</p>
