@@ -1,10 +1,26 @@
 <script lang="ts">
   export let variant: 'primary' | 'secondary' | 'ghost' | 'danger' = 'secondary';
   export let size: 'default' | 'sm' | 'icon' = 'default';
+  export let loading: boolean = false;
+  export let loadingLabel: string | undefined = undefined;
+
+  $: disabledFromProps = $$restProps.disabled === true || $$restProps.disabled === "";
+  $: effectiveDisabled = disabledFromProps || loading;
+  $: busyLabel = loadingLabel ?? "Завантаження...";
 </script>
 
-<button class="btn {variant} {size}" {...$$restProps}>
-  <slot />
+<button
+  class="btn {variant} {size}"
+  {...$$restProps}
+  disabled={effectiveDisabled}
+  aria-busy={loading ? "true" : undefined}
+>
+  {#if loading}
+    <span class="spinner" data-testid="button-spinner" aria-hidden="true"></span>
+    <span>{busyLabel}</span>
+  {:else}
+    <slot />
+  {/if}
 </button>
 
 <style>
@@ -30,6 +46,16 @@
   .btn:focus-visible {
     outline: 2px solid var(--acta-color-accent);
     outline-offset: 2px;
+  }
+
+  .spinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 999px;
+    animation: button-spin var(--acta-motion-base) linear infinite;
+    flex: 0 0 auto;
   }
 
   /* Sizes */
@@ -98,5 +124,17 @@
 
   .danger:not(:disabled):hover {
     filter: brightness(1.08);
+  }
+
+  @keyframes button-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .spinner {
+      animation: none;
+    }
   }
 </style>
