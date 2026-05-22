@@ -1,70 +1,25 @@
 <script lang="ts">
   import {
-    CALENDAR_EVENT_KIND_LABELS,
     PAYMENT_CALENDAR_COPY,
-    CALENDAR_FILTER_OPTIONS,
-    formatCalendarDayAriaLabel,
-    getCalendarEventDirectionLabel
+    CALENDAR_FILTER_OPTIONS
   } from "../config/ui";
+  import PaymentCalendarHeader from "./payments-calendar/PaymentCalendarHeader.svelte";
+  import PaymentCalendarSummary from "./payments-calendar/PaymentCalendarSummary.svelte";
+  import {
+    countEventsByKind,
+    getCalendarEventDirectionLabel,
+    getCalendarEventKindLabel,
+    getCalendarEventTone,
+    getDayAriaLabel,
+    getFilteredEvents,
+    getSelectedCalendarEvent,
+    getVisibleEventCount,
+    getWeekdayLabels
+  } from "./payments-calendar/payment-calendar-view-model";
   import { paymentsStore } from "../stores/payments";
-  import type {
-    PaymentCalendarDayDto,
-    PaymentCalendarEventDto,
-    PaymentCalendarEventKind
-  } from "../types";
 
   const payments = paymentsStore;
   const calendarFilterOptions = CALENDAR_FILTER_OPTIONS;
-
-  function filteredEvents(day: PaymentCalendarDayDto) {
-    if ($payments.calendarFilter === "all") {
-      return day.events;
-    }
-
-    return day.events.filter((event) => event.kind === $payments.calendarFilter);
-  }
-
-  function countEventsByKind(kind: PaymentCalendarEventKind) {
-    if (!$payments.calendar) {
-      return 0;
-    }
-
-    return $payments.calendar.days.reduce(
-      (sum, day) => sum + day.events.filter((event) => event.kind === kind).length,
-      0
-    );
-  }
-
-  function eventTone(event: PaymentCalendarEventDto) {
-    if (event.done) {
-      return "done";
-    }
-    if (event.overdue) {
-      return "overdue";
-    }
-    return event.kind;
-  }
-
-  function eventKindLabel(event: PaymentCalendarEventDto) {
-    return CALENDAR_EVENT_KIND_LABELS[event.kind];
-  }
-
-  function eventDirectionLabel(event: PaymentCalendarEventDto) {
-    if (event.kind !== "schedule") {
-      return "";
-    }
-
-    return getCalendarEventDirectionLabel(event.direction);
-  }
-
-  function dayAriaLabel(day: PaymentCalendarDayDto) {
-    return formatCalendarDayAriaLabel({
-      date: day.date,
-      eventCount: filteredEvents(day).length,
-      today: day.today,
-      selected: day.selected
-    });
-  }
 
   function onGridKeydown(event: KeyboardEvent) {
     if (!$payments.calendar) {
@@ -86,73 +41,27 @@
     }
   }
 
-  $: weekdayLabels = $payments.calendar?.days.slice(0, 7).map((day) => day.weekdayShort) ?? [
-    "Пн",
-    "Вт",
-    "Ср",
-    "Чт",
-    "Пт",
-    "Сб",
-    "Нд"
-  ];
+  $: calendarDays = $payments.calendar?.days ?? [];
+  $: weekdayLabels = getWeekdayLabels(calendarDays);
   $: selectedDay = $payments.calendar?.days.find((day) => day.selected) ?? null;
-  $: selectedEvents = selectedDay ? filteredEvents(selectedDay) : [];
-  $: selectedEvent =
-    selectedEvents.find((event) => event.id === $payments.selectedCalendarEventId) ??
-    selectedEvents[0] ??
-    null;
-  $: visibleEventCount = $payments.calendar
-    ? $payments.calendar.days.reduce((sum, day) => sum + filteredEvents(day).length, 0)
-    : 0;
-  $: scheduleCount = countEventsByKind("schedule");
-  $: taskCount = countEventsByKind("task");
+  $: selectedEvents = selectedDay ? getFilteredEvents(selectedDay, $payments.calendarFilter) : [];
+  $: selectedEvent = getSelectedCalendarEvent(selectedEvents, $payments.selectedCalendarEventId);
+  $: visibleEventCount = getVisibleEventCount(calendarDays, $payments.calendarFilter);
+  $: scheduleCount = countEventsByKind(calendarDays, "schedule");
+  $: taskCount = countEventsByKind(calendarDays, "task");
 </script>
 
 <section class="calendar-shell" data-testid="payments-calendar">
-  <div class="calendar-shell-header">
-    <div>
-      <h3>{PAYMENT_CALENDAR_COPY.title}</h3>
-      <p>Місячна сітка показує планові платежі та дедлайни задач в одному часовому контексті.</p>
-    </div>
-    <div class="calendar-toolbar">
-      <div class="calendar-nav">
-        <button class="btn-ghost" on:click={() => payments.shiftCalendarMonth(-1)} disabled={$payments.calendarLoading}>
-          {PAYMENT_CALENDAR_COPY.previousMonth}
-        </button>
-        <strong>{$payments.calendar?.monthLabel ?? PAYMENT_CALENDAR_COPY.loadingMonth}</strong>
-        <button class="btn-ghost" on:click={() => payments.shiftCalendarMonth(1)} disabled={$payments.calendarLoading}>
-          {PAYMENT_CALENDAR_COPY.nextMonth}
-        </button>
-      </div>
-      <div class="calendar-filters" role="radiogroup" aria-label="Фільтр подій календаря">
-        {#each calendarFilterOptions as option}
-          <button
-            class:active={$payments.calendarFilter === option.kind}
-            on:click={() => payments.setCalendarFilter(option.kind)}
-            role="radio"
-            aria-checked={$payments.calendarFilter === option.kind}
-          >
-            {option.label}
-          </button>
-        {/each}
-      </div>
-    </div>
-  </div>
+  <PaymentCalendarHeader
+    monthLabel={$payments.calendar?.monthLabel ?? PAYMENT_CALENDAR_COPY.loadingMonth}
+    calendarLoading={$payments.calendarLoading}
+    calendarFilter={$payments.calendarFilter}
+    filterOptions={calendarFilterOptions}
+    onShiftMonth={(delta) => payments.shiftCalendarMonth(delta)}
+    onSetFilter={(filter) => payments.setCalendarFilter(filter)}
+  />
 
-  <div class="calendar-summary">
-    <div class="calendar-summary-card">
-      <strong>{scheduleCount}</strong>
-      <span>Планових платежів у місяці</span>
-    </div>
-    <div class="calendar-summary-card">
-      <strong>{taskCount}</strong>
-      <span>Дедлайнів задач у місяці</span>
-    </div>
-    <div class="calendar-summary-card">
-      <strong>{visibleEventCount}</strong>
-      <span>{PAYMENT_CALENDAR_COPY.visibleEventsSummary}</span>
-    </div>
-  </div>
+  <PaymentCalendarSummary {scheduleCount} {taskCount} {visibleEventCount} />
 
   {#if $payments.calendarError && !$payments.calendar}
     <div class="empty-state-card" data-testid="payments-calendar-error" role="alert">
@@ -194,12 +103,12 @@
               class:has-overdue={day.hasOverdue}
               on:click={() => payments.selectCalendarDate(day.date)}
               aria-pressed={day.selected}
-              aria-label={dayAriaLabel(day)}
+              aria-label={getDayAriaLabel(day, $payments.calendarFilter)}
             >
               <div class="calendar-day-top">
                 <strong>{day.dayNumber}</strong>
-                {#if filteredEvents(day).length > 0}
-                  <span>{filteredEvents(day).length}</span>
+                {#if getFilteredEvents(day, $payments.calendarFilter).length > 0}
+                  <span>{getFilteredEvents(day, $payments.calendarFilter).length}</span>
                 {/if}
               </div>
 
@@ -213,13 +122,13 @@
               </div>
 
               <div class="calendar-day-events">
-                {#each filteredEvents(day).slice(0, 2) as event}
-                  <span class={`calendar-pill is-${eventTone(event)}`}>
+                {#each getFilteredEvents(day, $payments.calendarFilter).slice(0, 2) as event}
+                  <span class={`calendar-pill is-${getCalendarEventTone(event)}`}>
                     {event.title}
                   </span>
                 {/each}
-                {#if filteredEvents(day).length > 2}
-                  <span class="calendar-pill is-more">+{filteredEvents(day).length - 2} ще</span>
+                {#if getFilteredEvents(day, $payments.calendarFilter).length > 2}
+                  <span class="calendar-pill is-more">+{getFilteredEvents(day, $payments.calendarFilter).length - 2} ще</span>
                 {/if}
               </div>
             </button>
@@ -264,7 +173,7 @@
                   <p>{event.subtitle}</p>
                 </div>
                 <div class="calendar-event-meta">
-                  <span class={`task-pill is-${eventTone(event)}`}>{eventKindLabel(event)}</span>
+                  <span class={`task-pill is-${getCalendarEventTone(event)}`}>{getCalendarEventKindLabel(event)}</span>
                   <span>{event.statusLabel}</span>
                 </div>
               </button>
@@ -278,13 +187,13 @@
                   <strong>{selectedEvent.title}</strong>
                   <p>{selectedEvent.subtitle}</p>
                 </div>
-                <span class={`task-pill is-${eventTone(selectedEvent)}`}>{selectedEvent.statusLabel}</span>
+                <span class={`task-pill is-${getCalendarEventTone(selectedEvent)}`}>{selectedEvent.statusLabel}</span>
               </div>
 
               <dl class="calendar-event-facts">
                 <div>
                   <dt>Тип</dt>
-                  <dd>{eventKindLabel(selectedEvent)}</dd>
+                  <dd>{getCalendarEventKindLabel(selectedEvent)}</dd>
                 </div>
                 {#if selectedEvent.amountStr}
                   <div>
@@ -295,7 +204,7 @@
                 {#if selectedEvent.kind === "schedule"}
                   <div>
                     <dt>Напрям</dt>
-                    <dd>{eventDirectionLabel(selectedEvent)}</dd>
+                    <dd>{getCalendarEventDirectionLabel(selectedEvent)}</dd>
                   </div>
                 {/if}
                 {#if selectedEvent.recurrenceLabel}
@@ -376,10 +285,6 @@
     gap: 18px;
   }
 
-  .calendar-shell-header,
-  .calendar-toolbar,
-  .calendar-nav,
-  .calendar-summary,
   .calendar-layout,
   .calendar-side-header,
   .calendar-event-row,
@@ -389,7 +294,6 @@
     gap: 12px;
   }
 
-  .calendar-shell-header,
   .calendar-side-header,
   .calendar-event-row,
   .calendar-event-detail-top {
@@ -397,13 +301,11 @@
     align-items: flex-start;
   }
 
-  .calendar-shell-header h3,
   .calendar-side-header strong,
   .calendar-event-detail strong {
     margin: 0;
   }
 
-  .calendar-shell-header p,
   .calendar-side-header p,
   .calendar-event-row p,
   .calendar-event-detail p,
@@ -412,63 +314,11 @@
     color: var(--acta-color-text-muted);
   }
 
-  .calendar-toolbar,
-  .calendar-nav {
-    align-items: center;
-    flex-wrap: wrap;
-  }
-
-  .calendar-toolbar {
-    margin-left: auto;
-    justify-content: flex-end;
-  }
-
-  .calendar-filters {
-    display: inline-flex;
-    gap: 6px;
-    padding: 4px;
-    border-radius: 999px;
-    background: var(--acta-color-bg-subtle);
-  }
-
-  .calendar-filters button {
-    border: 0;
-    background: transparent;
-    color: var(--acta-color-text-muted);
-    padding: 8px 12px;
-    border-radius: 999px;
-  }
-
-  .calendar-filters button.active {
-    background: var(--acta-color-accent-soft);
-    color: var(--acta-color-accent-hover);
-  }
-
-  .calendar-summary {
-    flex-wrap: wrap;
-  }
-
-  .calendar-summary-card,
   .calendar-grid-panel,
   .calendar-side-panel {
     border-radius: var(--acta-radius-2xl);
     border: 1px solid var(--acta-color-border);
     background: color-mix(in srgb, var(--acta-color-bg-elevated) 82%, white 18%);
-  }
-
-  .calendar-summary-card {
-    min-width: 180px;
-    padding: 14px 16px;
-    display: grid;
-    gap: 6px;
-  }
-
-  .calendar-summary-card strong {
-    font-size: 1.35rem;
-  }
-
-  .calendar-summary-card span {
-    color: var(--acta-color-text-muted);
   }
 
   .calendar-layout {
